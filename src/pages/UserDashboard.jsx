@@ -78,6 +78,7 @@ export default function UserDashboard() {
     const [submitting, setSubmitting] = useState(false)
     const [toast, setToast] = useState(null)
     const numberInputRef = useRef(null)
+    const amountInputRef = useRef(null)
 
     // Auto-hide toast
     useEffect(() => {
@@ -259,10 +260,13 @@ export default function UserDashboard() {
             // Show toast instead of alert
             setToast({ message: 'ส่งเลขสำเร็จ!', type: 'success' })
 
-            // Select all text in number input for next entry
+            // Select all text in number input for next entry (with mobile fix)
             if (numberInputRef.current) {
-                numberInputRef.current.select()
-                numberInputRef.current.focus()
+                setTimeout(() => {
+                    numberInputRef.current.focus()
+                    numberInputRef.current.select()
+                    numberInputRef.current.setSelectionRange(0, 9999)
+                }, 50)
             }
 
         } catch (error) {
@@ -576,12 +580,25 @@ export default function UserDashboard() {
                                         ...submitForm,
                                         numbers: e.target.value.replace(/[ \-.,]/g, '*').replace(/[^\d*]/g, '')
                                     })}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault()
+                                            if (amountInputRef.current) {
+                                                setTimeout(() => {
+                                                    amountInputRef.current.focus()
+                                                    amountInputRef.current.select()
+                                                    amountInputRef.current.setSelectionRange(0, 9999)
+                                                }, 50)
+                                            }
+                                        }
+                                    }}
                                 />
                             </div>
 
                             <div className="form-group">
                                 <label className="form-label">จำนวนเงิน ({selectedRound.currency_name})</label>
                                 <input
+                                    ref={amountInputRef}
                                     type="text"
                                     className="form-input"
                                     inputMode="decimal"
