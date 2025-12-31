@@ -44,6 +44,7 @@ export default function UserDashboard() {
     const [submissions, setSubmissions] = useState([])
     const [loading, setLoading] = useState(true)
     const [activeTab, setActiveTab] = useState('rounds') // rounds, history, commission
+    const [userSettings, setUserSettings] = useState(null)
 
     // Submit form state
     const [showSubmitModal, setShowSubmitModal] = useState(false)
@@ -57,8 +58,24 @@ export default function UserDashboard() {
     useEffect(() => {
         if (profile?.dealer_id) {
             fetchRounds()
+            fetchUserSettings()
         }
     }, [profile])
+
+    async function fetchUserSettings() {
+        try {
+            const { data } = await supabase
+                .from('user_settings')
+                .select('*')
+                .eq('user_id', user.id)
+                .eq('dealer_id', profile.dealer_id)
+                .single()
+
+            if (data) setUserSettings(data)
+        } catch (error) {
+            console.error('Error fetching user settings:', error)
+        }
+    }
 
     useEffect(() => {
         if (selectedRound) {
@@ -146,15 +163,28 @@ export default function UserDashboard() {
 
         setSubmitting(true)
         try {
-            // Get commission rate from user settings
-            const { data: settings } = await supabase
-                .from('user_settings')
-                .select('commission_rates')
-                .eq('user_id', user.id)
-                .eq('dealer_id', profile.dealer_id)
-                .single()
+            // 1. Check number limits (Specific + Type)
+            const { data: limitCheck, error: limitError } = await supabase
+                .rpc('check_number_limit', {
+                    p_round_id: selectedRound.id,
+                    p_bet_type: submitForm.bet_type,
+                    p_numbers: submitForm.numbers,
+                    p_amount: parseFloat(submitForm.amount)
+                })
 
-            const commissionRate = settings?.commission_rates?.[submitForm.bet_type] || 0
+            if (limitError) throw limitError
+
+            const { is_exceeded, current_total, max_allowed, limit_type } = limitCheck[0]
+
+            if (is_exceeded) {
+                const remaining = max_allowed - current_total
+                const limitMsg = limit_type === 'number' ? 'เลขอั้นเฉพาะเลข' : 'เลขอั้นประเภท'
+                alert(`ขออภัย! ${limitMsg} นี้เต็มแล้ว\nรับได้สูงสุด: ${max_allowed}\nยอดปัจจุบัน: ${current_total}\nคงเหลือที่รับได้: ${remaining > 0 ? remaining : 0}`)
+                setSubmitting(false)
+                return
+            }
+
+            const commissionRate = userSettings?.commission_rates?.[submitForm.bet_type] || 0
             const amount = parseFloat(submitForm.amount)
             const commissionAmount = (amount * commissionRate) / 100
 
@@ -457,7 +487,7 @@ export default function UserDashboard() {
                 )}
 
                 {activeTab === 'commission' && (
-                    <CommissionTab user={user} profile={profile} />
+                    <CommissionTab user={user} profile={profile} userSettings={userSettings} />
                 )}
             </div>
 
@@ -658,28 +688,17 @@ function HistoryTab({ user, profile }) {
 }
 
 // Commission Tab Component
-function CommissionTab({ user, profile }) {
-    const [settings, setSettings] = useState(null)
-    const [loading, setLoading] = useState(true)
+function CommissionTab({ user, profile, userSettings }) {
+    const [loading, setLoading] = useState(false)
     const [totalCommission, setTotalCommission] = useState(0)
 
     useEffect(() => {
-        fetchSettings()
+        fetchTotalCommission()
     }, [])
 
-    async function fetchSettings() {
+    async function fetchTotalCommission() {
         setLoading(true)
         try {
-            // Get user settings
-            const { data: settingsData } = await supabase
-                .from('user_settings')
-                .select('*')
-                .eq('user_id', user.id)
-                .eq('dealer_id', profile.dealer_id)
-                .single()
-
-            setSettings(settingsData)
-
             // Get total commission earned
             const { data: subs } = await supabase
                 .from('submissions')
@@ -715,13 +734,13 @@ function CommissionTab({ user, profile }) {
 
             <div className="commission-rates card">
                 <h3>อัตราค่าคอมมิชชั่น</h3>
-                {settings?.commission_rates ? (
+                {userSettings?.commission_rates ? (
                     <div className="rates-grid">
                         {Object.entries(BET_TYPES).map(([key, info]) => (
                             <div key={key} className="rate-item">
                                 <span className="rate-label">{info.label}</span>
                                 <span className="rate-value">
-                                    {settings.commission_rates[key] || 0}%
+                                    {userSettings.commission_rates[key] || 0}%
                                 </span>
                             </div>
                         ))}

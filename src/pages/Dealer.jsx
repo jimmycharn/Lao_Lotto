@@ -82,6 +82,9 @@ export default function Dealer() {
     const [showLimitsModal, setShowLimitsModal] = useState(false)
     const [showSubmissionsModal, setShowSubmissionsModal] = useState(false)
     const [showResultsModal, setShowResultsModal] = useState(false)
+    const [showUserSettingsModal, setShowUserSettingsModal] = useState(false)
+    const [showNumberLimitsModal, setShowNumberLimitsModal] = useState(false)
+    const [selectedMember, setSelectedMember] = useState(null)
 
     // Form state for creating round
     const [roundForm, setRoundForm] = useState({
@@ -367,6 +370,17 @@ export default function Dealer() {
                                                         </button>
                                                     )}
                                                     <button
+                                                        className="icon-btn warning"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            setSelectedRound(round)
+                                                            setShowNumberLimitsModal(true)
+                                                        }}
+                                                        title="ตั้งค่าเลขอั้น"
+                                                    >
+                                                        <FiAlertTriangle />
+                                                    </button>
+                                                    <button
                                                         className="icon-btn danger"
                                                         onClick={(e) => {
                                                             e.stopPropagation()
@@ -494,7 +508,14 @@ export default function Dealer() {
                                                         {formatDate(member.created_at)}
                                                     </td>
                                                     <td>
-                                                        <button className="icon-btn" title="ตั้งค่าคอม">
+                                                        <button
+                                                            className="icon-btn"
+                                                            title="ตั้งค่าคอม"
+                                                            onClick={() => {
+                                                                setSelectedMember(member)
+                                                                setShowUserSettingsModal(true)
+                                                            }}
+                                                        >
                                                             <FiSettings />
                                                         </button>
                                                     </td>
@@ -696,6 +717,25 @@ export default function Dealer() {
                     onClose={() => {
                         setShowResultsModal(false)
                         fetchData()
+                    }}
+                />
+            )}
+
+            {/* Number Limits Modal */}
+            {showNumberLimitsModal && selectedRound && (
+                <NumberLimitsModal
+                    round={selectedRound}
+                    onClose={() => setShowNumberLimitsModal(false)}
+                />
+            )}
+
+            {/* User Settings Modal */}
+            {showUserSettingsModal && selectedMember && (
+                <UserSettingsModal
+                    member={selectedMember}
+                    onClose={() => {
+                        setShowUserSettingsModal(false)
+                        setSelectedMember(null)
                     }}
                 />
             )}
@@ -1037,6 +1077,320 @@ function ResultsModal({ round, onClose }) {
                         {loading ? 'กำลังประกาศ...' : (
                             <><FiCheck /> ประกาศผล</>
                         )}
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// Number Limits Modal Component
+function NumberLimitsModal({ round, onClose }) {
+    const [limits, setLimits] = useState([])
+    const [loading, setLoading] = useState(true)
+    const [saving, setSaving] = useState(false)
+    const [newLimit, setNewLimit] = useState({
+        bet_type: '2_top',
+        numbers: '',
+        max_amount: ''
+    })
+
+    useEffect(() => {
+        fetchLimits()
+    }, [round.id])
+
+    async function fetchLimits() {
+        setLoading(true)
+        try {
+            const { data, error } = await supabase
+                .from('number_limits')
+                .select('*')
+                .eq('round_id', round.id)
+                .order('created_at', { ascending: false })
+
+            if (!error) setLimits(data || [])
+        } catch (error) {
+            console.error('Error fetching limits:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    async function handleAddLimit() {
+        if (!newLimit.numbers || !newLimit.max_amount) {
+            alert('กรุณากรอกข้อมูลให้ครบ')
+            return
+        }
+
+        setSaving(true)
+        try {
+            const { error } = await supabase
+                .from('number_limits')
+                .insert({
+                    round_id: round.id,
+                    bet_type: newLimit.bet_type,
+                    numbers: newLimit.numbers,
+                    max_amount: parseFloat(newLimit.max_amount)
+                })
+
+            if (error) throw error
+
+            setNewLimit({ ...newLimit, numbers: '', max_amount: '' })
+            fetchLimits()
+        } catch (error) {
+            console.error('Error adding limit:', error)
+            alert('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    async function handleDeleteLimit(id) {
+        if (!confirm('ต้องการลบเลขอั้นนี้?')) return
+
+        try {
+            const { error } = await supabase
+                .from('number_limits')
+                .delete()
+                .eq('id', id)
+
+            if (!error) fetchLimits()
+        } catch (error) {
+            console.error('Error deleting limit:', error)
+        }
+    }
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                    <h3><FiAlertTriangle /> ตั้งค่าเลขอั้น - {round.lottery_name}</h3>
+                    <button className="modal-close" onClick={onClose}>
+                        <FiX />
+                    </button>
+                </div>
+
+                <div className="modal-body">
+                    {/* Add Form */}
+                    <div className="add-limit-form card">
+                        <h4>เพิ่มเลขอั้นใหม่</h4>
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label className="form-label">ประเภท</label>
+                                <select
+                                    className="form-input"
+                                    value={newLimit.bet_type}
+                                    onChange={e => setNewLimit({ ...newLimit, bet_type: e.target.value })}
+                                >
+                                    {Object.entries(BET_TYPES).map(([key, label]) => (
+                                        <option key={key} value={key}>{label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">เลข</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    placeholder="เช่น 47"
+                                    value={newLimit.numbers}
+                                    onChange={e => setNewLimit({ ...newLimit, numbers: e.target.value.replace(/\D/g, '') })}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">รับสูงสุด ({round.currency_name})</label>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    placeholder="0"
+                                    value={newLimit.max_amount}
+                                    onChange={e => setNewLimit({ ...newLimit, max_amount: e.target.value })}
+                                />
+                            </div>
+                            <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
+                                <button
+                                    className="btn btn-primary full-width"
+                                    onClick={handleAddLimit}
+                                    disabled={saving}
+                                >
+                                    <FiPlus /> เพิ่ม
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Limits List */}
+                    <div className="limits-list-section">
+                        <h4>รายการเลขอั้นปัจจุบัน</h4>
+                        {loading ? (
+                            <div className="loading-state">
+                                <div className="spinner"></div>
+                            </div>
+                        ) : limits.length === 0 ? (
+                            <p className="text-muted">ยังไม่มีการตั้งค่าเลขอั้นเฉพาะเลข</p>
+                        ) : (
+                            <div className="table-wrap">
+                                <table className="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>ประเภท</th>
+                                            <th>เลข</th>
+                                            <th>รับสูงสุด</th>
+                                            <th>จัดการ</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {limits.map(limit => (
+                                            <tr key={limit.id}>
+                                                <td>{BET_TYPES[limit.bet_type]}</td>
+                                                <td className="number-cell">{limit.numbers}</td>
+                                                <td>{round.currency_symbol}{limit.max_amount?.toLocaleString()}</td>
+                                                <td>
+                                                    <button
+                                                        className="icon-btn danger"
+                                                        onClick={() => handleDeleteLimit(limit.id)}
+                                                    >
+                                                        <FiTrash2 />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="modal-footer">
+                    <button className="btn btn-secondary" onClick={onClose}>
+                        ปิด
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// User Settings Modal Component
+function UserSettingsModal({ member, onClose }) {
+    const { user } = useAuth()
+    const [loading, setLoading] = useState(true)
+    const [saving, setSaving] = useState(false)
+    const [settings, setSettings] = useState({
+        commission_rates: {
+            '2_top': 10, '2_bottom': 10,
+            '3_top': 10, '3_tod': 10, '3_front': 10, '3_back': 10,
+            '4_tod': 10,
+            '6_top': 10
+        }
+    })
+
+    useEffect(() => {
+        fetchSettings()
+    }, [member.id])
+
+    async function fetchSettings() {
+        setLoading(true)
+        try {
+            const { data, error } = await supabase
+                .from('user_settings')
+                .select('*')
+                .eq('user_id', member.id)
+                .eq('dealer_id', user.id)
+                .single()
+
+            if (data) {
+                setSettings(data)
+            }
+        } catch (error) {
+            console.error('Error fetching user settings:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    async function handleSave() {
+        setSaving(true)
+        try {
+            const { error } = await supabase
+                .from('user_settings')
+                .upsert({
+                    user_id: member.id,
+                    dealer_id: user.id,
+                    commission_rates: settings.commission_rates,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'user_id, dealer_id' })
+
+            if (error) throw error
+            alert('บันทึกการตั้งค่าสำเร็จ')
+            onClose()
+        } catch (error) {
+            console.error('Error saving user settings:', error)
+            alert('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                    <h3><FiSettings /> ตั้งค่าสมาชิก: {member.full_name}</h3>
+                    <button className="modal-close" onClick={onClose}>
+                        <FiX />
+                    </button>
+                </div>
+
+                <div className="modal-body">
+                    {loading ? (
+                        <div className="loading-state">
+                            <div className="spinner"></div>
+                        </div>
+                    ) : (
+                        <div className="settings-form">
+                            <h4>% ค่าคอมมิชชั่นที่สมาชิกได้รับ</h4>
+                            <p className="text-muted mb-4">ระบุเปอร์เซ็นต์ค่าคอมมิชชั่นสำหรับแต่ละประเภทหวย</p>
+
+                            <div className="limits-grid">
+                                {Object.entries(BET_TYPES).map(([key, label]) => (
+                                    <div key={key} className="limit-row">
+                                        <span className="limit-label">{label}</span>
+                                        <div className="limit-inputs">
+                                            <div className="input-group">
+                                                <input
+                                                    type="number"
+                                                    className="form-input small"
+                                                    value={settings.commission_rates[key]}
+                                                    onChange={e => setSettings({
+                                                        ...settings,
+                                                        commission_rates: {
+                                                            ...settings.commission_rates,
+                                                            [key]: parseFloat(e.target.value) || 0
+                                                        }
+                                                    })}
+                                                />
+                                                <span className="input-suffix">%</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="modal-footer">
+                    <button className="btn btn-secondary" onClick={onClose}>
+                        ยกเลิก
+                    </button>
+                    <button
+                        className="btn btn-primary"
+                        onClick={handleSave}
+                        disabled={loading || saving}
+                    >
+                        {saving ? 'กำลังบันทึก...' : <><FiCheck /> บันทึกการตั้งค่า</>}
                     </button>
                 </div>
             </div>
