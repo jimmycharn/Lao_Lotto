@@ -54,85 +54,41 @@
 
 ---
 
-## 🗄️ Database Changes Required
+## 🛠️ Technical Updates
 
-```mermaid
-erDiagram
-    profiles ||--o{ lottery_rounds : owns
-    lottery_rounds ||--o{ submissions : has
-    profiles ||--o{ submissions : makes
-    profiles ||--o{ user_settings : has
-    lottery_rounds ||--o{ number_limits : has
-    
-    lottery_rounds {
-        uuid id PK
-        uuid dealer_id FK
-        string lottery_type
-        date round_date
-        timestamp open_time
-        timestamp close_time
-        timestamp delete_before_close
-        string winning_numbers
-        boolean is_closed
-        timestamp created_at
-    }
-    
-    submissions {
-        uuid id PK
-        uuid round_id FK
-        uuid user_id FK
-        string bet_type
-        string numbers
-        decimal amount
-        boolean is_deleted
-        boolean is_winner
-        decimal prize_amount
-        timestamp created_at
-    }
-    
-    user_settings {
-        uuid id PK
-        uuid user_id FK
-        uuid dealer_id FK
-        decimal commission_2digit
-        decimal commission_3digit
-        decimal commission_4digit
-        decimal commission_6digit
-        decimal payout_2digit
-        decimal payout_3digit
-        decimal payout_4digit
-        decimal payout_6digit
-    }
-    
-    number_limits {
-        uuid id PK
-        uuid round_id FK
-        string bet_type
-        string numbers
-        decimal max_amount
-    }
-```
+### User Dashboard (Submit Modal)
+- **4-Digit Input Logic**:
+    - **Thai/Hanoi**:
+        - If amount is empty/0: Show no bet type buttons.
+        - If amount > 0: Show "4 ตัวลอย" and "3 X [Permutation Count]".
+    - **Lao**:
+        - If amount is empty/0: Show "4 ตัวชุด".
+        - If amount > 0: Show "4 ตัวชุด", "4 ตัวลอย", and "3 X [Permutation Count]".
+- **Permutation Calculation**: Automatically calculate unique 3-digit permutations from 4 digits (e.g., 1234 -> 24, 1233 -> 12).
+- **Bulk Submission**: When "3 X [Count]" is clicked, generate all unique 3-digit permutations and submit them as "3 ตัวบน" (3_top) in a single batch.
+- **3-Column Layout**: Updated the bet type selection grid to use 3 columns for better organization.
+- **Thin Borders**: Added thin borders to bet type buttons for a more refined look.
 
 ---
 
 ## 🔄 Implementation Order
 
 ### Phase 1: Database & Core
-- [ ] สร้าง SQL migration ใหม่
-- [ ] อัปเดต Supabase schema
+- [x] สร้าง SQL migration ใหม่
+- [x] อัปเดต Supabase schema
 
 ### Phase 2: Dealer Dashboard
-- [ ] สร้างงวดหวย
-- [ ] ตั้งค่าคอม + อัตราจ่าย
-- [ ] ตั้งค่าอั้น
-- [ ] ดูเลขที่ส่งมา
-- [ ] ตรวจผลรางวัล
+- [x] สร้างงวดหวย
+- [x] ตั้งค่าคอม + อัตราจ่าย
+- [x] ตั้งค่าอั้น
+- [x] ดูเลขที่ส่งมา
+- [x] ตรวจผลรางวัล
 
 ### Phase 3: User Dashboard
-- [ ] ดูงวดที่เปิดรับ
-- [ ] ส่งเลข + ลบเลข
-- [ ] ดูค่าคอม
-- [ ] ดูผลรางวัล
+- [x] ดูงวดที่เปิดรับ
+- [x] ส่งเลข + ลบเลข
+- [x] ดูค่าคอม
+- [x] ดูผลรางวัล
 
 ### Phase 4: SuperAdmin Dashboard
 - [ ] ภาพรวมเจ้ามือ

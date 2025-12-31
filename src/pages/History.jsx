@@ -6,7 +6,7 @@ import './History.css'
 
 export default function History() {
     const { user } = useAuth()
-    const [purchases, setPurchases] = useState([])
+    const [submissions, setSubmissions] = useState([])
     const [loading, setLoading] = useState(true)
     const [filter, setFilter] = useState('all') // all, pending, won, lost
 
@@ -20,25 +20,24 @@ export default function History() {
         setLoading(true)
         try {
             const { data, error } = await supabase
-                .from('purchases')
+                .from('submissions')
                 .select(`
-          *,
-          lottery_draws (
-            draw_date,
-            two_digit,
-            three_digit,
-            four_digit,
-            six_digit,
-            is_published
-          )
-        `)
+                    *,
+                    lottery_rounds (
+                        lottery_name,
+                        round_date,
+                        status,
+                        is_result_announced
+                    )
+                `)
                 .eq('user_id', user.id)
+                .eq('is_deleted', false)
                 .order('created_at', { ascending: false })
 
             if (error) {
                 console.error('Error:', error)
             } else {
-                setPurchases(data || [])
+                setSubmissions(data || [])
             }
         } catch (error) {
             console.error('Error fetching history:', error)
@@ -49,37 +48,47 @@ export default function History() {
 
     const getBetTypeLabel = (type) => {
         const labels = {
-            two_digit: '2 ตัว',
-            three_digit: '3 ตัว',
-            four_digit: '4 ตัว',
-            six_digit: '6 ตัว'
+            '2_top': '2 ตัวบน',
+            '2_bottom': '2 ตัวล่าง',
+            '3_top': '3 ตัวบน',
+            '3_tod': '3 ตัวโต๊ด',
+            '3_bottom': '3 ตัวล่าง',
+            '4_tod': '4 ตัวโต๊ด',
+            '6_top': '6 ตัวบน',
+            'run_top': 'วิ่งบน',
+            'run_bottom': 'วิ่งล่าง',
+            'front_top_1': 'หน้าบน',
+            'middle_top_1': 'กลางบน',
+            'back_top_1': 'หลังบน',
+            'front_bottom_1': 'หน้าล่าง',
+            'back_bottom_1': 'หลังล่าง'
         }
         return labels[type] || type
     }
 
-    const getStatus = (purchase) => {
-        if (!purchase.lottery_draws?.is_published) {
+    const getStatus = (submission) => {
+        if (!submission.lottery_rounds?.is_result_announced) {
             return { label: 'รอผล', status: 'pending', icon: <FiClock /> }
         }
-        if (purchase.is_winner) {
+        if (submission.is_winner) {
             return { label: 'ถูกรางวัล', status: 'won', icon: <FiCheck /> }
         }
         return { label: 'ไม่ถูกรางวัล', status: 'lost', icon: <FiX /> }
     }
 
-    const filteredPurchases = purchases.filter(p => {
+    const filteredSubmissions = submissions.filter(s => {
         if (filter === 'all') return true
-        const status = getStatus(p).status
+        const status = getStatus(s).status
         return status === filter
     })
 
     const getTotalStats = () => {
-        const total = purchases.length
-        const pending = purchases.filter(p => !p.lottery_draws?.is_published).length
-        const won = purchases.filter(p => p.is_winner).length
+        const total = submissions.length
+        const pending = submissions.filter(s => !s.lottery_rounds?.is_result_announced).length
+        const won = submissions.filter(s => s.is_winner).length
         const lost = total - pending - won
-        const totalSpent = purchases.reduce((sum, p) => sum + (p.amount || 0), 0)
-        const totalWon = purchases.reduce((sum, p) => sum + (p.prize_amount || 0), 0)
+        const totalSpent = submissions.reduce((sum, s) => sum + (s.amount || 0), 0)
+        const totalWon = submissions.reduce((sum, s) => sum + (s.prize_amount || 0), 0)
 
         return { total, pending, won, lost, totalSpent, totalWon }
     }
@@ -155,13 +164,13 @@ export default function History() {
                     ))}
                 </div>
 
-                {/* Purchase List */}
+                {/* Submission List */}
                 {loading ? (
                     <div className="loading-state">
                         <div className="spinner"></div>
                         <p>กำลังโหลด...</p>
                     </div>
-                ) : filteredPurchases.length === 0 ? (
+                ) : filteredSubmissions.length === 0 ? (
                     <div className="empty-state card animate-fadeIn">
                         <FiGift className="empty-icon" />
                         <h3>ไม่มีรายการ</h3>
@@ -169,18 +178,18 @@ export default function History() {
                     </div>
                 ) : (
                     <div className="purchase-list">
-                        {filteredPurchases.map((purchase, index) => {
-                            const status = getStatus(purchase)
+                        {filteredSubmissions.map((submission, index) => {
+                            const status = getStatus(submission)
                             return (
                                 <div
-                                    key={purchase.id}
+                                    key={submission.id}
                                     className={`purchase-card card animate-slideUp ${status.status}`}
                                     style={{ animationDelay: `${index * 0.03}s` }}
                                 >
                                     <div className="purchase-header">
                                         <div className="purchase-type">
-                                            <span className="type-badge">{getBetTypeLabel(purchase.bet_type)}</span>
-                                            <span className="purchase-numbers">{purchase.numbers}</span>
+                                            <span className="type-badge">{getBetTypeLabel(submission.bet_type)}</span>
+                                            <span className="purchase-numbers">{submission.numbers}</span>
                                         </div>
                                         <div className={`purchase-status status-${status.status}`}>
                                             {status.icon}
@@ -192,26 +201,26 @@ export default function History() {
                                         <div className="detail-item">
                                             <FiCalendar />
                                             <span>
-                                                {purchase.lottery_draws?.draw_date
-                                                    ? new Date(purchase.lottery_draws.draw_date).toLocaleDateString('th-TH')
+                                                {submission.lottery_rounds?.lottery_name || 'หวยลาว'} - {submission.lottery_rounds?.round_date
+                                                    ? new Date(submission.lottery_rounds.round_date).toLocaleDateString('th-TH')
                                                     : 'รอประกาศ'
                                                 }
                                             </span>
                                         </div>
                                         <div className="detail-item">
                                             <FiDollarSign />
-                                            <span>เดิมพัน ฿{purchase.amount?.toLocaleString()}</span>
+                                            <span>เดิมพัน ฿{submission.amount?.toLocaleString()}</span>
                                         </div>
-                                        {purchase.is_winner && (
+                                        {submission.is_winner && (
                                             <div className="detail-item prize">
                                                 <FiGift />
-                                                <span>รางวัล ฿{purchase.prize_amount?.toLocaleString()}</span>
+                                                <span>รางวัล ฿{submission.prize_amount?.toLocaleString()}</span>
                                             </div>
                                         )}
                                     </div>
 
                                     <div className="purchase-time">
-                                        ซื้อเมื่อ {new Date(purchase.created_at).toLocaleString('th-TH')}
+                                        ซื้อเมื่อ {new Date(submission.created_at).toLocaleString('th-TH')}
                                     </div>
                                 </div>
                             )

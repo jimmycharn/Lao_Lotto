@@ -21,11 +21,11 @@ const BET_TYPES = {
     // 1 Digit
     'run_top': { label: 'วิ่งบน', digits: 1 },
     'run_bottom': { label: 'วิ่งล่าง', digits: 1 },
-    'front_top_1': { label: 'รูดหน้าบน', digits: 1 },
-    'middle_top_1': { label: 'รูดกลางบน', digits: 1 },
-    'back_top_1': { label: 'รูดหลังบน', digits: 1 },
-    'front_bottom_1': { label: 'รูดหน้าล่าง', digits: 1 },
-    'back_bottom_1': { label: 'รูดหลังล่าง', digits: 1 },
+    'front_top_1': { label: 'หน้าบน', digits: 1 },
+    'middle_top_1': { label: 'กลางบน', digits: 1 },
+    'back_top_1': { label: 'หลังบน', digits: 1 },
+    'front_bottom_1': { label: 'หน้าล่าง', digits: 1 },
+    'back_bottom_1': { label: 'หลังล่าง', digits: 1 },
 
     // 2 Digits
     '2_top': { label: '2 ตัวบน', digits: 2 },
@@ -57,6 +57,51 @@ const LOTTERY_TYPES = {
     'hanoi': 'หวยฮานอย',
     'yeekee': 'หวยยี่กี',
     'other': 'อื่นๆ'
+}
+
+// Helper to get all permutations
+const getPermutations = (str) => {
+    if (str.length <= 1) return [str]
+    const perms = []
+    for (let i = 0; i < str.length; i++) {
+        const char = str[i]
+        const remainingChars = str.slice(0, i) + str.slice(i + 1)
+        for (const subPerm of getPermutations(remainingChars)) {
+            perms.push(char + subPerm)
+        }
+    }
+    return [...new Set(perms)]
+}
+
+// Helper to get unique 3-digit permutations from 4 digits
+const getUnique3DigitPermsFrom4 = (str) => {
+    if (str.length !== 4) return []
+    const results = new Set()
+    // Get all combinations of 3 digits out of 4
+    for (let i = 0; i < 4; i++) {
+        const combination = str.slice(0, i) + str.slice(i + 1)
+        const perms = getPermutations(combination)
+        perms.forEach(p => results.add(p))
+    }
+    return Array.from(results)
+}
+
+// Helper to get unique 3-digit permutations from 5 digits
+const getUnique3DigitPermsFrom5 = (str) => {
+    if (str.length !== 5) return []
+    const results = new Set()
+    const chars = str.split('')
+    // Pick 3 out of 5
+    for (let i = 0; i < 5; i++) {
+        for (let j = i + 1; j < 5; j++) {
+            for (let k = j + 1; k < 5; k++) {
+                const combination = chars[i] + chars[j] + chars[k]
+                const perms = getPermutations(combination)
+                perms.forEach(p => results.add(p))
+            }
+        }
+    }
+    return Array.from(results)
 }
 
 export default function UserDashboard() {
@@ -198,11 +243,11 @@ export default function UserDashboard() {
             return
         }
 
-        const betTypeInfo = BET_TYPES[betType]
+        const betTypeInfo = BET_TYPES[betType] || { label: betType, digits: 0 }
         const digitsOnly = submitForm.numbers.replace(/\*/g, '')
 
-        // Strict digit check unless it's a permutation case (3_top with *)
-        if (digitsOnly.length !== betTypeInfo.digits) {
+        // Strict digit check unless it's a permutation case
+        if (betType !== '3_perm_from_4' && betType !== '3_perm_from_5' && digitsOnly.length !== betTypeInfo.digits) {
             if (!(betType === '3_top' && submitForm.numbers.includes('*'))) {
                 alert(`${betTypeInfo.label} ต้องมี ${betTypeInfo.digits} หลัก`)
                 return
@@ -211,47 +256,67 @@ export default function UserDashboard() {
 
         setSubmitting(true)
         try {
-            // 1. Check number limits (Specific + Type)
-            // Use the first part of amount for limit check if it's a split bet, 
-            // or the total if it's a single bet. This is a simplification.
-            const checkAmount = amountParts[0]
+            if (betType === '3_perm_from_4' || betType === '3_perm_from_5') {
+                const perms = betType === '3_perm_from_4'
+                    ? getUnique3DigitPermsFrom4(submitForm.numbers)
+                    : getUnique3DigitPermsFrom5(submitForm.numbers)
+                const commissionRate = userSettings?.commission_rates?.['3_top'] || 0
+                const commissionAmount = (totalAmount * commissionRate) / 100
 
-            const { data: limitCheck, error: limitError } = await supabase
-                .rpc('check_number_limit', {
-                    p_round_id: selectedRound.id,
-                    p_bet_type: betType,
-                    p_numbers: submitForm.numbers,
-                    p_amount: checkAmount
-                })
-
-            if (limitError) throw limitError
-
-            const { is_exceeded, current_total, max_allowed, limit_type } = limitCheck[0]
-
-            if (is_exceeded) {
-                const remaining = max_allowed - current_total
-                const limitMsg = limit_type === 'number' ? 'เลขอั้นเฉพาะเลข' : 'เลขอั้นประเภท'
-                alert(`ขออภัย! ${limitMsg} นี้เต็มแล้ว\nรับได้สูงสุด: ${max_allowed}\nยอดปัจจุบัน: ${current_total}\nคงเหลือที่รับได้: ${remaining > 0 ? remaining : 0}`)
-                setSubmitting(false)
-                return
-            }
-
-            const commissionRate = userSettings?.commission_rates?.[betType] || 0
-            const commissionAmount = (totalAmount * commissionRate) / 100
-
-            const { error } = await supabase
-                .from('submissions')
-                .insert({
+                const inserts = perms.map(p => ({
                     round_id: selectedRound.id,
                     user_id: user.id,
-                    bet_type: betType,
-                    numbers: submitForm.numbers,
+                    bet_type: '3_top',
+                    numbers: p,
                     amount: totalAmount,
                     commission_rate: commissionRate,
                     commission_amount: commissionAmount
-                })
+                }))
 
-            if (error) throw error
+                const { error } = await supabase.from('submissions').insert(inserts)
+                if (error) throw error
+            } else {
+                // Standard submission
+                // 1. Check number limits (Specific + Type)
+                const checkAmount = amountParts[0]
+
+                const { data: limitCheck, error: limitError } = await supabase
+                    .rpc('check_number_limit', {
+                        p_round_id: selectedRound.id,
+                        p_bet_type: betType,
+                        p_numbers: submitForm.numbers,
+                        p_amount: checkAmount
+                    })
+
+                if (limitError) throw limitError
+
+                const { is_exceeded, current_total, max_allowed, limit_type } = limitCheck[0]
+
+                if (is_exceeded) {
+                    const remaining = max_allowed - current_total
+                    const limitMsg = limit_type === 'number' ? 'เลขอั้นเฉพาะเลข' : 'เลขอั้นประเภท'
+                    alert(`ขออภัย! ${limitMsg} นี้เต็มแล้ว\nรับได้สูงสุด: ${max_allowed}\nยอดปัจจุบัน: ${current_total}\nคงเหลือที่รับได้: ${remaining > 0 ? remaining : 0}`)
+                    setSubmitting(false)
+                    return
+                }
+
+                const commissionRate = userSettings?.commission_rates?.[betType] || 0
+                const commissionAmount = (totalAmount * commissionRate) / 100
+
+                const { error } = await supabase
+                    .from('submissions')
+                    .insert({
+                        round_id: selectedRound.id,
+                        user_id: user.id,
+                        bet_type: betType,
+                        numbers: submitForm.numbers,
+                        amount: totalAmount,
+                        commission_rate: commissionRate,
+                        commission_amount: commissionAmount
+                    })
+
+                if (error) throw error
+            }
 
             // Reset form
             setSubmitForm({ ...submitForm, numbers: submitForm.numbers, amount: submitForm.amount })
@@ -621,52 +686,64 @@ export default function UserDashboard() {
                                         const hasStarInAmount = submitForm.amount.toString().includes('*')
                                         const lotteryType = selectedRound.lottery_type
                                         const amount = submitForm.amount.toString()
+                                        const isAmountEmpty = !amount || amount === '0' || amount === ''
 
                                         let available = []
 
-                                        if (digits === 0) {
-                                            if (lotteryType === 'lao') available = ['4_set']
-                                        } else if (digits === 1) {
-                                            if (amount) available = ['run_top', 'run_bottom', 'front_top_1', 'middle_top_1', 'back_top_1', 'front_bottom_1', 'back_bottom_1']
+                                        if (digits === 1) {
+                                            available = ['run_top', 'run_bottom', 'front_top_1', 'middle_top_1', 'back_top_1', 'front_bottom_1', 'back_bottom_1']
                                         } else if (digits === 2) {
-                                            if (amount) {
-                                                available = ['2_top', '2_front', '2_spread', '2_bottom']
-                                                if (!hasStarInAmount) available.splice(3, 0, '2_have')
-                                            }
+                                            available = ['2_top', '2_front', '2_spread', '2_bottom']
+                                            if (!hasStarInAmount) available.splice(3, 0, '2_have')
                                         } else if (digits === 3) {
-                                            if (amount) {
-                                                available = ['3_top', '3_tod']
-                                                if (lotteryType === 'thai') available.push('3_bottom')
-                                            }
+                                            available = ['3_top', '3_tod']
+                                            if (lotteryType === 'thai') available.push('3_bottom')
                                         } else if (digits === 4) {
                                             if (lotteryType === 'lao') {
-                                                if (!amount || amount === '0') available = ['4_set']
-                                                else if (hasStarInNumbers || hasStarInAmount) available = ['3_top']
-                                                else available = ['4_set', '4_float']
-                                            } else {
-                                                if (amount) {
-                                                    if (hasStarInNumbers || hasStarInAmount) available = ['3_top']
-                                                    else available = ['4_float']
+                                                if (isAmountEmpty) {
+                                                    available = ['4_set']
+                                                } else {
+                                                    const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
+                                                    available = [
+                                                        '4_set',
+                                                        '4_float',
+                                                        { id: '3_perm_from_4', label: `3 X ${permCount}` }
+                                                    ]
+                                                }
+                                            } else { // thai, hanoi
+                                                if (!isAmountEmpty) {
+                                                    const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
+                                                    available = [
+                                                        '4_float',
+                                                        { id: '3_perm_from_4', label: `3 X ${permCount}` }
+                                                    ]
                                                 }
                                             }
                                         } else if (digits === 5) {
-                                            if (amount) {
-                                                if (hasStarInNumbers || hasStarInAmount) available = ['3_top']
-                                                else available = ['5_float']
+                                            if (!isAmountEmpty) {
+                                                const permCount = getUnique3DigitPermsFrom5(submitForm.numbers).length
+                                                available = [
+                                                    '5_float',
+                                                    { id: '3_perm_from_5', label: `3 X ${permCount}` }
+                                                ]
                                             }
                                         }
 
-                                        return available.map(key => (
-                                            <button
-                                                key={key}
-                                                type="button"
-                                                className={`bet-type-btn ${submitForm.bet_type === key ? 'active' : ''}`}
-                                                onClick={() => handleSubmit(key)}
-                                                disabled={submitting}
-                                            >
-                                                {submitting && submitForm.bet_type === key ? 'กำลังส่ง...' : (BET_TYPES[key]?.label || key)}
-                                            </button>
-                                        ))
+                                        return available.map(item => {
+                                            const key = typeof item === 'string' ? item : item.id
+                                            const label = typeof item === 'string' ? (BET_TYPES[key]?.label || key) : item.label
+                                            return (
+                                                <button
+                                                    key={key}
+                                                    type="button"
+                                                    className={`bet-type-btn ${submitForm.bet_type === key ? 'active' : ''}`}
+                                                    onClick={() => handleSubmit(key)}
+                                                    disabled={submitting}
+                                                >
+                                                    {submitting && submitForm.bet_type === key ? 'กำลังส่ง...' : label}
+                                                </button>
+                                            )
+                                        })
                                     })()}
                                 </div>
                             </div>
