@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import {
@@ -18,13 +18,35 @@ import './UserDashboard.css'
 
 // Bet type labels
 const BET_TYPES = {
+    // 1 Digit
+    'run_top': { label: 'วิ่งบน', digits: 1 },
+    'run_bottom': { label: 'วิ่งล่าง', digits: 1 },
+    'front_top_1': { label: 'รูดหน้าบน', digits: 1 },
+    'middle_top_1': { label: 'รูดกลางบน', digits: 1 },
+    'back_top_1': { label: 'รูดหลังบน', digits: 1 },
+    'front_bottom_1': { label: 'รูดหน้าล่าง', digits: 1 },
+    'back_bottom_1': { label: 'รูดหลังล่าง', digits: 1 },
+
+    // 2 Digits
     '2_top': { label: '2 ตัวบน', digits: 2 },
+    '2_front': { label: '2 ตัวหน้า', digits: 2 },
+    '2_spread': { label: '2 ตัวถ่าง', digits: 2 },
+    '2_have': { label: '2 ตัวมี', digits: 2 },
     '2_bottom': { label: '2 ตัวล่าง', digits: 2 },
+
+    // 3 Digits
     '3_top': { label: '3 ตัวบน', digits: 3 },
     '3_tod': { label: '3 ตัวโต๊ด', digits: 3 },
-    '3_front': { label: '3 ตัวหน้า', digits: 3 },
-    '3_back': { label: '3 ตัวล่าง', digits: 3 },
-    '4_tod': { label: '4 ตัวโต๊ด', digits: 4 },
+    '3_bottom': { label: '3 ตัวล่าง', digits: 3 },
+
+    // 4 Digits
+    '4_set': { label: '4 ตัวชุด', digits: 4 },
+    '4_float': { label: '4 ตัวลอย', digits: 4 },
+
+    // 5 Digits
+    '5_float': { label: '5 ตัวลอย', digits: 5 },
+
+    // 6 Digits
     '6_top': { label: '6 ตัว (รางวัลที่ 1)', digits: 6 }
 }
 
@@ -54,6 +76,16 @@ export default function UserDashboard() {
         amount: ''
     })
     const [submitting, setSubmitting] = useState(false)
+    const [toast, setToast] = useState(null)
+    const numberInputRef = useRef(null)
+
+    // Auto-hide toast
+    useEffect(() => {
+        if (toast) {
+            const timer = setTimeout(() => setToast(null), 3000)
+            return () => clearTimeout(timer)
+        }
+    }, [toast])
 
     useEffect(() => {
         if (profile?.dealer_id) {
@@ -149,27 +181,46 @@ export default function UserDashboard() {
     }
 
     // Submit numbers
-    async function handleSubmit() {
-        if (!submitForm.numbers || !submitForm.amount) {
+    async function handleSubmit(betTypeOverride = null) {
+        const betType = betTypeOverride || submitForm.bet_type
+        if (!submitForm.numbers || !submitForm.amount || !betType) {
             alert('กรุณากรอกเลขและจำนวนเงิน')
             return
         }
 
-        const betTypeInfo = BET_TYPES[submitForm.bet_type]
-        if (submitForm.numbers.length !== betTypeInfo.digits) {
-            alert(`${betTypeInfo.label} ต้องมี ${betTypeInfo.digits} หลัก`)
+        // Handle amount with * (e.g. 10*10)
+        const amountParts = submitForm.amount.toString().split('*').map(p => parseFloat(p) || 0)
+        const totalAmount = amountParts.reduce((sum, p) => sum + p, 0)
+
+        if (totalAmount <= 0) {
+            alert('จำนวนเงินต้องมากกว่า 0')
             return
+        }
+
+        const betTypeInfo = BET_TYPES[betType]
+        const digitsOnly = submitForm.numbers.replace(/\*/g, '')
+
+        // Strict digit check unless it's a permutation case (3_top with *)
+        if (digitsOnly.length !== betTypeInfo.digits) {
+            if (!(betType === '3_top' && submitForm.numbers.includes('*'))) {
+                alert(`${betTypeInfo.label} ต้องมี ${betTypeInfo.digits} หลัก`)
+                return
+            }
         }
 
         setSubmitting(true)
         try {
             // 1. Check number limits (Specific + Type)
+            // Use the first part of amount for limit check if it's a split bet, 
+            // or the total if it's a single bet. This is a simplification.
+            const checkAmount = amountParts[0]
+
             const { data: limitCheck, error: limitError } = await supabase
                 .rpc('check_number_limit', {
                     p_round_id: selectedRound.id,
-                    p_bet_type: submitForm.bet_type,
+                    p_bet_type: betType,
                     p_numbers: submitForm.numbers,
-                    p_amount: parseFloat(submitForm.amount)
+                    p_amount: checkAmount
                 })
 
             if (limitError) throw limitError
@@ -184,18 +235,17 @@ export default function UserDashboard() {
                 return
             }
 
-            const commissionRate = userSettings?.commission_rates?.[submitForm.bet_type] || 0
-            const amount = parseFloat(submitForm.amount)
-            const commissionAmount = (amount * commissionRate) / 100
+            const commissionRate = userSettings?.commission_rates?.[betType] || 0
+            const commissionAmount = (totalAmount * commissionRate) / 100
 
             const { error } = await supabase
                 .from('submissions')
                 .insert({
                     round_id: selectedRound.id,
                     user_id: user.id,
-                    bet_type: submitForm.bet_type,
+                    bet_type: betType,
                     numbers: submitForm.numbers,
-                    amount: amount,
+                    amount: totalAmount,
                     commission_rate: commissionRate,
                     commission_amount: commissionAmount
                 })
@@ -203,9 +253,17 @@ export default function UserDashboard() {
             if (error) throw error
 
             // Reset form
-            setSubmitForm({ ...submitForm, numbers: '', amount: '' })
+            setSubmitForm({ ...submitForm, numbers: submitForm.numbers, amount: submitForm.amount })
             fetchSubmissions()
-            alert('ส่งเลขสำเร็จ!')
+
+            // Show toast instead of alert
+            setToast({ message: 'ส่งเลขสำเร็จ!', type: 'success' })
+
+            // Select all text in number input for next entry
+            if (numberInputRef.current) {
+                numberInputRef.current.select()
+                numberInputRef.current.focus()
+            }
 
         } catch (error) {
             console.error('Error:', error)
@@ -503,86 +561,111 @@ export default function UserDashboard() {
                         </div>
 
                         <div className="modal-body">
-                            {/* Bet Type Selection */}
-                            <div className="form-group">
-                                <label className="form-label">ประเภท</label>
-                                <div className="bet-type-grid">
-                                    {Object.entries(BET_TYPES).map(([key, info]) => (
-                                        <button
-                                            key={key}
-                                            type="button"
-                                            className={`bet-type-btn ${submitForm.bet_type === key ? 'active' : ''}`}
-                                            onClick={() => setSubmitForm({ ...submitForm, bet_type: key, numbers: '' })}
-                                        >
-                                            {info.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Number Input */}
                             <div className="form-group">
                                 <label className="form-label">
-                                    เลข ({BET_TYPES[submitForm.bet_type].digits} หลัก)
+                                    เลข ({BET_TYPES[submitForm.bet_type]?.digits || '-'} หลัก)
                                 </label>
                                 <input
+                                    ref={numberInputRef}
                                     type="text"
                                     className="form-input number-input"
-                                    maxLength={BET_TYPES[submitForm.bet_type].digits}
-                                    placeholder={'0'.repeat(BET_TYPES[submitForm.bet_type].digits)}
+                                    inputMode="decimal"
+                                    placeholder="ป้อนตัวเลข"
                                     value={submitForm.numbers}
                                     onChange={e => setSubmitForm({
                                         ...submitForm,
-                                        numbers: e.target.value.replace(/\D/g, '')
+                                        numbers: e.target.value.replace(/[ \-.,]/g, '*').replace(/[^\d*]/g, '')
                                     })}
                                 />
                             </div>
 
-                            {/* Amount Input */}
                             <div className="form-group">
                                 <label className="form-label">จำนวนเงิน ({selectedRound.currency_name})</label>
                                 <input
-                                    type="number"
+                                    type="text"
                                     className="form-input"
+                                    inputMode="decimal"
                                     placeholder="0"
                                     value={submitForm.amount}
                                     onChange={e => setSubmitForm({
                                         ...submitForm,
-                                        amount: e.target.value
+                                        amount: e.target.value.replace(/[ \-.,]/g, '*').replace(/[^\d*]/g, '')
                                     })}
                                 />
                             </div>
 
-                            {/* Payout Info */}
-                            {selectedRound.type_limits && (
-                                <div className="payout-info">
-                                    <span>อัตราจ่าย:</span>
-                                    <strong>
-                                        {selectedRound.type_limits.find(l => l.bet_type === submitForm.bet_type)?.payout_rate || '-'}
-                                        เท่า
-                                    </strong>
+                            {/* Bet Type Selection */}
+                            <div className="form-group">
+                                <label className="form-label">ประเภท</label>
+                                <div className="bet-type-grid">
+                                    {(() => {
+                                        const digits = submitForm.numbers.replace(/\*/g, '').length
+                                        const hasStarInNumbers = submitForm.numbers.includes('*')
+                                        const hasStarInAmount = submitForm.amount.toString().includes('*')
+                                        const lotteryType = selectedRound.lottery_type
+                                        const amount = submitForm.amount.toString()
+
+                                        let available = []
+
+                                        if (digits === 0) {
+                                            if (lotteryType === 'lao') available = ['4_set']
+                                        } else if (digits === 1) {
+                                            if (amount) available = ['run_top', 'run_bottom', 'front_top_1', 'middle_top_1', 'back_top_1', 'front_bottom_1', 'back_bottom_1']
+                                        } else if (digits === 2) {
+                                            if (amount) {
+                                                available = ['2_top', '2_front', '2_spread', '2_bottom']
+                                                if (!hasStarInAmount) available.splice(3, 0, '2_have')
+                                            }
+                                        } else if (digits === 3) {
+                                            if (amount) {
+                                                available = ['3_top', '3_tod']
+                                                if (lotteryType === 'thai') available.push('3_bottom')
+                                            }
+                                        } else if (digits === 4) {
+                                            if (lotteryType === 'lao') {
+                                                if (!amount || amount === '0') available = ['4_set']
+                                                else if (hasStarInNumbers || hasStarInAmount) available = ['3_top']
+                                                else available = ['4_set', '4_float']
+                                            } else {
+                                                if (amount) {
+                                                    if (hasStarInNumbers || hasStarInAmount) available = ['3_top']
+                                                    else available = ['4_float']
+                                                }
+                                            }
+                                        } else if (digits === 5) {
+                                            if (amount) {
+                                                if (hasStarInNumbers || hasStarInAmount) available = ['3_top']
+                                                else available = ['5_float']
+                                            }
+                                        }
+
+                                        return available.map(key => (
+                                            <button
+                                                key={key}
+                                                type="button"
+                                                className={`bet-type-btn ${submitForm.bet_type === key ? 'active' : ''}`}
+                                                onClick={() => handleSubmit(key)}
+                                                disabled={submitting}
+                                            >
+                                                {submitting && submitForm.bet_type === key ? 'กำลังส่ง...' : (BET_TYPES[key]?.label || key)}
+                                            </button>
+                                        ))
+                                    })()}
+                                </div>
+                            </div>
+
+                            {/* Toast Notification */}
+                            {toast && (
+                                <div className={`toast-notification ${toast.type}`}>
+                                    <FiCheck /> {toast.message}
                                 </div>
                             )}
                         </div>
-
-                        <div className="modal-footer">
-                            <button className="btn btn-secondary" onClick={() => setShowSubmitModal(false)}>
-                                ยกเลิก
-                            </button>
-                            <button
-                                className="btn btn-primary"
-                                onClick={handleSubmit}
-                                disabled={submitting}
-                            >
-                                {submitting ? 'กำลังส่ง...' : (
-                                    <><FiSend /> ส่งเลข</>
-                                )}
-                            </button>
-                        </div>
                     </div>
-                </div>
-            )}
-        </div>
+                </div >
+            )
+            }
+        </div >
     )
 }
 
