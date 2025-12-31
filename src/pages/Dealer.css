@@ -1,0 +1,349 @@
+.dealer-page {
+    padding: 2rem 0;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.page-header h1 {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, var(--color-primary), #fff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.page-header p {
+    color: var(--text-secondary);
+}
+
+.dealer-layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 2rem;
+}
+
+/* Sidebar */
+.dealer-sidebar {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 1.5rem;
+    height: fit-content;
+    position: sticky;
+    top: 90px;
+}
+
+.sidebar-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+}
+
+.draw-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.draw-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    width: 100%;
+    text-align: left;
+}
+
+.draw-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.draw-item.active {
+    background: rgba(212, 175, 55, 0.1);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+.draw-status {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-full);
+}
+
+.draw-status.published {
+    background: rgba(0, 210, 106, 0.2);
+    color: var(--color-success);
+}
+
+.draw-status.pending {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-muted);
+}
+
+/* Referral Section */
+.referral-section {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+}
+
+.referral-header {
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+.referral-header h3 {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    color: var(--color-primary);
+}
+
+.referral-header p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.referral-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.qr-wrapper {
+    padding: 1rem;
+    background: white;
+    border-radius: var(--radius-lg);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.qr-code-bg {
+    width: 120px;
+    height: 120px;
+}
+
+.link-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    width: 100%;
+    max-width: 400px;
+}
+
+.referral-link {
+    width: 100%;
+    padding: 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-family: monospace;
+    font-size: 0.9rem;
+    text-align: center;
+    word-break: break-all;
+}
+
+/* Stats Row */
+.stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.stat-box {
+    background: var(--bg-card);
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.stat-icon {
+    font-size: 2rem;
+    color: var(--color-primary);
+    padding: 0.75rem;
+    background: rgba(212, 175, 55, 0.1);
+    border-radius: var(--radius-md);
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.stat-label {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+/* Purchases Table */
+.purchases-section {
+    padding: 1.5rem;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.section-header h3 {
+    font-size: 1.25rem;
+    color: var(--text-primary);
+}
+
+.badge {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.25rem 0.75rem;
+    border-radius: var(--radius-full);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.purchases-table-wrap {
+    overflow-x: auto;
+}
+
+.purchases-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 800px;
+}
+
+.purchases-table th {
+    text-align: left;
+    padding: 1rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.purchases-table td {
+    padding: 1rem;
+    color: var(--text-primary);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.user-cell {
+    display: flex;
+    flex-direction: column;
+}
+
+.user-name {
+    font-weight: 500;
+}
+
+.user-email {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.type-badge {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+}
+
+.number-cell {
+    font-family: monospace;
+    font-size: 1.1rem;
+    letter-spacing: 1px;
+    color: var(--color-accent);
+}
+
+.time-cell {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: var(--radius-full);
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.status-badge.won {
+    background: rgba(0, 210, 106, 0.2);
+    color: var(--color-success);
+}
+
+.status-badge.lost {
+    background: rgba(233, 69, 96, 0.2);
+    color: var(--color-error);
+}
+
+.status-badge.pending {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .dealer-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .dealer-sidebar {
+        position: static;
+        margin-bottom: 1rem;
+    }
+
+    .draw-list {
+        flex-direction: row;
+        overflow-x: auto;
+        padding-bottom: 0.5rem;
+    }
+
+    .draw-item {
+        width: auto;
+        min-width: 160px;
+    }
+}
+
+@media (min-width: 768px) {
+    .referral-content {
+        flex-direction: row;
+        justify-content: center;
+        gap: 3rem;
+    }
+
+    .referral-header {
+        text-align: left;
+    }
+
+    .referral-header h3 {
+        justify-content: flex-start;
+    }
+
+    .link-wrapper {
+        align-items: flex-start;
+    }
+}
