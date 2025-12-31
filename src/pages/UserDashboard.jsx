@@ -247,7 +247,8 @@ export default function UserDashboard() {
         const digitsOnly = submitForm.numbers.replace(/\*/g, '')
 
         // Strict digit check unless it's a permutation case
-        if (betType !== '3_perm_from_4' && betType !== '3_perm_from_5' && betType !== '3_perm_from_3' && digitsOnly.length !== betTypeInfo.digits) {
+        const isSpecial3Digit = ['3_perm_from_4', '3_perm_from_5', '3_perm_from_3', '3_straight_tod', '3_straight_perm'].includes(betType)
+        if (!isSpecial3Digit && digitsOnly.length !== betTypeInfo.digits) {
             if (!(betType === '3_top' && submitForm.numbers.includes('*'))) {
                 alert(`${betTypeInfo.label} ต้องมี ${betTypeInfo.digits} หลัก`)
                 return
@@ -277,6 +278,77 @@ export default function UserDashboard() {
 
                 const { error } = await supabase.from('submissions').insert(inserts)
                 if (error) throw error
+            } else if (betType === '3_straight_tod') {
+                const [straightAmt, todAmt] = amountParts
+                const inserts = []
+
+                if (straightAmt > 0) {
+                    const rate = userSettings?.commission_rates?.['3_top'] || 0
+                    inserts.push({
+                        round_id: selectedRound.id,
+                        user_id: user.id,
+                        bet_type: '3_top',
+                        numbers: submitForm.numbers,
+                        amount: straightAmt,
+                        commission_rate: rate,
+                        commission_amount: (straightAmt * rate) / 100
+                    })
+                }
+
+                if (todAmt > 0) {
+                    const rate = userSettings?.commission_rates?.['3_tod'] || 0
+                    inserts.push({
+                        round_id: selectedRound.id,
+                        user_id: user.id,
+                        bet_type: '3_tod',
+                        numbers: submitForm.numbers,
+                        amount: todAmt,
+                        commission_rate: rate,
+                        commission_amount: (todAmt * rate) / 100
+                    })
+                }
+
+                if (inserts.length > 0) {
+                    const { error } = await supabase.from('submissions').insert(inserts)
+                    if (error) throw error
+                }
+            } else if (betType === '3_straight_perm') {
+                const [straightAmt, permAmt] = amountParts
+                const perms = getPermutations(submitForm.numbers).filter(p => p !== submitForm.numbers)
+                const inserts = []
+
+                if (straightAmt > 0) {
+                    const rate = userSettings?.commission_rates?.['3_top'] || 0
+                    inserts.push({
+                        round_id: selectedRound.id,
+                        user_id: user.id,
+                        bet_type: '3_top',
+                        numbers: submitForm.numbers,
+                        amount: straightAmt,
+                        commission_rate: rate,
+                        commission_amount: (straightAmt * rate) / 100
+                    })
+                }
+
+                if (permAmt > 0 && perms.length > 0) {
+                    const rate = userSettings?.commission_rates?.['3_top'] || 0
+                    perms.forEach(p => {
+                        inserts.push({
+                            round_id: selectedRound.id,
+                            user_id: user.id,
+                            bet_type: '3_top',
+                            numbers: p,
+                            amount: permAmt,
+                            commission_rate: rate,
+                            commission_amount: (permAmt * rate) / 100
+                        })
+                    })
+                }
+
+                if (inserts.length > 0) {
+                    const { error } = await supabase.from('submissions').insert(inserts)
+                    if (error) throw error
+                }
             } else {
                 // Standard submission
                 // 1. Check number limits (Specific + Type)
@@ -699,13 +771,21 @@ export default function UserDashboard() {
                                             if (!hasStarInAmount) available.splice(3, 0, '2_have')
                                         } else if (digits === 3) {
                                             if (!isAmountEmpty) {
-                                                const permCount = getPermutations(submitForm.numbers).length
-                                                available = [
-                                                    '3_top',
-                                                    '3_tod',
-                                                    { id: '3_perm_from_3', label: `คูณชุด ${permCount}` }
-                                                ]
-                                                if (lotteryType === 'thai') available.splice(2, 0, '3_bottom')
+                                                if (hasStarInAmount) {
+                                                    const permCount = getPermutations(submitForm.numbers).length
+                                                    available = [
+                                                        { id: '3_straight_tod', label: 'เต็ง-โต๊ด' },
+                                                        { id: '3_straight_perm', label: `1+กลับ (${permCount - 1})` }
+                                                    ]
+                                                } else {
+                                                    const permCount = getPermutations(submitForm.numbers).length
+                                                    available = [
+                                                        '3_top',
+                                                        '3_tod',
+                                                        { id: '3_perm_from_3', label: `คูณชุด ${permCount}` }
+                                                    ]
+                                                    if (lotteryType === 'thai') available.push('3_bottom')
+                                                }
                                             }
                                         } else if (digits === 4) {
                                             if (lotteryType === 'lao') {
