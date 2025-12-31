@@ -35,7 +35,7 @@ const BET_TYPES = {
     '2_bottom': { label: '2 ตัวล่าง', digits: 2 },
 
     // 3 Digits
-    '3_top': { label: '3 ตัวบน', digits: 3 },
+    '3_top': { label: '3 ตัวตรง', digits: 3 },
     '3_tod': { label: '3 ตัวโต๊ด', digits: 3 },
     '3_bottom': { label: '3 ตัวล่าง', digits: 3 },
 
@@ -247,7 +247,7 @@ export default function UserDashboard() {
         const digitsOnly = submitForm.numbers.replace(/\*/g, '')
 
         // Strict digit check unless it's a permutation case
-        if (betType !== '3_perm_from_4' && betType !== '3_perm_from_5' && digitsOnly.length !== betTypeInfo.digits) {
+        if (betType !== '3_perm_from_4' && betType !== '3_perm_from_5' && betType !== '3_perm_from_3' && digitsOnly.length !== betTypeInfo.digits) {
             if (!(betType === '3_top' && submitForm.numbers.includes('*'))) {
                 alert(`${betTypeInfo.label} ต้องมี ${betTypeInfo.digits} หลัก`)
                 return
@@ -256,10 +256,12 @@ export default function UserDashboard() {
 
         setSubmitting(true)
         try {
-            if (betType === '3_perm_from_4' || betType === '3_perm_from_5') {
-                const perms = betType === '3_perm_from_4'
-                    ? getUnique3DigitPermsFrom4(submitForm.numbers)
-                    : getUnique3DigitPermsFrom5(submitForm.numbers)
+            if (betType === '3_perm_from_4' || betType === '3_perm_from_5' || betType === '3_perm_from_3') {
+                let perms = []
+                if (betType === '3_perm_from_4') perms = getUnique3DigitPermsFrom4(submitForm.numbers)
+                else if (betType === '3_perm_from_5') perms = getUnique3DigitPermsFrom5(submitForm.numbers)
+                else if (betType === '3_perm_from_3') perms = getPermutations(submitForm.numbers)
+
                 const commissionRate = userSettings?.commission_rates?.['3_top'] || 0
                 const commissionAmount = (totalAmount * commissionRate) / 100
 
@@ -696,8 +698,15 @@ export default function UserDashboard() {
                                             available = ['2_top', '2_front', '2_spread', '2_bottom']
                                             if (!hasStarInAmount) available.splice(3, 0, '2_have')
                                         } else if (digits === 3) {
-                                            available = ['3_top', '3_tod']
-                                            if (lotteryType === 'thai') available.push('3_bottom')
+                                            if (!isAmountEmpty) {
+                                                const permCount = getPermutations(submitForm.numbers).length
+                                                available = [
+                                                    '3_top',
+                                                    '3_tod',
+                                                    { id: '3_perm_from_3', label: `คูณชุด ${permCount}` }
+                                                ]
+                                                if (lotteryType === 'thai') available.splice(2, 0, '3_bottom')
+                                            }
                                         } else if (digits === 4) {
                                             if (lotteryType === 'lao') {
                                                 if (isAmountEmpty) {
