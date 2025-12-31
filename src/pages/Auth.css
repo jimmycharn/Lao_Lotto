@@ -117,6 +117,29 @@
     text-decoration: underline;
 }
 
+/* Referral Info */
+.referral-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(212, 175, 55, 0.15);
+    border: 1px solid var(--color-primary);
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-full);
+    color: var(--color-primary);
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+}
+
+.referral-info strong {
+    color: #fff;
+}
+
+.dealer-welcome {
+    color: var(--color-success);
+    margin-top: 0.5rem;
+}
+
 /* Responsive */
 @media (max-width: 480px) {
     .auth-container {

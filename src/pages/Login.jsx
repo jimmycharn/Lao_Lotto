@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { FiMail, FiLock, FiUser, FiEye, FiEyeOff, FiGift } from 'react-icons/fi'
 import './Auth.css'
@@ -10,8 +10,20 @@ export default function Login() {
     const [showPassword, setShowPassword] = useState(false)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
-    const { signIn } = useAuth()
+    const { signIn, user, loading: authLoading } = useAuth()
     const navigate = useNavigate()
+
+    // Reset local loading state if authLoading finishes
+    useEffect(() => {
+        if (!authLoading) {
+            setLoading(false)
+        }
+    }, [authLoading])
+
+    // If user is already logged in, redirect immediately
+    if (user && !authLoading) {
+        return <Navigate to="/" replace />
+    }
 
     const handleSubmit = async (e) => {
         e.preventDefault()
@@ -19,18 +31,18 @@ export default function Login() {
         setLoading(true)
 
         try {
-            const { error } = await signIn(email, password)
-            if (error) {
-                let msg = error.message
+            const { error: signInError } = await signIn(email, password)
+            if (signInError) {
+                let msg = signInError.message
                 if (msg === 'Invalid login credentials') msg = 'อีเมลหรือรหัสผ่านไม่ถูกต้อง'
                 else if (msg.includes('Email not confirmed')) msg = 'กรุณายืนยันอีเมลในกล่องข้อความของคุณก่อนเข้าสู่ระบบ'
                 setError(msg)
-            } else {
-                navigate('/')
+                setLoading(false)
             }
+            // On success, authLoading will become true while fetching profile,
+            // and the useEffect above will reset loading when it's done.
         } catch (err) {
             setError('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง')
-        } finally {
             setLoading(false)
         }
     }

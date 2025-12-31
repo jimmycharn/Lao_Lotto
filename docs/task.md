@@ -1,50 +1,67 @@
-# Lao Lottery App - Task Checklist
+# Lao Lottery App - Task Checklist v2
 
-## Planning Phase
-- [x] Explore workspace
-- [x] Check Vite CLI options
-- [x] Create implementation plan
-- [x] Get user approval (3 roles: superadmin, เจ้ามือ, ผู้ใช้)
+## Phase 1: Initial Setup ✅
+- [x] Project setup (Vite + React + Supabase)
+- [x] Basic authentication
+- [x] Initial database schema
+- [x] Basic UI components
 
-## Setup Phase
-- [x] Initialize Vite + React project
-- [x] Install dependencies (Supabase, React Router, React Icons)
-- [x] Configure Supabase client
+---
 
-## Core Features
-- [x] Design database schema
-- [x] Create UI components
-  - [x] Header/Navigation
-  - [x] Lottery number input
-  - [x] Results display
-  - [x] User authentication
-- [x] Implement Supabase integration
-  - [x] Auth (login/register)
-  - [x] Database operations
+## Phase 2: Database Schema Update
+- [ ] Create new migration file
+- [ ] Add `lottery_rounds` table (งวดหวย)
+- [ ] Add `submissions` table (รายการส่งเลข)
+- [ ] Add `user_settings` table (ค่าคอม/อัตราจ่าย)
+- [ ] Add `number_limits` table (ค่าอั้น)
+- [ ] Run migration on Supabase
 
-## Pages Created
-- [x] Home - Landing page with hero and lottery types
-- [x] Login - User login
-- [x] Register - User registration
-- [x] BuyLottery - Select numbers and place bets
-- [x] Results - View lottery draw results
-- [x] History - User's purchase history
-- [x] Dealer - Dealer dashboard for managing tickets
-- [x] Admin - Superadmin dashboard for draws and users
+---
 
-## Styling
-- [x] Create design system with CSS variables
-- [x] Implement responsive layout
-- [x] Add animations and transitions
-- [x] Dark theme with golden accents
+## Phase 3: Dealer Dashboard
+- [ ] **งวดหวย**
+  - [ ] สร้างงวดใหม่
+  - [ ] แก้ไขงวด
+  - [ ] ปิดงวด
+- [ ] **ตั้งค่า User**
+  - [ ] ตั้งค่าคอมมิชชั่น
+  - [ ] ตั้งอัตราจ่าย
+- [ ] **ค่าอั้น**
+  - [ ] ตั้งค่าอั้นแต่ละเลข
+  - [ ] ดูเลขเกินค่าอั้น
+- [ ] **ดูเลขที่ส่ง**
+  - [ ] ภาพรวมตามประเภท
+  - [ ] รายละเอียดรายคน
+- [ ] **ตรวจผลรางวัล**
+  - [ ] ใส่เลขที่ออก
+  - [ ] คำนวณผู้ชนะ
+  - [ ] สรุปภาพรวม
 
-## Database
-- [x] Create profiles table with roles
-- [x] Create lottery_draws table
-- [x] Create purchases table
-- [x] Add RLS policies for security
+---
 
-## Verification
-- [x] Test application locally
-- [x] Capture screenshots
-- [x] Create walkthrough documentation
+## Phase 4: User Dashboard
+- [ ] **ดูงวดเปิดรับ**
+  - [ ] แสดงประเภทหวย
+  - [ ] แสดงเวลาเปิด-ปิด
+  - [ ] Countdown timer
+- [ ] **ส่งเลข**
+  - [ ] ป้อนเลข + จำนวนเงิน
+  - [ ] ลบเลขได้ตามเวลา
+- [ ] **ดูเลขที่ส่ง**
+- [ ] **ค่าคอมมิชชั่น**
+- [ ] **ผลรางวัล**
+
+---
+
+## Phase 5: SuperAdmin Dashboard
+- [ ] ภาพรวมระบบ
+- [ ] ดูข้อมูล Dealer
+- [ ] มุมมอง Dealer
+
+---
+
+## Phase 6: Polish & Testing
+- [ ] Responsive design
+- [ ] Error handling
+- [ ] Test all features
+- [ ] Deploy

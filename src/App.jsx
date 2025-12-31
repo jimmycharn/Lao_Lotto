@@ -9,6 +9,7 @@ import Results from './pages/Results'
 import History from './pages/History'
 import Dealer from './pages/Dealer'
 import Admin from './pages/Admin'
+import UserDashboard from './pages/UserDashboard'
 import './index.css'
 
 // Protected Route Component
@@ -54,6 +55,14 @@ function AppContent() {
             element={
               <ProtectedRoute requireAuth>
                 <BuyLottery />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute requireAuth>
+                <UserDashboard />
               </ProtectedRoute>
             }
           />

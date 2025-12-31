@@ -43,34 +43,44 @@ export function AuthProvider({ children }) {
     }, [])
 
     async function fetchProfile(userOrId) {
-        if (!supabase || !userOrId) return
+        if (!supabase || !userOrId) {
+            setLoading(false)
+            return
+        }
 
-        // Handle both user object and userId string (for backward compatibility)
+        // Handle both user object and userId string
         const userId = userOrId?.id || userOrId
         const userEmail = userOrId?.email
 
+        console.log('Fetching profile for:', userId)
+
         try {
-            console.log("Fetching profile for:", userId)
-            const { data, error } = await supabase
+            // Add a timeout to the profile fetch to prevent hanging
+            const fetchPromise = supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', userId)
                 .single()
+
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
+            )
+
+            const { data, error } = await Promise.race([fetchPromise, timeoutPromise])
 
             if (error) {
                 console.error('Error fetching profile:', error)
 
                 // If profile doesn't exist (PGRST116) and we have email, try to create it
                 if (error.code === 'PGRST116' && userEmail) {
-                    console.log("Profile not found. Attempting to auto-create...")
-
+                    console.log('Profile not found, attempting to auto-create...')
                     const newProfile = {
                         id: userId,
                         email: userEmail,
                         full_name: userOrId.user_metadata?.full_name || userEmail.split('@')[0],
-                        // Auto-fix role for this specific user ID
-                        role: userId === 'a3791af8-1e13-4034-87d8-6a54ee21c3d9' ? 'dealer' : 'user',
-                        balance: 0
+                        role: 'user',
+                        balance: 0,
+                        dealer_id: userOrId.user_metadata?.dealer_id || null
                     }
 
                     const { error: insertError } = await supabase
@@ -80,13 +90,13 @@ export function AuthProvider({ children }) {
                     if (insertError) {
                         console.error("Failed to auto-create profile:", insertError)
                     } else {
-                        console.log("Profile auto-created successfully!")
+                        console.log('Profile auto-created successfully')
                         setProfile(newProfile)
-                        return // Exit, state is set
+                        return
                     }
                 }
-            } else {
-                console.log("Profile data received:", data)
+            } else if (data) {
+                console.log('Profile loaded:', data.role)
                 setProfile(data)
             }
         } catch (error) {
@@ -96,14 +106,17 @@ export function AuthProvider({ children }) {
         }
     }
 
-    const signUp = async (email, password, fullName) => {
+    const signUp = async (email, password, fullName, dealerId = null) => {
         if (!supabase) return { data: null, error: { message: 'Supabase not configured' } }
 
         const { data, error } = await supabase.auth.signUp({
             email,
             password,
             options: {
-                data: { full_name: fullName }
+                data: {
+                    full_name: fullName,
+                    dealer_id: dealerId || null
+                }
             }
         })
         return { data, error }

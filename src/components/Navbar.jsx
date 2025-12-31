@@ -12,7 +12,8 @@ import {
     FiLogOut,
     FiUsers,
     FiSettings,
-    FiGift
+    FiGift,
+    FiSend
 } from 'react-icons/fi'
 import './Navbar.css'
 
@@ -22,17 +23,19 @@ export default function Navbar() {
     const navigate = useNavigate()
     const location = useLocation()
 
-
-
     const handleSignOut = async () => {
         await signOut()
         navigate('/')
         setIsOpen(false)
     }
 
+    // Check if user has a dealer
+    const hasDealer = profile?.dealer_id
+
     const navLinks = [
         { path: '/', label: 'หน้าแรก', icon: <FiHome /> },
-        { path: '/buy', label: 'ซื้อหวย', icon: <FiEdit />, requireAuth: true },
+        { path: '/dashboard', label: 'ส่งเลข', icon: <FiSend />, requireAuth: true, requireDealer: true },
+        { path: '/buy', label: 'ซื้อหวย', icon: <FiEdit />, requireAuth: true, hide: hasDealer },
         { path: '/results', label: 'ผลหวย', icon: <FiList /> },
         { path: '/history', label: 'ประวัติ', icon: <FiClock />, requireAuth: true },
     ]
@@ -59,8 +62,13 @@ export default function Navbar() {
 
                     {/* Desktop Nav */}
                     <div className="navbar-links desktop-only">
-                        {navLinks.map(link => (
-                            (!link.requireAuth || user) && (
+                        {navLinks.map(link => {
+                            // Check conditions
+                            if (link.hide) return null
+                            if (link.requireAuth && !user) return null
+                            if (link.requireDealer && !hasDealer) return null
+
+                            return (
                                 <Link
                                     key={link.path}
                                     to={link.path}
@@ -70,7 +78,7 @@ export default function Navbar() {
                                     <span>{link.label}</span>
                                 </Link>
                             )
-                        ))}
+                        })}
 
                         {/* Admin/Dealer Links */}
                         {(isSuperAdmin || isDealer) && adminLinks.map(link => (
@@ -132,8 +140,12 @@ export default function Navbar() {
             {/* Mobile Menu */}
             <div className={`mobile-menu ${isOpen ? 'open' : ''}`}>
                 <div className="mobile-menu-content">
-                    {navLinks.map(link => (
-                        (!link.requireAuth || user) && (
+                    {navLinks.map(link => {
+                        if (link.hide) return null
+                        if (link.requireAuth && !user) return null
+                        if (link.requireDealer && !hasDealer) return null
+
+                        return (
                             <Link
                                 key={link.path}
                                 to={link.path}
@@ -144,7 +156,7 @@ export default function Navbar() {
                                 <span>{link.label}</span>
                             </Link>
                         )
-                    ))}
+                    })}
 
                     {/* Admin/Dealer Links */}
                     {(isSuperAdmin || isDealer) && (

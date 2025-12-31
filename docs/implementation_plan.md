@@ -1,146 +1,140 @@
-# Lao Lottery App - Implementation Plan
+# Lao Lottery App - Implementation Plan v2
 
-สร้างแอปพลิเคชันหวยลาวโดยใช้ **Vite + React + Supabase** ที่มีระบบสมาชิก, ซื้อหวย, และตรวจผลรางวัล
-
-## User Review Required
-
-> [!IMPORTANT]
-> **Supabase Project Required**
-> คุณจะต้องสร้าง Supabase Project ก่อนที่จะใช้งานได้ โปรดไปที่ [supabase.com](https://supabase.com) เพื่อสร้างโปรเจ็คใหม่และรับ:
-> - `VITE_SUPABASE_URL` - URL ของโปรเจ็ค Supabase
-> - `VITE_SUPABASE_ANON_KEY` - Anon Key สำหรับเชื่อมต่อ
+ปรับปรุง Dashboard สำหรับระบบหวยลาว แบ่งตาม 3 บทบาท
 
 ---
 
-## Proposed Features
+## 📌 สรุป Requirements
 
-### 🎰 ฟีเจอร์หลัก
-1. **ระบบสมาชิก** - สมัครสมาชิก/เข้าสู่ระบบ ด้วย Email
-2. **ซื้อหวย** - เลือกเลข 2 ตัว, 3 ตัว, 4 ตัว และ 6 ตัว (หวยลาว)
-3. **ตรวจผลรางวัล** - ดูผลหวยงวดล่าสุดและงวดก่อนหน้า
-4. **ประวัติการซื้อ** - ดูรายการหวยที่เคยซื้อทั้งหมด
-5. **Dashboard Admin** - จัดการผลหวยและดูรายงาน
-
----
-
-## Proposed Changes
-
-### Project Setup
-
-#### [NEW] .env
-Environment variables สำหรับ Supabase connection
-
-#### [NEW] vite.config.js
-Vite configuration with React plugin
+### 1. SuperAdmin Dashboard
+| ฟีเจอร์ | รายละเอียด |
+|--------|-----------|
+| ภาพรวมเจ้ามือ | จำนวนเจ้ามือ, จำนวน user แต่ละคน |
+| ดูข้อมูลเจ้ามือ | คลิกเข้าไปดูรายละเอียดของแต่ละ dealer |
+| ดูข้อมูล User | ดูการส่งเลขของแต่ละ user |
+| ดูงวดที่เปิดรับ | เห็นว่า dealer กำลังเปิดรับหวยอะไรบ้าง |
+| มุมมอง Dealer | สามารถเข้าไปดู dashboard แบบ dealer ได้ |
 
 ---
 
-### Supabase Client
-
-#### [NEW] src/lib/supabase.js
-Supabase client initialization
-
----
-
-### Core Components
-
-#### [NEW] src/App.jsx
-Main app component with routing
-
-#### [NEW] src/components/Navbar.jsx
-Navigation bar with auth state
-
-#### [NEW] src/components/LotteryCard.jsx
-หวย Card component for displaying lottery options
+### 2. Dealer Dashboard
+| ฟีเจอร์ | รายละเอียด |
+|--------|-----------|
+| เชิญ User | QR Code + ลิงก์รับสมาชิก ✅ มีแล้ว |
+| สร้างงวดหวย | กำหนดวันที่, เวลาเปิด-ปิดรับ |
+| ตั้งค่าคอม | กำหนด commission rate ให้แต่ละ user |
+| ตั้งอัตราจ่าย | กำหนด payout rate ให้แต่ละ user |
+| ดูเลขที่ส่งมา | ภาพรวม + รายละเอียด |
+| ตั้งค่าอั้น | กำหนดว่าแต่ละเลขรับได้ไม่เกินเท่าไหร่ |
+| ดูเลขเกิน | แสดงเลขที่เกินค่าอั้น |
+| ตรวจผลรางวัล | ใส่เลขที่ออก → คำนวณผู้ชนะอัตโนมัติ |
+| ปิดงวด | ปิดงวดเมื่อจบ |
 
 ---
 
-### Pages
-
-#### [NEW] src/pages/Home.jsx
-Landing page with latest results and buy options
-
-#### [NEW] src/pages/Login.jsx
-Login/Register page
-
-#### [NEW] src/pages/BuyLottery.jsx
-ซื้อหวย - select numbers and place bets
-
-#### [NEW] src/pages/Results.jsx
-ผลหวย - View lottery results
-
-#### [NEW] src/pages/History.jsx
-ประวัติการซื้อ - User's purchase history
+### 3. User Dashboard  
+| ฟีเจอร์ | รายละเอียด |
+|--------|-----------|
+| ดูงวดเปิดรับ | เห็นประเภทหวย + เวลาเปิด-ปิด |
+| ส่งเลข | ป้อนเลขที่ขายมา → ส่งให้ dealer |
+| ลบเลข | ลบได้ภายในเวลาที่ dealer กำหนด |
+| ดูเลขที่ส่ง | รายการเลขทั้งหมดที่ส่งไป |
+| ดูค่าคอม | เห็น commission rate + คอมรวม |
+| ดูผลรางวัล | เลขที่ถูก + สรุปต้องจ่าย/ได้รับ |
 
 ---
 
-### Styling
+## 💡 ข้อเสนอแนะเพิ่มเติม
 
-#### [NEW] src/index.css
-Global styles with design system:
-- Dark theme with golden accents (ธีมหวยลาว)
-- CSS variables for consistency
-- Responsive design
-- Smooth animations
+1. **🔔 ระบบแจ้งเตือน** - แจ้งเมื่องวดเปิด/ปิด, หวยออก
+2. **📊 รายงานสรุป** - Export PDF/Excel สำหรับ dealer
+3. **💰 ประวัติเงิน** - บันทึกการจ่าย/รับเงินระหว่าง user-dealer
+4. **⏰ Timer แสดงเวลา** - Countdown ก่อนปิดรับ
+5. **📱 Mobile-first** - ออกแบบให้ใช้งานมือถือได้ดี
 
 ---
 
-## Database Schema
+## 🗄️ Database Changes Required
 
 ```mermaid
 erDiagram
-    users ||--o{ purchases : makes
-    lottery_draws ||--o{ purchases : has
+    profiles ||--o{ lottery_rounds : owns
+    lottery_rounds ||--o{ submissions : has
+    profiles ||--o{ submissions : makes
+    profiles ||--o{ user_settings : has
+    lottery_rounds ||--o{ number_limits : has
     
-    users {
+    lottery_rounds {
         uuid id PK
-        string email
-        string full_name
-        decimal balance
+        uuid dealer_id FK
+        string lottery_type
+        date round_date
+        timestamp open_time
+        timestamp close_time
+        timestamp delete_before_close
+        string winning_numbers
+        boolean is_closed
         timestamp created_at
     }
     
-    lottery_draws {
+    submissions {
         uuid id PK
-        date draw_date
-        string two_digit
-        string three_digit
-        string four_digit
-        string six_digit
-        boolean is_published
-        timestamp created_at
-    }
-    
-    purchases {
-        uuid id PK
+        uuid round_id FK
         uuid user_id FK
-        uuid draw_id FK
         string bet_type
         string numbers
         decimal amount
+        boolean is_deleted
         boolean is_winner
         decimal prize_amount
         timestamp created_at
     }
+    
+    user_settings {
+        uuid id PK
+        uuid user_id FK
+        uuid dealer_id FK
+        decimal commission_2digit
+        decimal commission_3digit
+        decimal commission_4digit
+        decimal commission_6digit
+        decimal payout_2digit
+        decimal payout_3digit
+        decimal payout_4digit
+        decimal payout_6digit
+    }
+    
+    number_limits {
+        uuid id PK
+        uuid round_id FK
+        string bet_type
+        string numbers
+        decimal max_amount
+    }
 ```
 
 ---
 
-## Verification Plan
+## 🔄 Implementation Order
 
-### Development Server
-```bash
-npm run dev
-```
-- ทดสอบการแสดงผลหน้าแรก
-- ทดสอบ responsive design
-- ทดสอบ navigation
+### Phase 1: Database & Core
+- [ ] สร้าง SQL migration ใหม่
+- [ ] อัปเดต Supabase schema
 
-### Supabase Integration
-- ทดสอบ login/register
-- ทดสอบการบันทึกข้อมูลหวย
-- ทดสอบการดึงผลหวย
+### Phase 2: Dealer Dashboard
+- [ ] สร้างงวดหวย
+- [ ] ตั้งค่าคอม + อัตราจ่าย
+- [ ] ตั้งค่าอั้น
+- [ ] ดูเลขที่ส่งมา
+- [ ] ตรวจผลรางวัล
 
-### Browser Testing
-- ทดสอบใน Chrome และ Mobile view
-- ตรวจสอบ UI/UX และ animations
+### Phase 3: User Dashboard
+- [ ] ดูงวดที่เปิดรับ
+- [ ] ส่งเลข + ลบเลข
+- [ ] ดูค่าคอม
+- [ ] ดูผลรางวัล
+
+### Phase 4: SuperAdmin Dashboard
+- [ ] ภาพรวมเจ้ามือ
+- [ ] ดูข้อมูล dealer/user
+- [ ] มุมมอง dealer

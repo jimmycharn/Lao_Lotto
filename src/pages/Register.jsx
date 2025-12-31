@@ -1,8 +1,8 @@
-import { useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useNavigate, useSearchParams, Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { FiMail, FiLock, FiUser, FiEye, FiEyeOff, FiGift } from 'react-icons/fi'
+import { FiMail, FiLock, FiUser, FiEye, FiEyeOff, FiGift, FiUsers } from 'react-icons/fi'
 import './Auth.css'
 
 export default function Register() {
@@ -14,10 +14,35 @@ export default function Register() {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
     const [success, setSuccess] = useState(false)
-    const { signUp } = useAuth()
+    const [dealerInfo, setDealerInfo] = useState(null)
+    const { signUp, user, loading: authLoading } = useAuth()
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
     const dealerId = searchParams.get('ref')
+
+    // Fetch dealer info if ref exists
+    useEffect(() => {
+        if (dealerId) {
+            fetchDealerInfo()
+        }
+    }, [dealerId])
+
+    async function fetchDealerInfo() {
+        const { data } = await supabase
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', dealerId)
+            .single()
+
+        if (data) {
+            setDealerInfo(data)
+        }
+    }
+
+    // Redirect if already logged in (after all hooks)
+    if (user && !authLoading) {
+        return <Navigate to="/" replace />
+    }
 
     const handleSubmit = async (e) => {
         e.preventDefault()
@@ -36,34 +61,29 @@ export default function Register() {
         setLoading(true)
 
         try {
-            const { data, error } = await signUp(email, password, fullName)
+            const { data, error } = await signUp(email, password, fullName, dealerId)
 
             if (error) {
                 let msg = error.message
                 if (msg === 'User already registered') msg = 'อีเมลนี้ถูกใช้งานแล้ว'
                 setError(msg)
+                setLoading(false)
             } else {
-                // Create profile
-                if (data.user) {
-                    await supabase.from('profiles').insert({
-                        id: data.user.id,
-                        email: email,
-                        full_name: fullName,
-                        role: 'user',
-                        balance: 0,
-                        dealer_id: dealerId || null
-                    })
-                }
+                // Profile is auto-created by database trigger including dealer_id from metadata
 
+                // Handle redirect or success message
                 if (data.session) {
+                    // Auto login successful
                     navigate('/')
                 } else {
+                    // Email confirmation required
                     setSuccess(true)
+                    setLoading(false)
                 }
             }
         } catch (err) {
+            console.error('Registration error:', err)
             setError('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง')
-        } finally {
             setLoading(false)
         }
     }
@@ -76,6 +96,9 @@ export default function Register() {
                         <FiGift className="auth-logo success" />
                         <h1>สมัครสำเร็จ!</h1>
                         <p>กรุณาตรวจสอบอีเมลเพื่อยืนยันบัญชี</p>
+                        {dealerInfo && (
+                            <p className="dealer-welcome">คุณเป็นสมาชิกของ {dealerInfo.full_name} แล้ว</p>
+                        )}
                     </div>
                     <Link to="/login" className="btn btn-primary btn-lg auth-submit">
                         ไปยังหน้าเข้าสู่ระบบ
@@ -91,7 +114,14 @@ export default function Register() {
                 <div className="auth-header">
                     <FiGift className="auth-logo" />
                     <h1>สมัครสมาชิก</h1>
-                    <p>เริ่มต้นเสี่ยงโชคกับเรา</p>
+                    {dealerInfo ? (
+                        <div className="referral-info">
+                            <FiUsers />
+                            <span>เจ้ามือ: <strong>{dealerInfo.full_name}</strong></span>
+                        </div>
+                    ) : (
+                        <p>เริ่มต้นเสี่ยงโชคกับเรา</p>
+                    )}
                 </div>
 
                 <form onSubmit={handleSubmit} className="auth-form">
