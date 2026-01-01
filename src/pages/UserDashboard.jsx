@@ -122,6 +122,9 @@ export default function UserDashboard() {
     })
     const [submitting, setSubmitting] = useState(false)
     const [toast, setToast] = useState(null)
+    const [drafts, setDrafts] = useState([])
+    const [viewMode, setViewMode] = useState('summary') // summary, detailed
+    const [currentBillId, setCurrentBillId] = useState(null)
     const numberInputRef = useRef(null)
     const amountInputRef = useRef(null)
 
@@ -226,15 +229,14 @@ export default function UserDashboard() {
         return new Date() < deleteDeadline
     }
 
-    // Submit numbers
-    async function handleSubmit(betTypeOverride = null) {
+    // Add to draft list
+    function addToDraft(betTypeOverride = null) {
         const betType = betTypeOverride || submitForm.bet_type
         if (!submitForm.numbers || !submitForm.amount || !betType) {
             alert('กรุณากรอกเลขและจำนวนเงิน')
             return
         }
 
-        // Handle amount with * (e.g. 10*10)
         const amountParts = submitForm.amount.toString().split('*').map(p => parseFloat(p) || 0)
         const totalAmount = amountParts.reduce((sum, p) => sum + p, 0)
 
@@ -246,7 +248,7 @@ export default function UserDashboard() {
         const betTypeInfo = BET_TYPES[betType] || { label: betType, digits: 0 }
         const digitsOnly = submitForm.numbers.replace(/\*/g, '')
 
-        // Strict digit check unless it's a permutation case
+        // Strict digit check
         const isSpecial3Digit = ['3_perm_from_4', '3_perm_from_5', '3_perm_from_3', '3_straight_tod', '3_straight_perm'].includes(betType)
         if (!isSpecial3Digit && digitsOnly.length !== betTypeInfo.digits) {
             if (!(betType === '3_top' && submitForm.numbers.includes('*'))) {
@@ -255,161 +257,171 @@ export default function UserDashboard() {
             }
         }
 
-        setSubmitting(true)
-        try {
-            if (betType === '3_perm_from_4' || betType === '3_perm_from_5' || betType === '3_perm_from_3') {
-                let perms = []
-                if (betType === '3_perm_from_4') perms = getUnique3DigitPermsFrom4(submitForm.numbers)
-                else if (betType === '3_perm_from_5') perms = getUnique3DigitPermsFrom5(submitForm.numbers)
-                else if (betType === '3_perm_from_3') perms = getPermutations(submitForm.numbers)
+        const entryId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+        const newDrafts = []
+        const timestamp = new Date().toISOString()
 
-                const commissionRate = userSettings?.commission_rates?.['3_top'] || 0
-                const commissionAmount = (totalAmount * commissionRate) / 100
+        // Get label for display
+        let displayLabel = betTypeInfo.label
+        if (betType === '3_perm_from_3') {
+            const permCount = getPermutations(submitForm.numbers).length
+            displayLabel = `คูณชุด ${permCount}`
+        } else if (betType === '3_perm_from_4') {
+            const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
+            displayLabel = `3 X ${permCount}`
+        } else if (betType === '3_perm_from_5') {
+            const permCount = getUnique3DigitPermsFrom5(submitForm.numbers).length
+            displayLabel = `3 X ${permCount}`
+        } else if (betType === '3_straight_tod') {
+            displayLabel = 'เต็ง-โต๊ด'
+        } else if (betType === '3_straight_perm') {
+            const permCount = getPermutations(submitForm.numbers).length
+            displayLabel = `1+กลับ (${permCount - 1})`
+        }
 
-                const inserts = perms.map(p => ({
-                    round_id: selectedRound.id,
-                    user_id: user.id,
+        if (betType === '3_perm_from_4' || betType === '3_perm_from_5' || betType === '3_perm_from_3') {
+            let perms = []
+            if (betType === '3_perm_from_4') perms = getUnique3DigitPermsFrom4(submitForm.numbers)
+            else if (betType === '3_perm_from_5') perms = getUnique3DigitPermsFrom5(submitForm.numbers)
+            else if (betType === '3_perm_from_3') perms = getPermutations(submitForm.numbers)
+
+            const rate = userSettings?.commission_rates?.['3_top'] || 0
+            perms.forEach(p => {
+                newDrafts.push({
+                    entry_id: entryId,
                     bet_type: '3_top',
                     numbers: p,
                     amount: totalAmount,
-                    commission_rate: commissionRate,
-                    commission_amount: commissionAmount
-                }))
-
-                const { error } = await supabase.from('submissions').insert(inserts)
-                if (error) throw error
-            } else if (betType === '3_straight_tod') {
-                const [straightAmt, todAmt] = amountParts
-                const inserts = []
-
-                if (straightAmt > 0) {
-                    const rate = userSettings?.commission_rates?.['3_top'] || 0
-                    inserts.push({
-                        round_id: selectedRound.id,
-                        user_id: user.id,
-                        bet_type: '3_top',
-                        numbers: submitForm.numbers,
-                        amount: straightAmt,
-                        commission_rate: rate,
-                        commission_amount: (straightAmt * rate) / 100
-                    })
-                }
-
-                if (todAmt > 0) {
-                    const rate = userSettings?.commission_rates?.['3_tod'] || 0
-                    inserts.push({
-                        round_id: selectedRound.id,
-                        user_id: user.id,
-                        bet_type: '3_tod',
-                        numbers: submitForm.numbers,
-                        amount: todAmt,
-                        commission_rate: rate,
-                        commission_amount: (todAmt * rate) / 100
-                    })
-                }
-
-                if (inserts.length > 0) {
-                    const { error } = await supabase.from('submissions').insert(inserts)
-                    if (error) throw error
-                }
-            } else if (betType === '3_straight_perm') {
-                const [straightAmt, permAmt] = amountParts
-                const perms = getPermutations(submitForm.numbers).filter(p => p !== submitForm.numbers)
-                const inserts = []
-
-                if (straightAmt > 0) {
-                    const rate = userSettings?.commission_rates?.['3_top'] || 0
-                    inserts.push({
-                        round_id: selectedRound.id,
-                        user_id: user.id,
-                        bet_type: '3_top',
-                        numbers: submitForm.numbers,
-                        amount: straightAmt,
-                        commission_rate: rate,
-                        commission_amount: (straightAmt * rate) / 100
-                    })
-                }
-
-                if (permAmt > 0 && perms.length > 0) {
-                    const rate = userSettings?.commission_rates?.['3_top'] || 0
-                    perms.forEach(p => {
-                        inserts.push({
-                            round_id: selectedRound.id,
-                            user_id: user.id,
-                            bet_type: '3_top',
-                            numbers: p,
-                            amount: permAmt,
-                            commission_rate: rate,
-                            commission_amount: (permAmt * rate) / 100
-                        })
-                    })
-                }
-
-                if (inserts.length > 0) {
-                    const { error } = await supabase.from('submissions').insert(inserts)
-                    if (error) throw error
-                }
-            } else {
-                // Standard submission
-                // 1. Check number limits (Specific + Type)
-                const checkAmount = amountParts[0]
-
-                const { data: limitCheck, error: limitError } = await supabase
-                    .rpc('check_number_limit', {
-                        p_round_id: selectedRound.id,
-                        p_bet_type: betType,
-                        p_numbers: submitForm.numbers,
-                        p_amount: checkAmount
-                    })
-
-                if (limitError) throw limitError
-
-                const { is_exceeded, current_total, max_allowed, limit_type } = limitCheck[0]
-
-                if (is_exceeded) {
-                    const remaining = max_allowed - current_total
-                    const limitMsg = limit_type === 'number' ? 'เลขอั้นเฉพาะเลข' : 'เลขอั้นประเภท'
-                    alert(`ขออภัย! ${limitMsg} นี้เต็มแล้ว\nรับได้สูงสุด: ${max_allowed}\nยอดปัจจุบัน: ${current_total}\nคงเหลือที่รับได้: ${remaining > 0 ? remaining : 0}`)
-                    setSubmitting(false)
-                    return
-                }
-
-                const commissionRate = userSettings?.commission_rates?.[betType] || 0
-                const commissionAmount = (totalAmount * commissionRate) / 100
-
-                const { error } = await supabase
-                    .from('submissions')
-                    .insert({
-                        round_id: selectedRound.id,
-                        user_id: user.id,
-                        bet_type: betType,
-                        numbers: submitForm.numbers,
-                        amount: totalAmount,
-                        commission_rate: commissionRate,
-                        commission_amount: commissionAmount
-                    })
-
-                if (error) throw error
+                    commission_rate: rate,
+                    commission_amount: (totalAmount * rate) / 100,
+                    display_numbers: submitForm.numbers,
+                    display_amount: submitForm.amount,
+                    display_bet_type: displayLabel,
+                    created_at: timestamp
+                })
+            })
+        } else if (betType === '3_straight_tod') {
+            const [straightAmt, todAmt] = amountParts
+            if (straightAmt > 0) {
+                const rate = userSettings?.commission_rates?.['3_top'] || 0
+                newDrafts.push({
+                    entry_id: entryId,
+                    bet_type: '3_top',
+                    numbers: submitForm.numbers,
+                    amount: straightAmt,
+                    commission_rate: rate,
+                    commission_amount: (straightAmt * rate) / 100,
+                    display_numbers: submitForm.numbers,
+                    display_amount: submitForm.amount,
+                    display_bet_type: displayLabel,
+                    created_at: timestamp
+                })
             }
+            if (todAmt > 0) {
+                const rate = userSettings?.commission_rates?.['3_tod'] || 0
+                newDrafts.push({
+                    entry_id: entryId,
+                    bet_type: '3_tod',
+                    numbers: submitForm.numbers,
+                    amount: todAmt,
+                    commission_rate: rate,
+                    commission_amount: (todAmt * rate) / 100,
+                    display_numbers: submitForm.numbers,
+                    display_amount: submitForm.amount,
+                    display_bet_type: displayLabel,
+                    created_at: timestamp
+                })
+            }
+        } else if (betType === '3_straight_perm') {
+            const [straightAmt, permAmt] = amountParts
+            const perms = getPermutations(submitForm.numbers).filter(p => p !== submitForm.numbers)
 
-            // Reset form
-            setSubmitForm({ ...submitForm, numbers: submitForm.numbers, amount: submitForm.amount })
+            if (straightAmt > 0) {
+                const rate = userSettings?.commission_rates?.['3_top'] || 0
+                newDrafts.push({
+                    entry_id: entryId,
+                    bet_type: '3_top',
+                    numbers: submitForm.numbers,
+                    amount: straightAmt,
+                    commission_rate: rate,
+                    commission_amount: (straightAmt * rate) / 100,
+                    display_numbers: submitForm.numbers,
+                    display_amount: submitForm.amount,
+                    display_bet_type: displayLabel,
+                    created_at: timestamp
+                })
+            }
+            if (permAmt > 0 && perms.length > 0) {
+                const rate = userSettings?.commission_rates?.['3_top'] || 0
+                perms.forEach(p => {
+                    newDrafts.push({
+                        entry_id: entryId,
+                        bet_type: '3_top',
+                        numbers: p,
+                        amount: permAmt,
+                        commission_rate: rate,
+                        commission_amount: (permAmt * rate) / 100,
+                        display_numbers: submitForm.numbers,
+                        display_amount: submitForm.amount,
+                        display_bet_type: displayLabel,
+                        created_at: timestamp
+                    })
+                })
+            }
+        } else {
+            const rate = userSettings?.commission_rates?.[betType] || 0
+            newDrafts.push({
+                entry_id: entryId,
+                bet_type: betType,
+                numbers: submitForm.numbers,
+                amount: totalAmount,
+                commission_rate: rate,
+                commission_amount: (totalAmount * rate) / 100,
+                display_numbers: submitForm.numbers,
+                display_amount: submitForm.amount,
+                display_bet_type: displayLabel,
+                created_at: timestamp
+            })
+        }
+
+        setDrafts(prev => [...prev, ...newDrafts])
+
+        // Focus back to number input
+        if (numberInputRef.current) {
+            setTimeout(() => {
+                numberInputRef.current.focus()
+                numberInputRef.current.select()
+                numberInputRef.current.setSelectionRange(0, 9999)
+            }, 50)
+        }
+    }
+
+    // Save all drafts to database
+    async function handleSaveBill() {
+        if (drafts.length === 0) return
+
+        setSubmitting(true)
+        try {
+            const billId = currentBillId || crypto.randomUUID()
+            const inserts = drafts.map(d => ({
+                ...d,
+                round_id: selectedRound.id,
+                user_id: user.id,
+                bill_id: billId
+            }))
+
+            const { error } = await supabase.from('submissions').insert(inserts)
+            if (error) throw error
+
+            setDrafts([])
+            setCurrentBillId(null)
+            setShowSubmitModal(false)
             fetchSubmissions()
-
-            // Show toast instead of alert
-            setToast({ message: 'ส่งเลขสำเร็จ!', type: 'success' })
-
-            // Select all text in number input for next entry (with mobile fix)
-            if (numberInputRef.current) {
-                setTimeout(() => {
-                    numberInputRef.current.focus()
-                    numberInputRef.current.select()
-                    numberInputRef.current.setSelectionRange(0, 9999)
-                }, 50)
-            }
-
+            setToast({ message: 'บันทึกโพยสำเร็จ!', type: 'success' })
         } catch (error) {
-            console.error('Error:', error)
+            console.error('Error saving bill:', error)
             alert('เกิดข้อผิดพลาด: ' + error.message)
         } finally {
             setSubmitting(false)
@@ -417,20 +429,28 @@ export default function UserDashboard() {
     }
 
     // Delete submission
-    async function handleDelete(submissionId) {
+    async function handleDelete(submission) {
         if (!confirm('ต้องการลบรายการนี้?')) return
 
         try {
-            const { error } = await supabase
+            let query = supabase
                 .from('submissions')
                 .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-                .eq('id', submissionId)
 
-            if (!error) {
-                fetchSubmissions()
+            if (viewMode === 'summary' && submission.entry_id) {
+                query = query.eq('entry_id', submission.entry_id)
+            } else {
+                query = query.eq('id', submission.id)
             }
+
+            const { error } = await query
+            if (error) throw error
+
+            fetchSubmissions()
+            setToast({ message: 'ลบรายการสำเร็จ', type: 'success' })
         } catch (error) {
-            console.error('Error:', error)
+            console.error('Error deleting:', error)
+            alert('เกิดข้อผิดพลาด: ' + error.message)
         }
     }
 
@@ -564,7 +584,19 @@ export default function UserDashboard() {
                                             {canSubmit() && (
                                                 <button
                                                     className="btn btn-primary"
-                                                    onClick={() => setShowSubmitModal(true)}
+                                                    onClick={() => {
+                                                        setSubmitForm({
+                                                            bet_type: '2_top',
+                                                            numbers: '',
+                                                            amount: ''
+                                                        })
+                                                        // Generate bill ID if starting fresh
+                                                        if (drafts.length === 0) {
+                                                            const shortId = 'B-' + Math.random().toString(36).substring(2, 8).toUpperCase()
+                                                            setCurrentBillId(shortId)
+                                                        }
+                                                        setShowSubmitModal(true)
+                                                    }}
                                                 >
                                                     <FiPlus /> ส่งเลข
                                                 </button>
@@ -610,7 +642,29 @@ export default function UserDashboard() {
 
                                     {/* Submissions List */}
                                     <div className="submissions-list card">
-                                        <h3>รายการที่ส่ง</h3>
+                                        <div className="list-header">
+                                            <h3>รายการที่ส่ง</h3>
+                                            <div className="view-toggle">
+                                                <button
+                                                    className={`toggle-btn ${viewMode === 'summary' ? 'active' : ''}`}
+                                                    onClick={() => setViewMode('summary')}
+                                                >
+                                                    แบบย่อ
+                                                </button>
+                                                <button
+                                                    className={`toggle-btn ${viewMode === 'detailed' ? 'active' : ''}`}
+                                                    onClick={() => setViewMode('detailed')}
+                                                >
+                                                    แบบขยาย
+                                                </button>
+                                                <button
+                                                    className={`toggle-btn ${viewMode === 'bill' ? 'active' : ''}`}
+                                                    onClick={() => setViewMode('bill')}
+                                                >
+                                                    แยกใบโพย
+                                                </button>
+                                            </div>
+                                        </div>
                                         {submissions.length === 0 ? (
                                             <div className="empty-state">
                                                 <FiList className="empty-icon" />
@@ -618,56 +672,173 @@ export default function UserDashboard() {
                                             </div>
                                         ) : (
                                             <div className="submissions-table-wrap">
-                                                <table className="submissions-table">
-                                                    <thead>
-                                                        <tr>
-                                                            <th>ประเภท</th>
-                                                            <th>เลข</th>
-                                                            <th>จำนวน</th>
-                                                            <th>ค่าคอม</th>
-                                                            <th>เวลา</th>
-                                                            <th></th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {submissions.map(sub => (
-                                                            <tr key={sub.id} className={sub.is_winner ? 'winner' : ''}>
-                                                                <td>
-                                                                    <span className="type-badge">
-                                                                        {BET_TYPES[sub.bet_type]?.label}
-                                                                    </span>
-                                                                </td>
-                                                                <td className="number-cell">{sub.numbers}</td>
-                                                                <td>{selectedRound.currency_symbol}{sub.amount?.toLocaleString()}</td>
-                                                                <td className="commission-cell">
-                                                                    {selectedRound.currency_symbol}{sub.commission_amount?.toLocaleString()}
-                                                                </td>
-                                                                <td className="time-cell">
-                                                                    {new Date(sub.created_at).toLocaleTimeString('th-TH', {
-                                                                        hour: '2-digit',
-                                                                        minute: '2-digit'
-                                                                    })}
-                                                                </td>
-                                                                <td>
-                                                                    {canDelete(sub) && (
-                                                                        <button
-                                                                            className="icon-btn danger"
-                                                                            onClick={() => handleDelete(sub.id)}
-                                                                            title="ลบ"
-                                                                        >
-                                                                            <FiTrash2 />
-                                                                        </button>
-                                                                    )}
-                                                                    {sub.is_winner && (
-                                                                        <span className="winner-badge">
-                                                                            <FiCheck /> ถูก!
-                                                                        </span>
-                                                                    )}
-                                                                </td>
+                                                {viewMode === 'bill' ? (
+                                                    <div className="bill-view-container">
+                                                        {(() => {
+                                                            const bills = submissions.reduce((acc, sub) => {
+                                                                const billId = sub.bill_id || 'no-bill'
+                                                                if (!acc[billId]) acc[billId] = []
+                                                                acc[billId].push(sub)
+                                                                return acc
+                                                            }, {})
+
+                                                            return Object.entries(bills).sort((a, b) => {
+                                                                // Sort by latest submission in each bill
+                                                                const latestA = new Date(a[1][0].created_at)
+                                                                const latestB = new Date(b[1][0].created_at)
+                                                                return latestB - latestA
+                                                            }).map(([billId, billItems]) => {
+                                                                const billTotal = billItems.reduce((sum, item) => sum + item.amount, 0)
+                                                                const billCommission = billItems.reduce((sum, item) => sum + item.commission_amount, 0)
+                                                                const billTime = new Date(billItems[0].created_at).toLocaleTimeString('th-TH', {
+                                                                    hour: '2-digit',
+                                                                    minute: '2-digit'
+                                                                })
+
+                                                                return (
+                                                                    <div key={billId} className="bill-group card">
+                                                                        <div className="bill-group-header">
+                                                                            <div className="bill-info">
+                                                                                <span className="bill-id-label">ใบโพย:</span>
+                                                                                <span className="bill-id-value">{billId === 'no-bill' ? 'ไม่มีเลขบิล' : billId}</span>
+                                                                                <span className="bill-time">{billTime}</span>
+                                                                            </div>
+                                                                            <div className="bill-summary-mini">
+                                                                                <span>รวม: <strong>{selectedRound.currency_symbol}{billTotal.toLocaleString()}</strong></span>
+                                                                                <span>คอม: <strong>{selectedRound.currency_symbol}{billCommission.toLocaleString()}</strong></span>
+                                                                            </div>
+                                                                        </div>
+                                                                        <table className="submissions-table mini">
+                                                                            <thead>
+                                                                                <tr>
+                                                                                    <th>เลข</th>
+                                                                                    <th>จำนวน</th>
+                                                                                    <th>ค่าคอม</th>
+                                                                                    <th></th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                {billItems.reduce((acc, sub) => {
+                                                                                    // Group by entry_id within bill for cleaner look
+                                                                                    if (sub.entry_id) {
+                                                                                        const existing = acc.find(a => a.entry_id === sub.entry_id)
+                                                                                        if (existing) {
+                                                                                            existing.amount += sub.amount
+                                                                                            existing.commission_amount += sub.commission_amount
+                                                                                            return acc
+                                                                                        }
+                                                                                        acc.push({ ...sub })
+                                                                                    } else {
+                                                                                        acc.push({ ...sub })
+                                                                                    }
+                                                                                    return acc
+                                                                                }, []).map(sub => (
+                                                                                    <tr key={sub.id || sub.entry_id}>
+                                                                                        <td className="number-cell">
+                                                                                            <div className="number-display">
+                                                                                                <span className="main-number">{sub.display_numbers || sub.numbers}</span>
+                                                                                                <span className="sub-type">{sub.display_bet_type || BET_TYPES[sub.bet_type]?.label}</span>
+                                                                                            </div>
+                                                                                        </td>
+                                                                                        <td>{sub.display_amount || sub.amount?.toLocaleString()}</td>
+                                                                                        <td>{sub.commission_amount?.toLocaleString()}</td>
+                                                                                        <td>
+                                                                                            {canDelete(sub) && (
+                                                                                                <button
+                                                                                                    className="icon-btn danger"
+                                                                                                    onClick={() => handleDelete(sub)}
+                                                                                                    title="ลบ"
+                                                                                                >
+                                                                                                    <FiTrash2 />
+                                                                                                </button>
+                                                                                            )}
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                ))}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                )
+                                                            })
+                                                        })()}
+                                                    </div>
+                                                ) : (
+                                                    <table className="submissions-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>เลข</th>
+                                                                <th>จำนวน</th>
+                                                                <th>ค่าคอม</th>
+                                                                <th>เวลา</th>
+                                                                <th></th>
                                                             </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
+                                                        </thead>
+                                                        <tbody>
+                                                            {(() => {
+                                                                const displayItems = viewMode === 'summary'
+                                                                    ? submissions.reduce((acc, sub) => {
+                                                                        if (sub.entry_id) {
+                                                                            const existing = acc.find(a => a.entry_id === sub.entry_id)
+                                                                            if (existing) {
+                                                                                existing.amount += sub.amount
+                                                                                existing.commission_amount += sub.commission_amount
+                                                                                return acc
+                                                                            }
+                                                                            acc.push({ ...sub })
+                                                                        } else {
+                                                                            acc.push({ ...sub })
+                                                                        }
+                                                                        return acc
+                                                                    }, [])
+                                                                    : submissions
+
+                                                                return displayItems.map(sub => (
+                                                                    <tr key={sub.id || sub.entry_id} className={sub.is_winner ? 'winner' : ''}>
+                                                                        <td className="number-cell">
+                                                                            <div className="number-display">
+                                                                                <span className="main-number">
+                                                                                    {viewMode === 'summary' ? (sub.display_numbers || sub.numbers) : sub.numbers}
+                                                                                </span>
+                                                                                <span className="sub-type">
+                                                                                    {viewMode === 'summary' ? (sub.display_bet_type || BET_TYPES[sub.bet_type]?.label) : BET_TYPES[sub.bet_type]?.label}
+                                                                                </span>
+                                                                            </div>
+                                                                        </td>
+                                                                        <td>
+                                                                            {selectedRound.currency_symbol}
+                                                                            {viewMode === 'summary' ? (sub.display_amount || sub.amount?.toLocaleString()) : sub.amount?.toLocaleString()}
+                                                                        </td>
+                                                                        <td className="commission-cell">
+                                                                            {selectedRound.currency_symbol}{sub.commission_amount?.toLocaleString()}
+                                                                        </td>
+                                                                        <td className="time-cell">
+                                                                            {new Date(sub.created_at).toLocaleTimeString('th-TH', {
+                                                                                hour: '2-digit',
+                                                                                minute: '2-digit'
+                                                                            })}
+                                                                        </td>
+                                                                        <td>
+                                                                            {canDelete(sub) && (
+                                                                                <button
+                                                                                    className="icon-btn danger"
+                                                                                    onClick={() => handleDelete(sub)}
+                                                                                    title="ลบ"
+                                                                                >
+                                                                                    <FiTrash2 />
+                                                                                </button>
+                                                                            )}
+                                                                            {sub.is_winner && (
+                                                                                <span className="winner-badge">
+                                                                                    <FiCheck /> ถูก!
+                                                                                </span>
+                                                                            )}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))
+                                                            })()}
+                                                        </tbody>
+                                                    </table>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -697,7 +868,12 @@ export default function UserDashboard() {
                 <div className="modal-overlay" onClick={() => setShowSubmitModal(false)}>
                     <div className="modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h3><FiPlus /> ส่งเลข</h3>
+                            <div className="header-left">
+                                <h3><FiPlus /> ส่งเลข</h3>
+                                {currentBillId && (
+                                    <span className="bill-id-badge">เลขใบโพย: {currentBillId}</span>
+                                )}
+                            </div>
                             <button className="modal-close" onClick={() => setShowSubmitModal(false)}>
                                 <FiX />
                             </button>
@@ -765,10 +941,14 @@ export default function UserDashboard() {
                                         let available = []
 
                                         if (digits === 1) {
-                                            available = ['run_top', 'run_bottom', 'front_top_1', 'middle_top_1', 'back_top_1', 'front_bottom_1', 'back_bottom_1']
+                                            if (!isAmountEmpty) {
+                                                available = ['run_top', 'run_bottom', 'front_top_1', 'middle_top_1', 'back_top_1', 'front_bottom_1', 'back_bottom_1']
+                                            }
                                         } else if (digits === 2) {
-                                            available = ['2_top', '2_front', '2_spread', '2_bottom']
-                                            if (!hasStarInAmount) available.splice(3, 0, '2_have')
+                                            if (!isAmountEmpty) {
+                                                available = ['2_top', '2_front', '2_spread', '2_bottom']
+                                                if (!hasStarInAmount) available.splice(3, 0, '2_have')
+                                            }
                                         } else if (digits === 3) {
                                             if (!isAmountEmpty) {
                                                 if (hasStarInAmount) {
@@ -826,16 +1006,116 @@ export default function UserDashboard() {
                                                     key={key}
                                                     type="button"
                                                     className={`bet-type-btn ${submitForm.bet_type === key ? 'active' : ''}`}
-                                                    onClick={() => handleSubmit(key)}
+                                                    onClick={() => addToDraft(key)}
                                                     disabled={submitting}
                                                 >
-                                                    {submitting && submitForm.bet_type === key ? 'กำลังส่ง...' : label}
+                                                    {label}
                                                 </button>
                                             )
                                         })
                                     })()}
                                 </div>
                             </div>
+
+                            {/* Drafts List (Summary Area) */}
+                            {drafts.length > 0 && (
+                                <div className="drafts-section">
+                                    <div className="drafts-header">
+                                        <h4>รายการในบิลนี้ (แบบย่อ)</h4>
+                                        <button
+                                            className="btn-text danger"
+                                            onClick={() => {
+                                                if (confirm('ต้องการล้างรายการทั้งหมดในบิลนี้?')) {
+                                                    setDrafts([])
+                                                    setCurrentBillId(null)
+                                                }
+                                            }}
+                                        >
+                                            ล้างรายการ
+                                        </button>
+                                    </div>
+                                    <div className="drafts-table-wrap scrollable">
+                                        <table className="drafts-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>เลข</th>
+                                                    <th>จำนวน</th>
+                                                    <th>ค่าคอม</th>
+                                                    <th></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {(() => {
+                                                    // Group drafts by entry_id for display
+                                                    const displayDrafts = drafts.reduce((acc, d) => {
+                                                        const existing = acc.find(a => a.entry_id === d.entry_id)
+                                                        if (existing) {
+                                                            existing.amount += d.amount
+                                                            existing.commission_amount += d.commission_amount
+                                                            return acc
+                                                        }
+                                                        acc.push({ ...d })
+                                                        return acc
+                                                    }, [])
+
+                                                    return displayDrafts.map(d => (
+                                                        <tr key={d.entry_id}>
+                                                            <td className="number-cell">
+                                                                <div className="number-display">
+                                                                    <span className="main-number">{d.display_numbers || d.numbers}</span>
+                                                                    <span className="sub-type">{d.display_bet_type || BET_TYPES[d.bet_type]?.label}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td>{d.display_amount || d.amount}</td>
+                                                            <td>{d.commission_amount.toLocaleString()}</td>
+                                                            <td>
+                                                                <button
+                                                                    className="icon-btn danger"
+                                                                    onClick={() => setDrafts(drafts.filter(item => item.entry_id !== d.entry_id))}
+                                                                >
+                                                                    <FiTrash2 />
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                })()}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    {/* Total Summary Bar */}
+                                    <div className="drafts-total-bar">
+                                        <div className="total-item">
+                                            <span>รวมรายการ:</span>
+                                            <strong>{drafts.length} รายการ</strong>
+                                        </div>
+                                        <div className="total-item">
+                                            <span>ยอดรวม:</span>
+                                            <strong>{drafts.reduce((sum, d) => sum + d.amount, 0).toLocaleString()} {selectedRound.currency_name}</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="modal-actions">
+                                <button
+                                    type="button"
+                                    className="btn btn-outline"
+                                    onClick={() => setShowSubmitModal(false)}
+                                    disabled={submitting}
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    onClick={handleSaveBill}
+                                    disabled={submitting || drafts.length === 0}
+                                >
+                                    {submitting ? 'กำลังบันทึก...' : 'บันทึกโพย'}
+                                </button>
+                            </div>
+
 
                             {/* Toast Notification */}
                             {toast && (
@@ -845,10 +1125,9 @@ export default function UserDashboard() {
                             )}
                         </div>
                     </div>
-                </div >
-            )
-            }
-        </div >
+                </div>
+            )}
+        </div>
     )
 }
 
