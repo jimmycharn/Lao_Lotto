@@ -853,6 +853,7 @@
     padding: 1rem;
     font-size: 1.1rem;
 }
+
 .drafts-header {
     display: flex;
     justify-content: space-between;
@@ -965,6 +966,20 @@
     padding: 1rem 1.25rem;
     background: rgba(212, 175, 55, 0.08);
     border-bottom: 1px solid rgba(212, 175, 55, 0.1);
+    transition: all 0.2s ease;
+}
+
+.bill-group-header.clickable {
+    cursor: pointer;
+}
+
+.bill-group-header.clickable:hover {
+    background: rgba(212, 175, 55, 0.15);
+}
+
+.bill-group.expanded .bill-group-header {
+    background: rgba(212, 175, 55, 0.12);
+    border-bottom-color: rgba(212, 175, 55, 0.2);
 }
 
 .bill-info {
@@ -1009,6 +1024,36 @@
     margin-left: 0.25rem;
 }
 
+.expand-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    color: var(--color-primary);
+    transition: transform 0.3s ease;
+}
+
+.bill-group.expanded .expand-icon {
+    transform: rotate(180deg);
+}
+
+.bill-details-content {
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 .submissions-table.mini {
     margin: 0;
     border: none;
@@ -1024,4 +1069,3 @@
 .submissions-table.mini thead {
     background: rgba(255, 255, 255, 0.02);
 }
-

@@ -12,7 +12,9 @@ import {
     FiGift,
     FiSend,
     FiList,
-    FiPercent
+    FiPercent,
+    FiChevronDown,
+    FiChevronUp
 } from 'react-icons/fi'
 import './UserDashboard.css'
 
@@ -123,7 +125,8 @@ export default function UserDashboard() {
     const [submitting, setSubmitting] = useState(false)
     const [toast, setToast] = useState(null)
     const [drafts, setDrafts] = useState([])
-    const [viewMode, setViewMode] = useState('summary') // summary, detailed
+    const [viewMode, setViewMode] = useState('summary') // summary, detailed, bill
+    const [expandedBills, setExpandedBills] = useState([])
     const [currentBillId, setCurrentBillId] = useState(null)
     const numberInputRef = useRef(null)
     const amountInputRef = useRef(null)
@@ -428,6 +431,15 @@ export default function UserDashboard() {
         }
     }
 
+    // Toggle bill expansion
+    function toggleBill(billId) {
+        setExpandedBills(prev =>
+            prev.includes(billId)
+                ? prev.filter(id => id !== billId)
+                : [...prev, billId]
+        )
+    }
+
     // Delete submission
     async function handleDelete(submission) {
         if (!confirm('ต้องการลบรายการนี้?')) return
@@ -695,9 +707,14 @@ export default function UserDashboard() {
                                                                     minute: '2-digit'
                                                                 })
 
+                                                                const isExpanded = expandedBills.includes(billId)
+
                                                                 return (
-                                                                    <div key={billId} className="bill-group card">
-                                                                        <div className="bill-group-header">
+                                                                    <div key={billId} className={`bill-group card ${isExpanded ? 'expanded' : ''}`}>
+                                                                        <div
+                                                                            className="bill-group-header clickable"
+                                                                            onClick={() => toggleBill(billId)}
+                                                                        >
                                                                             <div className="bill-info">
                                                                                 <span className="bill-id-label">ใบโพย:</span>
                                                                                 <span className="bill-id-value">{billId === 'no-bill' ? 'ไม่มีเลขบิล' : billId}</span>
@@ -706,57 +723,68 @@ export default function UserDashboard() {
                                                                             <div className="bill-summary-mini">
                                                                                 <span>รวม: <strong>{selectedRound.currency_symbol}{billTotal.toLocaleString()}</strong></span>
                                                                                 <span>คอม: <strong>{selectedRound.currency_symbol}{billCommission.toLocaleString()}</strong></span>
+                                                                                <span className="expand-icon">
+                                                                                    {isExpanded ? <FiChevronUp /> : <FiChevronDown />}
+                                                                                </span>
                                                                             </div>
                                                                         </div>
-                                                                        <table className="submissions-table mini">
-                                                                            <thead>
-                                                                                <tr>
-                                                                                    <th>เลข</th>
-                                                                                    <th>จำนวน</th>
-                                                                                    <th>ค่าคอม</th>
-                                                                                    <th></th>
-                                                                                </tr>
-                                                                            </thead>
-                                                                            <tbody>
-                                                                                {billItems.reduce((acc, sub) => {
-                                                                                    // Group by entry_id within bill for cleaner look
-                                                                                    if (sub.entry_id) {
-                                                                                        const existing = acc.find(a => a.entry_id === sub.entry_id)
-                                                                                        if (existing) {
-                                                                                            existing.amount += sub.amount
-                                                                                            existing.commission_amount += sub.commission_amount
+
+                                                                        {isExpanded && (
+                                                                            <div className="bill-details-content">
+                                                                                <table className="submissions-table mini">
+                                                                                    <thead>
+                                                                                        <tr>
+                                                                                            <th>เลข</th>
+                                                                                            <th>จำนวน</th>
+                                                                                            <th>ค่าคอม</th>
+                                                                                            <th></th>
+                                                                                        </tr>
+                                                                                    </thead>
+                                                                                    <tbody>
+                                                                                        {billItems.reduce((acc, sub) => {
+                                                                                            // Group by entry_id within bill for cleaner look
+                                                                                            if (sub.entry_id) {
+                                                                                                const existing = acc.find(a => a.entry_id === sub.entry_id)
+                                                                                                if (existing) {
+                                                                                                    existing.amount += sub.amount
+                                                                                                    existing.commission_amount += sub.commission_amount
+                                                                                                    return acc
+                                                                                                }
+                                                                                                acc.push({ ...sub })
+                                                                                            } else {
+                                                                                                acc.push({ ...sub })
+                                                                                            }
                                                                                             return acc
-                                                                                        }
-                                                                                        acc.push({ ...sub })
-                                                                                    } else {
-                                                                                        acc.push({ ...sub })
-                                                                                    }
-                                                                                    return acc
-                                                                                }, []).map(sub => (
-                                                                                    <tr key={sub.id || sub.entry_id}>
-                                                                                        <td className="number-cell">
-                                                                                            <div className="number-display">
-                                                                                                <span className="main-number">{sub.display_numbers || sub.numbers}</span>
-                                                                                                <span className="sub-type">{sub.display_bet_type || BET_TYPES[sub.bet_type]?.label}</span>
-                                                                                            </div>
-                                                                                        </td>
-                                                                                        <td>{sub.display_amount || sub.amount?.toLocaleString()}</td>
-                                                                                        <td>{sub.commission_amount?.toLocaleString()}</td>
-                                                                                        <td>
-                                                                                            {canDelete(sub) && (
-                                                                                                <button
-                                                                                                    className="icon-btn danger"
-                                                                                                    onClick={() => handleDelete(sub)}
-                                                                                                    title="ลบ"
-                                                                                                >
-                                                                                                    <FiTrash2 />
-                                                                                                </button>
-                                                                                            )}
-                                                                                        </td>
-                                                                                    </tr>
-                                                                                ))}
-                                                                            </tbody>
-                                                                        </table>
+                                                                                        }, []).map(sub => (
+                                                                                            <tr key={sub.id || sub.entry_id}>
+                                                                                                <td className="number-cell">
+                                                                                                    <div className="number-display">
+                                                                                                        <span className="main-number">{sub.display_numbers || sub.numbers}</span>
+                                                                                                        <span className="sub-type">{sub.display_bet_type || BET_TYPES[sub.bet_type]?.label}</span>
+                                                                                                    </div>
+                                                                                                </td>
+                                                                                                <td>{sub.display_amount || sub.amount?.toLocaleString()}</td>
+                                                                                                <td>{sub.commission_amount?.toLocaleString()}</td>
+                                                                                                <td>
+                                                                                                    {canDelete(sub) && (
+                                                                                                        <button
+                                                                                                            className="icon-btn danger"
+                                                                                                            onClick={(e) => {
+                                                                                                                e.stopPropagation()
+                                                                                                                handleDelete(sub)
+                                                                                                            }}
+                                                                                                            title="ลบ"
+                                                                                                        >
+                                                                                                            <FiTrash2 />
+                                                                                                        </button>
+                                                                                                    )}
+                                                                                                </td>
+                                                                                            </tr>
+                                                                                        ))}
+                                                                                    </tbody>
+                                                                                </table>
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 )
                                                             })
