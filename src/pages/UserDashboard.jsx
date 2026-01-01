@@ -737,19 +737,26 @@ export default function UserDashboard() {
                                                                                                 className="bill-group-header clickable"
                                                                                                 onClick={() => toggleBill(billId)}
                                                                                             >
-                                                                                                <div className="bill-info">
-                                                                                                    <span className="bill-id-label">ใบโพย:</span>
-                                                                                                    <span className="bill-id-value">{billId === 'no-bill' ? 'ไม่มีเลขบิล' : billId}</span>
-                                                                                                    <span className="bill-time">{billTime}</span>
-                                                                                                </div>
-                                                                                                <div className="bill-summary-mini">
-                                                                                                    <span>รวม: <strong>{round.currency_symbol}{billTotal.toLocaleString()}</strong></span>
-                                                                                                    <span>คอม: <strong>{round.currency_symbol}{billCommission.toLocaleString()}</strong></span>
-                                                                                                    <span className="expand-icon">
-                                                                                                        {isExpandedBill ? <FiChevronUp /> : <FiChevronDown />}
-                                                                                                    </span>
+                                                                                                <div className="bill-header-grid">
+                                                                                                    <div className="bill-header-labels">
+                                                                                                        <span>ใบโพย</span>
+                                                                                                        <span>เวลา</span>
+                                                                                                        <span>รวม</span>
+                                                                                                        <span>คอม</span>
+                                                                                                        <span></span>
+                                                                                                    </div>
+                                                                                                    <div className="bill-header-values">
+                                                                                                        <span className="bill-id-value">{billId === 'no-bill' ? '-' : billId}</span>
+                                                                                                        <span className="bill-time">{billTime}</span>
+                                                                                                        <span className="bill-total">{round.currency_symbol}{billTotal.toLocaleString()}</span>
+                                                                                                        <span className="bill-commission">{round.currency_symbol}{billCommission.toLocaleString()}</span>
+                                                                                                        <span className="expand-icon">
+                                                                                                            {isExpandedBill ? <FiChevronUp /> : <FiChevronDown />}
+                                                                                                        </span>
+                                                                                                    </div>
                                                                                                 </div>
                                                                                             </div>
+
 
                                                                                             {isExpandedBill && (
                                                                                                 <div className="bill-details-content">
