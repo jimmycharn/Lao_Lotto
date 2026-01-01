@@ -66,80 +66,140 @@
 }
 
 /* =============================================
-   ROUNDS LAYOUT
+   ROUNDS ACCORDION LAYOUT
    ============================================= */
 
-.rounds-layout {
-    display: grid;
-    grid-template-columns: 280px 1fr;
-    gap: 1.5rem;
+.rounds-accordion {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-width: 1000px;
+    margin: 0 auto;
 }
 
-/* Sidebar */
-.rounds-sidebar {
-    background: var(--color-card);
+.round-accordion-item {
     border-radius: var(--radius-lg);
-    padding: 1.25rem;
-    height: fit-content;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.rounds-sidebar h3 {
-    font-size: 1rem;
-    margin-bottom: 1rem;
-    color: var(--color-text);
-}
-
-.round-list {
+.round-accordion-header {
     display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.round-item {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    padding: 1rem;
-    background: var(--color-surface-light);
-    border: 2px solid rgba(255, 255, 255, 0.1);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    text-align: left;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 0;
+    background: var(--color-card);
+    border: 1px solid rgba(255, 255, 255, 0.05);
     transition: all 0.2s ease;
 }
 
-.round-item:hover {
+.round-accordion-header:hover {
     border-color: var(--color-primary);
+    background: rgba(212, 175, 55, 0.05);
 }
 
-.round-item.active {
-    border-color: var(--color-primary);
-    background: rgba(212, 175, 55, 0.1);
+.round-accordion-item.expanded .round-accordion-header {
+    background: rgba(212, 175, 55, 0.08);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-color: rgba(212, 175, 55, 0.2);
 }
 
-.round-name {
-    font-weight: 600;
+.round-header-info {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+}
+
+.round-title-group h3 {
+    margin-bottom: 0.25rem;
+    font-size: 1.1rem;
     color: var(--color-text);
 }
 
-.round-date {
+.round-title-group .round-date {
     font-size: 0.85rem;
     color: var(--color-text-muted);
 }
 
-.round-status {
+.round-header-status {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
-    font-size: 0.8rem;
+    gap: 1.5rem;
 }
 
-.round-status.open {
-    color: var(--color-success);
-}
-
-.round-status.closed {
+.round-header-status svg {
     color: var(--color-text-muted);
+    transition: transform 0.3s ease;
+}
+
+.round-accordion-item.expanded .round-header-status svg {
+    transform: rotate(180deg);
+    color: var(--color-primary);
+}
+
+.round-accordion-content {
+    padding: 1.5rem;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(212, 175, 55, 0.1);
+    border-top: none;
+    border-bottom-left-radius: var(--radius-lg);
+    border-bottom-right-radius: var(--radius-lg);
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    animation: slideDownFade 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideDownFade {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Round Info Detail inside Accordion */
+.round-info-detail {
+    padding: 1.25rem;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: var(--radius-md);
+}
+
+.detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.time-grid {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+}
+
+.time-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+}
+
+.time-remaining {
+    background: var(--color-success);
+    color: #000;
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-full);
+    font-weight: 600;
+    font-size: 0.9rem;
 }
 
 /* Lottery Badge */
@@ -170,76 +230,6 @@
 .lottery-badge.yeekee {
     background: rgba(156, 39, 176, 0.2);
     color: #9c27b0;
-}
-
-/* =============================================
-   MAIN CONTENT
-   ============================================= */
-
-.rounds-main {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-}
-
-/* Round Info Card */
-.round-info-card {
-    padding: 1.5rem;
-}
-
-.round-info-card .round-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 1.25rem;
-}
-
-.round-info-card h2 {
-    font-size: 1.5rem;
-    margin-bottom: 0.25rem;
-    color: var(--color-text);
-}
-
-.round-info-card p {
-    color: var(--color-text-muted);
-    font-size: 0.9rem;
-}
-
-.time-info {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1.5rem;
-    align-items: center;
-}
-
-.time-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    color: var(--color-text-muted);
-    font-size: 0.9rem;
-}
-
-.time-remaining {
-    background: var(--color-success);
-    color: #000;
-    padding: 0.5rem 1rem;
-    border-radius: var(--radius-full);
-    font-weight: 600;
-    font-size: 0.9rem;
-    animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-
-    0%,
-    100% {
-        opacity: 1;
-    }
-
-    50% {
-        opacity: 0.7;
-    }
 }
 
 /* =============================================
@@ -285,10 +275,8 @@
    SUBMISSIONS LIST
    ============================================= */
 
-.submissions-list h3 {
-    margin-bottom: 1rem;
-    font-size: 1.1rem;
-    color: var(--color-text);
+.submissions-list {
+    padding: 1.5rem;
 }
 
 .submissions-table-wrap {
@@ -520,6 +508,8 @@
 
 .history-card {
     padding: 1rem 1.25rem;
+    background: var(--color-card);
+    border-radius: var(--radius-md);
 }
 
 .history-card.winner {
@@ -692,66 +682,6 @@
 }
 
 /* =============================================
-   RESPONSIVE
-   ============================================= */
-
-@media (max-width: 768px) {
-    .user-dashboard {
-        padding: 1rem 0 3rem;
-    }
-
-    .user-tabs {
-        width: 100%;
-        overflow-x: auto;
-    }
-
-    .tab-btn {
-        padding: 0.65rem 1rem;
-        font-size: 0.85rem;
-        white-space: nowrap;
-    }
-
-    .rounds-layout {
-        grid-template-columns: 1fr;
-    }
-
-    .rounds-sidebar {
-        order: 2;
-    }
-
-    .rounds-main {
-        order: 1;
-    }
-
-    .round-info-card .round-header {
-        flex-direction: column;
-        gap: 1rem;
-    }
-
-    .time-info {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.5rem;
-    }
-
-    .submissions-summary {
-        grid-template-columns: repeat(3, 1fr);
-    }
-
-    .bet-type-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
-    .rates-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .history-content {
-        flex-wrap: wrap;
-    }
-}
-
-/* =============================================
    DRAFTING & VIEW TOGGLE STYLES
    ============================================= */
 
@@ -759,51 +689,104 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1rem;
+    margin-bottom: 2rem;
+    gap: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.list-header h3 {
+    margin-bottom: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--color-text);
+    white-space: nowrap;
+}
+
+.view-toggle-group {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.view-toggle-container {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.toggle-label {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 600;
 }
 
 .view-toggle {
     display: flex;
-    background: var(--color-surface-light);
+    background: rgba(0, 0, 0, 0.4);
     padding: 0.25rem;
     border-radius: var(--radius-md);
-    gap: 0.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(12px);
+}
+
+.divider-v {
+    width: 1px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .toggle-btn {
-    padding: 0.4rem 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
     border: none;
     background: transparent;
     color: var(--color-text-muted);
     border-radius: var(--radius-sm);
     cursor: pointer;
-    font-size: 0.8rem;
-    transition: all 0.2s ease;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    white-space: nowrap;
+}
+
+.toggle-btn svg {
+    font-size: 1rem;
+}
+
+.toggle-btn:hover {
+    color: var(--color-text);
+    background: rgba(255, 255, 255, 0.05);
 }
 
 .toggle-btn.active {
     background: var(--color-primary);
     color: #000;
     font-weight: 600;
+    box-shadow: 0 4px 12px rgba(212, 175, 55, 0.3);
 }
 
-.number-display {
-    display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
+.toggle-btn.group-toggle {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 0.5rem 1.25rem;
+    border-radius: var(--radius-md);
+    backdrop-filter: blur(12px);
 }
 
-.main-number {
-    font-family: 'Monaco', 'Menlo', monospace;
-    font-size: 1.1rem;
-    font-weight: 700;
+.toggle-btn.group-toggle:hover {
+    border-color: rgba(212, 175, 55, 0.3);
+}
+
+.toggle-btn.group-toggle.active {
+    background: rgba(212, 175, 55, 0.15);
+    border-color: var(--color-primary);
     color: var(--color-primary);
-    letter-spacing: 0.05em;
-}
-
-.sub-type {
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
+    box-shadow: 0 0 15px rgba(212, 175, 55, 0.1);
 }
 
 .drafts-section {
@@ -908,7 +891,6 @@
     min-width: 120px;
 }
 
-
 .drafts-table-wrap.scrollable {
     max-height: 250px;
     overflow-y: auto;
@@ -944,6 +926,9 @@
     color: var(--color-primary);
 }
 
+/* =============================================
+   BILL VIEW (ACCORDION)
+   ============================================= */
 
 .bill-view-container {
     display: flex;
@@ -1068,4 +1053,76 @@
 
 .submissions-table.mini thead {
     background: rgba(255, 255, 255, 0.02);
+}
+
+/* =============================================
+   RESPONSIVE
+   ============================================= */
+
+@media (max-width: 768px) {
+    .user-dashboard {
+        padding: 1rem 0 3rem;
+    }
+
+    .user-tabs {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    .tab-btn {
+        padding: 0.65rem 1rem;
+        font-size: 0.85rem;
+        white-space: nowrap;
+    }
+
+    .round-info-card .round-header {
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .time-info {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .submissions-summary {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .bet-type-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .list-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .view-toggle-group {
+        width: 100%;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .view-toggle-container {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .divider-v {
+        display: none;
+    }
+
+    .round-accordion-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .round-header-status {
+        width: 100%;
+        justify-content: space-between;
+    }
 }

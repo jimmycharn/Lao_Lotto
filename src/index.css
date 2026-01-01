@@ -58,6 +58,15 @@
 
   /* Font */
   --font-family: 'Prompt', 'Noto Sans Thai', sans-serif;
+
+  /* Compatibility Aliases for Dashboard */
+  --color-surface: #16213e;
+  --color-surface-light: #1a1a2e;
+  --color-text: #ffffff;
+  --color-text-muted: #a0a0b0;
+  --color-card: #1a1a2e;
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-danger: #e94560;
 }
 
 /* Reset & Base */

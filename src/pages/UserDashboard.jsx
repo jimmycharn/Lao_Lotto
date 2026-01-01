@@ -14,7 +14,9 @@ import {
     FiList,
     FiPercent,
     FiChevronDown,
-    FiChevronUp
+    FiChevronUp,
+    FiGrid,
+    FiLayers
 } from 'react-icons/fi'
 import './UserDashboard.css'
 
@@ -125,7 +127,8 @@ export default function UserDashboard() {
     const [submitting, setSubmitting] = useState(false)
     const [toast, setToast] = useState(null)
     const [drafts, setDrafts] = useState([])
-    const [viewMode, setViewMode] = useState('summary') // summary, detailed, bill
+    const [displayMode, setDisplayMode] = useState('summary') // summary, detailed
+    const [isGroupByBill, setIsGroupByBill] = useState(false)
     const [expandedBills, setExpandedBills] = useState([])
     const [currentBillId, setCurrentBillId] = useState(null)
     const numberInputRef = useRef(null)
@@ -260,9 +263,7 @@ export default function UserDashboard() {
             }
         }
 
-        const entryId = (typeof crypto !== 'undefined' && crypto.randomUUID)
-            ? crypto.randomUUID()
-            : Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+        const entryId = crypto.randomUUID()
         const newDrafts = []
         const timestamp = new Date().toISOString()
 
@@ -449,7 +450,9 @@ export default function UserDashboard() {
                 .from('submissions')
                 .update({ is_deleted: true, deleted_at: new Date().toISOString() })
 
-            if (viewMode === 'summary' && submission.entry_id) {
+            if (isGroupByBill && submission.entry_id) {
+                query = query.eq('entry_id', submission.entry_id)
+            } else if (displayMode === 'summary' && submission.entry_id) {
                 query = query.eq('entry_id', submission.entry_id)
             } else {
                 query = query.eq('id', submission.id)
@@ -533,625 +536,591 @@ export default function UserDashboard() {
                     </button>
                 </div>
 
-                {activeTab === 'rounds' && (
-                    <div className="rounds-layout">
-                        {/* Rounds List */}
-                        <div className="rounds-sidebar">
-                            <h3>งวดหวย</h3>
+                <div className="dashboard-content">
+                    {activeTab === 'rounds' && (
+                        <div className="rounds-accordion">
                             {loading ? (
                                 <div className="loading-state">
                                     <div className="spinner"></div>
                                 </div>
                             ) : rounds.length === 0 ? (
-                                <p className="text-muted">ไม่มีงวดที่เปิดรับ</p>
-                            ) : (
-                                <div className="round-list">
-                                    {rounds.map(round => (
-                                        <button
-                                            key={round.id}
-                                            className={`round-item ${selectedRound?.id === round.id ? 'active' : ''}`}
-                                            onClick={() => setSelectedRound(round)}
-                                        >
-                                            <span className={`lottery-badge ${round.lottery_type}`}>
-                                                {LOTTERY_TYPES[round.lottery_type]}
-                                            </span>
-                                            <span className="round-name">{round.lottery_name}</span>
-                                            <span className="round-date">
-                                                {new Date(round.round_date).toLocaleDateString('th-TH', {
-                                                    day: 'numeric',
-                                                    month: 'short'
-                                                })}
-                                            </span>
-                                            <span className={`round-status ${round.status}`}>
-                                                {round.status === 'open' ? (
-                                                    <><FiClock /> {formatTimeRemaining(round.close_time)}</>
-                                                ) : (
-                                                    'ปิดรับแล้ว'
-                                                )}
-                                            </span>
-                                        </button>
-                                    ))}
+                                <div className="empty-state card">
+                                    <FiCalendar className="empty-icon" />
+                                    <p>ไม่มีงวดที่เปิดรับ</p>
                                 </div>
-                            )}
-                        </div>
+                            ) : (
+                                rounds.map(round => {
+                                    const isExpanded = selectedRound?.id === round.id;
+                                    return (
+                                        <div key={round.id} className={`round-accordion-item ${isExpanded ? 'expanded' : ''}`}>
+                                            <div
+                                                className="round-accordion-header card clickable"
+                                                onClick={() => setSelectedRound(isExpanded ? null : round)}
+                                            >
+                                                <div className="round-header-info">
+                                                    <span className={`lottery-badge ${round.lottery_type}`}>
+                                                        {LOTTERY_TYPES[round.lottery_type]}
+                                                    </span>
+                                                    <div className="round-title-group">
+                                                        <h3>{round.lottery_name}</h3>
+                                                        <span className="round-date">
+                                                            {new Date(round.round_date).toLocaleDateString('th-TH', {
+                                                                weekday: 'long',
+                                                                day: 'numeric',
+                                                                month: 'long',
+                                                                year: 'numeric'
+                                                            })}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="round-header-status">
+                                                    {round.status === 'open' ? (
+                                                        <div className="time-remaining">
+                                                            {formatTimeRemaining(round.close_time)}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="round-status closed">ปิดรับแล้ว</span>
+                                                    )}
+                                                    {isExpanded ? <FiChevronUp /> : <FiChevronDown />}
+                                                </div>
+                                            </div>
 
-                        {/* Main Content */}
-                        <div className="rounds-main">
-                            {selectedRound ? (
-                                <>
-                                    {/* Round Info */}
-                                    <div className="round-info-card card">
-                                        <div className="round-header">
-                                            <div>
-                                                <h2>{selectedRound.lottery_name}</h2>
-                                                <p>
-                                                    {new Date(selectedRound.round_date).toLocaleDateString('th-TH', {
-                                                        weekday: 'long',
-                                                        day: 'numeric',
-                                                        month: 'long',
-                                                        year: 'numeric'
-                                                    })}
-                                                </p>
-                                            </div>
-                                            {canSubmit() && (
-                                                <button
-                                                    className="btn btn-primary"
-                                                    onClick={() => {
-                                                        setSubmitForm({
-                                                            bet_type: '2_top',
-                                                            numbers: '',
-                                                            amount: ''
-                                                        })
-                                                        // Generate bill ID if starting fresh
-                                                        if (drafts.length === 0) {
-                                                            const shortId = 'B-' + Math.random().toString(36).substring(2, 8).toUpperCase()
-                                                            setCurrentBillId(shortId)
-                                                        }
-                                                        setShowSubmitModal(true)
-                                                    }}
-                                                >
-                                                    <FiPlus /> ส่งเลข
-                                                </button>
-                                            )}
-                                        </div>
+                                            {isExpanded && (
+                                                <div className="round-accordion-content">
+                                                    {/* Round Info Detail */}
+                                                    <div className="round-info-detail card">
+                                                        <div className="detail-header">
+                                                            <div className="time-grid">
+                                                                <div className="time-item">
+                                                                    <FiClock />
+                                                                    <span>เปิดรับ: {new Date(round.open_time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                                </div>
+                                                                <div className="time-item">
+                                                                    <FiClock />
+                                                                    <span>ปิดรับ: {new Date(round.close_time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                                </div>
+                                                            </div>
+                                                            {canSubmit() && (
+                                                                <button
+                                                                    className="btn btn-primary"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setSubmitForm({
+                                                                            bet_type: '2_top',
+                                                                            numbers: '',
+                                                                            amount: ''
+                                                                        })
+                                                                        if (drafts.length === 0) {
+                                                                            const shortId = 'B-' + Math.random().toString(36).substring(2, 8).toUpperCase()
+                                                                            setCurrentBillId(shortId)
+                                                                        }
+                                                                        setShowSubmitModal(true)
+                                                                    }}
+                                                                >
+                                                                    <FiPlus /> ส่งเลข
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
 
-                                        <div className="time-info">
-                                            <div className="time-item">
-                                                <FiClock />
-                                                <span>เปิดรับ: {new Date(selectedRound.open_time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
-                                            </div>
-                                            <div className="time-item">
-                                                <FiClock />
-                                                <span>ปิดรับ: {new Date(selectedRound.close_time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
-                                            </div>
-                                            {selectedRound.status === 'open' && (
-                                                <div className="time-remaining">
-                                                    {formatTimeRemaining(selectedRound.close_time)}
+                                                    {/* Submissions Summary */}
+                                                    <div className="submissions-summary">
+                                                        <div className="summary-card">
+                                                            <span className="summary-value">{submissions.length}</span>
+                                                            <span className="summary-label">รายการ</span>
+                                                        </div>
+                                                        <div className="summary-card">
+                                                            <span className="summary-value">
+                                                                {round.currency_symbol}{totalAmount.toLocaleString()}
+                                                            </span>
+                                                            <span className="summary-label">ยอดรวม</span>
+                                                        </div>
+                                                        <div className="summary-card highlight">
+                                                            <span className="summary-value">
+                                                                {round.currency_symbol}{totalCommission.toLocaleString()}
+                                                            </span>
+                                                            <span className="summary-label">ค่าคอม</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="submissions-list card">
+                                                        <div className="list-header">
+                                                            <h3>รายการที่ส่ง</h3>
+                                                            <div className="view-toggle-group">
+                                                                <div className="view-toggle-container">
+                                                                    <span className="toggle-label">แสดงผล</span>
+                                                                    <div className="view-toggle">
+                                                                        <button
+                                                                            className={`toggle-btn ${displayMode === 'summary' ? 'active' : ''}`}
+                                                                            onClick={() => setDisplayMode('summary')}
+                                                                            title="แบบย่อ"
+                                                                        >
+                                                                            <FiList /> <span>แบบย่อ</span>
+                                                                        </button>
+                                                                        <button
+                                                                            className={`toggle-btn ${displayMode === 'detailed' ? 'active' : ''}`}
+                                                                            onClick={() => setDisplayMode('detailed')}
+                                                                            title="แบบขยาย"
+                                                                        >
+                                                                            <FiGrid /> <span>แบบขยาย</span>
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="divider-v"></div>
+
+                                                                <div className="view-toggle-container">
+                                                                    <span className="toggle-label">จัดกลุ่ม</span>
+                                                                    <button
+                                                                        className={`toggle-btn group-toggle ${isGroupByBill ? 'active' : ''}`}
+                                                                        onClick={() => setIsGroupByBill(!isGroupByBill)}
+                                                                    >
+                                                                        <FiLayers /> <span>แยกใบโพย</span>
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        {submissions.length === 0 ? (
+                                                            <div className="empty-state">
+                                                                <FiList className="empty-icon" />
+                                                                <p>ยังไม่มีรายการ</p>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="submissions-table-wrap">
+                                                                {(() => {
+                                                                    // Helper to process items based on displayMode
+                                                                    const processItems = (items) => {
+                                                                        if (displayMode === 'detailed') return items
+                                                                        return items.reduce((acc, sub) => {
+                                                                            if (sub.entry_id) {
+                                                                                const existing = acc.find(a => a.entry_id === sub.entry_id)
+                                                                                if (existing) {
+                                                                                    existing.amount += sub.amount
+                                                                                    existing.commission_amount += sub.commission_amount
+                                                                                    return acc
+                                                                                }
+                                                                                acc.push({ ...sub })
+                                                                            } else {
+                                                                                acc.push({ ...sub })
+                                                                            }
+                                                                            return acc
+                                                                        }, [])
+                                                                    }
+
+                                                                    if (isGroupByBill) {
+                                                                        const bills = submissions.reduce((acc, sub) => {
+                                                                            const billId = sub.bill_id || 'no-bill'
+                                                                            if (!acc[billId]) acc[billId] = []
+                                                                            acc[billId].push(sub)
+                                                                            return acc
+                                                                        }, {})
+
+                                                                        return (
+                                                                            <div className="bill-view-container">
+                                                                                {Object.entries(bills).sort((a, b) => {
+                                                                                    const latestA = new Date(a[1][0].created_at)
+                                                                                    const latestB = new Date(b[1][0].created_at)
+                                                                                    return latestB - latestA
+                                                                                }).map(([billId, billItems]) => {
+                                                                                    const billTotal = billItems.reduce((sum, item) => sum + item.amount, 0)
+                                                                                    const billCommission = billItems.reduce((sum, item) => sum + item.commission_amount, 0)
+                                                                                    const billTime = new Date(billItems[0].created_at).toLocaleTimeString('th-TH', {
+                                                                                        hour: '2-digit',
+                                                                                        minute: '2-digit'
+                                                                                    })
+                                                                                    const isExpandedBill = expandedBills.includes(billId)
+                                                                                    const processedBillItems = processItems(billItems)
+
+                                                                                    return (
+                                                                                        <div key={billId} className={`bill-group card ${isExpandedBill ? 'expanded' : ''}`}>
+                                                                                            <div
+                                                                                                className="bill-group-header clickable"
+                                                                                                onClick={() => toggleBill(billId)}
+                                                                                            >
+                                                                                                <div className="bill-info">
+                                                                                                    <span className="bill-id-label">ใบโพย:</span>
+                                                                                                    <span className="bill-id-value">{billId === 'no-bill' ? 'ไม่มีเลขบิล' : billId}</span>
+                                                                                                    <span className="bill-time">{billTime}</span>
+                                                                                                </div>
+                                                                                                <div className="bill-summary-mini">
+                                                                                                    <span>รวม: <strong>{round.currency_symbol}{billTotal.toLocaleString()}</strong></span>
+                                                                                                    <span>คอม: <strong>{round.currency_symbol}{billCommission.toLocaleString()}</strong></span>
+                                                                                                    <span className="expand-icon">
+                                                                                                        {isExpandedBill ? <FiChevronUp /> : <FiChevronDown />}
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                            </div>
+
+                                                                                            {isExpandedBill && (
+                                                                                                <div className="bill-details-content">
+                                                                                                    <table className="submissions-table mini">
+                                                                                                        <thead>
+                                                                                                            <tr>
+                                                                                                                <th>เลข</th>
+                                                                                                                <th>จำนวน</th>
+                                                                                                                <th>ค่าคอม</th>
+                                                                                                                <th></th>
+                                                                                                            </tr>
+                                                                                                        </thead>
+                                                                                                        <tbody>
+                                                                                                            {processedBillItems.map(sub => (
+                                                                                                                <tr key={sub.id || sub.entry_id}>
+                                                                                                                    <td className="number-cell">
+                                                                                                                        <div className="number-display">
+                                                                                                                            <span className="main-number">{sub.display_numbers || sub.numbers}</span>
+                                                                                                                            <span className="sub-type">{sub.display_bet_type || BET_TYPES[sub.bet_type]?.label}</span>
+                                                                                                                        </div>
+                                                                                                                    </td>
+                                                                                                                    <td>{sub.display_amount || sub.amount?.toLocaleString()}</td>
+                                                                                                                    <td>{sub.commission_amount?.toLocaleString()}</td>
+                                                                                                                    <td>
+                                                                                                                        {canDelete(sub) && (
+                                                                                                                            <button
+                                                                                                                                className="icon-btn danger"
+                                                                                                                                onClick={(e) => {
+                                                                                                                                    e.stopPropagation()
+                                                                                                                                    handleDelete(sub)
+                                                                                                                                }}
+                                                                                                                                title="ลบ"
+                                                                                                                            >
+                                                                                                                                <FiTrash2 />
+                                                                                                                            </button>
+                                                                                                                        )}
+                                                                                                                    </td>
+                                                                                                                </tr>
+                                                                                                            ))}
+                                                                                                        </tbody>
+                                                                                                    </table>
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    )
+                                                                                })}
+                                                                            </div>
+                                                                        )
+                                                                    } else {
+                                                                        // Single table view
+                                                                        const displayItems = processItems(submissions)
+                                                                        return (
+                                                                            <table className="submissions-table">
+                                                                                <thead>
+                                                                                    <tr>
+                                                                                        <th>เลข</th>
+                                                                                        <th>จำนวน</th>
+                                                                                        <th>ค่าคอม</th>
+                                                                                        <th>เวลา</th>
+                                                                                        <th></th>
+                                                                                    </tr>
+                                                                                </thead>
+                                                                                <tbody>
+                                                                                    {displayItems.map(sub => (
+                                                                                        <tr key={sub.id || sub.entry_id} className={sub.is_winner ? 'winner' : ''}>
+                                                                                            <td className="number-cell">
+                                                                                                <div className="number-display">
+                                                                                                    <span className="main-number">
+                                                                                                        {displayMode === 'summary' ? (sub.display_numbers || sub.numbers) : sub.numbers}
+                                                                                                    </span>
+                                                                                                    <span className="sub-type">
+                                                                                                        {displayMode === 'summary' ? (sub.display_bet_type || BET_TYPES[sub.bet_type]?.label) : BET_TYPES[sub.bet_type]?.label}
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                            </td>
+                                                                                            <td>{round.currency_symbol}{(displayMode === 'summary' ? sub.display_amount : sub.amount)?.toLocaleString()}</td>
+                                                                                            <td className="commission-cell">
+                                                                                                {round.currency_symbol}{sub.commission_amount?.toLocaleString()}
+                                                                                            </td>
+                                                                                            <td className="time-cell">
+                                                                                                {new Date(sub.created_at).toLocaleTimeString('th-TH', {
+                                                                                                    hour: '2-digit',
+                                                                                                    minute: '2-digit'
+                                                                                                })}
+                                                                                            </td>
+                                                                                            <td>
+                                                                                                {canDelete(sub) && (
+                                                                                                    <button
+                                                                                                        className="icon-btn danger"
+                                                                                                        onClick={() => handleDelete(sub)}
+                                                                                                        title="ลบ"
+                                                                                                    >
+                                                                                                        <FiTrash2 />
+                                                                                                    </button>
+                                                                                                )}
+                                                                                                {sub.is_winner && (
+                                                                                                    <span className="winner-badge">
+                                                                                                        <FiCheck /> ถูก!
+                                                                                                    </span>
+                                                                                                )}
+                                                                                            </td>
+                                                                                        </tr>
+                                                                                    ))}
+                                                                                </tbody>
+                                                                            </table>
+                                                                        )
+                                                                    }
+                                                                })()}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
-                                    </div>
-
-                                    {/* Submissions Summary */}
-                                    <div className="submissions-summary">
-                                        <div className="summary-card">
-                                            <span className="summary-value">{submissions.length}</span>
-                                            <span className="summary-label">รายการ</span>
-                                        </div>
-                                        <div className="summary-card">
-                                            <span className="summary-value">
-                                                {selectedRound.currency_symbol}{totalAmount.toLocaleString()}
-                                            </span>
-                                            <span className="summary-label">ยอดรวม</span>
-                                        </div>
-                                        <div className="summary-card highlight">
-                                            <span className="summary-value">
-                                                {selectedRound.currency_symbol}{totalCommission.toLocaleString()}
-                                            </span>
-                                            <span className="summary-label">ค่าคอม</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Submissions List */}
-                                    <div className="submissions-list card">
-                                        <div className="list-header">
-                                            <h3>รายการที่ส่ง</h3>
-                                            <div className="view-toggle">
-                                                <button
-                                                    className={`toggle-btn ${viewMode === 'summary' ? 'active' : ''}`}
-                                                    onClick={() => setViewMode('summary')}
-                                                >
-                                                    แบบย่อ
-                                                </button>
-                                                <button
-                                                    className={`toggle-btn ${viewMode === 'detailed' ? 'active' : ''}`}
-                                                    onClick={() => setViewMode('detailed')}
-                                                >
-                                                    แบบขยาย
-                                                </button>
-                                                <button
-                                                    className={`toggle-btn ${viewMode === 'bill' ? 'active' : ''}`}
-                                                    onClick={() => setViewMode('bill')}
-                                                >
-                                                    แยกใบโพย
-                                                </button>
-                                            </div>
-                                        </div>
-                                        {submissions.length === 0 ? (
-                                            <div className="empty-state">
-                                                <FiList className="empty-icon" />
-                                                <p>ยังไม่มีรายการ</p>
-                                            </div>
-                                        ) : (
-                                            <div className="submissions-table-wrap">
-                                                {viewMode === 'bill' ? (
-                                                    <div className="bill-view-container">
-                                                        {(() => {
-                                                            const bills = submissions.reduce((acc, sub) => {
-                                                                const billId = sub.bill_id || 'no-bill'
-                                                                if (!acc[billId]) acc[billId] = []
-                                                                acc[billId].push(sub)
-                                                                return acc
-                                                            }, {})
-
-                                                            return Object.entries(bills).sort((a, b) => {
-                                                                // Sort by latest submission in each bill
-                                                                const latestA = new Date(a[1][0].created_at)
-                                                                const latestB = new Date(b[1][0].created_at)
-                                                                return latestB - latestA
-                                                            }).map(([billId, billItems]) => {
-                                                                const billTotal = billItems.reduce((sum, item) => sum + item.amount, 0)
-                                                                const billCommission = billItems.reduce((sum, item) => sum + item.commission_amount, 0)
-                                                                const billTime = new Date(billItems[0].created_at).toLocaleTimeString('th-TH', {
-                                                                    hour: '2-digit',
-                                                                    minute: '2-digit'
-                                                                })
-
-                                                                const isExpanded = expandedBills.includes(billId)
-
-                                                                return (
-                                                                    <div key={billId} className={`bill-group card ${isExpanded ? 'expanded' : ''}`}>
-                                                                        <div
-                                                                            className="bill-group-header clickable"
-                                                                            onClick={() => toggleBill(billId)}
-                                                                        >
-                                                                            <div className="bill-info">
-                                                                                <span className="bill-id-label">ใบโพย:</span>
-                                                                                <span className="bill-id-value">{billId === 'no-bill' ? 'ไม่มีเลขบิล' : billId}</span>
-                                                                                <span className="bill-time">{billTime}</span>
-                                                                            </div>
-                                                                            <div className="bill-summary-mini">
-                                                                                <span>รวม: <strong>{selectedRound.currency_symbol}{billTotal.toLocaleString()}</strong></span>
-                                                                                <span>คอม: <strong>{selectedRound.currency_symbol}{billCommission.toLocaleString()}</strong></span>
-                                                                                <span className="expand-icon">
-                                                                                    {isExpanded ? <FiChevronUp /> : <FiChevronDown />}
-                                                                                </span>
-                                                                            </div>
-                                                                        </div>
-
-                                                                        {isExpanded && (
-                                                                            <div className="bill-details-content">
-                                                                                <table className="submissions-table mini">
-                                                                                    <thead>
-                                                                                        <tr>
-                                                                                            <th>เลข</th>
-                                                                                            <th>จำนวน</th>
-                                                                                            <th>ค่าคอม</th>
-                                                                                            <th></th>
-                                                                                        </tr>
-                                                                                    </thead>
-                                                                                    <tbody>
-                                                                                        {billItems.reduce((acc, sub) => {
-                                                                                            // Group by entry_id within bill for cleaner look
-                                                                                            if (sub.entry_id) {
-                                                                                                const existing = acc.find(a => a.entry_id === sub.entry_id)
-                                                                                                if (existing) {
-                                                                                                    existing.amount += sub.amount
-                                                                                                    existing.commission_amount += sub.commission_amount
-                                                                                                    return acc
-                                                                                                }
-                                                                                                acc.push({ ...sub })
-                                                                                            } else {
-                                                                                                acc.push({ ...sub })
-                                                                                            }
-                                                                                            return acc
-                                                                                        }, []).map(sub => (
-                                                                                            <tr key={sub.id || sub.entry_id}>
-                                                                                                <td className="number-cell">
-                                                                                                    <div className="number-display">
-                                                                                                        <span className="main-number">{sub.display_numbers || sub.numbers}</span>
-                                                                                                        <span className="sub-type">{sub.display_bet_type || BET_TYPES[sub.bet_type]?.label}</span>
-                                                                                                    </div>
-                                                                                                </td>
-                                                                                                <td>{sub.display_amount || sub.amount?.toLocaleString()}</td>
-                                                                                                <td>{sub.commission_amount?.toLocaleString()}</td>
-                                                                                                <td>
-                                                                                                    {canDelete(sub) && (
-                                                                                                        <button
-                                                                                                            className="icon-btn danger"
-                                                                                                            onClick={(e) => {
-                                                                                                                e.stopPropagation()
-                                                                                                                handleDelete(sub)
-                                                                                                            }}
-                                                                                                            title="ลบ"
-                                                                                                        >
-                                                                                                            <FiTrash2 />
-                                                                                                        </button>
-                                                                                                    )}
-                                                                                                </td>
-                                                                                            </tr>
-                                                                                        ))}
-                                                                                    </tbody>
-                                                                                </table>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                )
-                                                            })
-                                                        })()}
-                                                    </div>
-                                                ) : (
-                                                    <table className="submissions-table">
-                                                        <thead>
-                                                            <tr>
-                                                                <th>เลข</th>
-                                                                <th>จำนวน</th>
-                                                                <th>ค่าคอม</th>
-                                                                <th>เวลา</th>
-                                                                <th></th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {(() => {
-                                                                const displayItems = viewMode === 'summary'
-                                                                    ? submissions.reduce((acc, sub) => {
-                                                                        if (sub.entry_id) {
-                                                                            const existing = acc.find(a => a.entry_id === sub.entry_id)
-                                                                            if (existing) {
-                                                                                existing.amount += sub.amount
-                                                                                existing.commission_amount += sub.commission_amount
-                                                                                return acc
-                                                                            }
-                                                                            acc.push({ ...sub })
-                                                                        } else {
-                                                                            acc.push({ ...sub })
-                                                                        }
-                                                                        return acc
-                                                                    }, [])
-                                                                    : submissions
-
-                                                                return displayItems.map(sub => (
-                                                                    <tr key={sub.id || sub.entry_id} className={sub.is_winner ? 'winner' : ''}>
-                                                                        <td className="number-cell">
-                                                                            <div className="number-display">
-                                                                                <span className="main-number">
-                                                                                    {viewMode === 'summary' ? (sub.display_numbers || sub.numbers) : sub.numbers}
-                                                                                </span>
-                                                                                <span className="sub-type">
-                                                                                    {viewMode === 'summary' ? (sub.display_bet_type || BET_TYPES[sub.bet_type]?.label) : BET_TYPES[sub.bet_type]?.label}
-                                                                                </span>
-                                                                            </div>
-                                                                        </td>
-                                                                        <td>
-                                                                            {selectedRound.currency_symbol}
-                                                                            {viewMode === 'summary' ? (sub.display_amount || sub.amount?.toLocaleString()) : sub.amount?.toLocaleString()}
-                                                                        </td>
-                                                                        <td className="commission-cell">
-                                                                            {selectedRound.currency_symbol}{sub.commission_amount?.toLocaleString()}
-                                                                        </td>
-                                                                        <td className="time-cell">
-                                                                            {new Date(sub.created_at).toLocaleTimeString('th-TH', {
-                                                                                hour: '2-digit',
-                                                                                minute: '2-digit'
-                                                                            })}
-                                                                        </td>
-                                                                        <td>
-                                                                            {canDelete(sub) && (
-                                                                                <button
-                                                                                    className="icon-btn danger"
-                                                                                    onClick={() => handleDelete(sub)}
-                                                                                    title="ลบ"
-                                                                                >
-                                                                                    <FiTrash2 />
-                                                                                </button>
-                                                                            )}
-                                                                            {sub.is_winner && (
-                                                                                <span className="winner-badge">
-                                                                                    <FiCheck /> ถูก!
-                                                                                </span>
-                                                                            )}
-                                                                        </td>
-                                                                    </tr>
-                                                                ))
-                                                            })()}
-                                                        </tbody>
-                                                    </table>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                </>
-                            ) : (
-                                <div className="empty-state card">
-                                    <FiCalendar className="empty-icon" />
-                                    <h3>เลือกงวดหวย</h3>
-                                    <p>เลือกงวดจากรายการด้านซ้าย</p>
-                                </div>
+                                    )
+                                })
                             )}
                         </div>
-                    </div>
-                )}
+                    )}
 
-                {activeTab === 'history' && (
-                    <HistoryTab user={user} profile={profile} />
-                )}
+                    {activeTab === 'history' && (
+                        <HistoryTab user={user} profile={profile} />
+                    )}
 
-                {activeTab === 'commission' && (
-                    <CommissionTab user={user} profile={profile} userSettings={userSettings} />
-                )}
+                    {activeTab === 'commission' && (
+                        <CommissionTab user={user} profile={profile} userSettings={userSettings} />
+                    )}
+                </div>
             </div>
 
             {/* Submit Modal */}
             {showSubmitModal && selectedRound && (
-                <div className="modal-overlay" onClick={() => setShowSubmitModal(false)}>
-                    <div className="modal" onClick={e => e.stopPropagation()}>
+                <div className="modal-overlay" onClick={() => {
+                    if (drafts.length > 0) {
+                        if (confirm('ต้องการยกเลิกการส่งเลขทั้งหมดในรายการร่าง?')) {
+                            setDrafts([])
+                            setCurrentBillId(null)
+                            setShowSubmitModal(false)
+                        }
+                    } else {
+                        setShowSubmitModal(false)
+                    }
+                }}>
+                    <div className="modal submission-modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
-                            <div className="header-left">
+                            <div className="header-title">
                                 <h3><FiPlus /> ส่งเลข</h3>
-                                {currentBillId && (
-                                    <span className="bill-id-badge">เลขใบโพย: {currentBillId}</span>
-                                )}
+                                <span className="bill-id-badge">{currentBillId}</span>
                             </div>
-                            <button className="modal-close" onClick={() => setShowSubmitModal(false)}>
+                            <button className="modal-close" onClick={() => {
+                                if (drafts.length > 0) {
+                                    if (confirm('ต้องการยกเลิกการส่งเลขทั้งหมดในรายการร่าง?')) {
+                                        setDrafts([])
+                                        setCurrentBillId(null)
+                                        setShowSubmitModal(false)
+                                    }
+                                } else {
+                                    setShowSubmitModal(false)
+                                }
+                            }}>
                                 <FiX />
                             </button>
                         </div>
 
                         <div className="modal-body">
-                            <div className="form-group">
-                                <label className="form-label">
-                                    เลข ({BET_TYPES[submitForm.bet_type]?.digits || '-'} หลัก)
-                                </label>
-                                <input
-                                    ref={numberInputRef}
-                                    type="text"
-                                    className="form-input number-input"
-                                    inputMode="decimal"
-                                    placeholder="ป้อนตัวเลข"
-                                    value={submitForm.numbers}
-                                    onChange={e => setSubmitForm({
-                                        ...submitForm,
-                                        numbers: e.target.value.replace(/[ \-.,]/g, '*').replace(/[^\d*]/g, '')
-                                    })}
-                                    onKeyDown={e => {
-                                        if (e.key === 'Enter') {
-                                            e.preventDefault()
-                                            if (amountInputRef.current) {
-                                                setTimeout(() => {
-                                                    amountInputRef.current.focus()
-                                                    amountInputRef.current.select()
-                                                    amountInputRef.current.setSelectionRange(0, 9999)
-                                                }, 50)
-                                            }
-                                        }
-                                    }}
-                                />
-                            </div>
+                            <div className="input-section card">
+                                <div className="form-row">
+                                    <div className="form-group">
+                                        <label className="form-label">ตัวเลข</label>
+                                        <input
+                                            ref={numberInputRef}
+                                            type="text"
+                                            className="form-input number-input"
+                                            inputMode="decimal"
+                                            placeholder="ป้อนตัวเลข"
+                                            value={submitForm.numbers}
+                                            onChange={e => setSubmitForm({
+                                                ...submitForm,
+                                                numbers: e.target.value.replace(/[ \-.,]/g, '*').replace(/[^\d*]/g, '')
+                                            })}
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault()
+                                                    if (amountInputRef.current) {
+                                                        amountInputRef.current.focus()
+                                                        amountInputRef.current.select()
+                                                    }
+                                                }
+                                            }}
+                                        />
+                                    </div>
 
-                            <div className="form-group">
-                                <label className="form-label">จำนวนเงิน ({selectedRound.currency_name})</label>
-                                <input
-                                    ref={amountInputRef}
-                                    type="text"
-                                    className="form-input"
-                                    inputMode="decimal"
-                                    placeholder="0"
-                                    value={submitForm.amount}
-                                    onChange={e => setSubmitForm({
-                                        ...submitForm,
-                                        amount: e.target.value.replace(/[ \-.,]/g, '*').replace(/[^\d*]/g, '')
-                                    })}
-                                />
-                            </div>
+                                    <div className="form-group">
+                                        <label className="form-label">จำนวนเงิน ({selectedRound.currency_name})</label>
+                                        <input
+                                            ref={amountInputRef}
+                                            type="text"
+                                            className="form-input amount-input"
+                                            inputMode="decimal"
+                                            placeholder="0"
+                                            value={submitForm.amount}
+                                            onChange={e => setSubmitForm({
+                                                ...submitForm,
+                                                amount: e.target.value.replace(/[ \-.,]/g, '*').replace(/[^\d*]/g, '')
+                                            })}
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault()
+                                                    // Auto-add default bet type if possible
+                                                    const digits = submitForm.numbers.replace(/\*/g, '').length
+                                                    if (digits === 2) addToDraft('2_top')
+                                                    else if (digits === 3) addToDraft('3_top')
+                                                }
+                                            }}
+                                        />
+                                    </div>
+                                </div>
 
-                            {/* Bet Type Selection */}
-                            <div className="form-group">
-                                <label className="form-label">ประเภท</label>
-                                <div className="bet-type-grid">
-                                    {(() => {
-                                        const digits = submitForm.numbers.replace(/\*/g, '').length
-                                        const hasStarInNumbers = submitForm.numbers.includes('*')
-                                        const hasStarInAmount = submitForm.amount.toString().includes('*')
-                                        const lotteryType = selectedRound.lottery_type
-                                        const amount = submitForm.amount.toString()
-                                        const isAmountEmpty = !amount || amount === '0' || amount === ''
+                                <div className="bet-type-selection">
+                                    <label className="form-label">เลือกประเภท</label>
+                                    <div className="bet-type-grid">
+                                        {(() => {
+                                            const digits = submitForm.numbers.replace(/\*/g, '').length
+                                            const hasStarInAmount = submitForm.amount.toString().includes('*')
+                                            const lotteryType = selectedRound.lottery_type
+                                            const amount = submitForm.amount.toString()
+                                            const isAmountEmpty = !amount || amount === '0' || amount === ''
 
-                                        let available = []
+                                            let available = []
 
-                                        if (digits === 1) {
-                                            if (!isAmountEmpty) {
+                                            if (digits === 1) {
                                                 available = ['run_top', 'run_bottom', 'front_top_1', 'middle_top_1', 'back_top_1', 'front_bottom_1', 'back_bottom_1']
-                                            }
-                                        } else if (digits === 2) {
-                                            if (!isAmountEmpty) {
+                                            } else if (digits === 2) {
                                                 available = ['2_top', '2_front', '2_spread', '2_bottom']
                                                 if (!hasStarInAmount) available.splice(3, 0, '2_have')
-                                            }
-                                        } else if (digits === 3) {
-                                            if (!isAmountEmpty) {
-                                                if (hasStarInAmount) {
-                                                    const permCount = getPermutations(submitForm.numbers).length
-                                                    available = [
-                                                        { id: '3_straight_tod', label: 'เต็ง-โต๊ด' },
-                                                        { id: '3_straight_perm', label: `1+กลับ (${permCount - 1})` }
-                                                    ]
-                                                } else {
-                                                    const permCount = getPermutations(submitForm.numbers).length
-                                                    available = [
-                                                        '3_top',
-                                                        '3_tod',
-                                                        { id: '3_perm_from_3', label: `คูณชุด ${permCount}` }
-                                                    ]
-                                                    if (lotteryType === 'thai') available.push('3_bottom')
-                                                }
-                                            }
-                                        } else if (digits === 4) {
-                                            if (lotteryType === 'lao') {
-                                                if (isAmountEmpty) {
-                                                    available = ['4_set']
-                                                } else {
-                                                    const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
-                                                    available = [
-                                                        '4_set',
-                                                        '4_float',
-                                                        { id: '3_perm_from_4', label: `3 X ${permCount}` }
-                                                    ]
-                                                }
-                                            } else { // thai, hanoi
+                                            } else if (digits === 3) {
                                                 if (!isAmountEmpty) {
-                                                    const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
+                                                    if (hasStarInAmount) {
+                                                        const permCount = getPermutations(submitForm.numbers).length
+                                                        available = [
+                                                            { id: '3_straight_tod', label: 'เต็ง-โต๊ด' },
+                                                            { id: '3_straight_perm', label: `1+กลับ (${permCount - 1})` }
+                                                        ]
+                                                    } else {
+                                                        const permCount = getPermutations(submitForm.numbers).length
+                                                        available = [
+                                                            '3_top',
+                                                            '3_tod',
+                                                            { id: '3_perm_from_3', label: `คูณชุด ${permCount}` }
+                                                        ]
+                                                        if (lotteryType === 'thai') available.push('3_bottom')
+                                                    }
+                                                }
+                                            } else if (digits === 4) {
+                                                if (lotteryType === 'lao') {
+                                                    if (isAmountEmpty) {
+                                                        available = ['4_set']
+                                                    } else {
+                                                        const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
+                                                        available = [
+                                                            '4_set',
+                                                            '4_float',
+                                                            { id: '3_perm_from_4', label: `3 X ${permCount}` }
+                                                        ]
+                                                    }
+                                                } else {
+                                                    if (!isAmountEmpty) {
+                                                        const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
+                                                        available = [
+                                                            '4_float',
+                                                            { id: '3_perm_from_4', label: `3 X ${permCount}` }
+                                                        ]
+                                                    }
+                                                }
+                                            } else if (digits === 5) {
+                                                if (!isAmountEmpty) {
+                                                    const permCount = getUnique3DigitPermsFrom5(submitForm.numbers).length
                                                     available = [
-                                                        '4_float',
-                                                        { id: '3_perm_from_4', label: `3 X ${permCount}` }
+                                                        '5_float',
+                                                        { id: '3_perm_from_5', label: `3 X ${permCount}` }
                                                     ]
                                                 }
                                             }
-                                        } else if (digits === 5) {
-                                            if (!isAmountEmpty) {
-                                                const permCount = getUnique3DigitPermsFrom5(submitForm.numbers).length
-                                                available = [
-                                                    '5_float',
-                                                    { id: '3_perm_from_5', label: `3 X ${permCount}` }
-                                                ]
-                                            }
-                                        }
 
-                                        return available.map(item => {
-                                            const key = typeof item === 'string' ? item : item.id
-                                            const label = typeof item === 'string' ? (BET_TYPES[key]?.label || key) : item.label
-                                            return (
-                                                <button
-                                                    key={key}
-                                                    type="button"
-                                                    className={`bet-type-btn ${submitForm.bet_type === key ? 'active' : ''}`}
-                                                    onClick={() => addToDraft(key)}
-                                                    disabled={submitting}
-                                                >
-                                                    {label}
-                                                </button>
-                                            )
-                                        })
-                                    })()}
+                                            return available.map(item => {
+                                                const key = typeof item === 'string' ? item : item.id
+                                                const label = typeof item === 'string' ? (BET_TYPES[key]?.label || key) : item.label
+                                                return (
+                                                    <button
+                                                        key={key}
+                                                        type="button"
+                                                        className="bet-type-btn"
+                                                        onClick={() => addToDraft(key)}
+                                                    >
+                                                        {label}
+                                                    </button>
+                                                )
+                                            })
+                                        })()}
+                                    </div>
                                 </div>
                             </div>
 
-                            {/* Drafts List (Summary Area) */}
-                            {drafts.length > 0 && (
-                                <div className="drafts-section">
-                                    <div className="drafts-header">
-                                        <h4>รายการในบิลนี้ (แบบย่อ)</h4>
-                                        <button
-                                            className="btn-text danger"
-                                            onClick={() => {
-                                                if (confirm('ต้องการล้างรายการทั้งหมดในบิลนี้?')) {
-                                                    setDrafts([])
-                                                    setCurrentBillId(null)
-                                                }
-                                            }}
-                                        >
-                                            ล้างรายการ
+                            {/* Drafts List */}
+                            <div className="drafts-section card">
+                                <div className="section-header">
+                                    <h4>รายการที่เลือก ({drafts.length})</h4>
+                                    {drafts.length > 0 && (
+                                        <button className="text-btn danger" onClick={() => setDrafts([])}>
+                                            ล้างทั้งหมด
                                         </button>
-                                    </div>
-                                    <div className="drafts-table-wrap scrollable">
+                                    )}
+                                </div>
+                                <div className="drafts-list">
+                                    {drafts.length === 0 ? (
+                                        <div className="empty-draft">ยังไม่มีรายการ</div>
+                                    ) : (
                                         <table className="drafts-table">
                                             <thead>
                                                 <tr>
                                                     <th>เลข</th>
+                                                    <th>ประเภท</th>
                                                     <th>จำนวน</th>
-                                                    <th>ค่าคอม</th>
                                                     <th></th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {(() => {
-                                                    // Group drafts by entry_id for display
-                                                    const displayDrafts = drafts.reduce((acc, d) => {
-                                                        const existing = acc.find(a => a.entry_id === d.entry_id)
-                                                        if (existing) {
-                                                            existing.amount += d.amount
-                                                            existing.commission_amount += d.commission_amount
-                                                            return acc
-                                                        }
-                                                        acc.push({ ...d })
-                                                        return acc
-                                                    }, [])
-
-                                                    return displayDrafts.map(d => (
-                                                        <tr key={d.entry_id}>
-                                                            <td className="number-cell">
-                                                                <div className="number-display">
-                                                                    <span className="main-number">{d.display_numbers || d.numbers}</span>
-                                                                    <span className="sub-type">{d.display_bet_type || BET_TYPES[d.bet_type]?.label}</span>
-                                                                </div>
-                                                            </td>
-                                                            <td>{d.display_amount || d.amount}</td>
-                                                            <td>{d.commission_amount.toLocaleString()}</td>
-                                                            <td>
-                                                                <button
-                                                                    className="icon-btn danger"
-                                                                    onClick={() => setDrafts(drafts.filter(item => item.entry_id !== d.entry_id))}
-                                                                >
-                                                                    <FiTrash2 />
-                                                                </button>
-                                                            </td>
-                                                        </tr>
-                                                    ))
-                                                })()}
+                                                {drafts.map((d, idx) => (
+                                                    <tr key={idx}>
+                                                        <td>{d.numbers}</td>
+                                                        <td>{BET_TYPES[d.bet_type]?.label}</td>
+                                                        <td>{d.amount.toLocaleString()}</td>
+                                                        <td>
+                                                            <button
+                                                                className="icon-btn danger mini"
+                                                                onClick={() => setDrafts(prev => prev.filter((_, i) => i !== idx))}
+                                                            >
+                                                                <FiTrash2 />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
                                             </tbody>
                                         </table>
-                                    </div>
-
-                                    {/* Total Summary Bar */}
-                                    <div className="drafts-total-bar">
-                                        <div className="total-item">
-                                            <span>รวมรายการ:</span>
-                                            <strong>{drafts.length} รายการ</strong>
-                                        </div>
-                                        <div className="total-item">
-                                            <span>ยอดรวม:</span>
-                                            <strong>{drafts.reduce((sum, d) => sum + d.amount, 0).toLocaleString()} {selectedRound.currency_name}</strong>
-                                        </div>
-                                    </div>
+                                    )}
                                 </div>
-                            )}
-
-                            <div className="modal-actions">
-                                <button
-                                    type="button"
-                                    className="btn btn-outline"
-                                    onClick={() => setShowSubmitModal(false)}
-                                    disabled={submitting}
-                                >
-                                    ยกเลิก
-                                </button>
-                                <button
-                                    type="button"
-                                    className="btn btn-primary"
-                                    onClick={handleSaveBill}
-                                    disabled={submitting || drafts.length === 0}
-                                >
-                                    {submitting ? 'กำลังบันทึก...' : 'บันทึกโพย'}
-                                </button>
+                                <div className="drafts-footer">
+                                    <div className="total-row">
+                                        <span>ยอดรวม:</span>
+                                        <span className="total-value">
+                                            {selectedRound.currency_symbol}
+                                            {drafts.reduce((sum, d) => sum + d.amount, 0).toLocaleString()}
+                                        </span>
+                                    </div>
+                                    <button
+                                        className="btn btn-primary btn-block"
+                                        disabled={drafts.length === 0 || submitting}
+                                        onClick={handleSaveBill}
+                                    >
+                                        {submitting ? 'กำลังบันทึก...' : 'บันทึกโพย'}
+                                    </button>
+                                </div>
                             </div>
-
-
-                            {/* Toast Notification */}
-                            {toast && (
-                                <div className={`toast-notification ${toast.type}`}>
-                                    <FiCheck /> {toast.message}
-                                </div>
-                            )}
                         </div>
+
+                        {/* Toast Notification */}
+                        {toast && (
+                            <div className={`toast-notification ${toast.type}`}>
+                                <FiCheck /> {toast.message}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
