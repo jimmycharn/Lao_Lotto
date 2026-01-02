@@ -108,7 +108,21 @@ const getUnique3DigitPermsFrom5 = (str) => {
     return Array.from(results)
 }
 
+// Helper to generate UUID (compatible with older browsers)
+const generateUUID = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID()
+    }
+    // Fallback for browsers without crypto.randomUUID
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = Math.random() * 16 | 0
+        const v = c === 'x' ? r : (r & 0x3 | 0x8)
+        return v.toString(16)
+    })
+}
+
 export default function UserDashboard() {
+
     const { user, profile } = useAuth()
     const [rounds, setRounds] = useState([])
     const [selectedRound, setSelectedRound] = useState(null)
@@ -237,11 +251,19 @@ export default function UserDashboard() {
 
     // Add to draft list
     function addToDraft(betTypeOverride = null) {
+        console.log('addToDraft called with:', betTypeOverride)
+        console.log('submitForm:', submitForm)
         const betType = betTypeOverride || submitForm.bet_type
-        if (!submitForm.numbers || !submitForm.amount || !betType) {
+        // Clean numbers by removing spaces
+        const cleanNumbers = (submitForm.numbers || '').replace(/\s/g, '')
+        console.log('cleanNumbers:', cleanNumbers, 'betType:', betType)
+        if (!cleanNumbers || !submitForm.amount || !betType) {
+            console.log('Validation failed:', { cleanNumbers, amount: submitForm.amount, betType })
             alert('กรุณากรอกเลขและจำนวนเงิน')
             return
         }
+
+
 
         const amountParts = submitForm.amount.toString().split('*').map(p => parseFloat(p) || 0)
         const totalAmount = amountParts.reduce((sum, p) => sum + p, 0)
@@ -252,44 +274,46 @@ export default function UserDashboard() {
         }
 
         const betTypeInfo = BET_TYPES[betType] || { label: betType, digits: 0 }
-        const digitsOnly = submitForm.numbers.replace(/\*/g, '')
+        const digitsOnly = cleanNumbers.replace(/\*/g, '')
 
         // Strict digit check
         const isSpecial3Digit = ['3_perm_from_4', '3_perm_from_5', '3_perm_from_3', '3_straight_tod', '3_straight_perm'].includes(betType)
         if (!isSpecial3Digit && digitsOnly.length !== betTypeInfo.digits) {
-            if (!(betType === '3_top' && submitForm.numbers.includes('*'))) {
+            if (!(betType === '3_top' && cleanNumbers.includes('*'))) {
                 alert(`${betTypeInfo.label} ต้องมี ${betTypeInfo.digits} หลัก`)
                 return
             }
         }
 
-        const entryId = crypto.randomUUID()
+
+        const entryId = generateUUID()
+
         const newDrafts = []
         const timestamp = new Date().toISOString()
 
         // Get label for display
         let displayLabel = betTypeInfo.label
         if (betType === '3_perm_from_3') {
-            const permCount = getPermutations(submitForm.numbers).length
+            const permCount = getPermutations(cleanNumbers).length
             displayLabel = `คูณชุด ${permCount}`
         } else if (betType === '3_perm_from_4') {
-            const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
+            const permCount = getUnique3DigitPermsFrom4(cleanNumbers).length
             displayLabel = `3 X ${permCount}`
         } else if (betType === '3_perm_from_5') {
-            const permCount = getUnique3DigitPermsFrom5(submitForm.numbers).length
+            const permCount = getUnique3DigitPermsFrom5(cleanNumbers).length
             displayLabel = `3 X ${permCount}`
         } else if (betType === '3_straight_tod') {
             displayLabel = 'เต็ง-โต๊ด'
         } else if (betType === '3_straight_perm') {
-            const permCount = getPermutations(submitForm.numbers).length
+            const permCount = getPermutations(cleanNumbers).length
             displayLabel = `1+กลับ (${permCount - 1})`
         }
 
         if (betType === '3_perm_from_4' || betType === '3_perm_from_5' || betType === '3_perm_from_3') {
             let perms = []
-            if (betType === '3_perm_from_4') perms = getUnique3DigitPermsFrom4(submitForm.numbers)
-            else if (betType === '3_perm_from_5') perms = getUnique3DigitPermsFrom5(submitForm.numbers)
-            else if (betType === '3_perm_from_3') perms = getPermutations(submitForm.numbers)
+            if (betType === '3_perm_from_4') perms = getUnique3DigitPermsFrom4(cleanNumbers)
+            else if (betType === '3_perm_from_5') perms = getUnique3DigitPermsFrom5(cleanNumbers)
+            else if (betType === '3_perm_from_3') perms = getPermutations(cleanNumbers)
 
             const rate = userSettings?.commission_rates?.['3_top'] || 0
             perms.forEach(p => {
@@ -300,7 +324,7 @@ export default function UserDashboard() {
                     amount: totalAmount,
                     commission_rate: rate,
                     commission_amount: (totalAmount * rate) / 100,
-                    display_numbers: submitForm.numbers,
+                    display_numbers: cleanNumbers,
                     display_amount: submitForm.amount,
                     display_bet_type: displayLabel,
                     created_at: timestamp
@@ -313,11 +337,11 @@ export default function UserDashboard() {
                 newDrafts.push({
                     entry_id: entryId,
                     bet_type: '3_top',
-                    numbers: submitForm.numbers,
+                    numbers: cleanNumbers,
                     amount: straightAmt,
                     commission_rate: rate,
                     commission_amount: (straightAmt * rate) / 100,
-                    display_numbers: submitForm.numbers,
+                    display_numbers: cleanNumbers,
                     display_amount: submitForm.amount,
                     display_bet_type: displayLabel,
                     created_at: timestamp
@@ -328,11 +352,11 @@ export default function UserDashboard() {
                 newDrafts.push({
                     entry_id: entryId,
                     bet_type: '3_tod',
-                    numbers: submitForm.numbers,
+                    numbers: cleanNumbers,
                     amount: todAmt,
                     commission_rate: rate,
                     commission_amount: (todAmt * rate) / 100,
-                    display_numbers: submitForm.numbers,
+                    display_numbers: cleanNumbers,
                     display_amount: submitForm.amount,
                     display_bet_type: displayLabel,
                     created_at: timestamp
@@ -340,18 +364,18 @@ export default function UserDashboard() {
             }
         } else if (betType === '3_straight_perm') {
             const [straightAmt, permAmt] = amountParts
-            const perms = getPermutations(submitForm.numbers).filter(p => p !== submitForm.numbers)
+            const perms = getPermutations(cleanNumbers).filter(p => p !== cleanNumbers)
 
             if (straightAmt > 0) {
                 const rate = userSettings?.commission_rates?.['3_top'] || 0
                 newDrafts.push({
                     entry_id: entryId,
                     bet_type: '3_top',
-                    numbers: submitForm.numbers,
+                    numbers: cleanNumbers,
                     amount: straightAmt,
                     commission_rate: rate,
                     commission_amount: (straightAmt * rate) / 100,
-                    display_numbers: submitForm.numbers,
+                    display_numbers: cleanNumbers,
                     display_amount: submitForm.amount,
                     display_bet_type: displayLabel,
                     created_at: timestamp
@@ -367,7 +391,7 @@ export default function UserDashboard() {
                         amount: permAmt,
                         commission_rate: rate,
                         commission_amount: (permAmt * rate) / 100,
-                        display_numbers: submitForm.numbers,
+                        display_numbers: cleanNumbers,
                         display_amount: submitForm.amount,
                         display_bet_type: displayLabel,
                         created_at: timestamp
@@ -379,11 +403,11 @@ export default function UserDashboard() {
             newDrafts.push({
                 entry_id: entryId,
                 bet_type: betType,
-                numbers: submitForm.numbers,
+                numbers: cleanNumbers,
                 amount: totalAmount,
                 commission_rate: rate,
                 commission_amount: (totalAmount * rate) / 100,
-                display_numbers: submitForm.numbers,
+                display_numbers: cleanNumbers,
                 display_amount: submitForm.amount,
                 display_bet_type: displayLabel,
                 created_at: timestamp
@@ -408,7 +432,8 @@ export default function UserDashboard() {
 
         setSubmitting(true)
         try {
-            const billId = currentBillId || crypto.randomUUID()
+            const billId = currentBillId || generateUUID()
+
             const inserts = drafts.map(d => ({
                 ...d,
                 round_id: selectedRound.id,
@@ -949,30 +974,46 @@ export default function UserDashboard() {
                                         />
                                     </div>
 
-                                    <div className="form-group">
+                                    <div className="form-group amount-group">
                                         <label className="form-label">จำนวนเงิน ({selectedRound.currency_name})</label>
-                                        <input
-                                            ref={amountInputRef}
-                                            type="text"
-                                            className="form-input amount-input"
-                                            inputMode="decimal"
-                                            placeholder="0"
-                                            value={submitForm.amount}
-                                            onChange={e => setSubmitForm({
-                                                ...submitForm,
-                                                amount: e.target.value.replace(/[ \-.,]/g, '*').replace(/[^\d*]/g, '')
-                                            })}
-                                            onKeyDown={e => {
-                                                if (e.key === 'Enter') {
-                                                    e.preventDefault()
-                                                    // Auto-add default bet type if possible
-                                                    const digits = submitForm.numbers.replace(/\*/g, '').length
-                                                    if (digits === 2) addToDraft('2_top')
-                                                    else if (digits === 3) addToDraft('3_top')
-                                                }
-                                            }}
-                                        />
+                                        <div className="input-with-clear">
+                                            <input
+                                                ref={amountInputRef}
+                                                type="text"
+                                                className="form-input amount-input"
+                                                inputMode="decimal"
+                                                placeholder="0"
+                                                value={submitForm.amount}
+                                                onFocus={e => e.target.select()}
+                                                onChange={e => setSubmitForm({
+                                                    ...submitForm,
+                                                    amount: e.target.value.replace(/[ \-.,]/g, '*').replace(/[^\d*]/g, '')
+                                                })}
+                                                onKeyDown={e => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault()
+                                                        // Auto-add default bet type if possible
+                                                        const digits = submitForm.numbers.replace(/\*/g, '').length
+                                                        if (digits === 2) addToDraft('2_top')
+                                                        else if (digits === 3) addToDraft('3_top')
+                                                    }
+                                                }}
+                                            />
+                                            {submitForm.amount && (
+                                                <button
+                                                    type="button"
+                                                    className="clear-btn"
+                                                    onClick={() => {
+                                                        setSubmitForm({ ...submitForm, amount: '' })
+                                                        amountInputRef.current?.focus()
+                                                    }}
+                                                >
+                                                    <FiX />
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
+
                                 </div>
 
                                 <div className="bet-type-selection">
@@ -987,51 +1028,49 @@ export default function UserDashboard() {
 
                                             let available = []
 
-                                            if (digits === 1) {
+                                            // Only show bet type buttons if amount is also entered
+                                            if (isAmountEmpty) {
+                                                // Don't show any buttons if amount is empty
+                                                available = []
+                                            } else if (digits === 1) {
                                                 available = ['run_top', 'run_bottom', 'front_top_1', 'middle_top_1', 'back_top_1', 'front_bottom_1', 'back_bottom_1']
                                             } else if (digits === 2) {
                                                 available = ['2_top', '2_front', '2_spread', '2_bottom']
                                                 if (!hasStarInAmount) available.splice(3, 0, '2_have')
                                             } else if (digits === 3) {
-                                                if (!isAmountEmpty) {
-                                                    if (hasStarInAmount) {
-                                                        const permCount = getPermutations(submitForm.numbers).length
-                                                        available = [
-                                                            { id: '3_straight_tod', label: 'เต็ง-โต๊ด' },
-                                                            { id: '3_straight_perm', label: `1+กลับ (${permCount - 1})` }
-                                                        ]
-                                                    } else {
-                                                        const permCount = getPermutations(submitForm.numbers).length
-                                                        available = [
-                                                            '3_top',
-                                                            '3_tod',
-                                                            { id: '3_perm_from_3', label: `คูณชุด ${permCount}` }
-                                                        ]
-                                                        if (lotteryType === 'thai') available.push('3_bottom')
-                                                    }
-                                                }
-                                            } else if (digits === 4) {
-                                                if (lotteryType === 'lao') {
-                                                    if (isAmountEmpty) {
-                                                        available = ['4_set']
-                                                    } else {
-                                                        const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
-                                                        available = [
-                                                            '4_set',
-                                                            '4_float',
-                                                            { id: '3_perm_from_4', label: `3 X ${permCount}` }
-                                                        ]
-                                                    }
+                                                if (hasStarInAmount) {
+                                                    const permCount = getPermutations(submitForm.numbers).length
+                                                    available = [
+                                                        { id: '3_straight_tod', label: 'เต็ง-โต๊ด' },
+                                                        { id: '3_straight_perm', label: `1+กลับ (${permCount - 1})` }
+                                                    ]
                                                 } else {
-                                                    if (!isAmountEmpty) {
-                                                        const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
-                                                        available = [
-                                                            '4_float',
-                                                            { id: '3_perm_from_4', label: `3 X ${permCount}` }
-                                                        ]
-                                                    }
+                                                    const permCount = getPermutations(submitForm.numbers).length
+                                                    available = [
+                                                        '3_top',
+                                                        '3_tod',
+                                                        { id: '3_perm_from_3', label: `คูณชุด ${permCount}` }
+                                                    ]
+                                                    if (lotteryType === 'thai') available.push('3_bottom')
                                                 }
-                                            } else if (digits === 5) {
+                                            }
+                                            else if (digits === 4) {
+                                                if (lotteryType === 'lao') {
+                                                    const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
+                                                    available = [
+                                                        '4_set',
+                                                        '4_float',
+                                                        { id: '3_perm_from_4', label: `3 X ${permCount}` }
+                                                    ]
+                                                } else {
+                                                    const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
+                                                    available = [
+                                                        '4_float',
+                                                        { id: '3_perm_from_4', label: `3 X ${permCount}` }
+                                                    ]
+                                                }
+                                            }
+                                            else if (digits === 5) {
                                                 if (!isAmountEmpty) {
                                                     const permCount = getUnique3DigitPermsFrom5(submitForm.numbers).length
                                                     available = [

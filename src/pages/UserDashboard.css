@@ -1251,7 +1251,7 @@
         margin: 0;
         border-radius: 0 !important;
         border: none;
-        border-top: 1px solid rgba(255,255,255,0.1);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .bill-group-header {
@@ -1304,7 +1304,7 @@
     .bill-group {
         margin-bottom: 0.5rem;
         border-radius: var(--radius-md) !important;
-        border: 1px solid rgba(255,255,255,0.1) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
     }
 
     .bill-group-header {
@@ -1391,6 +1391,7 @@
 }
 
 @media (max-width: 768px) {
+
     .bill-header-labels,
     .bill-header-values {
         grid-template-columns: 2fr 1fr 1.5fr 1fr 0.5fr;
@@ -1404,4 +1405,140 @@
     .bill-header-values {
         font-size: 0.85rem;
     }
+}
+
+
+/* DRAFTS FOOTER STYLING */
+.drafts-footer {
+    padding: 1rem 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin-top: 1rem;
+}
+
+.total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding: 0.5rem 0;
+}
+
+.total-row span:first-child {
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+}
+
+.total-row .total-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--color-success);
+}
+
+@media (max-width: 768px) {
+    .total-row .total-value {
+        font-size: 1.1rem;
+    }
+}
+
+
+/* WIDER MODAL ON MOBILE */
+@media (max-width: 768px) {
+    .modal-overlay {
+        padding: 0;
+        align-items: flex-start;
+    }
+
+    .submission-modal {
+        width: 100%;
+        max-width: 100%;
+        max-height: 100%;
+        min-height: auto;
+        border-radius: 0;
+        margin: 0;
+        overflow-y: auto;
+        padding-top: env(safe-area-inset-top, 0);
+    }
+
+    .modal-header {
+        padding: 0.75rem 1rem;
+        padding-top: max(0.75rem, env(safe-area-inset-top, 0));
+        position: sticky;
+        top: 0;
+        background: var(--color-surface);
+        z-index: 10;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .modal-body {
+        padding: 0.5rem;
+        padding-bottom: 2rem;
+    }
+
+    .input-section.card {
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .form-row {
+        gap: 0.5rem;
+    }
+
+    .form-input {
+        padding: 0.75rem !important;
+        font-size: 1.1rem !important;
+    }
+
+    .bet-type-grid {
+        gap: 0.4rem;
+    }
+
+    .bet-type-btn {
+        padding: 0.6rem 0.8rem;
+        font-size: 0.9rem;
+    }
+
+    .drafts-section.card {
+        padding: 0.75rem;
+    }
+
+    .drafts-footer {
+        padding-bottom: env(safe-area-inset-bottom, 1rem);
+    }
+}
+/* INPUT WITH CLEAR BUTTON */
+.input-with-clear {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-with-clear .form-input {
+    padding-right: 2.5rem !important;
+    flex: 1;
+}
+
+.clear-btn {
+    position: absolute;
+    right: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 50%;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.clear-btn:hover {
+    background: rgba(255, 100, 100, 0.2);
+    color: var(--color-danger);
+}
+
+.clear-btn svg {
+    font-size: 0.9rem;
 }
