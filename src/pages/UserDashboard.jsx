@@ -145,8 +145,10 @@ export default function UserDashboard() {
     const [isGroupByBill, setIsGroupByBill] = useState(false)
     const [expandedBills, setExpandedBills] = useState([])
     const [currentBillId, setCurrentBillId] = useState(null)
+    const [billNote, setBillNote] = useState('')
     const numberInputRef = useRef(null)
     const amountInputRef = useRef(null)
+
 
     // Auto-hide toast
     useEffect(() => {
@@ -438,7 +440,8 @@ export default function UserDashboard() {
                 ...d,
                 round_id: selectedRound.id,
                 user_id: user.id,
-                bill_id: billId
+                bill_id: billId,
+                bill_note: billNote || null
             }))
 
             const { error } = await supabase.from('submissions').insert(inserts)
@@ -446,9 +449,11 @@ export default function UserDashboard() {
 
             setDrafts([])
             setCurrentBillId(null)
+            setBillNote('')
             setShowSubmitModal(false)
             fetchSubmissions()
             setToast({ message: 'บันทึกโพยสำเร็จ!', type: 'success' })
+
         } catch (error) {
             console.error('Error saving bill:', error)
             alert('เกิดข้อผิดพลาด: ' + error.message)
@@ -765,22 +770,28 @@ export default function UserDashboard() {
                                                                                                 <div className="bill-header-grid">
                                                                                                     <div className="bill-header-labels">
                                                                                                         <span>ใบโพย</span>
-                                                                                                        <span>เวลา</span>
                                                                                                         <span>รวม</span>
                                                                                                         <span>คอม</span>
                                                                                                         <span></span>
                                                                                                     </div>
                                                                                                     <div className="bill-header-values">
                                                                                                         <span className="bill-id-value">{billId === 'no-bill' ? '-' : billId}</span>
-                                                                                                        <span className="bill-time">{billTime}</span>
                                                                                                         <span className="bill-total">{round.currency_symbol}{billTotal.toLocaleString()}</span>
                                                                                                         <span className="bill-commission">{round.currency_symbol}{billCommission.toLocaleString()}</span>
                                                                                                         <span className="expand-icon">
                                                                                                             {isExpandedBill ? <FiChevronUp /> : <FiChevronDown />}
                                                                                                         </span>
                                                                                                     </div>
+                                                                                                    <div className="bill-sub-row">
+                                                                                                        <span className="bill-time">🕐 {billTime}</span>
+                                                                                                        {billItems[0]?.bill_note && (
+                                                                                                            <span className="bill-note-display">📝 {billItems[0].bill_note}</span>
+                                                                                                        )}
+                                                                                                    </div>
                                                                                                 </div>
+
                                                                                             </div>
+
 
 
                                                                                             {isExpandedBill && (
@@ -947,7 +958,19 @@ export default function UserDashboard() {
                         </div>
 
                         <div className="modal-body">
+                            {/* Bill Note Input */}
+                            <div className="bill-note-section">
+                                <input
+                                    type="text"
+                                    className="form-input bill-note-input"
+                                    placeholder="ชื่อผู้ซื้อ / บันทึกช่วยจำ (ไม่บังคับ)"
+                                    value={billNote}
+                                    onChange={e => setBillNote(e.target.value)}
+                                />
+                            </div>
+
                             <div className="input-section card">
+
                                 <div className="form-row">
                                     <div className="form-group">
                                         <label className="form-label">ตัวเลข</label>
