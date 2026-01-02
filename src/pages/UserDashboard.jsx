@@ -37,6 +37,12 @@ const BET_TYPES = {
     '2_spread': { label: '2 ตัวถ่าง', digits: 2 },
     '2_have': { label: '2 ตัวมี', digits: 2 },
     '2_bottom': { label: '2 ตัวล่าง', digits: 2 },
+    // 2 Digits Reversed (กลับ)
+    '2_top_rev': { label: '2 ตัวบนกลับ', digits: 2 },
+    '2_front_rev': { label: '2 ตัวหน้ากลับ', digits: 2 },
+    '2_spread_rev': { label: '2 ตัวถ่างกลับ', digits: 2 },
+    '2_bottom_rev': { label: '2 ตัวล่างกลับ', digits: 2 },
+
 
     // 3 Digits
     '3_top': { label: '3 ตัวตรง', digits: 3 },
@@ -400,6 +406,60 @@ export default function UserDashboard() {
                     })
                 })
             }
+        } else if (betType.endsWith('_rev') && cleanNumbers.length === 2) {
+            // 2-digit reversed bet types - create both normal and reversed entries
+            const baseBetType = betType.replace('_rev', '')
+            const reversedNumbers = cleanNumbers.split('').reverse().join('')
+            const [amt1, amt2] = amountParts
+
+            // First number with first amount
+            if (amt1 > 0) {
+                const rate = userSettings?.commission_rates?.[baseBetType] || 0
+                newDrafts.push({
+                    entry_id: entryId,
+                    bet_type: baseBetType,
+                    numbers: cleanNumbers,
+                    amount: amt1,
+                    commission_rate: rate,
+                    commission_amount: (amt1 * rate) / 100,
+                    display_numbers: cleanNumbers,
+                    display_amount: submitForm.amount,
+                    display_bet_type: displayLabel,
+                    created_at: timestamp
+                })
+            }
+
+            // Reversed number with second amount (if different from original)
+            if (amt2 > 0 && reversedNumbers !== cleanNumbers) {
+                const rate = userSettings?.commission_rates?.[baseBetType] || 0
+                newDrafts.push({
+                    entry_id: entryId,
+                    bet_type: baseBetType,
+                    numbers: reversedNumbers,
+                    amount: amt2,
+                    commission_rate: rate,
+                    commission_amount: (amt2 * rate) / 100,
+                    display_numbers: cleanNumbers,
+                    display_amount: submitForm.amount,
+                    display_bet_type: displayLabel,
+                    created_at: timestamp
+                })
+            } else if (amt2 > 0 && reversedNumbers === cleanNumbers) {
+                // Same number (e.g., 11, 22) - just add the second amount to same number
+                const rate = userSettings?.commission_rates?.[baseBetType] || 0
+                newDrafts.push({
+                    entry_id: entryId,
+                    bet_type: baseBetType,
+                    numbers: cleanNumbers,
+                    amount: amt2,
+                    commission_rate: rate,
+                    commission_amount: (amt2 * rate) / 100,
+                    display_numbers: cleanNumbers,
+                    display_amount: submitForm.amount,
+                    display_bet_type: displayLabel,
+                    created_at: timestamp
+                })
+            }
         } else {
             const rate = userSettings?.commission_rates?.[betType] || 0
             newDrafts.push({
@@ -412,6 +472,7 @@ export default function UserDashboard() {
                 display_numbers: cleanNumbers,
                 display_amount: submitForm.amount,
                 display_bet_type: displayLabel,
+
                 created_at: timestamp
             })
         }
@@ -1008,10 +1069,24 @@ export default function UserDashboard() {
                                                 placeholder="0"
                                                 value={submitForm.amount}
                                                 onFocus={e => e.target.select()}
-                                                onChange={e => setSubmitForm({
-                                                    ...submitForm,
-                                                    amount: e.target.value.replace(/[ \-.,]/g, '*').replace(/[^\d*]/g, '')
-                                                })}
+                                                onChange={e => {
+                                                    let value = e.target.value
+                                                    // Convert separators to *
+                                                    value = value.replace(/[ \-.,]/g, '*')
+                                                    // Remove non-digit and non-* characters
+                                                    value = value.replace(/[^\d*]/g, '')
+                                                    // Rule 1: Cannot start with *
+                                                    value = value.replace(/^\*+/, '')
+                                                    // Rule 2: Only allow one *
+                                                    const starCount = (value.match(/\*/g) || []).length
+                                                    if (starCount > 1) {
+                                                        // Keep only the first *
+                                                        const firstStarIndex = value.indexOf('*')
+                                                        value = value.substring(0, firstStarIndex + 1) + value.substring(firstStarIndex + 1).replace(/\*/g, '')
+                                                    }
+                                                    setSubmitForm({ ...submitForm, amount: value })
+                                                }}
+
                                                 onKeyDown={e => {
                                                     if (e.key === 'Enter') {
                                                         e.preventDefault()
@@ -1051,15 +1126,32 @@ export default function UserDashboard() {
 
                                             let available = []
 
-                                            // Only show bet type buttons if amount is also entered
-                                            if (isAmountEmpty) {
-                                                // Don't show any buttons if amount is empty
+                                            // Check if amount is incomplete (ends with * but no second number)
+                                            const amtParts = amount.split('*').filter(p => p && !isNaN(parseFloat(p)))
+                                            const isIncompleteAmount = amount.includes('*') && amtParts.length < 2
+
+                                            // Only show bet type buttons if amount is also entered and complete
+                                            if (isAmountEmpty || isIncompleteAmount) {
+                                                // Don't show any buttons if amount is empty or incomplete
                                                 available = []
                                             } else if (digits === 1) {
                                                 available = ['run_top', 'run_bottom', 'front_top_1', 'middle_top_1', 'back_top_1', 'front_bottom_1', 'back_bottom_1']
                                             } else if (digits === 2) {
-                                                available = ['2_top', '2_front', '2_spread', '2_bottom']
-                                                if (!hasStarInAmount) available.splice(3, 0, '2_have')
+
+                                                // Check if we have 2 complete amount parts (e.g., "100*50")
+                                                const amtParts = amount.split('*').filter(p => p && !isNaN(parseFloat(p)))
+                                                const hasTwoAmounts = amtParts.length === 2
+
+                                                if (hasTwoAmounts) {
+                                                    // With 2 amounts - show reversed types (กลับ)
+                                                    available = ['2_top_rev', '2_front_rev', '2_spread_rev', '2_bottom_rev']
+                                                } else if (amtParts.length === 1 && !amount.includes('*')) {
+                                                    // Single amount without "*" - show normal types
+                                                    available = ['2_top', '2_front', '2_spread', '2_have', '2_bottom']
+                                                }
+                                                // If amount ends with "*" but doesn't have 2nd number, show nothing
+
+
                                             } else if (digits === 3) {
                                                 if (hasStarInAmount) {
                                                     const permCount = getPermutations(submitForm.numbers).length
