@@ -1077,12 +1077,20 @@ export default function UserDashboard() {
                                                     value = value.replace(/[^\d*]/g, '')
                                                     // Rule 1: Cannot start with *
                                                     value = value.replace(/^\*+/, '')
-                                                    // Rule 2: Only allow one *
-                                                    const starCount = (value.match(/\*/g) || []).length
-                                                    if (starCount > 1) {
-                                                        // Keep only the first *
-                                                        const firstStarIndex = value.indexOf('*')
-                                                        value = value.substring(0, firstStarIndex + 1) + value.substring(firstStarIndex + 1).replace(/\*/g, '')
+
+                                                    // Special rule for 4-digit inputs on Lao/Hanoi: No "*" allowed
+                                                    const digits = submitForm.numbers.replace(/\*/g, '').length
+                                                    const isLaoOrHanoi = ['lao', 'hanoi'].includes(selectedRound?.lottery_type)
+                                                    if (digits === 4 && isLaoOrHanoi) {
+                                                        value = value.replace(/\*/g, '')
+                                                    } else {
+                                                        // Rule 2: Only allow one *
+                                                        const starCount = (value.match(/\*/g) || []).length
+                                                        if (starCount > 1) {
+                                                            // Keep only the first *
+                                                            const firstStarIndex = value.indexOf('*')
+                                                            value = value.substring(0, firstStarIndex + 1) + value.substring(firstStarIndex + 1).replace(/\*/g, '')
+                                                        }
                                                     }
                                                     setSubmitForm({ ...submitForm, amount: value })
                                                 }}
@@ -1131,7 +1139,9 @@ export default function UserDashboard() {
                                             const isIncompleteAmount = amount.includes('*') && amtParts.length < 2
 
                                             // Only show bet type buttons if amount is also entered and complete
-                                            if (isAmountEmpty || isIncompleteAmount) {
+                                            // Exception: For 4-digit on Lao/Hanoi, show "4 ตัวชุด" even when amount is empty
+                                            const isLaoOrHanoi4Digit = digits === 4 && ['lao', 'hanoi'].includes(lotteryType)
+                                            if ((isAmountEmpty || isIncompleteAmount) && !isLaoOrHanoi4Digit) {
                                                 // Don't show any buttons if amount is empty or incomplete
                                                 available = []
                                             } else if (digits === 1) {
@@ -1170,19 +1180,30 @@ export default function UserDashboard() {
                                                 }
                                             }
                                             else if (digits === 4) {
-                                                if (lotteryType === 'lao') {
-                                                    const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
-                                                    available = [
-                                                        '4_set',
-                                                        '4_float',
-                                                        { id: '3_perm_from_4', label: `3 X ${permCount}` }
-                                                    ]
+                                                const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
+                                                if (isLaoOrHanoi) {
+                                                    // For Lao and Hanoi: special logic for 4-digit
+                                                    if (isAmountEmpty) {
+                                                        // When amount is empty, only show "4 ตัวชุด"
+                                                        available = ['4_set']
+                                                    } else {
+                                                        // When amount has value, show all options
+                                                        const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
+                                                        available = [
+                                                            '4_set',
+                                                            '4_float',
+                                                            { id: '3_perm_from_4', label: `3 X ${permCount}` }
+                                                        ]
+                                                    }
                                                 } else {
-                                                    const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
-                                                    available = [
-                                                        '4_float',
-                                                        { id: '3_perm_from_4', label: `3 X ${permCount}` }
-                                                    ]
+                                                    // For other lottery types (Thai, etc.)
+                                                    if (!isAmountEmpty) {
+                                                        const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
+                                                        available = [
+                                                            '4_float',
+                                                            { id: '3_perm_from_4', label: `3 X ${permCount}` }
+                                                        ]
+                                                    }
                                                 }
                                             }
                                             else if (digits === 5) {
