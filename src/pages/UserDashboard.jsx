@@ -504,13 +504,17 @@ export default function UserDashboard() {
         try {
             const billId = currentBillId || generateUUID()
 
-            const inserts = drafts.map(d => ({
-                ...d,
-                round_id: selectedRound.id,
-                user_id: user.id,
-                bill_id: billId,
-                bill_note: billNote || null
-            }))
+            const inserts = drafts.map(d => {
+                // Remove original_count as it's only for UI tracking, not in DB schema
+                const { original_count, ...rest } = d
+                return {
+                    ...rest,
+                    round_id: selectedRound.id,
+                    user_id: user.id,
+                    bill_id: billId,
+                    bill_note: billNote || null
+                }
+            })
 
             const { error } = await supabase.from('submissions').insert(inserts)
             if (error) throw error
@@ -652,75 +656,75 @@ export default function UserDashboard() {
                                     return (
                                         <div key={round.id} className={`round-accordion-item ${isExpanded ? 'expanded' : ''}`}>
                                             <div
-                                                className="round-accordion-header card clickable"
+                                                className={`round-accordion-header card clickable ${isExpanded ? 'expanded-header' : ''}`}
                                                 onClick={() => setSelectedRound(isExpanded ? null : round)}
                                             >
-                                                <div className="round-header-info">
-                                                    <span className={`lottery-badge ${round.lottery_type}`}>
-                                                        {LOTTERY_TYPES[round.lottery_type]}
-                                                    </span>
-                                                    <div className="round-title-group">
-                                                        <h3>{round.lottery_name}</h3>
-                                                        <span className="round-date">
-                                                            {new Date(round.round_date).toLocaleDateString('th-TH', {
-                                                                weekday: 'long',
-                                                                day: 'numeric',
-                                                                month: 'long',
-                                                                year: 'numeric'
-                                                            })}
+                                                <div className="round-header-main">
+                                                    <div className="round-header-info">
+                                                        <span className={`lottery-badge ${round.lottery_type}`}>
+                                                            {LOTTERY_TYPES[round.lottery_type]}
                                                         </span>
+                                                        <div className="round-title-group">
+                                                            <h3>{round.lottery_name}</h3>
+                                                            <span className="round-date">
+                                                                {new Date(round.round_date).toLocaleDateString('th-TH', {
+                                                                    weekday: 'long',
+                                                                    day: 'numeric',
+                                                                    month: 'long',
+                                                                    year: 'numeric'
+                                                                })}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="round-header-status">
+                                                        {round.status === 'open' ? (
+                                                            <div className="time-remaining">
+                                                                {formatTimeRemaining(round.close_time)}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="round-status closed">ปิดรับแล้ว</span>
+                                                        )}
+                                                        {isExpanded ? <FiChevronUp /> : <FiChevronDown />}
                                                     </div>
                                                 </div>
-                                                <div className="round-header-status">
-                                                    {round.status === 'open' ? (
-                                                        <div className="time-remaining">
-                                                            {formatTimeRemaining(round.close_time)}
+                                                {isExpanded && (
+                                                    <div className="round-header-detail">
+                                                        <div className="time-grid">
+                                                            <div className="time-item">
+                                                                <FiClock />
+                                                                <span>เปิดรับ: {new Date(round.open_time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                            </div>
+                                                            <div className="time-item">
+                                                                <FiClock />
+                                                                <span>ปิดรับ: {new Date(round.close_time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                            </div>
                                                         </div>
-                                                    ) : (
-                                                        <span className="round-status closed">ปิดรับแล้ว</span>
-                                                    )}
-                                                    {isExpanded ? <FiChevronUp /> : <FiChevronDown />}
-                                                </div>
+                                                        {canSubmit() && (
+                                                            <button
+                                                                className="btn btn-primary"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setSubmitForm({
+                                                                        bet_type: '2_top',
+                                                                        numbers: '',
+                                                                        amount: ''
+                                                                    })
+                                                                    if (drafts.length === 0) {
+                                                                        const shortId = 'B-' + Math.random().toString(36).substring(2, 8).toUpperCase()
+                                                                        setCurrentBillId(shortId)
+                                                                    }
+                                                                    setShowSubmitModal(true)
+                                                                }}
+                                                            >
+                                                                <FiPlus /> ส่งเลข
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
 
                                             {isExpanded && (
                                                 <div className="round-accordion-content">
-                                                    {/* Round Info Detail */}
-                                                    <div className="round-info-detail card">
-                                                        <div className="detail-header">
-                                                            <div className="time-grid">
-                                                                <div className="time-item">
-                                                                    <FiClock />
-                                                                    <span>เปิดรับ: {new Date(round.open_time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
-                                                                </div>
-                                                                <div className="time-item">
-                                                                    <FiClock />
-                                                                    <span>ปิดรับ: {new Date(round.close_time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
-                                                                </div>
-                                                            </div>
-                                                            {canSubmit() && (
-                                                                <button
-                                                                    className="btn btn-primary"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        setSubmitForm({
-                                                                            bet_type: '2_top',
-                                                                            numbers: '',
-                                                                            amount: ''
-                                                                        })
-                                                                        if (drafts.length === 0) {
-                                                                            const shortId = 'B-' + Math.random().toString(36).substring(2, 8).toUpperCase()
-                                                                            setCurrentBillId(shortId)
-                                                                        }
-                                                                        setShowSubmitModal(true)
-                                                                    }}
-                                                                >
-                                                                    <FiPlus /> ส่งเลข
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    </div>
-
                                                     {/* Submissions Summary */}
                                                     <div className="submissions-summary">
                                                         <div className="summary-card">
