@@ -1777,68 +1777,84 @@ function SummaryModal({ round, onClose }) {
                     ) : userList.length === 0 ? (
                         <p className="text-muted">ไม่มีรายการส่งเลขในงวดนี้</p>
                     ) : (
-                        <div className="table-wrap">
-                            <table className="data-table summary-table">
-                                <thead>
-                                    <tr>
-                                        <th>ชื่อ</th>
-                                        <th>จำนวน</th>
-                                        <th>ยอดแทง</th>
-                                        <th>ถูกรางวัล</th>
-                                        <th>ยอดได้</th>
-                                        <th>สุทธิ</th>
-                                        <th>สถานะ</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {userList.map(user => {
-                                        const net = user.totalWin - user.totalBet
-                                        return (
-                                            <tr key={user.userId} className={net > 0 ? 'winner-row' : ''}>
-                                                <td>
-                                                    <div className="user-cell">
-                                                        <span className="user-name">{user.userName}</span>
-                                                        <span className="user-email">{user.email}</span>
-                                                    </div>
-                                                </td>
-                                                <td>{user.ticketCount} รายการ</td>
-                                                <td>{round.currency_symbol}{user.totalBet.toLocaleString()}</td>
-                                                <td>{user.winCount > 0 ? `${user.winCount} รายการ` : '-'}</td>
-                                                <td className={user.totalWin > 0 ? 'text-success' : ''}>
+                        <div className="user-summary-list">
+                            {userList.map(user => {
+                                const net = user.totalWin - user.totalBet
+                                return (
+                                    <div key={user.userId} className={`user-summary-card ${net > 0 ? 'winner' : net < 0 ? 'loser' : ''}`}>
+                                        <div className="user-summary-header">
+                                            <div className="user-info">
+                                                <span className="user-name">{user.userName}</span>
+                                                <span className="user-email">{user.email}</span>
+                                            </div>
+                                            <div className={`net-amount ${net > 0 ? 'positive' : net < 0 ? 'negative' : ''}`}>
+                                                {net > 0 ? '+' : ''}{round.currency_symbol}{net.toLocaleString()}
+                                            </div>
+                                        </div>
+                                        <div className="user-summary-details">
+                                            <div className="detail-item">
+                                                <span className="detail-label">แทง</span>
+                                                <span className="detail-value">{user.ticketCount} รายการ</span>
+                                            </div>
+                                            <div className="detail-item">
+                                                <span className="detail-label">ยอดแทง</span>
+                                                <span className="detail-value">{round.currency_symbol}{user.totalBet.toLocaleString()}</span>
+                                            </div>
+                                            <div className="detail-item">
+                                                <span className="detail-label">ถูกรางวัล</span>
+                                                <span className="detail-value text-success">{user.winCount > 0 ? `${user.winCount} รายการ` : '-'}</span>
+                                            </div>
+                                            <div className="detail-item">
+                                                <span className="detail-label">ยอดได้</span>
+                                                <span className={`detail-value ${user.totalWin > 0 ? 'text-success' : ''}`}>
                                                     {user.totalWin > 0 ? `${round.currency_symbol}${user.totalWin.toLocaleString()}` : '-'}
-                                                </td>
-                                                <td className={net > 0 ? 'text-success' : net < 0 ? 'text-danger' : ''}>
-                                                    <strong>
-                                                        {net > 0 ? '+' : ''}{round.currency_symbol}{net.toLocaleString()}
-                                                    </strong>
-                                                </td>
-                                                <td>
-                                                    {net > 0 ? (
-                                                        <span className="status-badge won">ต้องจ่าย</span>
-                                                    ) : net < 0 ? (
-                                                        <span className="status-badge lost">ต้องเก็บ</span>
-                                                    ) : (
-                                                        <span className="status-badge pending">เสมอ</span>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        )
-                                    })}
-                                </tbody>
-                                <tfoot>
-                                    <tr className="total-row">
-                                        <td><strong>รวมทั้งหมด</strong></td>
-                                        <td>{submissions.length} รายการ</td>
-                                        <td><strong>{round.currency_symbol}{grandTotalBet.toLocaleString()}</strong></td>
-                                        <td>{submissions.filter(s => s.is_winner).length} รายการ</td>
-                                        <td className="text-success"><strong>{round.currency_symbol}{grandTotalWin.toLocaleString()}</strong></td>
-                                        <td className={dealerProfit >= 0 ? 'text-success' : 'text-danger'}>
-                                            <strong>{dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}</strong>
-                                        </td>
-                                        <td></td>
-                                    </tr>
-                                </tfoot>
-                            </table>
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="user-summary-footer">
+                                            {net > 0 ? (
+                                                <span className="status-badge won">ต้องจ่าย {round.currency_symbol}{net.toLocaleString()}</span>
+                                            ) : net < 0 ? (
+                                                <span className="status-badge lost">ต้องเก็บ {round.currency_symbol}{Math.abs(net).toLocaleString()}</span>
+                                            ) : (
+                                                <span className="status-badge pending">เสมอ</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                )
+                            })}
+
+                            <div className="user-summary-card total-card">
+                                <div className="user-summary-header">
+                                    <div className="user-info">
+                                        <span className="user-name">รวมทั้งหมด</span>
+                                        <span className="user-email">{userList.length} คน, {submissions.length} รายการ</span>
+                                    </div>
+                                    <div className={`net-amount ${dealerProfit >= 0 ? 'positive' : 'negative'}`}>
+                                        {dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}
+                                    </div>
+                                </div>
+                                <div className="user-summary-details">
+                                    <div className="detail-item">
+                                        <span className="detail-label">ยอดแทงรวม</span>
+                                        <span className="detail-value">{round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
+                                    </div>
+                                    <div className="detail-item">
+                                        <span className="detail-label">ยอดจ่ายรางวัล</span>
+                                        <span className="detail-value text-danger">{round.currency_symbol}{grandTotalWin.toLocaleString()}</span>
+                                    </div>
+                                    <div className="detail-item">
+                                        <span className="detail-label">ถูกรางวัล</span>
+                                        <span className="detail-value">{submissions.filter(s => s.is_winner).length} รายการ</span>
+                                    </div>
+                                    <div className="detail-item">
+                                        <span className="detail-label">กำไร/ขาดทุน</span>
+                                        <span className={`detail-value ${dealerProfit >= 0 ? 'text-success' : 'text-danger'}`}>
+                                            {dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     )}
                 </div>
