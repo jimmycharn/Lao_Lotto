@@ -83,6 +83,7 @@ export default function Dealer() {
     const [showResultsModal, setShowResultsModal] = useState(false)
     const [showUserSettingsModal, setShowUserSettingsModal] = useState(false)
     const [showNumberLimitsModal, setShowNumberLimitsModal] = useState(false)
+    const [showSummaryModal, setShowSummaryModal] = useState(false)
     const [selectedMember, setSelectedMember] = useState(null)
 
     // Form state for creating round
@@ -436,16 +437,29 @@ export default function Dealer() {
 
                                             {/* Show edit button for announced rounds */}
                                             {round.status === 'announced' && round.is_result_announced && (
-                                                <button
-                                                    className="btn btn-outline btn-sm full-width"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        setSelectedRound(round)
-                                                        setShowResultsModal(true)
-                                                    }}
-                                                >
-                                                    <FiEdit2 /> แก้ไขผลรางวัล
-                                                </button>
+                                                <>
+                                                    <button
+                                                        className="btn btn-primary btn-sm full-width"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            setSelectedRound(round)
+                                                            setShowSummaryModal(true)
+                                                        }}
+                                                    >
+                                                        <FiDollarSign /> ดูสรุปยอด
+                                                    </button>
+                                                    <button
+                                                        className="btn btn-outline btn-sm full-width"
+                                                        style={{ marginTop: '0.5rem' }}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            setSelectedRound(round)
+                                                            setShowResultsModal(true)
+                                                        }}
+                                                    >
+                                                        <FiEdit2 /> แก้ไขผลรางวัล
+                                                    </button>
+                                                </>
                                             )}
                                         </div>
                                     ))}
@@ -752,6 +766,14 @@ export default function Dealer() {
                         setShowUserSettingsModal(false)
                         setSelectedMember(null)
                     }}
+                />
+            )}
+
+            {/* Summary Modal */}
+            {showSummaryModal && selectedRound && (
+                <SummaryModal
+                    round={selectedRound}
+                    onClose={() => setShowSummaryModal(false)}
                 />
             )}
         </div>
@@ -1642,6 +1664,188 @@ function UserSettingsModal({ member, onClose }) {
                         disabled={loading || saving}
                     >
                         {saving ? 'กำลังบันทึก...' : <><FiCheck /> บันทึกการตั้งค่า</>}
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// Summary Modal Component - Shows user profit/loss summary
+function SummaryModal({ round, onClose }) {
+    const [submissions, setSubmissions] = useState([])
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        fetchSubmissions()
+    }, [round.id])
+
+    async function fetchSubmissions() {
+        setLoading(true)
+        try {
+            const { data, error } = await supabase
+                .from('submissions')
+                .select(`
+                    *,
+                    profiles (id, full_name, email)
+                `)
+                .eq('round_id', round.id)
+                .eq('is_deleted', false)
+                .order('created_at', { ascending: false })
+
+            if (!error) setSubmissions(data || [])
+        } catch (error) {
+            console.error('Error fetching submissions:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    // Group submissions by user
+    const userSummaries = submissions.reduce((acc, sub) => {
+        const userId = sub.user_id
+        if (!acc[userId]) {
+            acc[userId] = {
+                userId,
+                userName: sub.profiles?.full_name || sub.profiles?.email || 'ไม่ระบุชื่อ',
+                email: sub.profiles?.email || '',
+                totalBet: 0,
+                totalWin: 0,
+                winCount: 0,
+                ticketCount: 0
+            }
+        }
+        acc[userId].totalBet += sub.amount || 0
+        acc[userId].totalWin += sub.prize_amount || 0
+        acc[userId].ticketCount++
+        if (sub.is_winner) acc[userId].winCount++
+        return acc
+    }, {})
+
+    const userList = Object.values(userSummaries).sort((a, b) => {
+        // Sort by net profit (descending - winners first)
+        const aNet = a.totalWin - a.totalBet
+        const bNet = b.totalWin - b.totalBet
+        return bNet - aNet
+    })
+
+    // Calculate totals
+    const grandTotalBet = userList.reduce((sum, u) => sum + u.totalBet, 0)
+    const grandTotalWin = userList.reduce((sum, u) => sum + u.totalWin, 0)
+    const dealerProfit = grandTotalBet - grandTotalWin
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal modal-xl" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                    <h3><FiDollarSign /> สรุปยอดได้-เสีย - {round.lottery_name}</h3>
+                    <button className="modal-close" onClick={onClose}>
+                        <FiX />
+                    </button>
+                </div>
+
+                <div className="modal-body">
+                    {/* Grand Summary Cards */}
+                    <div className="summary-cards-row">
+                        <div className="summary-stat-card">
+                            <span className="stat-label">ยอดแทงรวม</span>
+                            <span className="stat-value">{round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
+                        </div>
+                        <div className="summary-stat-card">
+                            <span className="stat-label">ยอดจ่ายรางวัล</span>
+                            <span className="stat-value danger">{round.currency_symbol}{grandTotalWin.toLocaleString()}</span>
+                        </div>
+                        <div className={`summary-stat-card ${dealerProfit >= 0 ? 'profit' : 'loss'}`}>
+                            <span className="stat-label">กำไร/ขาดทุน</span>
+                            <span className="stat-value">
+                                {dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}
+                            </span>
+                        </div>
+                        <div className="summary-stat-card">
+                            <span className="stat-label">จำนวนผู้ส่ง</span>
+                            <span className="stat-value">{userList.length} คน</span>
+                        </div>
+                    </div>
+
+                    {/* User Summary Table */}
+                    <h4 style={{ marginTop: '1.5rem', marginBottom: '1rem' }}>รายละเอียดแต่ละคน</h4>
+
+                    {loading ? (
+                        <div className="loading-state">
+                            <div className="spinner"></div>
+                        </div>
+                    ) : userList.length === 0 ? (
+                        <p className="text-muted">ไม่มีรายการส่งเลขในงวดนี้</p>
+                    ) : (
+                        <div className="table-wrap">
+                            <table className="data-table summary-table">
+                                <thead>
+                                    <tr>
+                                        <th>ชื่อ</th>
+                                        <th>จำนวน</th>
+                                        <th>ยอดแทง</th>
+                                        <th>ถูกรางวัล</th>
+                                        <th>ยอดได้</th>
+                                        <th>สุทธิ</th>
+                                        <th>สถานะ</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {userList.map(user => {
+                                        const net = user.totalWin - user.totalBet
+                                        return (
+                                            <tr key={user.userId} className={net > 0 ? 'winner-row' : ''}>
+                                                <td>
+                                                    <div className="user-cell">
+                                                        <span className="user-name">{user.userName}</span>
+                                                        <span className="user-email">{user.email}</span>
+                                                    </div>
+                                                </td>
+                                                <td>{user.ticketCount} รายการ</td>
+                                                <td>{round.currency_symbol}{user.totalBet.toLocaleString()}</td>
+                                                <td>{user.winCount > 0 ? `${user.winCount} รายการ` : '-'}</td>
+                                                <td className={user.totalWin > 0 ? 'text-success' : ''}>
+                                                    {user.totalWin > 0 ? `${round.currency_symbol}${user.totalWin.toLocaleString()}` : '-'}
+                                                </td>
+                                                <td className={net > 0 ? 'text-success' : net < 0 ? 'text-danger' : ''}>
+                                                    <strong>
+                                                        {net > 0 ? '+' : ''}{round.currency_symbol}{net.toLocaleString()}
+                                                    </strong>
+                                                </td>
+                                                <td>
+                                                    {net > 0 ? (
+                                                        <span className="status-badge won">ต้องจ่าย</span>
+                                                    ) : net < 0 ? (
+                                                        <span className="status-badge lost">ต้องเก็บ</span>
+                                                    ) : (
+                                                        <span className="status-badge pending">เสมอ</span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                                <tfoot>
+                                    <tr className="total-row">
+                                        <td><strong>รวมทั้งหมด</strong></td>
+                                        <td>{submissions.length} รายการ</td>
+                                        <td><strong>{round.currency_symbol}{grandTotalBet.toLocaleString()}</strong></td>
+                                        <td>{submissions.filter(s => s.is_winner).length} รายการ</td>
+                                        <td className="text-success"><strong>{round.currency_symbol}{grandTotalWin.toLocaleString()}</strong></td>
+                                        <td className={dealerProfit >= 0 ? 'text-success' : 'text-danger'}>
+                                            <strong>{dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}</strong>
+                                        </td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    )}
+                </div>
+
+                <div className="modal-footer">
+                    <button className="btn btn-secondary" onClick={onClose}>
+                        ปิด
                     </button>
                 </div>
             </div>

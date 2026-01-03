@@ -909,6 +909,7 @@
         font-size: 0.85rem;
     }
 }
+
 /* =============================================
    RESULTS FORM - NEW LAYOUTS
    ============================================= */
@@ -1099,5 +1100,114 @@
     .stock-inputs-row {
         grid-template-columns: 1fr;
         gap: 1rem;
+    }
+}
+
+/* =============================================
+   SUMMARY MODAL STYLES
+   ============================================= */
+
+.summary-cards-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.summary-stat-card {
+    background: var(--color-surface-light);
+    padding: 1.25rem;
+    border-radius: var(--radius-md);
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.summary-stat-card .stat-label {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}
+
+.summary-stat-card .stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--color-text);
+}
+
+.summary-stat-card .stat-value.danger {
+    color: var(--color-danger);
+}
+
+.summary-stat-card.profit {
+    background: linear-gradient(135deg, rgba(0, 210, 106, 0.1), rgba(0, 210, 106, 0.05));
+    border: 1px solid rgba(0, 210, 106, 0.3);
+}
+
+.summary-stat-card.profit .stat-value {
+    color: var(--color-success);
+}
+
+.summary-stat-card.loss {
+    background: linear-gradient(135deg, rgba(233, 69, 96, 0.1), rgba(233, 69, 96, 0.05));
+    border: 1px solid rgba(233, 69, 96, 0.3);
+}
+
+.summary-stat-card.loss .stat-value {
+    color: var(--color-danger);
+}
+
+/* Summary Table */
+.summary-table {
+    width: 100%;
+}
+
+.summary-table th {
+    background: var(--color-surface);
+    position: sticky;
+    top: 0;
+}
+
+.summary-table tfoot .total-row {
+    background: var(--color-surface-light);
+    font-size: 1rem;
+}
+
+.summary-table tfoot .total-row td {
+    padding: 1rem;
+    border-top: 2px solid var(--color-primary);
+}
+
+.text-success {
+    color: var(--color-success) !important;
+}
+
+.text-danger {
+    color: var(--color-danger) !important;
+}
+
+/* Responsive Summary */
+@media (max-width: 768px) {
+    .summary-cards-row {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .summary-stat-card .stat-value {
+        font-size: 1.25rem;
+    }
+
+    .summary-table {
+        font-size: 0.85rem;
+    }
+
+    .summary-table th,
+    .summary-table td {
+        padding: 0.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .summary-cards-row {
+        grid-template-columns: 1fr 1fr;
     }
 }
