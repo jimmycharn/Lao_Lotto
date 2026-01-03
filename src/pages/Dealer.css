@@ -909,3 +909,195 @@
         font-size: 0.85rem;
     }
 }
+/* =============================================
+   RESULTS FORM - NEW LAYOUTS
+   ============================================= */
+
+/* Common Results Form Styles */
+.results-form {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+}
+
+.results-form .form-group.full-width {
+    width: 100%;
+}
+
+.form-divider {
+    height: 1px;
+    background: var(--color-border);
+    margin: 1.5rem 0;
+}
+
+.form-section-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 1rem;
+}
+
+.form-note {
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+/* Large Input for Main Numbers */
+.result-input-large {
+    font-size: 2rem !important;
+    padding: 1rem !important;
+    border: 2px solid var(--color-primary) !important;
+    background: rgba(212, 175, 55, 0.05) !important;
+}
+
+.result-input-large::placeholder {
+    color: var(--color-surface-light);
+}
+
+/* Auto-Derived Info Display */
+.auto-derived-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-top: 1rem;
+    padding: 1rem;
+    background: rgba(0, 210, 106, 0.1);
+    border-radius: var(--radius-md);
+    border-left: 3px solid var(--color-success);
+}
+
+.auto-derived-info span {
+    font-size: 0.9rem;
+    color: var(--color-text);
+}
+
+.auto-derived-info strong {
+    font-size: 1.1rem;
+    color: var(--color-success);
+    font-family: 'Monaco', 'Menlo', monospace;
+    letter-spacing: 0.15em;
+}
+
+/* Derived Preview (for Lao) */
+.derived-preview {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background: rgba(212, 175, 55, 0.1);
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(212, 175, 55, 0.3);
+}
+
+.derived-label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    margin-bottom: 0.75rem;
+}
+
+.derived-numbers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.derived-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-md);
+}
+
+.derived-key {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    margin-bottom: 0.25rem;
+}
+
+.derived-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--color-primary);
+    font-family: 'Monaco', 'Menlo', monospace;
+    letter-spacing: 0.15em;
+}
+
+/* Three Bottom Grid (Thai) */
+.three-bottom-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+}
+
+.three-bottom-grid .form-group {
+    margin-bottom: 0;
+}
+
+.three-bottom-grid .form-label {
+    font-size: 0.8rem;
+    text-align: center;
+}
+
+.three-bottom-grid .result-input {
+    font-size: 1.25rem;
+}
+
+/* Stock Inputs Row */
+.stock-inputs-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+.stock-inputs-row .form-group {
+    margin-bottom: 0;
+}
+
+/* Stock Lottery Badge */
+.lottery-badge.stock {
+    background: linear-gradient(135deg, #2196f3, #4caf50);
+    color: #fff;
+}
+
+/* =============================================
+   RESPONSIVE - RESULTS FORM
+   ============================================= */
+
+@media (max-width: 768px) {
+    .results-form {
+        padding: 1rem;
+    }
+
+    .result-input-large {
+        font-size: 1.5rem !important;
+    }
+
+    .three-bottom-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .auto-derived-info {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .derived-numbers {
+        flex-wrap: wrap;
+    }
+
+    .derived-item {
+        flex: 1;
+        min-width: 80px;
+    }
+
+    .stock-inputs-row {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+}

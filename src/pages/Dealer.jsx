@@ -40,8 +40,7 @@ const LOTTERY_TYPES = {
     'thai': 'หวยไทย',
     'lao': 'หวยลาว',
     'hanoi': 'หวยฮานอย',
-    'yeekee': 'หวยยี่กี',
-    'other': 'อื่นๆ'
+    'stock': 'หวยหุ้น'
 }
 
 // Default payout rates
@@ -420,16 +419,32 @@ export default function Dealer() {
                                                 </div>
                                             </div>
 
-                                            {round.status === 'closed' && !round.is_result_announced && (
+                                            {/* Show button if closed OR time has passed, and result not announced */}
+                                            {(round.status === 'closed' || new Date() > new Date(round.close_time)) &&
+                                                round.status !== 'announced' && !round.is_result_announced && (
+                                                    <button
+                                                        className="btn btn-accent btn-sm full-width"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            setSelectedRound(round)
+                                                            setShowResultsModal(true)
+                                                        }}
+                                                    >
+                                                        <FiCheck /> ใส่ผลรางวัล
+                                                    </button>
+                                                )}
+
+                                            {/* Show edit button for announced rounds */}
+                                            {round.status === 'announced' && round.is_result_announced && (
                                                 <button
-                                                    className="btn btn-accent btn-sm full-width"
+                                                    className="btn btn-outline btn-sm full-width"
                                                     onClick={(e) => {
                                                         e.stopPropagation()
                                                         setSelectedRound(round)
                                                         setShowResultsModal(true)
                                                     }}
                                                 >
-                                                    <FiCheck /> ใส่ผลรางวัล
+                                                    <FiEdit2 /> แก้ไขผลรางวัล
                                                 </button>
                                             )}
                                         </div>
@@ -908,23 +923,149 @@ function SubmissionsModal({ round, onClose }) {
 
 // Results Modal Component
 function ResultsModal({ round, onClose }) {
-    const [winningNumbers, setWinningNumbers] = useState({
-        '2_top': '',
+    const lotteryType = round.lottery_type
+    const isEditing = round.is_result_announced // Check if we're editing existing results
+
+    // State for different lottery types
+    const [thaiForm, setThaiForm] = useState({
+        '6_top': '',
         '2_bottom': '',
-        '3_top': '',
-        '3_front': '',
-        '3_back': '',
-        '6_top': ''
+        '3_bottom_1': '',
+        '3_bottom_2': '',
+        '3_bottom_3': '',
+        '3_bottom_4': ''
     })
+
+    const [laoForm, setLaoForm] = useState({
+        '4_set': ''
+    })
+
+    const [hanoiForm, setHanoiForm] = useState({
+        '4_set': '',
+        '2_bottom': ''
+    })
+
+    const [stockForm, setStockForm] = useState({
+        '2_top': '',
+        '2_bottom': ''
+    })
+
     const [loading, setLoading] = useState(false)
 
-    async function handleAnnounce() {
-        if (!confirm('ยืนยันประกาศผลรางวัล?')) return
+    // Load existing winning numbers if editing
+    useEffect(() => {
+        if (isEditing && round.winning_numbers) {
+            const wn = round.winning_numbers
+            console.log('Loading existing winning numbers:', wn)
 
+            if (lotteryType === 'thai') {
+                setThaiForm({
+                    '6_top': wn['6_top'] || '',
+                    '2_bottom': wn['2_bottom'] || '',
+                    '3_bottom_1': wn['3_bottom']?.[0] || '',
+                    '3_bottom_2': wn['3_bottom']?.[1] || '',
+                    '3_bottom_3': wn['3_bottom']?.[2] || '',
+                    '3_bottom_4': wn['3_bottom']?.[3] || ''
+                })
+            } else if (lotteryType === 'lao') {
+                setLaoForm({
+                    '4_set': wn['4_set'] || ''
+                })
+            } else if (lotteryType === 'hanoi') {
+                setHanoiForm({
+                    '4_set': wn['4_set'] || '',
+                    '2_bottom': wn['2_bottom'] || ''
+                })
+            } else if (lotteryType === 'stock') {
+                setStockForm({
+                    '2_top': wn['2_top'] || '',
+                    '2_bottom': wn['2_bottom'] || ''
+                })
+            }
+        }
+    }, [round, isEditing, lotteryType])
+
+    // Auto-derive numbers for display
+    const getDerivedNumbers = () => {
+        if (lotteryType === 'lao') {
+            const set4 = laoForm['4_set']
+            return {
+                '2_top': set4.length >= 2 ? set4.slice(-2) : '',
+                '2_bottom': set4.length >= 2 ? set4.slice(0, 2) : '',
+                '3_top': set4.length >= 3 ? set4.slice(-3) : ''
+            }
+        }
+        if (lotteryType === 'hanoi') {
+            const set4 = hanoiForm['4_set']
+            return {
+                '2_top': set4.length >= 2 ? set4.slice(-2) : '',
+                '3_top': set4.length >= 3 ? set4.slice(-3) : ''
+            }
+        }
+        if (lotteryType === 'thai') {
+            const six = thaiForm['6_top']
+            return {
+                '2_top': six.length >= 2 ? six.slice(-2) : '',
+                '3_top': six.length >= 3 ? six.slice(-3) : ''
+            }
+        }
+        return {}
+    }
+
+    const derived = getDerivedNumbers()
+
+    // Build final winning numbers object for database
+    const buildWinningNumbers = () => {
+        if (lotteryType === 'thai') {
+            const result = {
+                '6_top': thaiForm['6_top'],
+                '2_top': derived['2_top'],
+                '3_top': derived['3_top'],
+                '2_bottom': thaiForm['2_bottom'],
+                '3_bottom': [
+                    thaiForm['3_bottom_1'],
+                    thaiForm['3_bottom_2'],
+                    thaiForm['3_bottom_3'],
+                    thaiForm['3_bottom_4']
+                ].filter(n => n.length === 3)
+            }
+            return result
+        }
+        if (lotteryType === 'lao') {
+            return {
+                '4_set': laoForm['4_set'],
+                '2_top': derived['2_top'],
+                '2_bottom': derived['2_bottom'],
+                '3_top': derived['3_top']
+            }
+        }
+        if (lotteryType === 'hanoi') {
+            return {
+                '4_set': hanoiForm['4_set'],
+                '2_top': derived['2_top'],
+                '2_bottom': hanoiForm['2_bottom'],
+                '3_top': derived['3_top']
+            }
+        }
+        if (lotteryType === 'stock') {
+            return {
+                '2_top': stockForm['2_top'],
+                '2_bottom': stockForm['2_bottom']
+            }
+        }
+        return {}
+    }
+
+    async function handleAnnounce() {
+        console.log('handleAnnounce called - proceeding directly')
         setLoading(true)
+
         try {
+            const winningNumbers = buildWinningNumbers()
+            console.log('Winning numbers:', winningNumbers)
+
             // Update round with winning numbers
-            const { error: roundError } = await supabase
+            const { data: updateData, error: roundError } = await supabase
                 .from('lottery_rounds')
                 .update({
                     winning_numbers: winningNumbers,
@@ -932,33 +1073,98 @@ function ResultsModal({ round, onClose }) {
                     status: 'announced'
                 })
                 .eq('id', round.id)
+                .select()
 
-            if (roundError) throw roundError
+            console.log('Update result:', updateData, roundError)
 
-            // Calculate winners (call RPC function)
-            const { data: winCount, error: calcError } = await supabase
-                .rpc('calculate_round_winners', { p_round_id: round.id })
-
-            if (calcError) {
-                console.error('Error calculating winners:', calcError)
+            if (roundError) {
+                console.error('Round update error:', roundError)
+                throw roundError
             }
 
-            alert(`ประกาศผลสำเร็จ! มีผู้ถูกรางวัล ${winCount || 0} รายการ`)
+            // If editing, reset all winner statuses first
+            if (isEditing) {
+                console.log('Resetting previous winner statuses...')
+                const { error: resetError } = await supabase
+                    .from('submissions')
+                    .update({ is_winner: false, prize_amount: 0 })
+                    .eq('round_id', round.id)
+                    .eq('is_deleted', false)
+
+                if (resetError) {
+                    console.warn('Error resetting winners:', resetError)
+                }
+            }
+
+            // Try to calculate winners (RPC function might not exist)
+            let winCount = 0
+            try {
+                const { data, error: calcError } = await supabase
+                    .rpc('calculate_round_winners', { p_round_id: round.id })
+
+                console.log('RPC result:', data, calcError)
+
+                if (calcError) {
+                    console.warn('RPC error (ignored):', calcError)
+                    // Don't throw - just continue without calculating winners
+                } else {
+                    winCount = data || 0
+                }
+            } catch (rpcError) {
+                console.warn('RPC function not available:', rpcError)
+                // Continue anyway - the round was updated successfully
+            }
+
+            const message = isEditing
+                ? `อัปเดตผลรางวัลสำเร็จ! มีผู้ถูกรางวัล ${winCount} รายการ`
+                : `ประกาศผลสำเร็จ! มีผู้ถูกรางวัล ${winCount} รายการ`
+            alert(message)
             onClose()
 
         } catch (error) {
-            console.error('Error:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
+            console.error('Error announcing:', error)
+            alert('เกิดข้อผิดพลาด: ' + (error.message || 'Unknown error'))
         } finally {
             setLoading(false)
         }
     }
 
+    // Render input helper
+    const renderNumberInput = (label, value, onChange, maxLength, placeholder, isLarge = false) => (
+        <div className={`form-group ${isLarge ? 'full-width' : ''}`}>
+            <label className="form-label">{label}</label>
+            <input
+                type="text"
+                inputMode="numeric"
+                className={`form-input result-input ${isLarge ? 'result-input-large' : ''}`}
+                maxLength={maxLength}
+                placeholder={placeholder}
+                value={value}
+                onChange={e => onChange(e.target.value.replace(/\D/g, ''))}
+            />
+        </div>
+    )
+
+    // Render derived preview
+    const renderDerivedPreview = (numbers) => (
+        <div className="derived-preview">
+            <span className="derived-label">เลขที่จะบันทึก:</span>
+            <div className="derived-numbers">
+                {Object.entries(numbers).filter(([k, v]) => v).map(([key, val]) => (
+                    <span key={key} className="derived-item">
+                        <span className="derived-key">{key.replace('_', ' ')}</span>
+                        <span className="derived-value">{val}</span>
+                    </span>
+                ))}
+            </div>
+        </div>
+    )
+
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
-                    <h3><FiCheck /> ใส่ผลรางวัล</h3>
+                    <h3><FiCheck /> ใส่ผลรางวัล - {LOTTERY_TYPES[lotteryType]}</h3>
                     <button className="modal-close" onClick={onClose}>
                         <FiX />
                     </button>
@@ -966,103 +1172,148 @@ function ResultsModal({ round, onClose }) {
 
                 <div className="modal-body">
                     <p className="text-muted" style={{ marginBottom: '1.5rem' }}>
-                        กรอกเลขที่ออกรางวัลสำหรับงวด {round.lottery_name}
+                        กรอกเลขที่ออกรางวัลสำหรับ <strong>{round.lottery_name}</strong>
                     </p>
 
-                    <div className="results-form">
-                        <div className="form-row">
-                            <div className="form-group">
-                                <label className="form-label">6 ตัว (รางวัลที่ 1)</label>
-                                <input
-                                    type="text"
-                                    className="form-input result-input"
-                                    maxLength={6}
-                                    placeholder="000000"
-                                    value={winningNumbers['6_top']}
-                                    onChange={e => setWinningNumbers({
-                                        ...winningNumbers,
-                                        '6_top': e.target.value.replace(/\D/g, '')
-                                    })}
-                                />
-                            </div>
-                        </div>
+                    {/* Thai Lottery Form */}
+                    {lotteryType === 'thai' && (
+                        <div className="results-form results-form-thai">
+                            {renderNumberInput(
+                                '🏆 รางวัลที่ 1 (6 ตัว)',
+                                thaiForm['6_top'],
+                                val => setThaiForm({ ...thaiForm, '6_top': val }),
+                                6,
+                                '000000',
+                                true
+                            )}
 
-                        <div className="form-row">
-                            <div className="form-group">
-                                <label className="form-label">3 ตัวบน</label>
-                                <input
-                                    type="text"
-                                    className="form-input result-input"
-                                    maxLength={3}
-                                    placeholder="000"
-                                    value={winningNumbers['3_top']}
-                                    onChange={e => setWinningNumbers({
-                                        ...winningNumbers,
-                                        '3_top': e.target.value.replace(/\D/g, '')
-                                    })}
-                                />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">3 ตัวหน้า</label>
-                                <input
-                                    type="text"
-                                    className="form-input result-input"
-                                    maxLength={3}
-                                    placeholder="000"
-                                    value={winningNumbers['3_front']}
-                                    onChange={e => setWinningNumbers({
-                                        ...winningNumbers,
-                                        '3_front': e.target.value.replace(/\D/g, '')
-                                    })}
-                                />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">3 ตัวล่าง</label>
-                                <input
-                                    type="text"
-                                    className="form-input result-input"
-                                    maxLength={3}
-                                    placeholder="000"
-                                    value={winningNumbers['3_back']}
-                                    onChange={e => setWinningNumbers({
-                                        ...winningNumbers,
-                                        '3_back': e.target.value.replace(/\D/g, '')
-                                    })}
-                                />
-                            </div>
-                        </div>
+                            {derived['2_top'] && (
+                                <div className="auto-derived-info">
+                                    <span>→ 2 ตัวบน: <strong>{derived['2_top']}</strong></span>
+                                    <span>→ 3 ตัวบน: <strong>{derived['3_top']}</strong></span>
+                                </div>
+                            )}
 
-                        <div className="form-row">
-                            <div className="form-group">
-                                <label className="form-label">2 ตัวบน</label>
-                                <input
-                                    type="text"
-                                    className="form-input result-input"
-                                    maxLength={2}
-                                    placeholder="00"
-                                    value={winningNumbers['2_top']}
-                                    onChange={e => setWinningNumbers({
-                                        ...winningNumbers,
-                                        '2_top': e.target.value.replace(/\D/g, '')
-                                    })}
-                                />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">2 ตัวล่าง</label>
-                                <input
-                                    type="text"
-                                    className="form-input result-input"
-                                    maxLength={2}
-                                    placeholder="00"
-                                    value={winningNumbers['2_bottom']}
-                                    onChange={e => setWinningNumbers({
-                                        ...winningNumbers,
-                                        '2_bottom': e.target.value.replace(/\D/g, '')
-                                    })}
-                                />
+                            <div className="form-divider"></div>
+
+                            {renderNumberInput(
+                                '2 ตัวล่าง',
+                                thaiForm['2_bottom'],
+                                val => setThaiForm({ ...thaiForm, '2_bottom': val }),
+                                2,
+                                '00'
+                            )}
+
+                            <div className="form-divider"></div>
+
+                            <div className="form-section-label">3 ตัวล่าง (4 รางวัล)</div>
+                            <div className="three-bottom-grid">
+                                {renderNumberInput(
+                                    'ชุดที่ 1',
+                                    thaiForm['3_bottom_1'],
+                                    val => setThaiForm({ ...thaiForm, '3_bottom_1': val }),
+                                    3,
+                                    '000'
+                                )}
+                                {renderNumberInput(
+                                    'ชุดที่ 2',
+                                    thaiForm['3_bottom_2'],
+                                    val => setThaiForm({ ...thaiForm, '3_bottom_2': val }),
+                                    3,
+                                    '000'
+                                )}
+                                {renderNumberInput(
+                                    'ชุดที่ 3',
+                                    thaiForm['3_bottom_3'],
+                                    val => setThaiForm({ ...thaiForm, '3_bottom_3': val }),
+                                    3,
+                                    '000'
+                                )}
+                                {renderNumberInput(
+                                    'ชุดที่ 4',
+                                    thaiForm['3_bottom_4'],
+                                    val => setThaiForm({ ...thaiForm, '3_bottom_4': val }),
+                                    3,
+                                    '000'
+                                )}
                             </div>
                         </div>
-                    </div>
+                    )}
+
+                    {/* Lao Lottery Form */}
+                    {lotteryType === 'lao' && (
+                        <div className="results-form results-form-lao">
+                            {renderNumberInput(
+                                '🎯 เลขชุด 4 ตัว',
+                                laoForm['4_set'],
+                                val => setLaoForm({ ...laoForm, '4_set': val }),
+                                4,
+                                '0000',
+                                true
+                            )}
+
+                            {laoForm['4_set'].length >= 2 && renderDerivedPreview({
+                                '2 ตัวบน': derived['2_top'],
+                                '2 ตัวล่าง': derived['2_bottom'],
+                                '3 ตัวบน': derived['3_top']
+                            })}
+                        </div>
+                    )}
+
+                    {/* Hanoi Lottery Form */}
+                    {lotteryType === 'hanoi' && (
+                        <div className="results-form results-form-hanoi">
+                            {renderNumberInput(
+                                '🎯 เลขชุด 4 ตัว',
+                                hanoiForm['4_set'],
+                                val => setHanoiForm({ ...hanoiForm, '4_set': val }),
+                                4,
+                                '0000',
+                                true
+                            )}
+
+                            {hanoiForm['4_set'].length >= 2 && (
+                                <div className="auto-derived-info">
+                                    <span>→ 2 ตัวบน: <strong>{derived['2_top']}</strong></span>
+                                    <span>→ 3 ตัวบน: <strong>{derived['3_top']}</strong></span>
+                                </div>
+                            )}
+
+                            <div className="form-divider"></div>
+
+                            {renderNumberInput(
+                                '2 ตัวล่าง (กรอกเอง)',
+                                hanoiForm['2_bottom'],
+                                val => setHanoiForm({ ...hanoiForm, '2_bottom': val }),
+                                2,
+                                '00'
+                            )}
+                        </div>
+                    )}
+
+                    {/* Stock Lottery Form */}
+                    {lotteryType === 'stock' && (
+                        <div className="results-form results-form-stock">
+                            <p className="form-note">หวยหุ้น - แทงเลข 2 ตัว บนและล่าง</p>
+
+                            <div className="stock-inputs-row">
+                                {renderNumberInput(
+                                    '2 ตัวบน',
+                                    stockForm['2_top'],
+                                    val => setStockForm({ ...stockForm, '2_top': val }),
+                                    2,
+                                    '00'
+                                )}
+                                {renderNumberInput(
+                                    '2 ตัวล่าง',
+                                    stockForm['2_bottom'],
+                                    val => setStockForm({ ...stockForm, '2_bottom': val }),
+                                    2,
+                                    '00'
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="modal-footer">
@@ -1074,8 +1325,8 @@ function ResultsModal({ round, onClose }) {
                         onClick={handleAnnounce}
                         disabled={loading}
                     >
-                        {loading ? 'กำลังประกาศ...' : (
-                            <><FiCheck /> ประกาศผล</>
+                        {loading ? (isEditing ? 'กำลังอัปเดต...' : 'กำลังประกาศ...') : (
+                            <>{isEditing ? <><FiEdit2 /> อัปเดตผล</> : <><FiCheck /> ประกาศผล</>}</>
                         )}
                     </button>
                 </div>

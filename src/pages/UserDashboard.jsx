@@ -16,7 +16,8 @@ import {
     FiChevronDown,
     FiChevronUp,
     FiGrid,
-    FiLayers
+    FiLayers,
+    FiAward
 } from 'react-icons/fi'
 import './UserDashboard.css'
 
@@ -134,8 +135,14 @@ export default function UserDashboard() {
     const [selectedRound, setSelectedRound] = useState(null)
     const [submissions, setSubmissions] = useState([])
     const [loading, setLoading] = useState(true)
-    const [activeTab, setActiveTab] = useState('rounds') // rounds, history, commission
+    const [activeTab, setActiveTab] = useState('rounds') // rounds, results, commission
     const [userSettings, setUserSettings] = useState(null)
+
+    // Results tab state
+    const [resultsRounds, setResultsRounds] = useState([])
+    const [selectedResultRound, setSelectedResultRound] = useState(null)
+    const [resultSubmissions, setResultSubmissions] = useState([])
+    const [resultsLoading, setResultsLoading] = useState(false)
 
     // Submit form state
     const [showSubmitModal, setShowSubmitModal] = useState(false)
@@ -193,6 +200,20 @@ export default function UserDashboard() {
         }
     }, [selectedRound])
 
+    // Fetch results when switching to results tab
+    useEffect(() => {
+        if (activeTab === 'results' && profile?.dealer_id) {
+            fetchResultsRounds()
+        }
+    }, [activeTab, profile])
+
+    // Fetch winning submissions when selecting a result round
+    useEffect(() => {
+        if (selectedResultRound) {
+            fetchResultSubmissions(selectedResultRound.id)
+        }
+    }, [selectedResultRound])
+
     async function fetchRounds() {
         setLoading(true)
         try {
@@ -238,6 +259,48 @@ export default function UserDashboard() {
             }
         } catch (error) {
             console.error('Error:', error)
+        }
+    }
+
+    // Fetch rounds with announced results for Results tab
+    async function fetchResultsRounds() {
+        setResultsLoading(true)
+        try {
+            const { data, error } = await supabase
+                .from('lottery_rounds')
+                .select('*')
+                .eq('dealer_id', profile.dealer_id)
+                .eq('is_result_announced', true)
+                .order('round_date', { ascending: false })
+                .limit(20)
+
+            if (!error) {
+                setResultsRounds(data || [])
+            }
+        } catch (error) {
+            console.error('Error fetching results rounds:', error)
+        } finally {
+            setResultsLoading(false)
+        }
+    }
+
+    // Fetch winning submissions for a specific round
+    async function fetchResultSubmissions(roundId) {
+        try {
+            const { data, error } = await supabase
+                .from('submissions')
+                .select('*')
+                .eq('round_id', roundId)
+                .eq('user_id', user.id)
+                .eq('is_deleted', false)
+                .eq('is_winner', true)
+                .order('created_at', { ascending: false })
+
+            if (!error) {
+                setResultSubmissions(data || [])
+            }
+        } catch (error) {
+            console.error('Error fetching result submissions:', error)
         }
     }
 
@@ -625,10 +688,10 @@ export default function UserDashboard() {
                         <FiCalendar /> งวดที่เปิด
                     </button>
                     <button
-                        className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('history')}
+                        className={`tab-btn ${activeTab === 'results' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('results')}
                     >
-                        <FiList /> ประวัติ
+                        <FiAward /> ผลรางวัล
                     </button>
                     <button
                         className={`tab-btn ${activeTab === 'commission' ? 'active' : ''}`}
@@ -985,8 +1048,127 @@ export default function UserDashboard() {
                         </div>
                     )}
 
-                    {activeTab === 'history' && (
-                        <HistoryTab user={user} profile={profile} />
+                    {activeTab === 'results' && (
+                        <div className="rounds-accordion">
+                            {resultsLoading ? (
+                                <div className="loading-state">
+                                    <div className="spinner"></div>
+                                </div>
+                            ) : resultsRounds.length === 0 ? (
+                                <div className="empty-state card">
+                                    <FiAward className="empty-icon" />
+                                    <p>ยังไม่มีผลรางวัล</p>
+                                </div>
+                            ) : (
+                                resultsRounds.map(round => {
+                                    const isExpanded = selectedResultRound?.id === round.id
+
+                                    // Calculate summary for expanded round
+                                    const winningCount = resultSubmissions.length
+                                    const totalPrize = resultSubmissions.reduce((sum, s) => sum + (s.prize_amount || 0), 0)
+
+                                    // Group by bill for display
+                                    const billGroups = resultSubmissions.reduce((acc, sub) => {
+                                        const billId = sub.bill_id || 'no-bill'
+                                        if (!acc[billId]) acc[billId] = []
+                                        acc[billId].push(sub)
+                                        return acc
+                                    }, {})
+
+                                    return (
+                                        <div key={round.id} className={`round-accordion-item ${isExpanded ? 'expanded' : ''}`}>
+                                            <div
+                                                className={`round-accordion-header card clickable ${isExpanded ? 'expanded-header' : ''}`}
+                                                onClick={() => setSelectedResultRound(isExpanded ? null : round)}
+                                            >
+                                                <div className="round-header-main">
+                                                    <div className="round-header-info">
+                                                        <span className={`lottery-badge ${round.lottery_type}`}>
+                                                            {round.lottery_name || round.lottery_type}
+                                                        </span>
+                                                        <div className="round-title-group">
+                                                            <h3>{round.lottery_name || getLotteryTypeName(round.lottery_type)}</h3>
+                                                            <span className="round-date">
+                                                                {new Date(round.round_date).toLocaleDateString('th-TH', {
+                                                                    weekday: 'short',
+                                                                    day: 'numeric',
+                                                                    month: 'short',
+                                                                    year: 'numeric'
+                                                                })}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="round-header-status">
+                                                        <span className="status-badge announced">
+                                                            <FiCheck /> ประกาศผลแล้ว
+                                                        </span>
+                                                        <FiChevronDown />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {isExpanded && (
+                                                <div className="round-accordion-content">
+                                                    {/* Summary Cards */}
+                                                    <div className="submissions-summary">
+                                                        <div className="summary-card">
+                                                            <span className="summary-value">{winningCount}</span>
+                                                            <span className="summary-label">รายการที่ถูก</span>
+                                                        </div>
+                                                        <div className="summary-card highlight">
+                                                            <span className="summary-value">
+                                                                {round.currency_symbol || '฿'}{totalPrize.toLocaleString()}
+                                                            </span>
+                                                            <span className="summary-label">รางวัลที่ได้</span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Winning List */}
+                                                    {winningCount === 0 ? (
+                                                        <div className="empty-state card" style={{ padding: '2rem' }}>
+                                                            <p>ไม่มีรายการที่ถูกรางวัลในงวดนี้</p>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="result-winners-list">
+                                                            {Object.entries(billGroups).map(([billId, items]) => {
+                                                                const billTotal = items.reduce((sum, s) => sum + (s.prize_amount || 0), 0)
+                                                                return (
+                                                                    <div key={billId} className="result-bill-group card">
+                                                                        <div className="result-bill-header">
+                                                                            <span className="bill-label">
+                                                                                <FiGift /> โพย {billId === 'no-bill' ? '-' : billId.slice(-6).toUpperCase()}
+                                                                            </span>
+                                                                            <span className="bill-prize">
+                                                                                +{round.currency_symbol || '฿'}{billTotal.toLocaleString()}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="result-bill-items">
+                                                                            {items.map(sub => (
+                                                                                <div key={sub.id} className="result-item">
+                                                                                    <div className="result-number">
+                                                                                        <span className="number-value">{sub.display_numbers || sub.numbers}</span>
+                                                                                        <span className="bet-type">{BET_TYPES[sub.bet_type]?.label || sub.bet_type}</span>
+                                                                                    </div>
+                                                                                    <div className="result-amounts">
+                                                                                        <span className="bet-amount">{round.currency_symbol || '฿'}{sub.amount}</span>
+                                                                                        <span className="arrow">→</span>
+                                                                                        <span className="prize-amount">{round.currency_symbol || '฿'}{(sub.prize_amount || 0).toLocaleString()}</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                )
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                })
+                            )}
+                        </div>
                     )}
 
                     {activeTab === 'commission' && (
