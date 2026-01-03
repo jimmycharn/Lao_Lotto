@@ -663,6 +663,39 @@ export default function UserDashboard() {
     const totalAmount = submissions.reduce((sum, s) => sum + (s.amount || 0), 0)
     const totalCommission = submissions.reduce((sum, s) => sum + (s.commission_amount || 0), 0)
 
+    // Default payout rates per bet type
+    const DEFAULT_PAYOUTS = {
+        'run_top': 3, 'run_bottom': 4,
+        'pak_top': 8, 'pak_bottom': 6,
+        '2_top': 65, '2_front': 65, '2_center': 65, '2_spread': 65, '2_run': 10, '2_bottom': 65,
+        '3_top': 550, '3_tod': 100, '3_bottom': 135, '3_front': 100, '3_back': 135,
+        '4_run': 20, '4_tod': 100, '4_set': 100, '4_float': 20, '5_float': 10, '6_top': 1000000
+    }
+
+    // Get lottery type category for settings lookup
+    const getLotteryTypeKey = (lotteryType) => {
+        if (lotteryType === 'thai') return 'thai'
+        if (lotteryType === 'lao' || lotteryType === 'hanoi') return 'lao'
+        if (lotteryType === 'stock') return 'stock'
+        return 'thai'
+    }
+
+    // Calculate expected payout for a submission based on user settings
+    const getCalculatedPrize = (sub, round) => {
+        if (!sub.is_winner) return 0
+
+        const lotteryKey = getLotteryTypeKey(round?.lottery_type)
+        const settings = userSettings?.lottery_settings?.[lotteryKey]?.[sub.bet_type]
+
+        if (settings && settings.payout !== undefined) {
+            return sub.amount * settings.payout
+        }
+
+        // Use default payout rate for this bet type
+        const defaultRate = DEFAULT_PAYOUTS[sub.bet_type] || 1
+        return sub.amount * defaultRate
+    }
+
     // No dealer assigned
     if (!profile?.dealer_id) {
         return (
@@ -1071,9 +1104,12 @@ export default function UserDashboard() {
                                 resultsRounds.map(round => {
                                     const isExpanded = selectedResultRound?.id === round.id
 
-                                    // Calculate summary for expanded round
-                                    const winningCount = resultSubmissions.length
-                                    const totalPrize = resultSubmissions.reduce((sum, s) => sum + (s.prize_amount || 0), 0)
+                                    // Calculate summary for expanded round using user's payout rates
+                                    const totalPrize = resultSubmissions.reduce((sum, s) => {
+                                        if (s.is_winner) return sum + getCalculatedPrize(s, round)
+                                        return sum
+                                    }, 0)
+                                    const winningCount = resultSubmissions.filter(s => s.is_winner).length
 
                                     // Group by bill for display
                                     const billGroups = resultSubmissions.reduce((acc, sub) => {
@@ -1157,7 +1193,7 @@ export default function UserDashboard() {
                                                     ) : (
                                                         <div className="result-winners-list">
                                                             {Object.entries(billGroups).map(([billId, items]) => {
-                                                                const billTotal = items.reduce((sum, s) => sum + (s.prize_amount || 0), 0)
+                                                                const billTotal = items.reduce((sum, s) => sum + (s.is_winner ? getCalculatedPrize(s, round) : 0), 0)
                                                                 return (
                                                                     <div key={billId} className="result-bill-group card">
                                                                         <div className="result-bill-header">
@@ -1178,7 +1214,7 @@ export default function UserDashboard() {
                                                                                     <div className="result-amounts">
                                                                                         <span className="bet-amount">{round.currency_symbol || '฿'}{sub.amount}</span>
                                                                                         <span className="arrow">→</span>
-                                                                                        <span className="prize-amount">{round.currency_symbol || '฿'}{(sub.prize_amount || 0).toLocaleString()}</span>
+                                                                                        <span className="prize-amount">{round.currency_symbol || '฿'}{(sub.is_winner ? getCalculatedPrize(sub, round) : 0).toLocaleString()}</span>
                                                                                     </div>
                                                                                 </div>
                                                                             ))}
