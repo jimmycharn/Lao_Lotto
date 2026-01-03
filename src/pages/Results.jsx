@@ -12,6 +12,7 @@ import {
     FiChevronUp
 } from 'react-icons/fi'
 import './Results.css'
+import './ViewToggle.css'
 
 // Bet type labels
 const BET_TYPES = {
@@ -47,8 +48,9 @@ export default function Results() {
     const [currentPage, setCurrentPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
     const [expandedRound, setExpandedRound] = useState(null)
-    const [winningSubmissions, setWinningSubmissions] = useState([])
+    const [submissions, setSubmissions] = useState([])
     const [submissionsLoading, setSubmissionsLoading] = useState(false)
+    const [viewMode, setViewMode] = useState('winners') // 'all' or 'winners'
     const itemsPerPage = 10
 
     useEffect(() => {
@@ -59,9 +61,9 @@ export default function Results() {
 
     useEffect(() => {
         if (expandedRound) {
-            fetchWinningSubmissions(expandedRound.id)
+            fetchSubmissions(expandedRound.id)
         }
-    }, [expandedRound])
+    }, [expandedRound, viewMode])
 
     async function fetchResults() {
         setLoading(true)
@@ -98,23 +100,29 @@ export default function Results() {
         }
     }
 
-    async function fetchWinningSubmissions(roundId) {
+    async function fetchSubmissions(roundId) {
         setSubmissionsLoading(true)
         try {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('submissions')
                 .select('*')
                 .eq('round_id', roundId)
                 .eq('user_id', user.id)
                 .eq('is_deleted', false)
-                .eq('is_winner', true)
                 .order('created_at', { ascending: false })
 
+            // Filter by winners only if in winners mode
+            if (viewMode === 'winners') {
+                query = query.eq('is_winner', true)
+            }
+
+            const { data, error } = await query
+
             if (!error) {
-                setWinningSubmissions(data || [])
+                setSubmissions(data || [])
             }
         } catch (error) {
-            console.error('Error fetching winning submissions:', error)
+            console.error('Error fetching submissions:', error)
         } finally {
             setSubmissionsLoading(false)
         }
@@ -138,9 +146,9 @@ export default function Results() {
         })
     }
 
-    // Group winning submissions by bill
+    // Group submissions by bill
     const getBillGroups = () => {
-        return winningSubmissions.reduce((acc, sub) => {
+        return submissions.reduce((acc, sub) => {
             const billId = sub.bill_id || 'no-bill'
             if (!acc[billId]) acc[billId] = []
             acc[billId].push(sub)
@@ -150,9 +158,11 @@ export default function Results() {
 
     // Get summary stats
     const getSummary = () => {
-        const winningCount = winningSubmissions.length
-        const totalPrize = winningSubmissions.reduce((sum, s) => sum + (s.prize_amount || 0), 0)
-        return { winningCount, totalPrize }
+        const totalCount = submissions.length
+        const winningCount = submissions.filter(s => s.is_winner).length
+        const totalBet = submissions.reduce((sum, s) => sum + (s.amount || 0), 0)
+        const totalPrize = submissions.filter(s => s.is_winner).reduce((sum, s) => sum + (s.prize_amount || 0), 0)
+        return { totalCount, winningCount, totalBet, totalPrize }
     }
 
     // No dealer assigned
@@ -198,7 +208,7 @@ export default function Results() {
                             {results.map((result, index) => {
                                 const isExpanded = expandedRound?.id === result.id
                                 const billGroups = getBillGroups()
-                                const { winningCount, totalPrize } = getSummary()
+                                const { totalCount, winningCount, totalBet, totalPrize } = getSummary()
 
                                 return (
                                     <div
@@ -254,26 +264,50 @@ export default function Results() {
                                                     </div>
                                                 </div>
 
-                                                {/* My Winnings Section */}
+                                                {/* My Submissions Section */}
                                                 <div className="my-winnings-section">
-                                                    <h4>รายการที่ถูกของฉัน</h4>
+                                                    <div className="section-header-with-toggle">
+                                                        <h4>{viewMode === 'all' ? 'เลขที่ส่งทั้งหมด' : 'รายการที่ถูกรางวัล'}</h4>
+                                                        <div className="view-toggle">
+                                                            <button
+                                                                className={`toggle-btn ${viewMode === 'all' ? 'active' : ''}`}
+                                                                onClick={() => setViewMode('all')}
+                                                            >
+                                                                ทั้งหมด
+                                                            </button>
+                                                            <button
+                                                                className={`toggle-btn ${viewMode === 'winners' ? 'active' : ''}`}
+                                                                onClick={() => setViewMode('winners')}
+                                                            >
+                                                                ถูกรางวัล
+                                                            </button>
+                                                        </div>
+                                                    </div>
 
                                                     {submissionsLoading ? (
                                                         <div className="loading-state mini">
                                                             <div className="spinner small"></div>
                                                         </div>
-                                                    ) : winningCount === 0 ? (
+                                                    ) : totalCount === 0 ? (
                                                         <div className="no-winnings-message">
-                                                            <p>ไม่มีรายการที่ถูกรางวัลในงวดนี้</p>
+                                                            <p>{viewMode === 'all' ? 'ไม่มีรายการที่ส่งในงวดนี้' : 'ไม่มีรายการที่ถูกรางวัลในงวดนี้'}</p>
                                                         </div>
                                                     ) : (
                                                         <>
                                                             {/* Summary Stats */}
                                                             <div className="winnings-summary">
                                                                 <div className="summary-item">
-                                                                    <span className="summary-value">{winningCount}</span>
-                                                                    <span className="summary-label">รายการที่ถูก</span>
+                                                                    <span className="summary-value">{totalCount}</span>
+                                                                    <span className="summary-label">{viewMode === 'all' ? 'รายการที่ส่ง' : 'รายการที่ถูก'}</span>
                                                                 </div>
+                                                                {viewMode === 'all' ? (
+                                                                    <div className="summary-item">
+                                                                        <span className="summary-value">
+                                                                            {result.currency_symbol || '฿'}{totalBet.toLocaleString()}
+                                                                        </span>
+                                                                        <span className="summary-label">ยอดแทง</span>
+                                                                    </div>
+                                                                ) : null}
                                                                 <div className="summary-item highlight">
                                                                     <span className="summary-value">
                                                                         {result.currency_symbol || '฿'}{totalPrize.toLocaleString()}
