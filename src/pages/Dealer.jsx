@@ -1948,9 +1948,9 @@ function SummaryModal({ round, onClose }) {
 
     const userList = Object.values(userSummaries).sort((a, b) => {
         // Sort by net profit (descending - winners first)
-        // Net = Win - Bet (from user perspective, positive means dealer pays them)
-        const aNet = a.totalWin - a.totalBet
-        const bNet = b.totalWin - b.totalBet
+        // Net = Win + Commission - Bet (from user perspective, positive means dealer pays them)
+        const aNet = a.totalWin + a.totalCommission - a.totalBet
+        const bNet = b.totalWin + b.totalCommission - b.totalBet
         return bNet - aNet
     })
 
@@ -2006,7 +2006,8 @@ function SummaryModal({ round, onClose }) {
                     ) : (
                         <div className="user-summary-list">
                             {userList.map(user => {
-                                const net = user.totalWin - user.totalBet
+                                // Net = Prize + Commission - Bet (what dealer owes user)
+                                const net = user.totalWin + user.totalCommission - user.totalBet
                                 return (
                                     <div key={user.userId} className={`user-summary-card ${net > 0 ? 'winner' : net < 0 ? 'loser' : ''}`}>
                                         <div className="user-summary-header">
