@@ -20,6 +20,7 @@ import {
     FiAward
 } from 'react-icons/fi'
 import './UserDashboard.css'
+import './ViewToggle.css'
 
 // Bet type labels
 const BET_TYPES = {
@@ -143,6 +144,7 @@ export default function UserDashboard() {
     const [selectedResultRound, setSelectedResultRound] = useState(null)
     const [resultSubmissions, setResultSubmissions] = useState([])
     const [resultsLoading, setResultsLoading] = useState(false)
+    const [resultViewMode, setResultViewMode] = useState('winners') // 'all' or 'winners'
 
     // Submit form state
     const [showSubmitModal, setShowSubmitModal] = useState(false)
@@ -207,12 +209,12 @@ export default function UserDashboard() {
         }
     }, [activeTab, profile])
 
-    // Fetch winning submissions when selecting a result round
+    // Fetch submissions when selecting a result round or changing view mode
     useEffect(() => {
         if (selectedResultRound) {
             fetchResultSubmissions(selectedResultRound.id)
         }
-    }, [selectedResultRound])
+    }, [selectedResultRound, resultViewMode])
 
     async function fetchRounds() {
         setLoading(true)
@@ -284,17 +286,23 @@ export default function UserDashboard() {
         }
     }
 
-    // Fetch winning submissions for a specific round
+    // Fetch submissions for a specific round (all or winners only)
     async function fetchResultSubmissions(roundId) {
         try {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('submissions')
                 .select('*')
                 .eq('round_id', roundId)
                 .eq('user_id', user.id)
                 .eq('is_deleted', false)
-                .eq('is_winner', true)
                 .order('created_at', { ascending: false })
+
+            // Filter by winners only if in winners mode
+            if (resultViewMode === 'winners') {
+                query = query.eq('is_winner', true)
+            }
+
+            const { data, error } = await query
 
             if (!error) {
                 setResultSubmissions(data || [])
@@ -1109,11 +1117,29 @@ export default function UserDashboard() {
 
                                             {isExpanded && (
                                                 <div className="round-accordion-content">
+                                                    {/* View Mode Toggle */}
+                                                    <div className="view-toggle-container">
+                                                        <div className="view-toggle">
+                                                            <button
+                                                                className={`toggle-btn ${resultViewMode === 'all' ? 'active' : ''}`}
+                                                                onClick={() => setResultViewMode('all')}
+                                                            >
+                                                                ทั้งหมด
+                                                            </button>
+                                                            <button
+                                                                className={`toggle-btn ${resultViewMode === 'winners' ? 'active' : ''}`}
+                                                                onClick={() => setResultViewMode('winners')}
+                                                            >
+                                                                ถูกรางวัล
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
                                                     {/* Summary Cards */}
                                                     <div className="submissions-summary">
                                                         <div className="summary-card">
-                                                            <span className="summary-value">{winningCount}</span>
-                                                            <span className="summary-label">รายการที่ถูก</span>
+                                                            <span className="summary-value">{resultSubmissions.length}</span>
+                                                            <span className="summary-label">{resultViewMode === 'all' ? 'รายการที่ส่ง' : 'รายการที่ถูก'}</span>
                                                         </div>
                                                         <div className="summary-card highlight">
                                                             <span className="summary-value">
@@ -1123,10 +1149,10 @@ export default function UserDashboard() {
                                                         </div>
                                                     </div>
 
-                                                    {/* Winning List */}
-                                                    {winningCount === 0 ? (
+                                                    {/* Items List */}
+                                                    {resultSubmissions.length === 0 ? (
                                                         <div className="empty-state card" style={{ padding: '2rem' }}>
-                                                            <p>ไม่มีรายการที่ถูกรางวัลในงวดนี้</p>
+                                                            <p>{resultViewMode === 'all' ? 'ไม่มีรายการที่ส่งในงวดนี้' : 'ไม่มีรายการที่ถูกรางวัลในงวดนี้'}</p>
                                                         </div>
                                                     ) : (
                                                         <div className="result-winners-list">

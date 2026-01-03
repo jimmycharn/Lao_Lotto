@@ -1,4 +1,4 @@
-/* View Toggle Styles - Append to Results.css */
+/* View Toggle Styles */
 
 /* Section Header with Toggle */
 .section-header-with-toggle {
@@ -44,6 +44,13 @@
     font-weight: 600;
 }
 
+/* View Toggle Container */
+.view-toggle-container {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 1rem;
+}
+
 @media (max-width: 480px) {
     .section-header-with-toggle {
         flex-direction: column;
@@ -57,5 +64,9 @@
     .toggle-btn {
         flex: 1;
         text-align: center;
+    }
+
+    .view-toggle-container {
+        justify-content: center;
     }
 }
