@@ -1820,16 +1820,18 @@ function UserSettingsModal({ member, onClose }) {
 // Summary Modal Component - Shows user profit/loss summary
 function SummaryModal({ round, onClose }) {
     const [submissions, setSubmissions] = useState([])
+    const [userSettings, setUserSettings] = useState({})
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        fetchSubmissions()
+        fetchData()
     }, [round.id])
 
-    async function fetchSubmissions() {
+    async function fetchData() {
         setLoading(true)
         try {
-            const { data, error } = await supabase
+            // Fetch submissions
+            const { data: submissionsData, error: subError } = await supabase
                 .from('submissions')
                 .select(`
                     *,
@@ -1839,12 +1841,47 @@ function SummaryModal({ round, onClose }) {
                 .eq('is_deleted', false)
                 .order('created_at', { ascending: false })
 
-            if (!error) setSubmissions(data || [])
+            if (!subError) setSubmissions(submissionsData || [])
+
+            // Fetch user_settings for all users in this round
+            const { data: settingsData, error: setError } = await supabase
+                .from('user_settings')
+                .select('*')
+                .eq('dealer_id', round.dealer_id)
+
+            if (!setError && settingsData) {
+                const settingsMap = {}
+                settingsData.forEach(s => {
+                    settingsMap[s.user_id] = s
+                })
+                setUserSettings(settingsMap)
+            }
         } catch (error) {
-            console.error('Error fetching submissions:', error)
+            console.error('Error fetching data:', error)
         } finally {
             setLoading(false)
         }
+    }
+
+    // Get lottery type category
+    const getLotteryTypeKey = () => {
+        if (round.lottery_type === 'thai') return 'thai'
+        if (round.lottery_type === 'lao' || round.lottery_type === 'hanoi') return 'lao'
+        if (round.lottery_type === 'stock') return 'stock'
+        return 'thai'
+    }
+
+    // Calculate commission for a submission
+    const getCommission = (sub) => {
+        const lotteryKey = getLotteryTypeKey()
+        const settings = userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[sub.bet_type]
+        if (settings && settings.commission) {
+            if (settings.isFixed) {
+                return settings.commission // Fixed amount per bet
+            }
+            return sub.amount * (settings.commission / 100) // Percentage
+        }
+        return sub.amount * 0.15 // Default 15%
     }
 
     // Group submissions by user
@@ -1857,12 +1894,14 @@ function SummaryModal({ round, onClose }) {
                 email: sub.profiles?.email || '',
                 totalBet: 0,
                 totalWin: 0,
+                totalCommission: 0,
                 winCount: 0,
                 ticketCount: 0
             }
         }
         acc[userId].totalBet += sub.amount || 0
         acc[userId].totalWin += sub.prize_amount || 0
+        acc[userId].totalCommission += getCommission(sub)
         acc[userId].ticketCount++
         if (sub.is_winner) acc[userId].winCount++
         return acc
@@ -1870,6 +1909,7 @@ function SummaryModal({ round, onClose }) {
 
     const userList = Object.values(userSummaries).sort((a, b) => {
         // Sort by net profit (descending - winners first)
+        // Net = Win - Bet (from user perspective, positive means dealer pays them)
         const aNet = a.totalWin - a.totalBet
         const bNet = b.totalWin - b.totalBet
         return bNet - aNet
@@ -1878,7 +1918,9 @@ function SummaryModal({ round, onClose }) {
     // Calculate totals
     const grandTotalBet = userList.reduce((sum, u) => sum + u.totalBet, 0)
     const grandTotalWin = userList.reduce((sum, u) => sum + u.totalWin, 0)
-    const dealerProfit = grandTotalBet - grandTotalWin
+    const grandTotalCommission = userList.reduce((sum, u) => sum + u.totalCommission, 0)
+    // Dealer profit = Bets received - Prizes paid - Commission paid
+    const dealerProfit = grandTotalBet - grandTotalWin - grandTotalCommission
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -1901,15 +1943,15 @@ function SummaryModal({ round, onClose }) {
                             <span className="stat-label">ยอดจ่ายรางวัล</span>
                             <span className="stat-value danger">{round.currency_symbol}{grandTotalWin.toLocaleString()}</span>
                         </div>
+                        <div className="summary-stat-card">
+                            <span className="stat-label">ค่าคอมรวม</span>
+                            <span className="stat-value" style={{ color: 'var(--color-warning)' }}>{round.currency_symbol}{grandTotalCommission.toLocaleString()}</span>
+                        </div>
                         <div className={`summary-stat-card ${dealerProfit >= 0 ? 'profit' : 'loss'}`}>
-                            <span className="stat-label">กำไร/ขาดทุน</span>
+                            <span className="stat-label">กำไรสุทธิ</span>
                             <span className="stat-value">
                                 {dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}
                             </span>
-                        </div>
-                        <div className="summary-stat-card">
-                            <span className="stat-label">จำนวนผู้ส่ง</span>
-                            <span className="stat-value">{userList.length} คน</span>
                         </div>
                     </div>
 
@@ -1947,13 +1989,13 @@ function SummaryModal({ round, onClose }) {
                                                 <span className="detail-value">{round.currency_symbol}{user.totalBet.toLocaleString()}</span>
                                             </div>
                                             <div className="detail-item">
-                                                <span className="detail-label">ถูกรางวัล</span>
-                                                <span className="detail-value text-success">{user.winCount > 0 ? `${user.winCount} รายการ` : '-'}</span>
+                                                <span className="detail-label">ค่าคอม</span>
+                                                <span className="detail-value" style={{ color: 'var(--color-warning)' }}>{round.currency_symbol}{user.totalCommission.toLocaleString()}</span>
                                             </div>
                                             <div className="detail-item">
-                                                <span className="detail-label">ยอดได้</span>
+                                                <span className="detail-label">ถูก/ยอดได้</span>
                                                 <span className={`detail-value ${user.totalWin > 0 ? 'text-success' : ''}`}>
-                                                    {user.totalWin > 0 ? `${round.currency_symbol}${user.totalWin.toLocaleString()}` : '-'}
+                                                    {user.winCount > 0 ? `${user.winCount}/${round.currency_symbol}${user.totalWin.toLocaleString()}` : '-'}
                                                 </span>
                                             </div>
                                         </div>
