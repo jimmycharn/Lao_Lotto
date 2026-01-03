@@ -1871,17 +1871,55 @@ function SummaryModal({ round, onClose }) {
         return 'thai'
     }
 
+    // Default commission rates per bet type
+    const DEFAULT_COMMISSIONS = {
+        'run_top': 15, 'run_bottom': 15,
+        'pak_top': 15, 'pak_bottom': 15,
+        '2_top': 15, '2_front': 15, '2_center': 15, '2_run': 15, '2_bottom': 15,
+        '3_top': 30, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
+        '4_run': 15, '4_tod': 15, '5_run': 15, '6_top': 15
+    }
+
     // Calculate commission for a submission
     const getCommission = (sub) => {
         const lotteryKey = getLotteryTypeKey()
         const settings = userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[sub.bet_type]
-        if (settings && settings.commission) {
+
+        if (settings && settings.commission !== undefined) {
             if (settings.isFixed) {
                 return settings.commission // Fixed amount per bet
             }
             return sub.amount * (settings.commission / 100) // Percentage
         }
-        return sub.amount * 0.15 // Default 15%
+
+        // Use default commission rate for this bet type
+        const defaultRate = DEFAULT_COMMISSIONS[sub.bet_type] || 15
+        return sub.amount * (defaultRate / 100)
+    }
+
+    // Default payout rates per bet type
+    const DEFAULT_PAYOUTS = {
+        'run_top': 3, 'run_bottom': 4,
+        'pak_top': 8, 'pak_bottom': 6,
+        '2_top': 65, '2_front': 65, '2_center': 65, '2_run': 10, '2_bottom': 65,
+        '3_top': 550, '3_tod': 100, '3_bottom': 135, '3_front': 100, '3_back': 135,
+        '4_run': 20, '4_tod': 100, '5_run': 10, '6_top': 1000000
+    }
+
+    // Calculate expected payout for a winning submission
+    const getExpectedPayout = (sub) => {
+        if (!sub.is_winner) return 0
+
+        const lotteryKey = getLotteryTypeKey()
+        const settings = userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[sub.bet_type]
+
+        if (settings && settings.payout !== undefined) {
+            return sub.amount * settings.payout
+        }
+
+        // Use default payout rate for this bet type
+        const defaultRate = DEFAULT_PAYOUTS[sub.bet_type] || 1
+        return sub.amount * defaultRate
     }
 
     // Group submissions by user
@@ -1900,7 +1938,8 @@ function SummaryModal({ round, onClose }) {
             }
         }
         acc[userId].totalBet += sub.amount || 0
-        acc[userId].totalWin += sub.prize_amount || 0
+        // Calculate win amount from user settings (more accurate than database value)
+        acc[userId].totalWin += getExpectedPayout(sub)
         acc[userId].totalCommission += getCommission(sub)
         acc[userId].ticketCount++
         if (sub.is_winner) acc[userId].winCount++
