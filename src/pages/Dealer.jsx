@@ -22,6 +22,7 @@ import {
     FiLock
 } from 'react-icons/fi'
 import './Dealer.css'
+import './SettingsTabs.css'
 
 // Bet type labels
 const BET_TYPES = {
@@ -1545,19 +1546,102 @@ function NumberLimitsModal({ round, onClose }) {
     )
 }
 
-// User Settings Modal Component
+// User Settings Modal Component - With Lottery Type Tabs
 function UserSettingsModal({ member, onClose }) {
     const { user } = useAuth()
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
-    const [settings, setSettings] = useState({
-        commission_rates: {
-            '2_top': 10, '2_bottom': 10,
-            '3_top': 10, '3_tod': 10, '3_front': 10, '3_back': 10,
-            '4_tod': 10,
-            '6_top': 10
+    const [activeTab, setActiveTab] = useState('thai')
+
+    // Default settings structure with commission and payout rates
+    const getDefaultSettings = () => ({
+        thai: {
+            'run_top': { commission: 15, payout: 3 },
+            'run_bottom': { commission: 15, payout: 4 },
+            'pak_top': { commission: 15, payout: 8 },
+            'pak_bottom': { commission: 15, payout: 6 },
+            '2_top': { commission: 15, payout: 65 },
+            '2_front': { commission: 15, payout: 65 },
+            '2_center': { commission: 15, payout: 65 },
+            '2_run': { commission: 15, payout: 10 },
+            '2_bottom': { commission: 15, payout: 65 },
+            '3_top': { commission: 30, payout: 550 },
+            '3_tod': { commission: 15, payout: 100 },
+            '3_bottom': { commission: 15, payout: 135 },
+            '4_run': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 }
+        },
+        lao: {
+            '4_top': { commission: 25, payout: 100000, isFixed: true },
+            '4_tod': { commission: 25, payout: 4000, isFixed: true },
+            '3_top': { commission: 25, payout: 30000, isFixed: true },
+            '3_tod': { commission: 25, payout: 3000, isFixed: true },
+            '2_front': { commission: 25, payout: 1000, isFixed: true },
+            '2_back': { commission: 25, payout: 1000, isFixed: true },
+            'run_top': { commission: 15, payout: 3 },
+            'run_bottom': { commission: 15, payout: 4 },
+            'pak_top': { commission: 15, payout: 8 },
+            'pak_bottom': { commission: 15, payout: 6 },
+            '2_top': { commission: 15, payout: 65 },
+            '2_center': { commission: 15, payout: 65 },
+            '2_run': { commission: 15, payout: 10 },
+            '2_bottom': { commission: 15, payout: 65 },
+            '3_straight': { commission: 30, payout: 550 },
+            '3_tod_single': { commission: 15, payout: 100 },
+            '4_run': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 }
+        },
+        stock: {
+            '2_top': { commission: 15, payout: 65 },
+            '2_bottom': { commission: 15, payout: 65 }
         }
     })
+
+    const [settings, setSettings] = useState(getDefaultSettings())
+
+    // Labels for each bet type
+    const BET_LABELS = {
+        thai: {
+            'run_top': 'ลอยบน',
+            'run_bottom': 'ลอยล่าง',
+            'pak_top': 'ปักบน (หน้า/กลาง/หลัง)',
+            'pak_bottom': 'ปักล่าง (หน้า/หลัง)',
+            '2_top': '2 ตัวบน',
+            '2_front': '2 ตัวหน้า',
+            '2_center': '2 ตัวถ่าง',
+            '2_run': '2 ตัวลอย',
+            '2_bottom': '2 ตัวล่าง',
+            '3_top': '3 ตัวตรง',
+            '3_tod': '3 ตัวโต๊ด',
+            '3_bottom': '3 ตัวล่าง',
+            '4_run': '4 ตัวลอย',
+            '5_run': '5 ตัวลอย'
+        },
+        lao: {
+            '4_top': '4 ตัวตรง (ชุด 120฿)',
+            '4_tod': '4 ตัวโต๊ด (ชุด 120฿)',
+            '3_top': '3 ตัวตรง (ชุด 120฿)',
+            '3_tod': '3 ตัวโต๊ด (ชุด 120฿)',
+            '2_front': '2 ตัวหน้า (ชุด 120฿)',
+            '2_back': '2 ตัวหลัง (ชุด 120฿)',
+            'run_top': 'ลอยบน',
+            'run_bottom': 'ลอยล่าง',
+            'pak_top': 'ปักบน (หน้า/กลาง/หลัง)',
+            'pak_bottom': 'ปักล่าง (หน้า/หลัง)',
+            '2_top': '2 ตัวบน',
+            '2_center': '2 ตัวถ่าง',
+            '2_run': '2 ตัวลอย',
+            '2_bottom': '2 ตัวล่าง',
+            '3_straight': '3 ตัวตรง',
+            '3_tod_single': '3 ตัวโต๊ด',
+            '4_run': '4 ตัวลอย',
+            '5_run': '5 ตัวลอย'
+        },
+        stock: {
+            '2_top': '2 ตัวบน',
+            '2_bottom': '2 ตัวล่าง'
+        }
+    }
 
     useEffect(() => {
         fetchSettings()
@@ -1573,8 +1657,18 @@ function UserSettingsModal({ member, onClose }) {
                 .eq('dealer_id', user.id)
                 .single()
 
-            if (data) {
-                setSettings(data)
+            if (data && data.lottery_settings) {
+                const merged = { ...getDefaultSettings() }
+                Object.keys(data.lottery_settings).forEach(tab => {
+                    if (merged[tab]) {
+                        Object.keys(data.lottery_settings[tab]).forEach(key => {
+                            if (merged[tab][key]) {
+                                merged[tab][key] = { ...merged[tab][key], ...data.lottery_settings[tab][key] }
+                            }
+                        })
+                    }
+                })
+                setSettings(merged)
             }
         } catch (error) {
             console.error('Error fetching user settings:', error)
@@ -1591,7 +1685,7 @@ function UserSettingsModal({ member, onClose }) {
                 .upsert({
                     user_id: member.id,
                     dealer_id: user.id,
-                    commission_rates: settings.commission_rates,
+                    lottery_settings: settings,
                     updated_at: new Date().toISOString()
                 }, { onConflict: 'user_id, dealer_id' })
 
@@ -1606,9 +1700,28 @@ function UserSettingsModal({ member, onClose }) {
         }
     }
 
+    const updateSetting = (tab, key, field, value) => {
+        setSettings(prev => ({
+            ...prev,
+            [tab]: {
+                ...prev[tab],
+                [key]: {
+                    ...prev[tab][key],
+                    [field]: parseFloat(value) || 0
+                }
+            }
+        }))
+    }
+
+    const LOTTERY_TABS = [
+        { key: 'thai', label: 'หวยไทย' },
+        { key: 'lao', label: 'หวยลาว/ฮานอย' },
+        { key: 'stock', label: 'หวยหุ้น' }
+    ]
+
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal modal-xl" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
                     <h3><FiSettings /> ตั้งค่าสมาชิก: {member.full_name}</h3>
                     <button className="modal-close" onClick={onClose}>
@@ -1623,33 +1736,66 @@ function UserSettingsModal({ member, onClose }) {
                         </div>
                     ) : (
                         <div className="settings-form">
-                            <h4>% ค่าคอมมิชชั่นที่สมาชิกได้รับ</h4>
-                            <p className="text-muted mb-4">ระบุเปอร์เซ็นต์ค่าคอมมิชชั่นสำหรับแต่ละประเภทหวย</p>
-
-                            <div className="limits-grid">
-                                {Object.entries(BET_TYPES).map(([key, label]) => (
-                                    <div key={key} className="limit-row">
-                                        <span className="limit-label">{label}</span>
-                                        <div className="limit-inputs">
-                                            <div className="input-group">
-                                                <input
-                                                    type="number"
-                                                    className="form-input small"
-                                                    value={settings.commission_rates[key]}
-                                                    onChange={e => setSettings({
-                                                        ...settings,
-                                                        commission_rates: {
-                                                            ...settings.commission_rates,
-                                                            [key]: parseFloat(e.target.value) || 0
-                                                        }
-                                                    })}
-                                                />
-                                                <span className="input-suffix">%</span>
-                                            </div>
-                                        </div>
-                                    </div>
+                            <div className="settings-tabs">
+                                {LOTTERY_TABS.map(tab => (
+                                    <button
+                                        key={tab.key}
+                                        className={`settings-tab ${activeTab === tab.key ? 'active' : ''}`}
+                                        onClick={() => setActiveTab(tab.key)}
+                                    >
+                                        {tab.label}
+                                    </button>
                                 ))}
                             </div>
+
+                            <div className="settings-table-wrap">
+                                <table className="settings-table">
+                                    <thead>
+                                        <tr>
+                                            <th>ประเภท</th>
+                                            <th>ค่าคอม</th>
+                                            <th>อัตราจ่าย</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {Object.entries(settings[activeTab] || {}).map(([key, value]) => (
+                                            <tr key={key} className={value.isFixed ? 'fixed-row' : ''}>
+                                                <td className="type-cell">
+                                                    {BET_LABELS[activeTab]?.[key] || key}
+                                                </td>
+                                                <td>
+                                                    <div className="input-group">
+                                                        <input
+                                                            type="number"
+                                                            className="form-input small"
+                                                            value={value.commission}
+                                                            onChange={e => updateSetting(activeTab, key, 'commission', e.target.value)}
+                                                        />
+                                                        <span className="input-suffix">{value.isFixed ? '฿' : '%'}</span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div className="input-group">
+                                                        <input
+                                                            type="number"
+                                                            className="form-input small"
+                                                            value={value.payout}
+                                                            onChange={e => updateSetting(activeTab, key, 'payout', e.target.value)}
+                                                        />
+                                                        <span className="input-suffix">เท่า</span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {activeTab === 'lao' && (
+                                <p className="text-muted" style={{ marginTop: '1rem', fontSize: '0.85rem' }}>
+                                    * หวยชุด 4 ตัว ขายชุดละ 120 บาท - ค่าคอมเป็นบาทต่อชุด
+                                </p>
+                            )}
                         </div>
                     )}
                 </div>
