@@ -132,6 +132,220 @@ function getDefaultSetPricesForType(lotteryType) {
     return setPrices
 }
 
+// Round Accordion Item Component
+function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, onCloseRound, onShowNumberLimits, onDeleteRound, onShowResults, getStatusBadge, formatDate, formatTime, user }) {
+    const [isExpanded, setIsExpanded] = useState(false)
+    const [summaryData, setSummaryData] = useState({ loading: false, submissions: [], userSettings: {} })
+
+    const isAnnounced = round.status === 'announced' && round.is_result_announced
+
+    // Fetch summary data when expanded and announced
+    useEffect(() => {
+        if (isExpanded && isAnnounced && summaryData.submissions.length === 0 && !summaryData.loading) {
+            fetchSummaryData()
+        }
+    }, [isExpanded, isAnnounced])
+
+    async function fetchSummaryData() {
+        setSummaryData(prev => ({ ...prev, loading: true }))
+        try {
+            const { data: submissionsData } = await supabase
+                .from('submissions')
+                .select('*, profiles(id, full_name, email)')
+                .eq('round_id', round.id)
+                .eq('is_deleted', false)
+                .order('created_at', { ascending: false })
+
+            const userIds = [...new Set((submissionsData || []).map(s => s.user_id))]
+            const settingsMap = {}
+
+            for (const userId of userIds) {
+                const { data: settingsData } = await supabase
+                    .from('user_settings')
+                    .select('*')
+                    .eq('user_id', userId)
+                    .eq('dealer_id', user?.id)
+                    .single()
+                if (settingsData) settingsMap[userId] = settingsData
+            }
+
+            setSummaryData({ submissions: submissionsData || [], userSettings: settingsMap, loading: false })
+        } catch (error) {
+            console.error('Error fetching summary:', error)
+            setSummaryData(prev => ({ ...prev, loading: false }))
+        }
+    }
+
+    // Calculate summary values
+    const getLotteryTypeKey = () => {
+        if (round.lottery_type === 'thai') return 'thai'
+        if (round.lottery_type === 'lao' || round.lottery_type === 'hanoi') return 'lao'
+        return 'stock'
+    }
+
+    const DEFAULT_COMMISSIONS = {
+        'run_top': 15, 'run_bottom': 15, 'pak_top': 15, 'pak_bottom': 15,
+        '2_top': 15, '2_front': 15, '2_center': 15, '2_spread': 15, '2_run': 15, '2_bottom': 15,
+        '3_top': 15, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
+        '4_run': 15, '4_tod': 15, '4_set': 15, '4_float': 15, '5_run': 15, '5_float': 15, '6_top': 15
+    }
+
+    const DEFAULT_PAYOUTS = {
+        'run_top': 3, 'run_bottom': 4, 'pak_top': 8, 'pak_bottom': 6,
+        '2_top': 65, '2_front': 65, '2_center': 65, '2_run': 10, '2_bottom': 65,
+        '3_top': 550, '3_tod': 100, '3_bottom': 135, '3_front': 100, '3_back': 135,
+        '4_run': 20, '4_tod': 100, '5_run': 10, '6_top': 1000000
+    }
+
+    const getCommission = (sub) => {
+        const lotteryKey = getLotteryTypeKey()
+        const settings = summaryData.userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[sub.bet_type]
+        if (settings?.commission !== undefined) {
+            return settings.isFixed ? settings.commission : sub.amount * (settings.commission / 100)
+        }
+        return sub.amount * ((DEFAULT_COMMISSIONS[sub.bet_type] || 15) / 100)
+    }
+
+    const getExpectedPayout = (sub) => {
+        if (!sub.is_winner) return 0
+        const lotteryKey = getLotteryTypeKey()
+        const settings = summaryData.userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[sub.bet_type]
+        if (settings?.payout !== undefined) return sub.amount * settings.payout
+        return sub.amount * (DEFAULT_PAYOUTS[sub.bet_type] || 1)
+    }
+
+    // Calculate user summaries
+    const userSummaries = isExpanded && isAnnounced && !summaryData.loading ? Object.values(
+        summaryData.submissions.reduce((acc, sub) => {
+            const userId = sub.user_id
+            if (!acc[userId]) {
+                acc[userId] = {
+                    userId, userName: sub.profiles?.full_name || sub.profiles?.email || 'ไม่ระบุชื่อ',
+                    email: sub.profiles?.email || '', totalBet: 0, totalWin: 0, totalCommission: 0, winCount: 0, ticketCount: 0
+                }
+            }
+            acc[userId].totalBet += sub.amount || 0
+            acc[userId].totalWin += getExpectedPayout(sub)
+            acc[userId].totalCommission += getCommission(sub)
+            acc[userId].ticketCount++
+            if (sub.is_winner) acc[userId].winCount++
+            return acc
+        }, {})
+    ).sort((a, b) => (b.totalWin + b.totalCommission - b.totalBet) - (a.totalWin + a.totalCommission - a.totalBet)) : []
+
+    const grandTotalBet = userSummaries.reduce((sum, u) => sum + u.totalBet, 0)
+    const grandTotalWin = userSummaries.reduce((sum, u) => sum + u.totalWin, 0)
+    const grandTotalCommission = userSummaries.reduce((sum, u) => sum + u.totalCommission, 0)
+    const dealerProfit = grandTotalBet - grandTotalWin - grandTotalCommission
+
+    return (
+        <div className={`round-accordion-item ${round.lottery_type} ${isExpanded ? 'expanded' : ''}`}>
+            <div className="round-accordion-header card" onClick={() => setIsExpanded(!isExpanded)}>
+                <div className="round-header-left">
+                    <span className={`lottery-badge ${round.lottery_type}`}>{LOTTERY_TYPES[round.lottery_type]}</span>
+                    {getStatusBadge(round)}
+                </div>
+                <div className="round-header-center">
+                    <h3>{round.lottery_name || LOTTERY_TYPES[round.lottery_type]}</h3>
+                    <div className="round-meta">
+                        <span><FiCalendar /> {formatDate(round.round_date)}</span>
+                        <span><FiClock /> {formatTime(round.open_time)} - {formatTime(round.close_time)}</span>
+                        <span>{round.submissions?.length || 0} รายการ</span>
+                    </div>
+                </div>
+                <div className="round-header-right">
+                    <div className="round-actions">
+                        <button className="icon-btn" onClick={(e) => { e.stopPropagation(); onShowSubmissions(); }} title="ดูเลขที่ส่ง"><FiEye /></button>
+                        {round.status === 'open' && <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onCloseRound(); }} title="ปิดงวด"><FiLock /></button>}
+                        <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onShowNumberLimits(); }} title="ตั้งค่าเลขอั้น"><FiAlertTriangle /></button>
+                        <button className="icon-btn danger" onClick={(e) => { e.stopPropagation(); onDeleteRound(); }} title="ลบ"><FiTrash2 /></button>
+                    </div>
+                    <svg className={`chevron ${isExpanded ? 'rotated' : ''}`} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </div>
+            </div>
+
+            {isExpanded && (
+                <div className="round-accordion-content">
+                    <div className="accordion-actions">
+                        {(round.status === 'closed' || new Date() > new Date(round.close_time)) && !isAnnounced && (
+                            <button className="btn btn-accent" onClick={onShowResults}><FiCheck /> ใส่ผลรางวัล</button>
+                        )}
+                        {isAnnounced && (
+                            <button className="btn btn-outline" onClick={onShowResults}><FiEdit2 /> แก้ไขผลรางวัล</button>
+                        )}
+                    </div>
+
+                    {isAnnounced && (
+                        summaryData.loading ? (
+                            <div className="loading-state"><div className="spinner"></div></div>
+                        ) : (
+                            <>
+                                <div className="user-summary-card total-card">
+                                    <div className="user-summary-header">
+                                        <div className="user-info">
+                                            <span className="user-name">สรุปยอดรวม</span>
+                                            <span className="user-email">{userSummaries.length} คน, {summaryData.submissions.length} รายการ</span>
+                                        </div>
+                                        <div className={`net-amount ${dealerProfit >= 0 ? 'positive' : 'negative'}`}>
+                                            {dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}
+                                        </div>
+                                    </div>
+                                    <div className="user-summary-details">
+                                        <div className="detail-item"><span className="detail-label">ยอดแทงรวม</span><span className="detail-value">{round.currency_symbol}{grandTotalBet.toLocaleString()}</span></div>
+                                        <div className="detail-item"><span className="detail-label">ยอดจ่ายรางวัล</span><span className="detail-value text-danger">{round.currency_symbol}{grandTotalWin.toLocaleString()}</span></div>
+                                        <div className="detail-item"><span className="detail-label">ถูกรางวัล</span><span className="detail-value">{summaryData.submissions.filter(s => s.is_winner).length} รายการ</span></div>
+                                        <div className="detail-item"><span className="detail-label">กำไร/ขาดทุน</span><span className={`detail-value ${dealerProfit >= 0 ? 'text-success' : 'text-danger'}`}>{dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}</span></div>
+                                    </div>
+                                </div>
+                                {userSummaries.length > 0 && (
+                                    <div className="user-summary-list" style={{ marginTop: '1rem' }}>
+                                        <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-text-muted)' }}>รายละเอียดแต่ละคน</h4>
+                                        {userSummaries.map(usr => {
+                                            const net = usr.totalWin + usr.totalCommission - usr.totalBet
+                                            return (
+                                                <div key={usr.userId} className={`user-summary-card ${net > 0 ? 'winner' : net < 0 ? 'loser' : ''}`}>
+                                                    <div className="user-summary-header">
+                                                        <div className="user-info">
+                                                            <span className="user-name">{usr.userName}</span>
+                                                            <span className="user-email">{usr.email}</span>
+                                                        </div>
+                                                        <div className={`net-amount ${net > 0 ? 'positive' : net < 0 ? 'negative' : ''}`}>
+                                                            {net > 0 ? '+' : ''}{round.currency_symbol}{net.toLocaleString()}
+                                                        </div>
+                                                    </div>
+                                                    <div className="user-summary-details">
+                                                        <div className="detail-item"><span className="detail-label">แทง</span><span className="detail-value">{usr.ticketCount} รายการ</span></div>
+                                                        <div className="detail-item"><span className="detail-label">ยอดแทง</span><span className="detail-value">{round.currency_symbol}{usr.totalBet.toLocaleString()}</span></div>
+                                                        <div className="detail-item"><span className="detail-label">ค่าคอม</span><span className="detail-value" style={{ color: 'var(--color-warning)' }}>{round.currency_symbol}{usr.totalCommission.toLocaleString()}</span></div>
+                                                        <div className="detail-item"><span className="detail-label">ถูก/ยอดได้</span><span className={`detail-value ${usr.totalWin > 0 ? 'text-success' : ''}`}>{usr.winCount > 0 ? `${usr.winCount}/${round.currency_symbol}${usr.totalWin.toLocaleString()}` : '-'}</span></div>
+                                                    </div>
+                                                    <div className="user-summary-footer">
+                                                        {net > 0 ? <span className="status-badge won">ต้องจ่าย {round.currency_symbol}{net.toLocaleString()}</span>
+                                                            : net < 0 ? <span className="status-badge lost">ต้องเก็บ {round.currency_symbol}{Math.abs(net).toLocaleString()}</span>
+                                                                : <span className="status-badge pending">เสมอ</span>}
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                )}
+                            </>
+                        )
+                    )}
+
+                    {!isAnnounced && (
+                        <div className="empty-state" style={{ padding: '1.5rem', textAlign: 'center' }}>
+                            <p style={{ color: 'var(--color-text-muted)' }}>ยังไม่ได้ประกาศผลรางวัล</p>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    )
+}
+
 export default function Dealer() {
     const { user, profile, isDealer, isSuperAdmin } = useAuth()
     const [searchParams] = useSearchParams()
@@ -408,137 +622,23 @@ export default function Dealer() {
                                     <p>กดปุ่ม "สร้างงวดใหม่" เพื่อเริ่มต้น</p>
                                 </div>
                             ) : (
-                                <div className="rounds-grid">
+                                <div className="rounds-list">
                                     {rounds.map(round => (
-                                        <div
+                                        <RoundAccordionItem
                                             key={round.id}
-                                            className={`round-card card ${round.lottery_type} ${selectedRound?.id === round.id ? 'selected' : ''}`}
-                                            onClick={() => setSelectedRound(round)}
-                                        >
-                                            <div className="round-header">
-                                                <div className="round-type">
-                                                    <span className={`lottery-badge ${round.lottery_type}`}>
-                                                        {LOTTERY_TYPES[round.lottery_type]}
-                                                    </span>
-                                                    {getStatusBadge(round)}
-                                                </div>
-                                                <div className="round-actions">
-                                                    <button
-                                                        className="icon-btn"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation()
-                                                            setSelectedRound(round)
-                                                            setShowSubmissionsModal(true)
-                                                        }}
-                                                        title="ดูเลขที่ส่ง"
-                                                    >
-                                                        <FiEye />
-                                                    </button>
-                                                    {round.status === 'open' && (
-                                                        <button
-                                                            className="icon-btn warning"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation()
-                                                                handleCloseRound(round.id)
-                                                            }}
-                                                            title="ปิดงวด"
-                                                        >
-                                                            <FiLock />
-                                                        </button>
-                                                    )}
-                                                    <button
-                                                        className="icon-btn warning"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation()
-                                                            setSelectedRound(round)
-                                                            setShowNumberLimitsModal(true)
-                                                        }}
-                                                        title="ตั้งค่าเลขอั้น"
-                                                    >
-                                                        <FiAlertTriangle />
-                                                    </button>
-                                                    <button
-                                                        className="icon-btn danger"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation()
-                                                            handleDeleteRound(round.id)
-                                                        }}
-                                                        title="ลบ"
-                                                    >
-                                                        <FiTrash2 />
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            <div className="round-info">
-                                                <h3>{round.lottery_name || LOTTERY_TYPES[round.lottery_type]}</h3>
-                                                <div className="round-date">
-                                                    <FiCalendar />
-                                                    <span>{formatDate(round.round_date)}</span>
-                                                </div>
-                                                <div className="round-time">
-                                                    <FiClock />
-                                                    <span>
-                                                        {formatTime(round.open_time)} - {formatTime(round.close_time)}
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            <div className="round-stats">
-                                                <div className="stat">
-                                                    <span className="stat-value">{round.submissions?.length || 0}</span>
-                                                    <span className="stat-label">รายการ</span>
-                                                </div>
-                                                <div className="stat">
-                                                    <span className="stat-value">
-                                                        {round.currency_symbol}
-                                                    </span>
-                                                    <span className="stat-label">{round.currency_name}</span>
-                                                </div>
-                                            </div>
-
-                                            {/* Show button if closed OR time has passed, and result not announced */}
-                                            {(round.status === 'closed' || new Date() > new Date(round.close_time)) &&
-                                                round.status !== 'announced' && !round.is_result_announced && (
-                                                    <button
-                                                        className="btn btn-accent btn-sm full-width"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation()
-                                                            setSelectedRound(round)
-                                                            setShowResultsModal(true)
-                                                        }}
-                                                    >
-                                                        <FiCheck /> ใส่ผลรางวัล
-                                                    </button>
-                                                )}
-
-                                            {/* Show edit button for announced rounds */}
-                                            {round.status === 'announced' && round.is_result_announced && (
-                                                <>
-                                                    <button
-                                                        className="btn btn-primary btn-sm full-width"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation()
-                                                            setSelectedRound(round)
-                                                            setShowSummaryModal(true)
-                                                        }}
-                                                    >
-                                                        <FiDollarSign /> ดูสรุปยอด
-                                                    </button>
-                                                    <button
-                                                        className="btn btn-outline btn-sm full-width"
-                                                        style={{ marginTop: '0.5rem' }}
-                                                        onClick={(e) => {
-                                                            e.stopPropagation()
-                                                            setSelectedRound(round)
-                                                            setShowResultsModal(true)
-                                                        }}
-                                                    >
-                                                        <FiEdit2 /> แก้ไขผลรางวัล
-                                                    </button>
-                                                </>
-                                            )}
-                                        </div>
+                                            round={round}
+                                            isSelected={selectedRound?.id === round.id}
+                                            onSelect={setSelectedRound}
+                                            onShowSubmissions={() => { setSelectedRound(round); setShowSubmissionsModal(true); }}
+                                            onCloseRound={() => handleCloseRound(round.id)}
+                                            onShowNumberLimits={() => { setSelectedRound(round); setShowNumberLimitsModal(true); }}
+                                            onDeleteRound={() => handleDeleteRound(round.id)}
+                                            onShowResults={() => { setSelectedRound(round); setShowResultsModal(true); }}
+                                            getStatusBadge={getStatusBadge}
+                                            formatDate={formatDate}
+                                            formatTime={formatTime}
+                                            user={user}
+                                        />
                                     ))}
                                 </div>
                             )}

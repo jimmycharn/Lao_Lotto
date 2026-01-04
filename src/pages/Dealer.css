@@ -1532,3 +1532,123 @@
     border-color: #00c853;
     box-shadow: 0 0 25px rgba(0, 200, 83, 0.4);
 }
+
+/* =============================================
+   ROUNDS LIST ACCORDION LAYOUT
+   ============================================= */
+
+.rounds-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.round-accordion-item {
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.round-accordion-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-left: 4px solid var(--color-text-muted);
+}
+
+.round-accordion-header:hover {
+    background: var(--color-card-hover);
+}
+
+.round-header-left {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    min-width: 130px;
+}
+
+.round-header-center {
+    flex: 1;
+}
+
+.round-header-center h3 {
+    margin: 0 0 0.25rem 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.round-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}
+
+.round-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.round-header-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.round-header-right .chevron {
+    transition: transform 0.2s ease;
+    color: var(--color-text-muted);
+}
+
+.round-header-right .chevron.rotated {
+    transform: rotate(180deg);
+}
+
+.round-accordion-content {
+    background: var(--color-card);
+    padding: 1.25rem;
+    border-top: 1px solid var(--color-border);
+    border-left: 4px solid var(--color-primary);
+}
+
+.accordion-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+/* Lottery type colors for accordion */
+.round-accordion-item.thai .round-accordion-header {
+    border-left-color: #ed1c24;
+}
+.round-accordion-item.lao .round-accordion-header {
+    border-left-color: #002868;
+}
+.round-accordion-item.hanoi .round-accordion-header {
+    border-left-color: #ffcd00;
+}
+.round-accordion-item.stock .round-accordion-header {
+    border-left-color: #00c853;
+}
+
+.round-accordion-item.expanded .round-accordion-header {
+    background: var(--color-card-hover);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+    .round-accordion-header {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+    .round-header-left { min-width: 100%; order: 1; }
+    .round-header-center { width: 100%; order: 3; }
+    .round-header-right { order: 2; margin-left: auto; }
+    .round-meta { gap: 0.5rem; }
+    .round-meta span { font-size: 0.8rem; }
+}
