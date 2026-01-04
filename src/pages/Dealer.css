@@ -1,4 +1,4 @@
-/* =============================================
+﻿/* =============================================
    DEALER DASHBOARD STYLES
    ============================================= */
 
@@ -554,29 +554,57 @@
 
 /* Lottery Type Grid */
 .lottery-type-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
 }
 
 .type-option {
-    padding: 0.5rem 1rem;
+    padding: 0.75rem 1rem;
     border: 2px solid var(--color-border);
-    background: transparent;
+    background: var(--color-surface-light);
     color: var(--color-text);
     border-radius: var(--radius-md);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.25s ease;
+    font-weight: 500;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.type-option::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: transparent;
+    transition: background 0.25s ease;
 }
 
 .type-option:hover {
     border-color: var(--color-primary);
+    background: rgba(212, 175, 55, 0.1);
+    transform: translateY(-2px);
+}
+
+.type-option:hover::before {
+    background: var(--color-primary);
 }
 
 .type-option.active {
     border-color: var(--color-primary);
-    background: var(--color-primary);
+    background: linear-gradient(135deg, var(--color-primary), #c4a030);
     color: #000;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(212, 175, 55, 0.3);
+}
+
+.type-option.active::before {
+    background: #fff;
 }
 
 /* Form Section */
@@ -619,6 +647,18 @@
     gap: 1rem;
     flex-wrap: wrap;
 }
+
+.set-badge {
+    display: inline-block;
+    padding: 0.15rem 0.4rem;
+    background: rgba(0, 210, 106, 0.15);
+    color: var(--color-success);
+    font-size: 0.7rem;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    text-transform: uppercase;
+}
+
 
 .input-group {
     display: flex;
@@ -883,14 +923,77 @@
         margin: 1rem;
     }
 
+    /* Lottery type buttons on mobile */
+    .lottery-type-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+    }
+
+    .type-option {
+        padding: 0.65rem 0.5rem;
+        font-size: 0.9rem;
+    }
+
     .limit-row {
         flex-direction: column;
-        align-items: flex-start;
-        gap: 0.75rem;
+        align-items: stretch;
+        gap: 0.5rem;
+        padding: 1rem;
+        margin-bottom: 0.25rem;
+        border-left: 3px solid var(--color-primary);
+    }
+
+    .limit-row .limit-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 0.95rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .limit-row .set-badge {
+        margin-left: auto;
     }
 
     .limit-inputs {
         width: 100%;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+    }
+
+    .limit-inputs .input-group {
+        flex: 1;
+        max-width: 180px;
+        background: rgba(0, 0, 0, 0.2);
+        padding: 0.5rem 0.75rem;
+        border-radius: var(--radius-md);
+    }
+
+    .limit-inputs .form-input.small {
+        flex: 1;
+        min-width: 60px;
+        max-width: 80px;
+        padding: 0.6rem;
+        font-size: 1rem;
+        text-align: center;
+    }
+
+    .limit-inputs .input-prefix,
+    .limit-inputs .input-suffix {
+        font-size: 0.8rem;
+        white-space: nowrap;
+    }
+
+    /* Global set price on mobile */
+    .global-set-price {
+        margin-bottom: 1rem !important;
+        padding: 0.75rem !important;
+    }
+
+    .global-set-price .input-group {
+        flex-wrap: wrap;
+        justify-content: center !important;
     }
 
     .summary-grid {

@@ -24,7 +24,81 @@ import {
 import './Dealer.css'
 import './SettingsTabs.css'
 
-// Bet type labels
+// Lottery type labels
+const LOTTERY_TYPES = {
+    'thai': 'หวยไทย',
+    'lao': 'หวยลาว',
+    'hanoi': 'หวยฮานอย',
+    'stock': 'หวยหุ้น'
+}
+
+// Bet types by lottery type (matching user_settings structure)
+const BET_TYPES_BY_LOTTERY = {
+    thai: {
+        'run_top': { label: 'ลอยบน', defaultLimit: 5000 },
+        'run_bottom': { label: 'ลอยล่าง', defaultLimit: 5000 },
+        'pak_top': { label: 'ปักบน (หน้า/กลาง/หลัง)', defaultLimit: 5000 },
+        'pak_bottom': { label: 'ปักล่าง (หน้า/หลัง)', defaultLimit: 5000 },
+        '2_top': { label: '2 ตัวบน', defaultLimit: 1000 },
+        '2_front': { label: '2 ตัวหน้า', defaultLimit: 1000 },
+        '2_center': { label: '2 ตัวถ่าง', defaultLimit: 1000 },
+        '2_run': { label: '2 ตัวลอย', defaultLimit: 1000 },
+        '2_bottom': { label: '2 ตัวล่าง', defaultLimit: 1000 },
+        '3_top': { label: '3 ตัวตรง', defaultLimit: 500 },
+        '3_tod': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
+        '3_bottom': { label: '3 ตัวล่าง', defaultLimit: 500 },
+        '4_run': { label: '4 ตัวลอย', defaultLimit: 200 },
+        '5_run': { label: '5 ตัวลอย', defaultLimit: 100 }
+    },
+    lao: {
+        '4_top': { label: '4 ตัวตรง', defaultLimit: 200, isSet: true, defaultSetPrice: 120 },
+        '4_tod': { label: '4 ตัวโต๊ด', defaultLimit: 200, isSet: true, defaultSetPrice: 120 },
+        '3_top': { label: '3 ตัวตรง', defaultLimit: 500, isSet: true, defaultSetPrice: 120 },
+        '3_tod': { label: '3 ตัวโต๊ด', defaultLimit: 500, isSet: true, defaultSetPrice: 120 },
+        '2_front': { label: '2 ตัวหน้า', defaultLimit: 1000, isSet: true, defaultSetPrice: 120 },
+        '2_back': { label: '2 ตัวหลัง', defaultLimit: 1000, isSet: true, defaultSetPrice: 120 },
+        'run_top': { label: 'ลอยบน', defaultLimit: 5000 },
+        'run_bottom': { label: 'ลอยล่าง', defaultLimit: 5000 },
+        'pak_top': { label: 'ปักบน (หน้า/กลาง/หลัง)', defaultLimit: 5000 },
+        'pak_bottom': { label: 'ปักล่าง (หน้า/หลัง)', defaultLimit: 5000 },
+        '2_top': { label: '2 ตัวบน', defaultLimit: 1000 },
+        '2_front_single': { label: '2 ตัวหน้า', defaultLimit: 1000 },
+        '2_center': { label: '2 ตัวถ่าง', defaultLimit: 1000 },
+        '2_run': { label: '2 ตัวลอย', defaultLimit: 1000 },
+        '2_bottom': { label: '2 ตัวล่าง', defaultLimit: 1000 },
+        '3_straight': { label: '3 ตัวตรง', defaultLimit: 500 },
+        '3_tod_single': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
+        '4_run': { label: '4 ตัวลอย', defaultLimit: 200 },
+        '5_run': { label: '5 ตัวลอย', defaultLimit: 100 }
+    },
+    hanoi: {
+        '4_top': { label: '4 ตัวตรง', defaultLimit: 200, isSet: true, defaultSetPrice: 120 },
+        '4_tod': { label: '4 ตัวโต๊ด', defaultLimit: 200, isSet: true, defaultSetPrice: 120 },
+        '3_top': { label: '3 ตัวตรง', defaultLimit: 500, isSet: true, defaultSetPrice: 120 },
+        '3_tod': { label: '3 ตัวโต๊ด', defaultLimit: 500, isSet: true, defaultSetPrice: 120 },
+        '2_front': { label: '2 ตัวหน้า', defaultLimit: 1000, isSet: true, defaultSetPrice: 120 },
+        '2_back': { label: '2 ตัวหลัง', defaultLimit: 1000, isSet: true, defaultSetPrice: 120 },
+        'run_top': { label: 'ลอยบน', defaultLimit: 5000 },
+        'run_bottom': { label: 'ลอยล่าง', defaultLimit: 5000 },
+        'pak_top': { label: 'ปักบน (หน้า/กลาง/หลัง)', defaultLimit: 5000 },
+        'pak_bottom': { label: 'ปักล่าง (หน้า/หลัง)', defaultLimit: 5000 },
+        '2_top': { label: '2 ตัวบน', defaultLimit: 1000 },
+        '2_front_single': { label: '2 ตัวหน้า', defaultLimit: 1000 },
+        '2_center': { label: '2 ตัวถ่าง', defaultLimit: 1000 },
+        '2_run': { label: '2 ตัวลอย', defaultLimit: 1000 },
+        '2_bottom': { label: '2 ตัวล่าง', defaultLimit: 1000 },
+        '3_straight': { label: '3 ตัวตรง', defaultLimit: 500 },
+        '3_tod_single': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
+        '4_run': { label: '4 ตัวลอย', defaultLimit: 200 },
+        '5_run': { label: '5 ตัวลอย', defaultLimit: 100 }
+    },
+    stock: {
+        '2_top': { label: '2 ตัวบน', defaultLimit: 1000 },
+        '2_bottom': { label: '2 ตัวล่าง', defaultLimit: 1000 }
+    }
+}
+
+// Legacy bet type labels (for displaying results/submissions)
 const BET_TYPES = {
     '2_top': '2 ตัวบน',
     '2_bottom': '2 ตัวล่าง',
@@ -36,36 +110,26 @@ const BET_TYPES = {
     '6_top': '6 ตัวบน (รางวัลที่ 1)'
 }
 
-// Lottery type labels
-const LOTTERY_TYPES = {
-    'thai': 'หวยไทย',
-    'lao': 'หวยลาว',
-    'hanoi': 'หวยฮานอย',
-    'stock': 'หวยหุ้น'
+// Helper to get default limits for a lottery type
+function getDefaultLimitsForType(lotteryType) {
+    const betTypes = BET_TYPES_BY_LOTTERY[lotteryType] || {}
+    const limits = {}
+    Object.entries(betTypes).forEach(([key, config]) => {
+        limits[key] = config.defaultLimit
+    })
+    return limits
 }
 
-// Default payout rates
-const DEFAULT_PAYOUTS = {
-    '2_top': 90,
-    '2_bottom': 90,
-    '3_top': 500,
-    '3_tod': 150,
-    '3_front': 500,
-    '3_back': 500,
-    '4_tod': 5000,
-    '6_top': 100000
-}
-
-// Default limits
-const DEFAULT_LIMITS = {
-    '2_top': 1000,
-    '2_bottom': 1000,
-    '3_top': 500,
-    '3_tod': 500,
-    '3_front': 500,
-    '3_back': 500,
-    '4_tod': 200,
-    '6_top': 100
+// Helper to get default set prices for a lottery type
+function getDefaultSetPricesForType(lotteryType) {
+    const betTypes = BET_TYPES_BY_LOTTERY[lotteryType] || {}
+    const setPrices = {}
+    Object.entries(betTypes).forEach(([key, config]) => {
+        if (config.isSet) {
+            setPrices[key] = config.defaultSetPrice || 120
+        }
+    })
+    return setPrices
 }
 
 export default function Dealer() {
@@ -97,9 +161,19 @@ export default function Dealer() {
         delete_before_minutes: 30,
         currency_symbol: '฿',
         currency_name: 'บาท',
-        type_limits: { ...DEFAULT_LIMITS },
-        payout_rates: { ...DEFAULT_PAYOUTS }
+        type_limits: getDefaultLimitsForType('lao'),
+        set_prices: getDefaultSetPricesForType('lao')
     })
+
+    // Update limits when lottery type changes
+    const handleLotteryTypeChange = (newType) => {
+        setRoundForm(prev => ({
+            ...prev,
+            lottery_type: newType,
+            type_limits: getDefaultLimitsForType(newType),
+            set_prices: getDefaultSetPricesForType(newType)
+        }))
+    }
 
     // Fetch data on tab change
     useEffect(() => {
@@ -186,13 +260,15 @@ export default function Dealer() {
 
             if (roundError) throw roundError
 
-            // Create type limits
-            const typeLimitsData = Object.entries(roundForm.type_limits).map(([betType, maxAmount]) => ({
-                round_id: round.id,
-                bet_type: betType,
-                max_per_number: maxAmount,
-                payout_rate: roundForm.payout_rates[betType] || DEFAULT_PAYOUTS[betType]
-            }))
+            // Create type limits (no payout_rate - comes from user_settings)
+            const typeLimitsData = Object.entries(roundForm.type_limits)
+                .filter(([, maxAmount]) => maxAmount > 0)  // Only add limits with value > 0
+                .map(([betType, maxAmount]) => ({
+                    round_id: round.id,
+                    bet_type: betType,
+                    max_per_number: maxAmount,
+                    payout_rate: 0 // Placeholder - actual payout from user_settings
+                }))
 
             const { error: limitsError } = await supabase
                 .from('type_limits')
@@ -594,7 +670,7 @@ export default function Dealer() {
                                             key={key}
                                             type="button"
                                             className={`type-option ${roundForm.lottery_type === key ? 'active' : ''}`}
-                                            onClick={() => setRoundForm({ ...roundForm, lottery_type: key })}
+                                            onClick={() => handleLotteryTypeChange(key)}
                                         >
                                             {label}
                                         </button>
@@ -673,36 +749,61 @@ export default function Dealer() {
                                 </div>
                             </div>
 
-                            {/* Limits & Payouts */}
+                            {/* Limits by Bet Type - Based on selected lottery type */}
                             <div className="form-section">
-                                <h4>อัตราจ่าย & ค่าอั้นตามประเภท</h4>
+                                <h4>ค่าอั้นตามประเภทเลข ({LOTTERY_TYPES[roundForm.lottery_type]})</h4>
+                                <p className="form-hint" style={{ marginBottom: '1rem', opacity: 0.7, fontSize: '0.85rem' }}>
+                                    อัตราจ่ายจะใช้ตามที่ตั้งค่าให้แต่ละลูกค้า
+                                </p>
+
+                                {/* Global set price for 4-digit (Lao/Hanoi only) */}
+                                {(roundForm.lottery_type === 'lao' || roundForm.lottery_type === 'hanoi') && (
+                                    <div className="global-set-price" style={{
+                                        marginBottom: '1.5rem',
+                                        padding: '1rem',
+                                        background: 'rgba(212, 175, 55, 0.1)',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid rgba(212, 175, 55, 0.3)'
+                                    }}>
+                                        <div className="input-group" style={{ justifyContent: 'flex-start', gap: '0.75rem' }}>
+                                            <span style={{ fontWeight: 500, color: 'var(--color-primary)' }}>เลขชุด 4 ตัว</span>
+                                            <span className="input-prefix">ชุดละ</span>
+                                            <input
+                                                type="number"
+                                                className="form-input small"
+                                                value={roundForm.set_prices['4_top'] || 120}
+                                                onChange={e => {
+                                                    const newPrice = parseInt(e.target.value) || 0
+                                                    setRoundForm({
+                                                        ...roundForm,
+                                                        set_prices: {
+                                                            ...roundForm.set_prices,
+                                                            '4_top': newPrice,
+                                                            '4_tod': newPrice
+                                                        }
+                                                    })
+                                                }}
+                                            />
+                                            <span className="input-suffix">{roundForm.currency_name}</span>
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div className="limits-grid">
-                                    {Object.entries(BET_TYPES).map(([key, label]) => (
+                                    {Object.entries(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {}).map(([key, config]) => (
                                         <div key={key} className="limit-row">
-                                            <span className="limit-label">{label}</span>
+                                            <span className="limit-label">
+                                                {config.label}
+                                                {config.isSet && <span className="set-badge">ชุด</span>}
+                                            </span>
                                             <div className="limit-inputs">
-                                                <div className="input-group">
-                                                    <span className="input-prefix">จ่าย</span>
-                                                    <input
-                                                        type="number"
-                                                        className="form-input small"
-                                                        value={roundForm.payout_rates[key]}
-                                                        onChange={e => setRoundForm({
-                                                            ...roundForm,
-                                                            payout_rates: {
-                                                                ...roundForm.payout_rates,
-                                                                [key]: parseInt(e.target.value) || 0
-                                                            }
-                                                        })}
-                                                    />
-                                                    <span className="input-suffix">เท่า</span>
-                                                </div>
+                                                {/* Limit input */}
                                                 <div className="input-group">
                                                     <span className="input-prefix">อั้น</span>
                                                     <input
                                                         type="number"
                                                         className="form-input small"
-                                                        value={roundForm.type_limits[key]}
+                                                        value={roundForm.type_limits[key] || 0}
                                                         onChange={e => setRoundForm({
                                                             ...roundForm,
                                                             type_limits: {
@@ -711,7 +812,7 @@ export default function Dealer() {
                                                             }
                                                         })}
                                                     />
-                                                    <span className="input-suffix">{roundForm.currency_name}</span>
+                                                    <span className="input-suffix">{config.isSet ? 'ชุด' : roundForm.currency_name}</span>
                                                 </div>
                                             </div>
                                         </div>
