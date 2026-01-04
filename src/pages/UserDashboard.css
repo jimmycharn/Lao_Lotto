@@ -2107,3 +2107,9 @@
         grid-template-columns: repeat(2, 1fr);
     }
 }
+/* Result item count text */
+.result-item-count {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    margin-bottom: 1rem;
+}

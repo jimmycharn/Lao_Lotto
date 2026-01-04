@@ -1975,13 +1975,13 @@ function SummaryModal({ round, onClose }) {
         return 'thai'
     }
 
-    // Default commission rates per bet type
+    // Default commission rates per bet type (percentage) - same as UserDashboard
     const DEFAULT_COMMISSIONS = {
         'run_top': 15, 'run_bottom': 15,
         'pak_top': 15, 'pak_bottom': 15,
-        '2_top': 15, '2_front': 15, '2_center': 15, '2_run': 15, '2_bottom': 15,
-        '3_top': 30, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
-        '4_run': 15, '4_tod': 15, '5_run': 15, '6_top': 15
+        '2_top': 15, '2_front': 15, '2_center': 15, '2_spread': 15, '2_run': 15, '2_bottom': 15,
+        '3_top': 15, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
+        '4_run': 15, '4_tod': 15, '4_set': 15, '4_float': 15, '5_run': 15, '5_float': 15, '6_top': 15
     }
 
     // Calculate commission for a submission
@@ -2076,25 +2076,36 @@ function SummaryModal({ round, onClose }) {
                 </div>
 
                 <div className="modal-body">
-                    {/* Grand Summary Cards */}
-                    <div className="summary-cards-row">
-                        <div className="summary-stat-card">
-                            <span className="stat-label">ยอดแทงรวม</span>
-                            <span className="stat-value">{round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
-                        </div>
-                        <div className="summary-stat-card">
-                            <span className="stat-label">ยอดจ่ายรางวัล</span>
-                            <span className="stat-value danger">{round.currency_symbol}{grandTotalWin.toLocaleString()}</span>
-                        </div>
-                        <div className="summary-stat-card">
-                            <span className="stat-label">ค่าคอมรวม</span>
-                            <span className="stat-value" style={{ color: 'var(--color-warning)' }}>{round.currency_symbol}{grandTotalCommission.toLocaleString()}</span>
-                        </div>
-                        <div className={`summary-stat-card ${dealerProfit >= 0 ? 'profit' : 'loss'}`}>
-                            <span className="stat-label">กำไรสุทธิ</span>
-                            <span className="stat-value">
+                    {/* Grand Summary Card - Moved from bottom */}
+                    <div className="user-summary-card total-card" style={{ marginBottom: '1.5rem' }}>
+                        <div className="user-summary-header">
+                            <div className="user-info">
+                                <span className="user-name">สรุปยอดรวม</span>
+                                <span className="user-email">{userList.length} คน, {submissions.length} รายการ</span>
+                            </div>
+                            <div className={`net-amount ${dealerProfit >= 0 ? 'positive' : 'negative'}`}>
                                 {dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}
-                            </span>
+                            </div>
+                        </div>
+                        <div className="user-summary-details">
+                            <div className="detail-item">
+                                <span className="detail-label">ยอดแทงรวม</span>
+                                <span className="detail-value">{round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
+                            </div>
+                            <div className="detail-item">
+                                <span className="detail-label">ยอดจ่ายรางวัล</span>
+                                <span className="detail-value text-danger">{round.currency_symbol}{grandTotalWin.toLocaleString()}</span>
+                            </div>
+                            <div className="detail-item">
+                                <span className="detail-label">ถูกรางวัล</span>
+                                <span className="detail-value">{submissions.filter(s => s.is_winner).length} รายการ</span>
+                            </div>
+                            <div className="detail-item">
+                                <span className="detail-label">กำไร/ขาดทุน</span>
+                                <span className={`detail-value ${dealerProfit >= 0 ? 'text-success' : 'text-danger'}`}>
+                                    {dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}
+                                </span>
+                            </div>
                         </div>
                     </div>
 
@@ -2155,38 +2166,6 @@ function SummaryModal({ round, onClose }) {
                                     </div>
                                 )
                             })}
-
-                            <div className="user-summary-card total-card">
-                                <div className="user-summary-header">
-                                    <div className="user-info">
-                                        <span className="user-name">รวมทั้งหมด</span>
-                                        <span className="user-email">{userList.length} คน, {submissions.length} รายการ</span>
-                                    </div>
-                                    <div className={`net-amount ${dealerProfit >= 0 ? 'positive' : 'negative'}`}>
-                                        {dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}
-                                    </div>
-                                </div>
-                                <div className="user-summary-details">
-                                    <div className="detail-item">
-                                        <span className="detail-label">ยอดแทงรวม</span>
-                                        <span className="detail-value">{round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
-                                    </div>
-                                    <div className="detail-item">
-                                        <span className="detail-label">ยอดจ่ายรางวัล</span>
-                                        <span className="detail-value text-danger">{round.currency_symbol}{grandTotalWin.toLocaleString()}</span>
-                                    </div>
-                                    <div className="detail-item">
-                                        <span className="detail-label">ถูกรางวัล</span>
-                                        <span className="detail-value">{submissions.filter(s => s.is_winner).length} รายการ</span>
-                                    </div>
-                                    <div className="detail-item">
-                                        <span className="detail-label">กำไร/ขาดทุน</span>
-                                        <span className={`detail-value ${dealerProfit >= 0 ? 'text-success' : 'text-danger'}`}>
-                                            {dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     )}
                 </div>

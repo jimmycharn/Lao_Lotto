@@ -698,6 +698,32 @@ export default function UserDashboard() {
         return sub.amount * defaultRate
     }
 
+    // Default commission rates per bet type (percentage)
+    const DEFAULT_COMMISSIONS = {
+        'run_top': 15, 'run_bottom': 15,
+        'pak_top': 15, 'pak_bottom': 15,
+        '2_top': 15, '2_front': 15, '2_center': 15, '2_spread': 15, '2_run': 15, '2_bottom': 15,
+        '3_top': 15, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
+        '4_run': 15, '4_tod': 15, '4_set': 15, '4_float': 15, '5_run': 15, '5_float': 15, '6_top': 15
+    }
+
+    // Calculate commission for a submission based on user settings
+    const getCalculatedCommission = (sub, round) => {
+        const lotteryKey = getLotteryTypeKey(round?.lottery_type)
+        const settings = userSettings?.lottery_settings?.[lotteryKey]?.[sub.bet_type]
+
+        if (settings && settings.commission !== undefined) {
+            if (settings.isFixed) {
+                return settings.commission // Fixed amount per bet
+            }
+            return sub.amount * (settings.commission / 100) // Percentage
+        }
+
+        // Use default commission rate for this bet type
+        const defaultRate = DEFAULT_COMMISSIONS[sub.bet_type] || 15
+        return sub.amount * (defaultRate / 100)
+    }
+
     // No dealer assigned
     if (!profile?.dealer_id) {
         return (
@@ -1115,7 +1141,8 @@ export default function UserDashboard() {
 
                                     // Calculate total amount and commission from ALL submissions
                                     const resultTotalAmount = allResultSubmissions.reduce((sum, s) => sum + (s.amount || 0), 0)
-                                    const resultTotalCommission = allResultSubmissions.reduce((sum, s) => sum + (s.commission_amount || 0), 0)
+                                    // Calculate commission using user settings per bet_type and lottery_type
+                                    const resultTotalCommission = allResultSubmissions.reduce((sum, s) => sum + getCalculatedCommission(s, round), 0)
                                     // Net result = Commission + Prize - Total Amount (positive = profit, negative = loss)
                                     const netResult = resultTotalCommission + totalPrize - resultTotalAmount
 
@@ -1205,6 +1232,11 @@ export default function UserDashboard() {
                                                                 ถูกรางวัล
                                                             </button>
                                                         </div>
+                                                    </div>
+
+                                                    {/* Item Count */}
+                                                    <div className="result-item-count">
+                                                        {resultSubmissions.length} รายการ
                                                     </div>
 
                                                     {/* Items List */}
