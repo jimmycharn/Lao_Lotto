@@ -1846,6 +1846,7 @@
         display: none;
     }
 }
+
 /* =============================================
    RESULTS TAB STYLES
    ============================================= */
@@ -1952,3 +1953,121 @@
     color: var(--color-success);
 }
 
+/* =============================================
+   LOTTERY TYPE COLOR THEMES
+   ============================================= */
+
+/* Thai Lottery - Red Theme */
+.round-accordion-item.thai .round-accordion-header {
+    border: 2px solid #ed1c24;
+    border-top: 5px solid #ed1c24;
+    background: linear-gradient(180deg, rgba(237, 28, 36, 0.15) 0%, var(--color-card) 30%);
+}
+
+.round-accordion-item.thai:hover .round-accordion-header,
+.round-accordion-item.thai.expanded .round-accordion-header {
+    border-color: #ed1c24;
+    background: linear-gradient(180deg, rgba(237, 28, 36, 0.25) 0%, rgba(237, 28, 36, 0.08) 50%);
+    box-shadow: 0 0 20px rgba(237, 28, 36, 0.2);
+}
+
+.round-accordion-item.thai .round-accordion-content {
+    border: 2px solid #ed1c24;
+    border-top: none;
+}
+
+.round-accordion-item.thai.expanded .round-header-status svg {
+    color: #ed1c24;
+}
+
+/* Lao Lottery - Blue Theme */
+.round-accordion-item.lao .round-accordion-header {
+    border: 2px solid #002868;
+    border-top: 5px solid #002868;
+    background: linear-gradient(180deg, rgba(0, 40, 104, 0.15) 0%, var(--color-card) 30%);
+}
+
+.round-accordion-item.lao:hover .round-accordion-header,
+.round-accordion-item.lao.expanded .round-accordion-header {
+    border-color: #002868;
+    background: linear-gradient(180deg, rgba(0, 40, 104, 0.25) 0%, rgba(0, 40, 104, 0.08) 50%);
+    box-shadow: 0 0 20px rgba(0, 40, 104, 0.2);
+}
+
+.round-accordion-item.lao .round-accordion-content {
+    border: 2px solid #002868;
+    border-top: none;
+}
+
+.round-accordion-item.lao.expanded .round-header-status svg {
+    color: #4a90d9;
+}
+
+/* Hanoi Lottery - Yellow Theme */
+.round-accordion-item.hanoi .round-accordion-header {
+    border: 2px solid #ffcd00;
+    border-top: 5px solid #ffcd00;
+    background: linear-gradient(180deg, rgba(255, 205, 0, 0.15) 0%, var(--color-card) 30%);
+}
+
+.round-accordion-item.hanoi:hover .round-accordion-header,
+.round-accordion-item.hanoi.expanded .round-accordion-header {
+    border-color: #ffcd00;
+    background: linear-gradient(180deg, rgba(255, 205, 0, 0.25) 0%, rgba(255, 205, 0, 0.08) 50%);
+    box-shadow: 0 0 20px rgba(255, 205, 0, 0.2);
+}
+
+.round-accordion-item.hanoi .round-accordion-content {
+    border: 2px solid #ffcd00;
+    border-top: none;
+}
+
+.round-accordion-item.hanoi.expanded .round-header-status svg {
+    color: #ffcd00;
+}
+
+/* Yeekee Lottery - Purple Theme */
+.round-accordion-item.yeekee .round-accordion-header {
+    border: 2px solid #9c27b0;
+    border-top: 5px solid #9c27b0;
+    background: linear-gradient(180deg, rgba(156, 39, 176, 0.15) 0%, var(--color-card) 30%);
+}
+
+.round-accordion-item.yeekee:hover .round-accordion-header,
+.round-accordion-item.yeekee.expanded .round-accordion-header {
+    border-color: #9c27b0;
+    background: linear-gradient(180deg, rgba(156, 39, 176, 0.25) 0%, rgba(156, 39, 176, 0.08) 50%);
+    box-shadow: 0 0 20px rgba(156, 39, 176, 0.2);
+}
+
+.round-accordion-item.yeekee .round-accordion-content {
+    border: 2px solid #9c27b0;
+    border-top: none;
+}
+
+.round-accordion-item.yeekee.expanded .round-header-status svg {
+    color: #9c27b0;
+}
+
+/* Stock Lottery - Green Theme */
+.round-accordion-item.stock .round-accordion-header {
+    border: 2px solid #00c853;
+    border-top: 5px solid #00c853;
+    background: linear-gradient(180deg, rgba(0, 200, 83, 0.15) 0%, var(--color-card) 30%);
+}
+
+.round-accordion-item.stock:hover .round-accordion-header,
+.round-accordion-item.stock.expanded .round-accordion-header {
+    border-color: #00c853;
+    background: linear-gradient(180deg, rgba(0, 200, 83, 0.25) 0%, rgba(0, 200, 83, 0.08) 50%);
+    box-shadow: 0 0 20px rgba(0, 200, 83, 0.2);
+}
+
+.round-accordion-item.stock .round-accordion-content {
+    border: 2px solid #00c853;
+    border-top: none;
+}
+
+.round-accordion-item.stock.expanded .round-header-status svg {
+    color: #00c853;
+}

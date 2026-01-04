@@ -412,7 +412,7 @@ export default function Dealer() {
                                     {rounds.map(round => (
                                         <div
                                             key={round.id}
-                                            className={`round-card card ${selectedRound?.id === round.id ? 'selected' : ''}`}
+                                            className={`round-card card ${round.lottery_type} ${selectedRound?.id === round.id ? 'selected' : ''}`}
                                             onClick={() => setSelectedRound(round)}
                                         >
                                             <div className="round-header">
@@ -1465,7 +1465,7 @@ function NumberLimitsModal({ round, onClose }) {
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [newLimit, setNewLimit] = useState({
-        bet_type: '2_top',
+        bet_type: Object.keys(BET_TYPES_BY_LOTTERY[round.lottery_type] || {})[0] || '2_top',
         numbers: '',
         max_amount: ''
     })
@@ -1557,8 +1557,8 @@ function NumberLimitsModal({ round, onClose }) {
                                     value={newLimit.bet_type}
                                     onChange={e => setNewLimit({ ...newLimit, bet_type: e.target.value })}
                                 >
-                                    {Object.entries(BET_TYPES).map(([key, label]) => (
-                                        <option key={key} value={key}>{label}</option>
+                                    {Object.entries(BET_TYPES_BY_LOTTERY[round.lottery_type] || {}).map(([key, config]) => (
+                                        <option key={key} value={key}>{config.label}</option>
                                     ))}
                                 </select>
                             </div>
@@ -1585,7 +1585,10 @@ function NumberLimitsModal({ round, onClose }) {
                             <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
                                 <button
                                     className="btn btn-primary full-width"
-                                    onClick={handleAddLimit}
+                                    onClick={(e) => {
+                                        e.target.blur()
+                                        handleAddLimit()
+                                    }}
                                     disabled={saving}
                                 >
                                     <FiPlus /> เพิ่ม

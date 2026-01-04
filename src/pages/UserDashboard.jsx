@@ -758,7 +758,7 @@ export default function UserDashboard() {
                                 rounds.map(round => {
                                     const isExpanded = selectedRound?.id === round.id;
                                     return (
-                                        <div key={round.id} className={`round-accordion-item ${isExpanded ? 'expanded' : ''}`}>
+                                        <div key={round.id} className={`round-accordion-item ${round.lottery_type} ${isExpanded ? 'expanded' : ''}`}>
                                             <div
                                                 className={`round-accordion-header card clickable ${isExpanded ? 'expanded-header' : ''}`}
                                                 onClick={() => setSelectedRound(isExpanded ? null : round)}
@@ -1120,7 +1120,7 @@ export default function UserDashboard() {
                                     }, {})
 
                                     return (
-                                        <div key={round.id} className={`round-accordion-item ${isExpanded ? 'expanded' : ''}`}>
+                                        <div key={round.id} className={`round-accordion-item ${round.lottery_type} ${isExpanded ? 'expanded' : ''}`}>
                                             <div
                                                 className={`round-accordion-header card clickable ${isExpanded ? 'expanded-header' : ''}`}
                                                 onClick={() => setSelectedResultRound(isExpanded ? null : round)}
