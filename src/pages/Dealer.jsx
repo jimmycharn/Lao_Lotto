@@ -139,12 +139,12 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
 
     const isAnnounced = round.status === 'announced' && round.is_result_announced
 
-    // Fetch summary data when expanded and announced
+    // Fetch summary data immediately when announced (to show in header)
     useEffect(() => {
-        if (isExpanded && isAnnounced && summaryData.submissions.length === 0 && !summaryData.loading) {
+        if (isAnnounced && summaryData.submissions.length === 0 && !summaryData.loading) {
             fetchSummaryData()
         }
-    }, [isExpanded, isAnnounced])
+    }, [isAnnounced])
 
     async function fetchSummaryData() {
         setSummaryData(prev => ({ ...prev, loading: true }))
@@ -214,8 +214,8 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
         return sub.amount * (DEFAULT_PAYOUTS[sub.bet_type] || 1)
     }
 
-    // Calculate user summaries
-    const userSummaries = isExpanded && isAnnounced && !summaryData.loading ? Object.values(
+    // Calculate user summaries (always calculate for announced rounds to show in header)
+    const userSummaries = isAnnounced && !summaryData.loading ? Object.values(
         summaryData.submissions.reduce((acc, sub) => {
             const userId = sub.user_id
             if (!acc[userId]) {
@@ -252,6 +252,17 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                         <span><FiClock /> {formatTime(round.open_time)} - {formatTime(round.close_time)}</span>
                         <span>{round.submissions?.length || 0} รายการ</span>
                     </div>
+                    {/* Show summary inline in header for announced rounds */}
+                    {isAnnounced && !summaryData.loading && (
+                        <div className="header-summary">
+                            <span className="summary-item"><span className="label">แทง</span> {round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
+                            <span className="summary-item"><span className="label">จ่าย</span> <span className="text-danger">{round.currency_symbol}{grandTotalWin.toLocaleString()}</span></span>
+                            <span className="summary-item"><span className="label">คอม</span> <span style={{ color: 'var(--color-warning)' }}>{round.currency_symbol}{grandTotalCommission.toLocaleString()}</span></span>
+                            <span className={`summary-item profit ${dealerProfit >= 0 ? 'positive' : 'negative'}`}>
+                                <span className="label">กำไร</span> {dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}
+                            </span>
+                        </div>
+                    )}
                 </div>
                 <div className="round-header-right">
                     <div className="round-actions">
@@ -282,23 +293,6 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                             <div className="loading-state"><div className="spinner"></div></div>
                         ) : (
                             <>
-                                <div className="user-summary-card total-card">
-                                    <div className="user-summary-header">
-                                        <div className="user-info">
-                                            <span className="user-name">สรุปยอดรวม</span>
-                                            <span className="user-email">{userSummaries.length} คน, {summaryData.submissions.length} รายการ</span>
-                                        </div>
-                                        <div className={`net-amount ${dealerProfit >= 0 ? 'positive' : 'negative'}`}>
-                                            {dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}
-                                        </div>
-                                    </div>
-                                    <div className="user-summary-details">
-                                        <div className="detail-item"><span className="detail-label">ยอดแทงรวม</span><span className="detail-value">{round.currency_symbol}{grandTotalBet.toLocaleString()}</span></div>
-                                        <div className="detail-item"><span className="detail-label">ยอดจ่ายรางวัล</span><span className="detail-value text-danger">{round.currency_symbol}{grandTotalWin.toLocaleString()}</span></div>
-                                        <div className="detail-item"><span className="detail-label">ถูกรางวัล</span><span className="detail-value">{summaryData.submissions.filter(s => s.is_winner).length} รายการ</span></div>
-                                        <div className="detail-item"><span className="detail-label">กำไร/ขาดทุน</span><span className={`detail-value ${dealerProfit >= 0 ? 'text-success' : 'text-danger'}`}>{dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}</span></div>
-                                    </div>
-                                </div>
                                 {userSummaries.length > 0 && (
                                     <div className="user-summary-list" style={{ marginTop: '1rem' }}>
                                         <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-text-muted)' }}>รายละเอียดแต่ละคน</h4>
