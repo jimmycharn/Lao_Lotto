@@ -143,6 +143,7 @@ export default function UserDashboard() {
     const [resultsRounds, setResultsRounds] = useState([])
     const [selectedResultRound, setSelectedResultRound] = useState(null)
     const [resultSubmissions, setResultSubmissions] = useState([])
+    const [allResultSubmissions, setAllResultSubmissions] = useState([]) // All submissions for summary calculations
     const [resultsLoading, setResultsLoading] = useState(false)
     const [resultViewMode, setResultViewMode] = useState('winners') // 'all' or 'winners'
 
@@ -289,7 +290,8 @@ export default function UserDashboard() {
     // Fetch submissions for a specific round (all or winners only)
     async function fetchResultSubmissions(roundId) {
         try {
-            let query = supabase
+            // Always fetch all submissions first for summary calculations
+            const { data: allData, error: allError } = await supabase
                 .from('submissions')
                 .select('*')
                 .eq('round_id', roundId)
@@ -297,15 +299,15 @@ export default function UserDashboard() {
                 .eq('is_deleted', false)
                 .order('created_at', { ascending: false })
 
-            // Filter by winners only if in winners mode
-            if (resultViewMode === 'winners') {
-                query = query.eq('is_winner', true)
-            }
+            if (!allError) {
+                setAllResultSubmissions(allData || [])
 
-            const { data, error } = await query
-
-            if (!error) {
-                setResultSubmissions(data || [])
+                // Filter for display based on view mode
+                if (resultViewMode === 'winners') {
+                    setResultSubmissions((allData || []).filter(s => s.is_winner))
+                } else {
+                    setResultSubmissions(allData || [])
+                }
             }
         } catch (error) {
             console.error('Error fetching result submissions:', error)
@@ -1104,12 +1106,18 @@ export default function UserDashboard() {
                                 resultsRounds.map(round => {
                                     const isExpanded = selectedResultRound?.id === round.id
 
-                                    // Calculate summary for expanded round using user's payout rates
-                                    const totalPrize = resultSubmissions.reduce((sum, s) => {
+                                    // Calculate summary for expanded round using ALL submissions (not filtered)
+                                    const totalPrize = allResultSubmissions.reduce((sum, s) => {
                                         if (s.is_winner) return sum + getCalculatedPrize(s, round)
                                         return sum
                                     }, 0)
-                                    const winningCount = resultSubmissions.filter(s => s.is_winner).length
+                                    const winningCount = allResultSubmissions.filter(s => s.is_winner).length
+
+                                    // Calculate total amount and commission from ALL submissions
+                                    const resultTotalAmount = allResultSubmissions.reduce((sum, s) => sum + (s.amount || 0), 0)
+                                    const resultTotalCommission = allResultSubmissions.reduce((sum, s) => sum + (s.commission_amount || 0), 0)
+                                    // Net result = Commission + Prize - Total Amount (positive = profit, negative = loss)
+                                    const netResult = resultTotalCommission + totalPrize - resultTotalAmount
 
                                     // Group by bill for display
                                     const billGroups = resultSubmissions.reduce((acc, sub) => {
@@ -1153,6 +1161,34 @@ export default function UserDashboard() {
 
                                             {isExpanded && (
                                                 <div className="round-accordion-content">
+                                                    {/* Summary Cards */}
+                                                    <div className="submissions-summary results-summary">
+                                                        <div className="summary-card">
+                                                            <span className="summary-value">
+                                                                {round.currency_symbol || '฿'}{resultTotalAmount.toLocaleString()}
+                                                            </span>
+                                                            <span className="summary-label">ยอดส่งรวม</span>
+                                                        </div>
+                                                        <div className="summary-card">
+                                                            <span className="summary-value">
+                                                                {round.currency_symbol || '฿'}{resultTotalCommission.toLocaleString()}
+                                                            </span>
+                                                            <span className="summary-label">ค่าคอม</span>
+                                                        </div>
+                                                        <div className="summary-card highlight">
+                                                            <span className="summary-value">
+                                                                {round.currency_symbol || '฿'}{totalPrize.toLocaleString()}
+                                                            </span>
+                                                            <span className="summary-label">รางวัลที่ได้</span>
+                                                        </div>
+                                                        <div className={`summary-card ${netResult >= 0 ? 'profit' : 'loss'}`}>
+                                                            <span className="summary-value">
+                                                                {netResult >= 0 ? '+' : ''}{round.currency_symbol || '฿'}{netResult.toLocaleString()}
+                                                            </span>
+                                                            <span className="summary-label">ผลกำไร/ขาดทุน</span>
+                                                        </div>
+                                                    </div>
+
                                                     {/* View Mode Toggle */}
                                                     <div className="view-toggle-container">
                                                         <div className="view-toggle">
@@ -1168,20 +1204,6 @@ export default function UserDashboard() {
                                                             >
                                                                 ถูกรางวัล
                                                             </button>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Summary Cards */}
-                                                    <div className="submissions-summary">
-                                                        <div className="summary-card">
-                                                            <span className="summary-value">{resultSubmissions.length}</span>
-                                                            <span className="summary-label">{resultViewMode === 'all' ? 'รายการที่ส่ง' : 'รายการที่ถูก'}</span>
-                                                        </div>
-                                                        <div className="summary-card highlight">
-                                                            <span className="summary-value">
-                                                                {round.currency_symbol || '฿'}{totalPrize.toLocaleString()}
-                                                            </span>
-                                                            <span className="summary-label">รางวัลที่ได้</span>
                                                         </div>
                                                     </div>
 

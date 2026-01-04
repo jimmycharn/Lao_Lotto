@@ -2071,3 +2071,39 @@
 .round-accordion-item.stock.expanded .round-header-status svg {
     color: #00c853;
 }
+
+/* Results Summary - 4 columns */
+.submissions-summary.results-summary {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.summary-card.profit {
+    background: linear-gradient(135deg, rgba(0, 200, 83, 0.2), rgba(0, 200, 83, 0.1));
+    border: 1px solid var(--color-success);
+}
+
+.summary-card.profit .summary-value {
+    color: var(--color-success);
+}
+
+.summary-card.loss {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.1));
+    border: 1px solid var(--color-error);
+}
+
+.summary-card.loss .summary-value {
+    color: var(--color-error);
+}
+
+/* Responsive for results summary */
+@media (max-width: 900px) {
+    .submissions-summary.results-summary {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .submissions-summary.results-summary {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
