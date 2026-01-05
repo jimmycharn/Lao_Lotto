@@ -133,7 +133,7 @@ function getDefaultSetPricesForType(lotteryType) {
 }
 
 // Round Accordion Item Component
-function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, onCloseRound, onShowNumberLimits, onDeleteRound, onShowResults, getStatusBadge, formatDate, formatTime, user }) {
+function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, onCloseRound, onEditRound, onShowNumberLimits, onDeleteRound, onShowResults, getStatusBadge, formatDate, formatTime, user }) {
     const [isExpanded, setIsExpanded] = useState(false)
     const [summaryData, setSummaryData] = useState({ loading: false, submissions: [], userSettings: {} })
 
@@ -267,6 +267,7 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                 <div className="round-header-right">
                     <div className="round-actions">
                         <button className="icon-btn" onClick={(e) => { e.stopPropagation(); onShowSubmissions(); }} title="ดูเลขที่ส่ง"><FiEye /></button>
+                        <button className="icon-btn" onClick={(e) => { e.stopPropagation(); onEditRound(); }} title="แก้ไขงวด"><FiEdit2 /></button>
                         {round.status === 'open' && <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onCloseRound(); }} title="ปิดงวด"><FiLock /></button>}
                         <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onShowNumberLimits(); }} title="ตั้งค่าเลขอั้น"><FiAlertTriangle /></button>
                         <button className="icon-btn danger" onClick={(e) => { e.stopPropagation(); onDeleteRound(); }} title="ลบ"><FiTrash2 /></button>
@@ -358,6 +359,8 @@ export default function Dealer() {
 
     // Modal states
     const [showCreateModal, setShowCreateModal] = useState(false)
+    const [showEditModal, setShowEditModal] = useState(false)
+    const [editingRound, setEditingRound] = useState(null)
     const [showLimitsModal, setShowLimitsModal] = useState(false)
     const [showSubmissionsModal, setShowSubmissionsModal] = useState(false)
     const [showResultsModal, setShowResultsModal] = useState(false)
@@ -388,6 +391,31 @@ export default function Dealer() {
             type_limits: getDefaultLimitsForType(newType),
             set_prices: getDefaultSetPricesForType(newType)
         }))
+    }
+
+    // Auto-select input content on focus
+    const handleInputFocus = (e) => {
+        e.target.select()
+    }
+
+    // Move to next input on Enter key
+    const handleInputKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault()
+            const form = e.target.closest('.modal-body')
+            if (!form) return
+
+            const inputs = Array.from(form.querySelectorAll('input:not([disabled]), select:not([disabled])'))
+            const currentIndex = inputs.indexOf(e.target)
+
+            if (currentIndex !== -1 && currentIndex < inputs.length - 1) {
+                const nextInput = inputs[currentIndex + 1]
+                nextInput.focus()
+                if (nextInput.type !== 'date' && nextInput.type !== 'time' && nextInput.tagName !== 'SELECT') {
+                    nextInput.select()
+                }
+            }
+        }
     }
 
     // Fetch data on tab change
@@ -536,6 +564,108 @@ export default function Dealer() {
         }
     }
 
+    // Open edit modal with round data
+    async function handleOpenEditModal(round) {
+        // Fetch type_limits for this round
+        const { data: typeLimits } = await supabase
+            .from('type_limits')
+            .select('*')
+            .eq('round_id', round.id)
+
+        // Build type_limits object from fetched data
+        const limitsObj = {}
+        const setPricesObj = {}
+        if (typeLimits) {
+            typeLimits.forEach(limit => {
+                limitsObj[limit.bet_type] = limit.max_per_number || 0
+            })
+        }
+
+        // Extract time from ISO string
+        const openTime = new Date(round.open_time)
+        const closeTime = new Date(round.close_time)
+        const formatTimeForInput = (date) => {
+            return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+        }
+
+        // Set form with round data
+        setRoundForm({
+            lottery_type: round.lottery_type,
+            lottery_name: round.lottery_name || '',
+            round_date: round.round_date,
+            open_time: formatTimeForInput(openTime),
+            close_time: formatTimeForInput(closeTime),
+            delete_before_minutes: round.delete_before_minutes || 30,
+            currency_symbol: round.currency_symbol || '฿',
+            currency_name: round.currency_name || 'บาท',
+            type_limits: { ...getDefaultLimitsForType(round.lottery_type), ...limitsObj },
+            set_prices: { ...getDefaultSetPricesForType(round.lottery_type), ...setPricesObj }
+        })
+
+        setEditingRound(round)
+        setShowEditModal(true)
+    }
+
+    // Update existing round
+    async function handleUpdateRound() {
+        if (!editingRound) return
+
+        try {
+            // Combine date and time
+            const openDateTime = new Date(`${roundForm.round_date}T${roundForm.open_time}:00`)
+            const closeDateTime = new Date(`${roundForm.round_date}T${roundForm.close_time}:00`)
+
+            // Update round
+            const { error: roundError } = await supabase
+                .from('lottery_rounds')
+                .update({
+                    lottery_type: roundForm.lottery_type,
+                    lottery_name: roundForm.lottery_name || LOTTERY_TYPES[roundForm.lottery_type],
+                    round_date: roundForm.round_date,
+                    open_time: openDateTime.toISOString(),
+                    close_time: closeDateTime.toISOString(),
+                    delete_before_minutes: roundForm.delete_before_minutes,
+                    currency_symbol: roundForm.currency_symbol,
+                    currency_name: roundForm.currency_name
+                })
+                .eq('id', editingRound.id)
+
+            if (roundError) throw roundError
+
+            // Delete old type_limits and create new ones
+            await supabase
+                .from('type_limits')
+                .delete()
+                .eq('round_id', editingRound.id)
+
+            const typeLimitsData = Object.entries(roundForm.type_limits)
+                .filter(([, maxAmount]) => maxAmount > 0)
+                .map(([betType, maxAmount]) => ({
+                    round_id: editingRound.id,
+                    bet_type: betType,
+                    max_per_number: maxAmount,
+                    payout_rate: 0
+                }))
+
+            if (typeLimitsData.length > 0) {
+                const { error: limitsError } = await supabase
+                    .from('type_limits')
+                    .insert(typeLimitsData)
+
+                if (limitsError) throw limitsError
+            }
+
+            setShowEditModal(false)
+            setEditingRound(null)
+            fetchData()
+            alert('แก้ไขงวดสำเร็จ!')
+
+        } catch (error) {
+            console.error('Error updating round:', error)
+            alert('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+
     // Get status badge
     const getStatusBadge = (round) => {
         const now = new Date()
@@ -632,6 +762,7 @@ export default function Dealer() {
                                             onSelect={setSelectedRound}
                                             onShowSubmissions={() => { setSelectedRound(round); setShowSubmissionsModal(true); }}
                                             onCloseRound={() => handleCloseRound(round.id)}
+                                            onEditRound={() => handleOpenEditModal(round)}
                                             onShowNumberLimits={() => { setSelectedRound(round); setShowNumberLimitsModal(true); }}
                                             onDeleteRound={() => handleDeleteRound(round.id)}
                                             onShowResults={() => { setSelectedRound(round); setShowResultsModal(true); }}
@@ -788,6 +919,8 @@ export default function Dealer() {
                                     placeholder={LOTTERY_TYPES[roundForm.lottery_type]}
                                     value={roundForm.lottery_name}
                                     onChange={e => setRoundForm({ ...roundForm, lottery_name: e.target.value })}
+                                    onFocus={handleInputFocus}
+                                    onKeyDown={handleInputKeyDown}
                                 />
                             </div>
 
@@ -800,6 +933,7 @@ export default function Dealer() {
                                         className="form-input"
                                         value={roundForm.round_date}
                                         onChange={e => setRoundForm({ ...roundForm, round_date: e.target.value })}
+                                        onKeyDown={handleInputKeyDown}
                                     />
                                 </div>
                                 <div className="form-group">
@@ -809,6 +943,7 @@ export default function Dealer() {
                                         className="form-input"
                                         value={roundForm.open_time}
                                         onChange={e => setRoundForm({ ...roundForm, open_time: e.target.value })}
+                                        onKeyDown={handleInputKeyDown}
                                     />
                                 </div>
                                 <div className="form-group">
@@ -818,6 +953,7 @@ export default function Dealer() {
                                         className="form-input"
                                         value={roundForm.close_time}
                                         onChange={e => setRoundForm({ ...roundForm, close_time: e.target.value })}
+                                        onKeyDown={handleInputKeyDown}
                                     />
                                 </div>
                             </div>
@@ -831,6 +967,8 @@ export default function Dealer() {
                                         className="form-input"
                                         value={roundForm.delete_before_minutes}
                                         onChange={e => setRoundForm({ ...roundForm, delete_before_minutes: parseInt(e.target.value) || 0 })}
+                                        onFocus={handleInputFocus}
+                                        onKeyDown={handleInputKeyDown}
                                     />
                                 </div>
                                 <div className="form-group">
@@ -912,6 +1050,8 @@ export default function Dealer() {
                                                                 [key]: parseInt(e.target.value) || 0
                                                             }
                                                         })}
+                                                        onFocus={handleInputFocus}
+                                                        onKeyDown={handleInputKeyDown}
                                                     />
                                                     <span className="input-suffix">{config.isSet ? 'ชุด' : roundForm.currency_name}</span>
                                                 </div>
@@ -928,6 +1068,201 @@ export default function Dealer() {
                             </button>
                             <button className="btn btn-primary" onClick={handleCreateRound}>
                                 <FiCheck /> สร้างงวด
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Round Modal */}
+            {showEditModal && editingRound && (
+                <div className="modal-overlay" onClick={() => { setShowEditModal(false); setEditingRound(null); }}>
+                    <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3><FiEdit2 /> แก้ไขงวดหวย</h3>
+                            <button className="modal-close" onClick={() => { setShowEditModal(false); setEditingRound(null); }}>
+                                <FiX />
+                            </button>
+                        </div>
+
+                        <div className="modal-body">
+                            {/* Lottery Type - Disabled for edit */}
+                            <div className="form-group">
+                                <label className="form-label">ประเภทหวย</label>
+                                <div className="lottery-type-grid">
+                                    {Object.entries(LOTTERY_TYPES).map(([key, label]) => (
+                                        <button
+                                            key={key}
+                                            type="button"
+                                            className={`type-option ${roundForm.lottery_type === key ? 'active' : ''}`}
+                                            onClick={() => handleLotteryTypeChange(key)}
+                                            disabled={true}
+                                            style={{ opacity: roundForm.lottery_type === key ? 1 : 0.5, cursor: 'not-allowed' }}
+                                        >
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Custom Name */}
+                            <div className="form-group">
+                                <label className="form-label">ชื่องวด (ไม่บังคับ)</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    placeholder={LOTTERY_TYPES[roundForm.lottery_type]}
+                                    value={roundForm.lottery_name}
+                                    onChange={e => setRoundForm({ ...roundForm, lottery_name: e.target.value })}
+                                    onFocus={handleInputFocus}
+                                    onKeyDown={handleInputKeyDown}
+                                />
+                            </div>
+
+                            {/* Date & Time */}
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label className="form-label">วันที่</label>
+                                    <input
+                                        type="date"
+                                        className="form-input"
+                                        value={roundForm.round_date}
+                                        onChange={e => setRoundForm({ ...roundForm, round_date: e.target.value })}
+                                        onKeyDown={handleInputKeyDown}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">เวลาเปิดรับ</label>
+                                    <input
+                                        type="time"
+                                        className="form-input"
+                                        value={roundForm.open_time}
+                                        onChange={e => setRoundForm({ ...roundForm, open_time: e.target.value })}
+                                        onKeyDown={handleInputKeyDown}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">เวลาปิดรับ</label>
+                                    <input
+                                        type="time"
+                                        className="form-input"
+                                        value={roundForm.close_time}
+                                        onChange={e => setRoundForm({ ...roundForm, close_time: e.target.value })}
+                                        onKeyDown={handleInputKeyDown}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Delete Before */}
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label className="form-label">ลบเลขได้ก่อนปิดรับ (นาที)</label>
+                                    <input
+                                        type="number"
+                                        className="form-input"
+                                        value={roundForm.delete_before_minutes}
+                                        onChange={e => setRoundForm({ ...roundForm, delete_before_minutes: parseInt(e.target.value) || 0 })}
+                                        onFocus={handleInputFocus}
+                                        onKeyDown={handleInputKeyDown}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">สัญลักษณ์สกุลเงิน</label>
+                                    <select
+                                        className="form-input"
+                                        value={roundForm.currency_symbol}
+                                        onChange={e => {
+                                            const symbol = e.target.value
+                                            const name = symbol === '฿' ? 'บาท' : 'กีบ'
+                                            setRoundForm({ ...roundForm, currency_symbol: symbol, currency_name: name })
+                                        }}
+                                    >
+                                        <option value="฿">฿ บาท</option>
+                                        <option value="₭">₭ กีบ</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Limits by Bet Type */}
+                            <div className="form-section">
+                                <h4>ค่าอั้นตามประเภทเลข ({LOTTERY_TYPES[roundForm.lottery_type]})</h4>
+                                <p className="form-hint" style={{ marginBottom: '1rem', opacity: 0.7, fontSize: '0.85rem' }}>
+                                    อัตราจ่ายจะใช้ตามที่ตั้งค่าให้แต่ละลูกค้า
+                                </p>
+
+                                {/* Global set price for 4-digit (Lao/Hanoi only) */}
+                                {(roundForm.lottery_type === 'lao' || roundForm.lottery_type === 'hanoi') && (
+                                    <div className="global-set-price" style={{
+                                        marginBottom: '1.5rem',
+                                        padding: '1rem',
+                                        background: 'rgba(212, 175, 55, 0.1)',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid rgba(212, 175, 55, 0.3)'
+                                    }}>
+                                        <div className="input-group" style={{ justifyContent: 'flex-start', gap: '0.75rem' }}>
+                                            <span style={{ fontWeight: 500, color: 'var(--color-primary)' }}>เลขชุด 4 ตัว</span>
+                                            <span className="input-prefix">ชุดละ</span>
+                                            <input
+                                                type="number"
+                                                className="form-input small"
+                                                value={roundForm.set_prices['4_top'] || 120}
+                                                onChange={e => {
+                                                    const newPrice = parseInt(e.target.value) || 0
+                                                    setRoundForm({
+                                                        ...roundForm,
+                                                        set_prices: {
+                                                            ...roundForm.set_prices,
+                                                            '4_top': newPrice,
+                                                            '4_tod': newPrice
+                                                        }
+                                                    })
+                                                }}
+                                            />
+                                            <span className="input-suffix">{roundForm.currency_name}</span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="limits-grid">
+                                    {Object.entries(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {}).map(([key, config]) => (
+                                        <div key={key} className="limit-row">
+                                            <span className="limit-label">
+                                                {config.label}
+                                                {config.isSet && <span className="set-badge">ชุด</span>}
+                                            </span>
+                                            <div className="limit-inputs">
+                                                {/* Limit input */}
+                                                <div className="input-group">
+                                                    <span className="input-prefix">อั้น</span>
+                                                    <input
+                                                        type="number"
+                                                        className="form-input small"
+                                                        value={roundForm.type_limits[key] || 0}
+                                                        onChange={e => setRoundForm({
+                                                            ...roundForm,
+                                                            type_limits: {
+                                                                ...roundForm.type_limits,
+                                                                [key]: parseInt(e.target.value) || 0
+                                                            }
+                                                        })}
+                                                        onFocus={handleInputFocus}
+                                                        onKeyDown={handleInputKeyDown}
+                                                    />
+                                                    <span className="input-suffix">{config.isSet ? 'ชุด' : roundForm.currency_name}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => { setShowEditModal(false); setEditingRound(null); }}>
+                                ยกเลิก
+                            </button>
+                            <button className="btn btn-primary" onClick={handleUpdateRound}>
+                                <FiCheck /> บันทึกการแก้ไข
                             </button>
                         </div>
                     </div>
