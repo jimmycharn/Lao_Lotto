@@ -277,7 +277,7 @@
 
 .status-badge.lost {
     background: rgba(233, 69, 96, 0.15);
-    color: var(--color-danger);
+    color: #e94560 !important;
 }
 
 /* =============================================
@@ -1439,6 +1439,17 @@
     color: var(--color-danger);
 }
 
+/* Ensure badge colors in user summary footer */
+.user-summary-footer .status-badge.won {
+    background: rgba(0, 210, 106, 0.2);
+    color: var(--color-success);
+}
+
+.user-summary-footer .status-badge.lost {
+    background: rgba(233, 69, 96, 0.2);
+    color: #e94560 !important;
+}
+
 /* Responsive for user summary cards */
 @media (max-width: 600px) {
     .user-summary-details {
@@ -1449,6 +1460,7 @@
         font-size: 1.1rem;
     }
 }
+
 /* =============================================
    LOTTERY TYPE COLOR THEMES - Round Cards
    ============================================= */
@@ -1459,11 +1471,13 @@
     border-top: 5px solid #ed1c24;
     background: linear-gradient(180deg, rgba(237, 28, 36, 0.15) 0%, var(--color-card) 30%);
 }
+
 .round-card.thai:hover {
     border-color: #ed1c24;
     background: linear-gradient(180deg, rgba(237, 28, 36, 0.25) 0%, rgba(237, 28, 36, 0.08) 50%);
     box-shadow: 0 0 20px rgba(237, 28, 36, 0.3);
 }
+
 .round-card.thai.selected {
     border-color: #ed1c24;
     box-shadow: 0 0 25px rgba(237, 28, 36, 0.4);
@@ -1475,11 +1489,13 @@
     border-top: 5px solid #002868;
     background: linear-gradient(180deg, rgba(0, 40, 104, 0.15) 0%, var(--color-card) 30%);
 }
+
 .round-card.lao:hover {
     border-color: #002868;
     background: linear-gradient(180deg, rgba(0, 40, 104, 0.25) 0%, rgba(0, 40, 104, 0.08) 50%);
     box-shadow: 0 0 20px rgba(0, 40, 104, 0.3);
 }
+
 .round-card.lao.selected {
     border-color: #002868;
     box-shadow: 0 0 25px rgba(0, 40, 104, 0.4);
@@ -1491,11 +1507,13 @@
     border-top: 5px solid #ffcd00;
     background: linear-gradient(180deg, rgba(255, 205, 0, 0.15) 0%, var(--color-card) 30%);
 }
+
 .round-card.hanoi:hover {
     border-color: #ffcd00;
     background: linear-gradient(180deg, rgba(255, 205, 0, 0.25) 0%, rgba(255, 205, 0, 0.08) 50%);
     box-shadow: 0 0 20px rgba(255, 205, 0, 0.3);
 }
+
 .round-card.hanoi.selected {
     border-color: #ffcd00;
     box-shadow: 0 0 25px rgba(255, 205, 0, 0.4);
@@ -1507,11 +1525,13 @@
     border-top: 5px solid #9c27b0;
     background: linear-gradient(180deg, rgba(156, 39, 176, 0.15) 0%, var(--color-card) 30%);
 }
+
 .round-card.yeekee:hover {
     border-color: #9c27b0;
     background: linear-gradient(180deg, rgba(156, 39, 176, 0.25) 0%, rgba(156, 39, 176, 0.08) 50%);
     box-shadow: 0 0 20px rgba(156, 39, 176, 0.3);
 }
+
 .round-card.yeekee.selected {
     border-color: #9c27b0;
     box-shadow: 0 0 25px rgba(156, 39, 176, 0.4);
@@ -1523,11 +1543,13 @@
     border-top: 5px solid #00c853;
     background: linear-gradient(180deg, rgba(0, 200, 83, 0.15) 0%, var(--color-card) 30%);
 }
+
 .round-card.stock:hover {
     border-color: #00c853;
     background: linear-gradient(180deg, rgba(0, 200, 83, 0.25) 0%, rgba(0, 200, 83, 0.08) 50%);
     box-shadow: 0 0 20px rgba(0, 200, 83, 0.3);
 }
+
 .round-card.stock.selected {
     border-color: #00c853;
     box-shadow: 0 0 25px rgba(0, 200, 83, 0.4);
@@ -1626,12 +1648,15 @@
 .round-accordion-item.thai .round-accordion-header {
     border-left-color: #ed1c24;
 }
+
 .round-accordion-item.lao .round-accordion-header {
     border-left-color: #002868;
 }
+
 .round-accordion-item.hanoi .round-accordion-header {
     border-left-color: #ffcd00;
 }
+
 .round-accordion-item.stock .round-accordion-header {
     border-left-color: #00c853;
 }
@@ -1646,11 +1671,29 @@
         flex-wrap: wrap;
         gap: 0.75rem;
     }
-    .round-header-left { min-width: 100%; order: 1; }
-    .round-header-center { width: 100%; order: 3; }
-    .round-header-right { order: 2; margin-left: auto; }
-    .round-meta { gap: 0.5rem; }
-    .round-meta span { font-size: 0.8rem; }
+
+    .round-header-left {
+        min-width: 100%;
+        order: 1;
+    }
+
+    .round-header-center {
+        width: 100%;
+        order: 3;
+    }
+
+    .round-header-right {
+        order: 2;
+        margin-left: auto;
+    }
+
+    .round-meta {
+        gap: 0.5rem;
+    }
+
+    .round-meta span {
+        font-size: 0.8rem;
+    }
 }
 
 /* Header summary display */

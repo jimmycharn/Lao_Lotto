@@ -297,16 +297,22 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                     <div className="user-summary-list" style={{ marginTop: '1rem' }}>
                                         <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-text-muted)' }}>รายละเอียดแต่ละคน</h4>
                                         {userSummaries.map(usr => {
-                                            const net = usr.totalWin + usr.totalCommission - usr.totalBet
+                                            // User's net = totalWin + totalCommission - totalBet
+                                            // Dealer's perspective = inverted (dealer loses when user gains)
+                                            const userNet = usr.totalWin + usr.totalCommission - usr.totalBet
+                                            const dealerNet = -userNet // Invert for dealer's perspective
                                             return (
-                                                <div key={usr.userId} className={`user-summary-card ${net > 0 ? 'winner' : net < 0 ? 'loser' : ''}`}>
+                                                // dealerNet < 0 = dealer loses = loser card (red border)
+                                                // dealerNet > 0 = dealer gains = winner card (green border)
+                                                <div key={usr.userId} className={`user-summary-card ${dealerNet < 0 ? 'loser' : dealerNet > 0 ? 'winner' : ''}`}>
                                                     <div className="user-summary-header">
                                                         <div className="user-info">
                                                             <span className="user-name">{usr.userName}</span>
                                                             <span className="user-email">{usr.email}</span>
                                                         </div>
-                                                        <div className={`net-amount ${net > 0 ? 'positive' : net < 0 ? 'negative' : ''}`}>
-                                                            {net > 0 ? '+' : ''}{round.currency_symbol}{net.toLocaleString()}
+                                                        {/* Show dealer's perspective: negative = red (owe user), positive = green (gain) */}
+                                                        <div className={`net-amount ${dealerNet < 0 ? 'negative' : dealerNet > 0 ? 'positive' : ''}`}>
+                                                            {dealerNet > 0 ? '+' : ''}{round.currency_symbol}{dealerNet.toLocaleString()}
                                                         </div>
                                                     </div>
                                                     <div className="user-summary-details">
@@ -316,8 +322,9 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                                         <div className="detail-item"><span className="detail-label">ถูก/ยอดได้</span><span className={`detail-value ${usr.totalWin > 0 ? 'text-success' : ''}`}>{usr.winCount > 0 ? `${usr.winCount}/${round.currency_symbol}${usr.totalWin.toLocaleString()}` : '-'}</span></div>
                                                     </div>
                                                     <div className="user-summary-footer">
-                                                        {net > 0 ? <span className="status-badge won">ต้องจ่าย {round.currency_symbol}{net.toLocaleString()}</span>
-                                                            : net < 0 ? <span className="status-badge lost">ต้องเก็บ {round.currency_symbol}{Math.abs(net).toLocaleString()}</span>
+                                                        {/* Dealer's perspective: dealerNet < 0 = must pay (red), dealerNet > 0 = collect (green) */}
+                                                        {dealerNet < 0 ? <span className="status-badge lost">ต้องจ่าย {round.currency_symbol}{Math.abs(dealerNet).toLocaleString()}</span>
+                                                            : dealerNet > 0 ? <span className="status-badge won">ต้องเก็บ {round.currency_symbol}{dealerNet.toLocaleString()}</span>
                                                                 : <span className="status-badge pending">เสมอ</span>}
                                                     </div>
                                                 </div>
