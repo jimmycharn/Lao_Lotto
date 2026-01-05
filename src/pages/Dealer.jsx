@@ -21,7 +21,8 @@ import {
     FiCopy,
     FiAlertTriangle,
     FiEye,
-    FiLock
+    FiLock,
+    FiSend
 } from 'react-icons/fi'
 import './Dealer.css'
 import './SettingsTabs.css'
@@ -1320,35 +1321,184 @@ export default function Dealer() {
     )
 }
 
-// Submissions Modal Component
+// Submissions Modal Component - With 3 Tabs
 function SubmissionsModal({ round, onClose }) {
+    const [activeTab, setActiveTab] = useState('total') // 'total' | 'excess' | 'transferred'
     const [submissions, setSubmissions] = useState([])
+    const [typeLimits, setTypeLimits] = useState({})
+    const [numberLimits, setNumberLimits] = useState([])
+    const [transfers, setTransfers] = useState([])
     const [loading, setLoading] = useState(true)
     const [selectedUser, setSelectedUser] = useState('all')
     const [betTypeFilter, setBetTypeFilter] = useState('all')
+    const [selectedBatch, setSelectedBatch] = useState('all')
+
+    // Transfer modal state
+    const [showTransferModal, setShowTransferModal] = useState(false)
+    const [transferTarget, setTransferTarget] = useState(null)
+    const [transferForm, setTransferForm] = useState({
+        amount: 0,
+        target_dealer_name: '',
+        target_dealer_contact: '',
+        notes: ''
+    })
+    const [savingTransfer, setSavingTransfer] = useState(false)
 
     useEffect(() => {
-        fetchSubmissions()
+        fetchAllData()
     }, [])
 
-    async function fetchSubmissions() {
+    async function fetchAllData() {
         setLoading(true)
         try {
-            const { data, error } = await supabase
+            // Fetch submissions
+            const { data: subsData } = await supabase
                 .from('submissions')
-                .select(`
-                    *,
-                    profiles (full_name, email)
-                `)
+                .select(`*, profiles (full_name, email)`)
                 .eq('round_id', round.id)
                 .eq('is_deleted', false)
                 .order('created_at', { ascending: false })
 
-            if (!error) setSubmissions(data || [])
+            setSubmissions(subsData || [])
+
+            // Fetch type limits
+            const { data: typeLimitsData } = await supabase
+                .from('type_limits')
+                .select('*')
+                .eq('round_id', round.id)
+
+            const limitsObj = {}
+            typeLimitsData?.forEach(l => {
+                limitsObj[l.bet_type] = l.max_per_number
+            })
+            setTypeLimits(limitsObj)
+
+            // Fetch number-specific limits
+            const { data: numberLimitsData } = await supabase
+                .from('number_limits')
+                .select('*')
+                .eq('round_id', round.id)
+
+            setNumberLimits(numberLimitsData || [])
+
+            // Fetch transfers
+            const { data: transfersData } = await supabase
+                .from('bet_transfers')
+                .select('*')
+                .eq('round_id', round.id)
+                .order('created_at', { ascending: false })
+
+            setTransfers(transfersData || [])
+
         } catch (error) {
-            console.error('Error:', error)
+            console.error('Error fetching data:', error)
         } finally {
             setLoading(false)
+        }
+    }
+
+    // Calculate excess items
+    const calculateExcessItems = () => {
+        // Group submissions by bet_type + numbers
+        const grouped = {}
+        submissions.forEach(sub => {
+            const key = `${sub.bet_type}|${sub.numbers}`
+            if (!grouped[key]) {
+                grouped[key] = {
+                    bet_type: sub.bet_type,
+                    numbers: sub.numbers,
+                    total: 0,
+                    submissions: []
+                }
+            }
+            grouped[key].total += sub.amount
+            grouped[key].submissions.push(sub)
+        })
+
+        // Calculate excess for each group
+        const excessItems = []
+        Object.values(grouped).forEach(group => {
+            // Get limit: first check number_limits, then type_limits
+            const numberLimit = numberLimits.find(
+                nl => nl.bet_type === group.bet_type && nl.numbers === group.numbers
+            )
+            const typeLimit = typeLimits[group.bet_type]
+            const limit = numberLimit ? numberLimit.max_amount : (typeLimit || 999999999)
+
+            // Calculate already transferred amount for this number
+            const transferredAmount = transfers
+                .filter(t => t.bet_type === group.bet_type && t.numbers === group.numbers)
+                .reduce((sum, t) => sum + (t.amount || 0), 0)
+
+            // Excess = total - limit - already transferred
+            const effectiveExcess = group.total - limit - transferredAmount
+
+            if (effectiveExcess > 0) {
+                excessItems.push({
+                    ...group,
+                    limit,
+                    excess: effectiveExcess,
+                    transferredAmount
+                })
+            }
+        })
+
+        return excessItems
+    }
+
+    const excessItems = calculateExcessItems()
+
+    // Get unique transfer batches
+    const uniqueBatches = [...new Set(transfers.map(t => t.transfer_batch_id))]
+
+    // Filter transfers by batch
+    const filteredTransfers = selectedBatch === 'all'
+        ? transfers
+        : transfers.filter(t => t.transfer_batch_id === selectedBatch)
+
+    // Handle transfer creation
+    const handleOpenTransfer = (item) => {
+        setTransferTarget(item)
+        setTransferForm({
+            amount: item.excess,
+            target_dealer_name: '',
+            target_dealer_contact: '',
+            notes: ''
+        })
+        setShowTransferModal(true)
+    }
+
+    const handleSaveTransfer = async () => {
+        if (!transferTarget || !transferForm.amount || !transferForm.target_dealer_name) {
+            alert('กรุณากรอกข้อมูลให้ครบถ้วน')
+            return
+        }
+
+        setSavingTransfer(true)
+        try {
+            const { error } = await supabase
+                .from('bet_transfers')
+                .insert({
+                    round_id: round.id,
+                    bet_type: transferTarget.bet_type,
+                    numbers: transferTarget.numbers,
+                    amount: transferForm.amount,
+                    target_dealer_name: transferForm.target_dealer_name,
+                    target_dealer_contact: transferForm.target_dealer_contact,
+                    notes: transferForm.notes
+                })
+
+            if (error) throw error
+
+            // Refresh data
+            await fetchAllData()
+            setShowTransferModal(false)
+            setTransferTarget(null)
+        } catch (error) {
+            console.error('Error saving transfer:', error)
+            alert('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setSavingTransfer(false)
         }
     }
 
@@ -1382,6 +1532,8 @@ function SubmissionsModal({ round, onClose }) {
     }, {})
 
     const totalAmount = userFilteredSubmissions.reduce((sum, s) => sum + (s.amount || 0), 0)
+    const totalExcess = excessItems.reduce((sum, item) => sum + item.excess, 0)
+    const totalTransferred = transfers.reduce((sum, t) => sum + (t.amount || 0), 0)
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -1393,119 +1545,380 @@ function SubmissionsModal({ round, onClose }) {
                     </button>
                 </div>
 
+                {/* Tabs */}
+                <div className="modal-tabs">
+                    <button
+                        className={`modal-tab-btn ${activeTab === 'total' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('total')}
+                    >
+                        ยอดรวม
+                    </button>
+                    <button
+                        className={`modal-tab-btn ${activeTab === 'excess' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('excess')}
+                    >
+                        ยอดเกิน {excessItems.length > 0 && <span className="tab-badge">{excessItems.length}</span>}
+                    </button>
+                    <button
+                        className={`modal-tab-btn ${activeTab === 'transferred' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('transferred')}
+                    >
+                        ยอดตีออก {transfers.length > 0 && <span className="tab-badge">{transfers.length}</span>}
+                    </button>
+                </div>
+
                 <div className="modal-body">
-                    {/* Summary - Only Total Amount */}
-                    <div className="summary-grid">
-                        <div className="summary-card highlight">
-                            <span className="summary-value">
-                                {round.currency_symbol}{totalAmount.toLocaleString()}
-                            </span>
-                            <span className="summary-label">ยอดรวม</span>
-                        </div>
-                    </div>
-
-                    {/* User Filter */}
-                    <div className="filter-section">
-                        <label className="filter-label"><FiUser /> เลือกผู้ส่ง:</label>
-                        <div className="filter-row">
-                            <button
-                                className={`filter-btn ${selectedUser === 'all' ? 'active' : ''}`}
-                                onClick={() => setSelectedUser('all')}
-                            >
-                                ทั้งหมด ({submissions.length})
-                            </button>
-                            {uniqueUsers.map(user => {
-                                const userCount = submissions.filter(s => s.user_id === user.id).length
-                                return (
-                                    <button
-                                        key={user.id}
-                                        className={`filter-btn ${selectedUser === user.id ? 'active' : ''}`}
-                                        onClick={() => setSelectedUser(user.id)}
-                                        title={user.email}
-                                    >
-                                        {user.name} ({userCount})
-                                    </button>
-                                )
-                            })}
-                        </div>
-                    </div>
-
-                    {/* Bet Type Filter */}
-                    <div className="filter-section">
-                        <label className="filter-label"><FiGrid /> ประเภท:</label>
-                        <div className="filter-row">
-                            <button
-                                className={`filter-btn ${betTypeFilter === 'all' ? 'active' : ''}`}
-                                onClick={() => setBetTypeFilter('all')}
-                            >
-                                ทั้งหมด
-                            </button>
-                            {Object.entries(summaryByType).map(([key, data]) => (
-                                <button
-                                    key={key}
-                                    className={`filter-btn ${betTypeFilter === key ? 'active' : ''}`}
-                                    onClick={() => setBetTypeFilter(key)}
-                                >
-                                    {BET_TYPES[key]} ({data.count})
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Table */}
                     {loading ? (
                         <div className="loading-state">
                             <div className="spinner"></div>
                         </div>
-                    ) : filteredSubmissions.length === 0 ? (
-                        <div className="empty-state">
-                            <p>ไม่มีรายการ</p>
-                        </div>
                     ) : (
-                        <div className="table-wrap">
-                            <table className="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>ประเภท</th>
-                                        <th>เลข</th>
-                                        <th>จำนวน</th>
-                                        <th>เวลา</th>
-                                        <th>สถานะ</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filteredSubmissions.map(sub => (
-                                        <tr key={sub.id} className={sub.is_winner ? 'winner-row' : ''}>
-                                            <td>
-                                                <span className="type-badge">{BET_TYPES[sub.bet_type]}</span>
-                                            </td>
-                                            <td className="number-cell">{sub.numbers}</td>
-                                            <td>{round.currency_symbol}{sub.amount?.toLocaleString()}</td>
-                                            <td className="time-cell">
-                                                {new Date(sub.created_at).toLocaleTimeString('th-TH', {
-                                                    hour: '2-digit',
-                                                    minute: '2-digit'
-                                                })}
-                                            </td>
-                                            <td>
-                                                {round.is_result_announced ? (
-                                                    sub.is_winner ? (
-                                                        <span className="status-badge won"><FiCheck /> ถูกรางวัล</span>
-                                                    ) : (
-                                                        <span className="status-badge lost">ไม่ถูก</span>
+                        <>
+                            {/* Tab: ยอดรวม (Total) */}
+                            {activeTab === 'total' && (
+                                <>
+                                    {/* Summary - Only Total Amount */}
+                                    <div className="summary-grid">
+                                        <div className="summary-card highlight">
+                                            <span className="summary-value">
+                                                {round.currency_symbol}{totalAmount.toLocaleString()}
+                                            </span>
+                                            <span className="summary-label">ยอดรวม</span>
+                                        </div>
+                                    </div>
+
+                                    {/* User Filter */}
+                                    <div className="filter-section">
+                                        <label className="filter-label"><FiUser /> เลือกผู้ส่ง:</label>
+                                        <div className="filter-row">
+                                            <button
+                                                className={`filter-btn ${selectedUser === 'all' ? 'active' : ''}`}
+                                                onClick={() => setSelectedUser('all')}
+                                            >
+                                                ทั้งหมด ({submissions.length})
+                                            </button>
+                                            {uniqueUsers.map(user => {
+                                                const userCount = submissions.filter(s => s.user_id === user.id).length
+                                                return (
+                                                    <button
+                                                        key={user.id}
+                                                        className={`filter-btn ${selectedUser === user.id ? 'active' : ''}`}
+                                                        onClick={() => setSelectedUser(user.id)}
+                                                        title={user.email}
+                                                    >
+                                                        {user.name} ({userCount})
+                                                    </button>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {/* Bet Type Filter */}
+                                    <div className="filter-section">
+                                        <label className="filter-label"><FiGrid /> ประเภท:</label>
+                                        <div className="filter-row">
+                                            <button
+                                                className={`filter-btn ${betTypeFilter === 'all' ? 'active' : ''}`}
+                                                onClick={() => setBetTypeFilter('all')}
+                                            >
+                                                ทั้งหมด
+                                            </button>
+                                            {Object.entries(summaryByType).map(([key, data]) => (
+                                                <button
+                                                    key={key}
+                                                    className={`filter-btn ${betTypeFilter === key ? 'active' : ''}`}
+                                                    onClick={() => setBetTypeFilter(key)}
+                                                >
+                                                    {BET_TYPES[key]} ({data.count})
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Table */}
+                                    {filteredSubmissions.length === 0 ? (
+                                        <div className="empty-state">
+                                            <p>ไม่มีรายการ</p>
+                                        </div>
+                                    ) : (
+                                        <div className="table-wrap">
+                                            <table className="data-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>ประเภท</th>
+                                                        <th>เลข</th>
+                                                        <th>จำนวน</th>
+                                                        <th>เวลา</th>
+                                                        <th>สถานะ</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {filteredSubmissions.map(sub => (
+                                                        <tr key={sub.id} className={sub.is_winner ? 'winner-row' : ''}>
+                                                            <td>
+                                                                <span className="type-badge">{BET_TYPES[sub.bet_type]}</span>
+                                                            </td>
+                                                            <td className="number-cell">{sub.numbers}</td>
+                                                            <td>{round.currency_symbol}{sub.amount?.toLocaleString()}</td>
+                                                            <td className="time-cell">
+                                                                {new Date(sub.created_at).toLocaleTimeString('th-TH', {
+                                                                    hour: '2-digit',
+                                                                    minute: '2-digit'
+                                                                })}
+                                                            </td>
+                                                            <td>
+                                                                {round.is_result_announced ? (
+                                                                    sub.is_winner ? (
+                                                                        <span className="status-badge won"><FiCheck /> ถูกรางวัล</span>
+                                                                    ) : (
+                                                                        <span className="status-badge lost">ไม่ถูก</span>
+                                                                    )
+                                                                ) : (
+                                                                    <span className="status-badge pending">รอผล</span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+
+                            {/* Tab: ยอดเกิน (Excess) */}
+                            {activeTab === 'excess' && (
+                                <>
+                                    {/* Summary */}
+                                    <div className="summary-grid">
+                                        <div className="summary-card warning">
+                                            <span className="summary-value">
+                                                {round.currency_symbol}{totalExcess.toLocaleString()}
+                                            </span>
+                                            <span className="summary-label">ยอดเกินรวม</span>
+                                        </div>
+                                    </div>
+
+                                    {excessItems.length === 0 ? (
+                                        <div className="empty-state">
+                                            <FiCheck style={{ fontSize: '2rem', color: 'var(--color-success)', marginBottom: '0.5rem' }} />
+                                            <p>ไม่มีเลขที่เกินค่าอั้น</p>
+                                        </div>
+                                    ) : (
+                                        <div className="excess-list">
+                                            {excessItems.map((item, idx) => (
+                                                <div key={idx} className="excess-card">
+                                                    <div className="excess-info">
+                                                        <span className="type-badge">{BET_TYPES[item.bet_type]}</span>
+                                                        <span className="excess-number">{item.numbers}</span>
+                                                    </div>
+                                                    <div className="excess-details">
+                                                        <div className="excess-row">
+                                                            <span>ค่าอั้น:</span>
+                                                            <span>{round.currency_symbol}{item.limit.toLocaleString()}</span>
+                                                        </div>
+                                                        <div className="excess-row">
+                                                            <span>ยอดรับ:</span>
+                                                            <span>{round.currency_symbol}{item.total.toLocaleString()}</span>
+                                                        </div>
+                                                        {item.transferredAmount > 0 && (
+                                                            <div className="excess-row transferred">
+                                                                <span>ตีออกแล้ว:</span>
+                                                                <span>-{round.currency_symbol}{item.transferredAmount.toLocaleString()}</span>
+                                                            </div>
+                                                        )}
+                                                        <div className="excess-row excess-amount">
+                                                            <span>เกิน:</span>
+                                                            <span className="text-warning">{round.currency_symbol}{item.excess.toLocaleString()}</span>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        className="btn btn-warning btn-sm"
+                                                        onClick={() => handleOpenTransfer(item)}
+                                                    >
+                                                        <FiSend /> ตีออก
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </>
+                            )}
+
+                            {/* Tab: ยอดตีออก (Transferred) */}
+                            {activeTab === 'transferred' && (
+                                <>
+                                    {/* Summary */}
+                                    <div className="summary-grid">
+                                        <div className="summary-card">
+                                            <span className="summary-value">
+                                                {round.currency_symbol}{totalTransferred.toLocaleString()}
+                                            </span>
+                                            <span className="summary-label">ตีออกรวม</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Batch Filter */}
+                                    {uniqueBatches.length > 1 && (
+                                        <div className="filter-section">
+                                            <label className="filter-label"><FiClock /> ดูตาม:</label>
+                                            <div className="filter-row">
+                                                <button
+                                                    className={`filter-btn ${selectedBatch === 'all' ? 'active' : ''}`}
+                                                    onClick={() => setSelectedBatch('all')}
+                                                >
+                                                    ทั้งหมด ({transfers.length})
+                                                </button>
+                                                {uniqueBatches.map((batchId, idx) => {
+                                                    const batchCount = transfers.filter(t => t.transfer_batch_id === batchId).length
+                                                    const batchTime = transfers.find(t => t.transfer_batch_id === batchId)?.created_at
+                                                    return (
+                                                        <button
+                                                            key={batchId}
+                                                            className={`filter-btn ${selectedBatch === batchId ? 'active' : ''}`}
+                                                            onClick={() => setSelectedBatch(batchId)}
+                                                        >
+                                                            ครั้งที่ {idx + 1} ({batchCount})
+                                                        </button>
                                                     )
-                                                ) : (
-                                                    <span className="status-badge pending">รอผล</span>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {filteredTransfers.length === 0 ? (
+                                        <div className="empty-state">
+                                            <p>ยังไม่มีรายการตีออก</p>
+                                        </div>
+                                    ) : (
+                                        <div className="table-wrap">
+                                            <table className="data-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>ประเภท</th>
+                                                        <th>เลข</th>
+                                                        <th>จำนวน</th>
+                                                        <th>ตีออกให้</th>
+                                                        <th>เวลา</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {filteredTransfers.map(transfer => (
+                                                        <tr key={transfer.id}>
+                                                            <td>
+                                                                <span className="type-badge">{BET_TYPES[transfer.bet_type]}</span>
+                                                            </td>
+                                                            <td className="number-cell">{transfer.numbers}</td>
+                                                            <td>{round.currency_symbol}{transfer.amount?.toLocaleString()}</td>
+                                                            <td>
+                                                                <div className="dealer-info">
+                                                                    <span>{transfer.target_dealer_name}</span>
+                                                                    {transfer.target_dealer_contact && (
+                                                                        <small>{transfer.target_dealer_contact}</small>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                            <td className="time-cell">
+                                                                {new Date(transfer.created_at).toLocaleTimeString('th-TH', {
+                                                                    hour: '2-digit',
+                                                                    minute: '2-digit'
+                                                                })}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </>
                     )}
                 </div>
             </div>
+
+            {/* Transfer Modal */}
+            {showTransferModal && transferTarget && (
+                <div className="modal-overlay nested" onClick={() => setShowTransferModal(false)}>
+                    <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3><FiSend /> ตีออกเลข</h3>
+                            <button className="modal-close" onClick={() => setShowTransferModal(false)}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="transfer-info">
+                                <span className="type-badge">{BET_TYPES[transferTarget.bet_type]}</span>
+                                <span className="transfer-number">{transferTarget.numbers}</span>
+                                <span className="transfer-excess">
+                                    ยอดเกิน: {round.currency_symbol}{transferTarget.excess.toLocaleString()}
+                                </span>
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">จำนวนที่ต้องการตีออก</label>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    value={transferForm.amount}
+                                    onChange={e => setTransferForm({ ...transferForm, amount: parseFloat(e.target.value) || 0 })}
+                                    max={transferTarget.excess}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">ตีออกไปให้ (ชื่อเจ้ามือ/ร้าน) *</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    placeholder="เช่น ร้านโชคดี"
+                                    value={transferForm.target_dealer_name}
+                                    onChange={e => setTransferForm({ ...transferForm, target_dealer_name: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">เบอร์โทร / Line ID (ไม่บังคับ)</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    placeholder="เช่น 08x-xxx-xxxx"
+                                    value={transferForm.target_dealer_contact}
+                                    onChange={e => setTransferForm({ ...transferForm, target_dealer_contact: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">หมายเหตุ</label>
+                                <textarea
+                                    className="form-input"
+                                    rows="2"
+                                    placeholder="หมายเหตุเพิ่มเติม (ไม่บังคับ)"
+                                    value={transferForm.notes}
+                                    onChange={e => setTransferForm({ ...transferForm, notes: e.target.value })}
+                                />
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => setShowTransferModal(false)}
+                                disabled={savingTransfer}
+                            >
+                                ยกเลิก
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleSaveTransfer}
+                                disabled={savingTransfer || !transferForm.amount || !transferForm.target_dealer_name}
+                            >
+                                {savingTransfer ? 'กำลังบันทึก...' : '✓ บันทึก'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
