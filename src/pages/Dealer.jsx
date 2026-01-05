@@ -1394,24 +1394,14 @@ function SubmissionsModal({ round, onClose }) {
                 </div>
 
                 <div className="modal-body">
-                    {/* Summary */}
+                    {/* Summary - Only Total Amount */}
                     <div className="summary-grid">
-                        <div className="summary-card">
-                            <span className="summary-value">{submissions.length}</span>
-                            <span className="summary-label">รายการทั้งหมด</span>
-                        </div>
                         <div className="summary-card highlight">
                             <span className="summary-value">
                                 {round.currency_symbol}{totalAmount.toLocaleString()}
                             </span>
                             <span className="summary-label">ยอดรวม</span>
                         </div>
-                        {Object.entries(summaryByType).map(([type, data]) => (
-                            <div key={type} className="summary-card">
-                                <span className="summary-value">{data.count}</span>
-                                <span className="summary-label">{BET_TYPES[type]}</span>
-                            </div>
-                        ))}
                     </div>
 
                     {/* User Filter */}
