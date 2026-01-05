@@ -371,6 +371,7 @@ export default function Dealer() {
     const [showNumberLimitsModal, setShowNumberLimitsModal] = useState(false)
     const [showSummaryModal, setShowSummaryModal] = useState(false)
     const [selectedMember, setSelectedMember] = useState(null)
+    const [saving, setSaving] = useState(false)
 
     // Form state for creating round
     const [roundForm, setRoundForm] = useState({
@@ -613,6 +614,7 @@ export default function Dealer() {
     async function handleUpdateRound() {
         if (!editingRound) return
 
+        setSaving(true)
         try {
             // Combine date and time
             const openDateTime = new Date(`${roundForm.round_date}T${roundForm.open_time}:00`)
@@ -636,13 +638,19 @@ export default function Dealer() {
             if (roundError) throw roundError
 
             // Delete old type_limits and create new ones
-            await supabase
+            const { error: deleteError } = await supabase
                 .from('type_limits')
                 .delete()
                 .eq('round_id', editingRound.id)
 
+            if (deleteError) {
+                console.error('Error deleting old limits:', deleteError)
+            }
+
+            // Filter only limits that are part of the current lottery type
+            const validBetTypes = Object.keys(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {})
             const typeLimitsData = Object.entries(roundForm.type_limits)
-                .filter(([, maxAmount]) => maxAmount > 0)
+                .filter(([betType, maxAmount]) => maxAmount > 0 && validBetTypes.includes(betType))
                 .map(([betType, maxAmount]) => ({
                     round_id: editingRound.id,
                     bet_type: betType,
@@ -655,7 +663,10 @@ export default function Dealer() {
                     .from('type_limits')
                     .insert(typeLimitsData)
 
-                if (limitsError) throw limitsError
+                if (limitsError) {
+                    console.error('Error inserting limits:', limitsError, 'Data:', typeLimitsData)
+                    throw limitsError
+                }
             }
 
             setShowEditModal(false)
@@ -666,6 +677,8 @@ export default function Dealer() {
         } catch (error) {
             console.error('Error updating round:', error)
             alert('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setSaving(false)
         }
     }
 
