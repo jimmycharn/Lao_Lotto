@@ -1737,6 +1737,7 @@
         font-size: 0.85rem;
     }
 }
+
 /* =============================================
    FILTER ROW HORIZONTAL SCROLL OVERRIDE
    ============================================= */
@@ -1764,5 +1765,5 @@
 .filter-btn {
     white-space: nowrap;
     flex-shrink: 0;
+    border-radius: 20px;
 }
-
