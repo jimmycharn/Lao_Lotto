@@ -1737,3 +1737,32 @@
         font-size: 0.85rem;
     }
 }
+/* =============================================
+   FILTER ROW HORIZONTAL SCROLL OVERRIDE
+   ============================================= */
+
+.filter-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+    -webkit-overflow-scrolling: touch;
+}
+
+.filter-row::-webkit-scrollbar {
+    height: 3px;
+}
+
+.filter-row::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.filter-row::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 4px;
+}
+
+.filter-btn {
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+

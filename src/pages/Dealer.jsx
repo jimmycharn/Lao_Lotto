@@ -6,6 +6,8 @@ import QRCode from 'react-qr-code'
 import {
     FiPlus,
     FiUsers,
+    FiUser,
+    FiGrid,
     FiFileText,
     FiSettings,
     FiCalendar,
@@ -1322,7 +1324,8 @@ export default function Dealer() {
 function SubmissionsModal({ round, onClose }) {
     const [submissions, setSubmissions] = useState([])
     const [loading, setLoading] = useState(true)
-    const [filter, setFilter] = useState('all')
+    const [selectedUser, setSelectedUser] = useState('all')
+    const [betTypeFilter, setBetTypeFilter] = useState('all')
 
     useEffect(() => {
         fetchSubmissions()
@@ -1349,8 +1352,27 @@ function SubmissionsModal({ round, onClose }) {
         }
     }
 
-    // Group by bet type for summary
-    const summaryByType = submissions.reduce((acc, sub) => {
+    // Extract unique users from submissions
+    const uniqueUsers = [...new Map(
+        submissions.map(s => [s.user_id, {
+            id: s.user_id,
+            name: s.profiles?.full_name || 'ไม่ระบุ',
+            email: s.profiles?.email || ''
+        }])
+    ).values()]
+
+    // Filter by user first
+    const userFilteredSubmissions = selectedUser === 'all'
+        ? submissions
+        : submissions.filter(s => s.user_id === selectedUser)
+
+    // Then filter by bet type
+    const filteredSubmissions = betTypeFilter === 'all'
+        ? userFilteredSubmissions
+        : userFilteredSubmissions.filter(s => s.bet_type === betTypeFilter)
+
+    // Group by bet type for summary (based on user-filtered submissions)
+    const summaryByType = userFilteredSubmissions.reduce((acc, sub) => {
         if (!acc[sub.bet_type]) {
             acc[sub.bet_type] = { count: 0, amount: 0 }
         }
@@ -1359,12 +1381,7 @@ function SubmissionsModal({ round, onClose }) {
         return acc
     }, {})
 
-    // Filter submissions
-    const filteredSubmissions = filter === 'all'
-        ? submissions
-        : submissions.filter(s => s.bet_type === filter)
-
-    const totalAmount = submissions.reduce((sum, s) => sum + (s.amount || 0), 0)
+    const totalAmount = userFilteredSubmissions.reduce((sum, s) => sum + (s.amount || 0), 0)
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -1397,23 +1414,52 @@ function SubmissionsModal({ round, onClose }) {
                         ))}
                     </div>
 
-                    {/* Filter */}
-                    <div className="filter-row">
-                        <button
-                            className={`filter-btn ${filter === 'all' ? 'active' : ''}`}
-                            onClick={() => setFilter('all')}
-                        >
-                            ทั้งหมด
-                        </button>
-                        {Object.entries(BET_TYPES).map(([key, label]) => (
+                    {/* User Filter */}
+                    <div className="filter-section">
+                        <label className="filter-label"><FiUser /> เลือกผู้ส่ง:</label>
+                        <div className="filter-row">
                             <button
-                                key={key}
-                                className={`filter-btn ${filter === key ? 'active' : ''}`}
-                                onClick={() => setFilter(key)}
+                                className={`filter-btn ${selectedUser === 'all' ? 'active' : ''}`}
+                                onClick={() => setSelectedUser('all')}
                             >
-                                {label}
+                                ทั้งหมด ({submissions.length})
                             </button>
-                        ))}
+                            {uniqueUsers.map(user => {
+                                const userCount = submissions.filter(s => s.user_id === user.id).length
+                                return (
+                                    <button
+                                        key={user.id}
+                                        className={`filter-btn ${selectedUser === user.id ? 'active' : ''}`}
+                                        onClick={() => setSelectedUser(user.id)}
+                                        title={user.email}
+                                    >
+                                        {user.name} ({userCount})
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Bet Type Filter */}
+                    <div className="filter-section">
+                        <label className="filter-label"><FiGrid /> ประเภท:</label>
+                        <div className="filter-row">
+                            <button
+                                className={`filter-btn ${betTypeFilter === 'all' ? 'active' : ''}`}
+                                onClick={() => setBetTypeFilter('all')}
+                            >
+                                ทั้งหมด
+                            </button>
+                            {Object.entries(summaryByType).map(([key, data]) => (
+                                <button
+                                    key={key}
+                                    className={`filter-btn ${betTypeFilter === key ? 'active' : ''}`}
+                                    onClick={() => setBetTypeFilter(key)}
+                                >
+                                    {BET_TYPES[key]} ({data.count})
+                                </button>
+                            ))}
+                        </div>
                     </div>
 
                     {/* Table */}
@@ -1430,7 +1476,6 @@ function SubmissionsModal({ round, onClose }) {
                             <table className="data-table">
                                 <thead>
                                     <tr>
-                                        <th>ผู้ส่ง</th>
                                         <th>ประเภท</th>
                                         <th>เลข</th>
                                         <th>จำนวน</th>
@@ -1441,12 +1486,6 @@ function SubmissionsModal({ round, onClose }) {
                                 <tbody>
                                     {filteredSubmissions.map(sub => (
                                         <tr key={sub.id} className={sub.is_winner ? 'winner-row' : ''}>
-                                            <td>
-                                                <div className="user-cell">
-                                                    <span className="user-name">{sub.profiles?.full_name || 'ไม่ระบุ'}</span>
-                                                    <span className="user-email">{sub.profiles?.email}</span>
-                                                </div>
-                                            </td>
                                             <td>
                                                 <span className="type-badge">{BET_TYPES[sub.bet_type]}</span>
                                             </td>
