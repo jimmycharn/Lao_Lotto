@@ -1357,6 +1357,15 @@ function SubmissionsModal({ round, onClose }) {
     })
     const [savingTransfer, setSavingTransfer] = useState(false)
 
+    // Bulk transfer state
+    const [selectedExcessItems, setSelectedExcessItems] = useState({}) // { 'betType|numbers': true/false }
+    const [showBulkTransferModal, setShowBulkTransferModal] = useState(false)
+    const [bulkTransferForm, setBulkTransferForm] = useState({
+        target_dealer_name: '',
+        target_dealer_contact: '',
+        notes: ''
+    })
+
     useEffect(() => {
         fetchAllData()
     }, [])
@@ -1509,6 +1518,92 @@ function SubmissionsModal({ round, onClose }) {
             setTransferTarget(null)
         } catch (error) {
             console.error('Error saving transfer:', error)
+            alert('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setSavingTransfer(false)
+        }
+    }
+
+    // Toggle single excess item selection
+    const toggleExcessItem = (item) => {
+        const key = `${item.bet_type}|${item.numbers}`
+        setSelectedExcessItems(prev => ({
+            ...prev,
+            [key]: !prev[key]
+        }))
+    }
+
+    // Select/Deselect all excess items
+    const toggleSelectAll = () => {
+        const allSelected = excessItems.every(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+        if (allSelected) {
+            setSelectedExcessItems({})
+        } else {
+            const newSelected = {}
+            excessItems.forEach(item => {
+                newSelected[`${item.bet_type}|${item.numbers}`] = true
+            })
+            setSelectedExcessItems(newSelected)
+        }
+    }
+
+    // Get selected excess items count
+    const selectedCount = excessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`]).length
+    const selectedTotalExcess = excessItems
+        .filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+        .reduce((sum, item) => sum + item.excess, 0)
+
+    // Handle bulk transfer
+    const handleOpenBulkTransfer = () => {
+        if (selectedCount === 0) {
+            alert('กรุณาเลือกรายการที่ต้องการตีออก')
+            return
+        }
+        setBulkTransferForm({
+            target_dealer_name: '',
+            target_dealer_contact: '',
+            notes: ''
+        })
+        setShowBulkTransferModal(true)
+    }
+
+    const handleSaveBulkTransfer = async () => {
+        if (!bulkTransferForm.target_dealer_name) {
+            alert('กรุณากรอกชื่อเจ้ามือที่ต้องการตีออก')
+            return
+        }
+
+        setSavingTransfer(true)
+        try {
+            // Get all selected items
+            const selectedItems = excessItems.filter(item =>
+                selectedExcessItems[`${item.bet_type}|${item.numbers}`]
+            )
+
+            // Create batch transfer records
+            const transferRecords = selectedItems.map(item => ({
+                round_id: round.id,
+                bet_type: item.bet_type,
+                numbers: item.numbers,
+                amount: item.excess,
+                target_dealer_name: bulkTransferForm.target_dealer_name,
+                target_dealer_contact: bulkTransferForm.target_dealer_contact,
+                notes: bulkTransferForm.notes
+            }))
+
+            const { error } = await supabase
+                .from('bet_transfers')
+                .insert(transferRecords)
+
+            if (error) throw error
+
+            // Refresh data and reset selection
+            await fetchAllData()
+            setSelectedExcessItems({})
+            setShowBulkTransferModal(false)
+            alert(`ตีออกสำเร็จ ${selectedItems.length} รายการ!`)
+        } catch (error) {
+            console.error('Error saving bulk transfer:', error)
             alert('เกิดข้อผิดพลาด: ' + error.message)
         } finally {
             setSavingTransfer(false)
@@ -1710,6 +1805,14 @@ function SubmissionsModal({ round, onClose }) {
                                             </span>
                                             <span className="summary-label">ยอดเกินรวม</span>
                                         </div>
+                                        {selectedCount > 0 && (
+                                            <div className="summary-card">
+                                                <span className="summary-value">
+                                                    {round.currency_symbol}{selectedTotalExcess.toLocaleString()}
+                                                </span>
+                                                <span className="summary-label">เลือกแล้ว ({selectedCount})</span>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {excessItems.length === 0 ? (
@@ -1718,42 +1821,75 @@ function SubmissionsModal({ round, onClose }) {
                                             <p>ไม่มีเลขที่เกินค่าอั้น</p>
                                         </div>
                                     ) : (
-                                        <div className="excess-list">
-                                            {excessItems.map((item, idx) => (
-                                                <div key={idx} className="excess-card">
-                                                    <div className="excess-info">
-                                                        <span className="type-badge">{BET_TYPES[item.bet_type]}</span>
-                                                        <span className="excess-number">{item.numbers}</span>
-                                                    </div>
-                                                    <div className="excess-details">
-                                                        <div className="excess-row">
-                                                            <span>ค่าอั้น:</span>
-                                                            <span>{round.currency_symbol}{item.limit.toLocaleString()}</span>
-                                                        </div>
-                                                        <div className="excess-row">
-                                                            <span>ยอดรับ:</span>
-                                                            <span>{round.currency_symbol}{item.total.toLocaleString()}</span>
-                                                        </div>
-                                                        {item.transferredAmount > 0 && (
-                                                            <div className="excess-row transferred">
-                                                                <span>ตีออกแล้ว:</span>
-                                                                <span>-{round.currency_symbol}{item.transferredAmount.toLocaleString()}</span>
+                                        <>
+                                            {/* Bulk Actions */}
+                                            <div className="bulk-actions">
+                                                <label className="checkbox-container">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={excessItems.length > 0 && excessItems.every(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])}
+                                                        onChange={toggleSelectAll}
+                                                    />
+                                                    <span className="checkmark"></span>
+                                                    เลือกทั้งหมด ({excessItems.length})
+                                                </label>
+                                                <button
+                                                    className="btn btn-warning"
+                                                    onClick={handleOpenBulkTransfer}
+                                                    disabled={selectedCount === 0}
+                                                >
+                                                    <FiSend /> ตีออกที่เลือก ({selectedCount})
+                                                </button>
+                                            </div>
+
+                                            <div className="excess-list">
+                                                {excessItems.map((item, idx) => {
+                                                    const isSelected = selectedExcessItems[`${item.bet_type}|${item.numbers}`]
+                                                    return (
+                                                        <div key={idx} className={`excess-card ${isSelected ? 'selected' : ''}`}>
+                                                            <label className="checkbox-container excess-checkbox">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={isSelected || false}
+                                                                    onChange={() => toggleExcessItem(item)}
+                                                                />
+                                                                <span className="checkmark"></span>
+                                                            </label>
+                                                            <div className="excess-info" onClick={() => toggleExcessItem(item)}>
+                                                                <span className="type-badge">{BET_TYPES[item.bet_type]}</span>
+                                                                <span className="excess-number">{item.numbers}</span>
                                                             </div>
-                                                        )}
-                                                        <div className="excess-row excess-amount">
-                                                            <span>เกิน:</span>
-                                                            <span className="text-warning">{round.currency_symbol}{item.excess.toLocaleString()}</span>
+                                                            <div className="excess-details">
+                                                                <div className="excess-row">
+                                                                    <span>ค่าอั้น:</span>
+                                                                    <span>{round.currency_symbol}{item.limit.toLocaleString()}</span>
+                                                                </div>
+                                                                <div className="excess-row">
+                                                                    <span>ยอดรับ:</span>
+                                                                    <span>{round.currency_symbol}{item.total.toLocaleString()}</span>
+                                                                </div>
+                                                                {item.transferredAmount > 0 && (
+                                                                    <div className="excess-row transferred">
+                                                                        <span>ตีออกแล้ว:</span>
+                                                                        <span>-{round.currency_symbol}{item.transferredAmount.toLocaleString()}</span>
+                                                                    </div>
+                                                                )}
+                                                                <div className="excess-row excess-amount">
+                                                                    <span>เกิน:</span>
+                                                                    <span className="text-warning">{round.currency_symbol}{item.excess.toLocaleString()}</span>
+                                                                </div>
+                                                            </div>
+                                                            <button
+                                                                className="btn btn-warning btn-sm"
+                                                                onClick={() => handleOpenTransfer(item)}
+                                                            >
+                                                                <FiSend /> ตีออก
+                                                            </button>
                                                         </div>
-                                                    </div>
-                                                    <button
-                                                        className="btn btn-warning btn-sm"
-                                                        onClick={() => handleOpenTransfer(item)}
-                                                    >
-                                                        <FiSend /> ตีออก
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        </>
                                     )}
                                 </>
                             )}
@@ -1927,6 +2063,83 @@ function SubmissionsModal({ round, onClose }) {
                                 disabled={savingTransfer || !transferForm.amount || !transferForm.target_dealer_name}
                             >
                                 {savingTransfer ? 'กำลังบันทึก...' : '✓ บันทึก'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Bulk Transfer Modal */}
+            {showBulkTransferModal && (
+                <div className="modal-overlay nested" onClick={() => setShowBulkTransferModal(false)}>
+                    <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3><FiSend /> ตีออกหลายรายการ</h3>
+                            <button className="modal-close" onClick={() => setShowBulkTransferModal(false)}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="bulk-transfer-summary">
+                                <div className="bulk-summary-item">
+                                    <span className="bulk-summary-label">จำนวนรายการ:</span>
+                                    <span className="bulk-summary-value">{selectedCount} รายการ</span>
+                                </div>
+                                <div className="bulk-summary-item">
+                                    <span className="bulk-summary-label">ยอดรวม:</span>
+                                    <span className="bulk-summary-value text-warning">
+                                        {round.currency_symbol}{selectedTotalExcess.toLocaleString()}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">ชื่อเจ้ามือที่ตีออก *</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    placeholder="ชื่อเจ้ามือรับ"
+                                    value={bulkTransferForm.target_dealer_name}
+                                    onChange={e => setBulkTransferForm({ ...bulkTransferForm, target_dealer_name: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">เบอร์ติดต่อ</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    placeholder="เบอร์โทร/Line ID (ไม่บังคับ)"
+                                    value={bulkTransferForm.target_dealer_contact}
+                                    onChange={e => setBulkTransferForm({ ...bulkTransferForm, target_dealer_contact: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">หมายเหตุ</label>
+                                <textarea
+                                    className="form-input"
+                                    rows="2"
+                                    placeholder="หมายเหตุเพิ่มเติม (ไม่บังคับ)"
+                                    value={bulkTransferForm.notes}
+                                    onChange={e => setBulkTransferForm({ ...bulkTransferForm, notes: e.target.value })}
+                                />
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => setShowBulkTransferModal(false)}
+                                disabled={savingTransfer}
+                            >
+                                ยกเลิก
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleSaveBulkTransfer}
+                                disabled={savingTransfer || !bulkTransferForm.target_dealer_name}
+                            >
+                                {savingTransfer ? 'กำลังบันทึก...' : `✓ ตีออก ${selectedCount} รายการ`}
                             </button>
                         </div>
                     </div>
