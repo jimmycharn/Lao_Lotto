@@ -1481,8 +1481,14 @@ function SubmissionsModal({ round, onClose }) {
 
     const excessItems = calculateExcessItems()
 
-    // Get unique transfer batches
+    // Get unique transfer batches (sorted by earliest created_at - oldest first)
     const uniqueBatches = [...new Set(transfers.map(t => t.transfer_batch_id))]
+        .map(batchId => ({
+            batchId,
+            createdAt: transfers.find(t => t.transfer_batch_id === batchId)?.created_at
+        }))
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+        .map(item => item.batchId)
 
     // Filter transfers by batch
     const filteredTransfers = selectedBatch === 'all'
@@ -1954,6 +1960,16 @@ function SubmissionsModal({ round, onClose }) {
                                             </span>
                                             <span className="summary-label">ตีออกรวม</span>
                                         </div>
+                                        {selectedBatch !== 'all' && (
+                                            <div className="summary-card highlight">
+                                                <span className="summary-value">
+                                                    {round.currency_symbol}{filteredTransfers.reduce((sum, t) => sum + (t.amount || 0), 0).toLocaleString()}
+                                                </span>
+                                                <span className="summary-label">
+                                                    ครั้งที่ {uniqueBatches.indexOf(selectedBatch) + 1} ({filteredTransfers.length} รายการ)
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Batch Filter */}
