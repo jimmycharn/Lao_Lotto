@@ -22,10 +22,21 @@ import {
     FiAlertTriangle,
     FiEye,
     FiLock,
-    FiSend
+    FiSend,
+    FiRotateCcw
 } from 'react-icons/fi'
 import './Dealer.css'
 import './SettingsTabs.css'
+
+// Helper function to generate batch ID (UUID v4 format - works in all browsers)
+const generateBatchId = () => {
+    // Generate UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        const r = Math.random() * 16 | 0
+        const v = c === 'x' ? r : (r & 0x3 | 0x8)
+        return v.toString(16)
+    })
+}
 
 // Lottery type labels
 const LOTTERY_TYPES = {
@@ -1507,7 +1518,8 @@ function SubmissionsModal({ round, onClose }) {
                     amount: transferForm.amount,
                     target_dealer_name: transferForm.target_dealer_name,
                     target_dealer_contact: transferForm.target_dealer_contact,
-                    notes: transferForm.notes
+                    notes: transferForm.notes,
+                    transfer_batch_id: generateBatchId()
                 })
 
             if (error) throw error
@@ -1521,6 +1533,39 @@ function SubmissionsModal({ round, onClose }) {
             alert('เกิดข้อผิดพลาด: ' + error.message)
         } finally {
             setSavingTransfer(false)
+        }
+    }
+
+    // Handle undo transfer (bulk delete)
+    const handleUndoTransfer = async () => {
+        const itemsToUndo = filteredTransfers
+        if (itemsToUndo.length === 0) return
+
+        const undoLabel = selectedBatch === 'all'
+            ? `ทั้งหมด ${itemsToUndo.length} รายการ`
+            : `ครั้งนี้ ${itemsToUndo.length} รายการ`
+        const totalAmount = itemsToUndo.reduce((sum, t) => sum + (t.amount || 0), 0)
+
+        if (!confirm(`ต้องการเอาคืน${undoLabel} ยอดรวม ${round.currency_symbol}${totalAmount.toLocaleString()} หรือไม่?`)) {
+            return
+        }
+
+        try {
+            const ids = itemsToUndo.map(t => t.id)
+            const { error } = await supabase
+                .from('bet_transfers')
+                .delete()
+                .in('id', ids)
+
+            if (error) throw error
+
+            // Reset batch filter if the batch no longer exists
+            setSelectedBatch('all')
+            // Refresh data
+            await fetchAllData()
+        } catch (error) {
+            console.error('Error undoing transfer:', error)
+            alert('เกิดข้อผิดพลาด: ' + error.message)
         }
     }
 
@@ -1580,7 +1625,10 @@ function SubmissionsModal({ round, onClose }) {
                 selectedExcessItems[`${item.bet_type}|${item.numbers}`]
             )
 
-            // Create batch transfer records
+            // Generate a batch ID for this transfer session
+            const batchId = generateBatchId()
+
+            // Create batch transfer records with same batch ID
             const transferRecords = selectedItems.map(item => ({
                 round_id: round.id,
                 bet_type: item.bet_type,
@@ -1588,7 +1636,8 @@ function SubmissionsModal({ round, onClose }) {
                 amount: item.excess,
                 target_dealer_name: bulkTransferForm.target_dealer_name,
                 target_dealer_contact: bulkTransferForm.target_dealer_contact,
-                notes: bulkTransferForm.notes
+                notes: bulkTransferForm.notes,
+                transfer_batch_id: batchId
             }))
 
             const { error } = await supabase
@@ -1932,6 +1981,18 @@ function SubmissionsModal({ round, onClose }) {
                                                     )
                                                 })}
                                             </div>
+                                        </div>
+                                    )}
+
+                                    {/* Bulk Undo Button */}
+                                    {filteredTransfers.length > 0 && (
+                                        <div className="bulk-actions" style={{ marginBottom: '1rem' }}>
+                                            <button
+                                                className="btn btn-danger"
+                                                onClick={handleUndoTransfer}
+                                            >
+                                                <FiRotateCcw /> เอาคืน{selectedBatch === 'all' ? 'ทั้งหมด' : 'ครั้งนี้'} ({filteredTransfers.length} รายการ)
+                                            </button>
                                         </div>
                                     )}
 
