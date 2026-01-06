@@ -3,6 +3,8 @@ import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import QRCode from 'react-qr-code'
+import { jsPDF } from 'jspdf'
+import { addThaiFont } from '../utils/thaiFontLoader'
 import {
     FiPlus,
     FiUsers,
@@ -1575,7 +1577,170 @@ function SubmissionsModal({ round, onClose }) {
         }
     }
 
-    // Toggle single excess item selection
+    // Generate transfer text for copy/share
+    const generateTransferText = () => {
+        const items = filteredTransfers
+        if (items.length === 0) return ''
+
+        const batchLabel = selectedBatch === 'all'
+            ? 'ทั้งหมด'
+            : `ครั้งที่ ${uniqueBatches.indexOf(selectedBatch) + 1}`
+        const totalAmount = items.reduce((sum, t) => sum + (t.amount || 0), 0)
+        const targetDealer = items[0]?.target_dealer_name || '-'
+
+        let text = `📤 ยอดตีออก - ${round.lottery_name}\n`
+        text += `📅 ${batchLabel} (${items.length} รายการ)\n`
+        text += `👤 ตีออกให้: ${targetDealer}\n`
+        text += `💰 ยอดรวม: ${round.currency_symbol}${totalAmount.toLocaleString()}\n`
+        text += `━━━━━━━━━━━━━━━━\n`
+
+        // Group by bet type
+        const groupedByType = {}
+        items.forEach(t => {
+            if (!groupedByType[t.bet_type]) {
+                groupedByType[t.bet_type] = []
+            }
+            groupedByType[t.bet_type].push(t)
+        })
+
+        // Output each group
+        Object.entries(groupedByType).forEach(([betType, typeItems]) => {
+            text += `${BET_TYPES[betType]}\n`
+            typeItems.forEach(t => {
+                text += `${t.numbers}=${t.amount?.toLocaleString()}\n`
+            })
+            text += `━━━━━━━━━━━━━━━━\n`
+        })
+
+        text += `รวม: ${round.currency_symbol}${totalAmount.toLocaleString()}`
+
+        return text
+    }
+
+    // Copy transfers to clipboard
+    const handleCopyTransfers = async () => {
+        const text = generateTransferText()
+        if (!text) return
+
+        try {
+            await navigator.clipboard.writeText(text)
+            alert('คัดลอกสำเร็จ!')
+        } catch (error) {
+            console.error('Error copying:', error)
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea')
+            textArea.value = text
+            document.body.appendChild(textArea)
+            textArea.select()
+            document.execCommand('copy')
+            document.body.removeChild(textArea)
+            alert('คัดลอกสำเร็จ!')
+        }
+    }
+
+    // Generate and share PDF with Thai font support
+    const handleShareTransfers = async () => {
+        const items = filteredTransfers
+        if (items.length === 0) return
+
+        const batchLabel = selectedBatch === 'all'
+            ? 'ทั้งหมด'
+            : `ครั้งที่ ${uniqueBatches.indexOf(selectedBatch) + 1}`
+        const totalAmount = items.reduce((sum, t) => sum + (t.amount || 0), 0)
+        const targetDealer = items[0]?.target_dealer_name || '-'
+
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+
+        // Try to load Thai font
+        const hasThaiFon = await addThaiFont(doc)
+        if (!hasThaiFon) {
+            doc.setFont('helvetica')
+        }
+
+        let y = 20
+        const lineHeight = 7
+        const pageWidth = doc.internal.pageSize.getWidth()
+
+        // Title
+        doc.setFontSize(16)
+        if (hasThaiFon) {
+            doc.text(`ยอดตีออก - ${round.lottery_name}`, pageWidth / 2, y, { align: 'center' })
+        } else {
+            doc.text('Transfer Report', pageWidth / 2, y, { align: 'center' })
+        }
+        y += lineHeight * 2
+
+        // Header info
+        doc.setFontSize(11)
+        doc.text(`${hasThaiFon ? 'ครั้งที่' : 'Batch'}: ${batchLabel} (${items.length} ${hasThaiFon ? 'รายการ' : 'items'})`, 20, y)
+        y += lineHeight
+        doc.text(`${hasThaiFon ? 'ตีออกให้' : 'To'}: ${targetDealer}`, 20, y)
+        y += lineHeight
+        doc.text(`${hasThaiFon ? 'ยอดรวม' : 'Total'}: ${round.currency_symbol}${totalAmount.toLocaleString()}`, 20, y)
+        y += lineHeight
+        doc.text(`${hasThaiFon ? 'วันที่' : 'Date'}: ${new Date().toLocaleDateString('th-TH')}`, 20, y)
+        y += lineHeight * 1.5
+
+        doc.setLineWidth(0.5)
+        doc.line(20, y, pageWidth - 20, y)
+        y += lineHeight
+
+        // Group by bet type
+        const groupedByType = {}
+        items.forEach(t => {
+            if (!groupedByType[t.bet_type]) groupedByType[t.bet_type] = []
+            groupedByType[t.bet_type].push(t)
+        })
+
+        // Output each group
+        Object.entries(groupedByType).forEach(([betType, typeItems]) => {
+            if (y > 260) { doc.addPage(); y = 20 }
+
+            // Just the type label without count/subtotal
+            doc.setFontSize(11)
+            const typeLabel = BET_TYPES[betType] || betType
+            doc.text(typeLabel, 20, y)
+            y += lineHeight * 0.8
+            doc.setFontSize(10)
+
+            // Items in columns
+            const colWidth = 40, startX = 20, itemsPerRow = 4
+            let col = 0
+            typeItems.forEach(t => {
+                if (y > 280) { doc.addPage(); y = 20; col = 0 }
+                doc.text(`${t.numbers}=${t.amount?.toLocaleString()}`, startX + (col * colWidth), y)
+                col++
+                if (col >= itemsPerRow) { col = 0; y += lineHeight * 0.7 }
+            })
+            if (col > 0) y += lineHeight * 0.7
+            y += lineHeight * 0.8
+        })
+
+        // Total line
+        y += lineHeight * 0.5
+        doc.setLineWidth(0.5)
+        doc.line(20, y, pageWidth - 20, y)
+        y += lineHeight
+        doc.setFontSize(12)
+        doc.text(`${hasThaiFon ? 'รวมทั้งหมด' : 'TOTAL'}: ${round.currency_symbol}${totalAmount.toLocaleString()}`, 20, y)
+
+        // Generate and share/download
+        const dateStr = new Date().toISOString().split('T')[0]
+        const filename = `transfer_${dateStr}.pdf`
+        const pdfBlob = doc.output('blob')
+        const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' })
+
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+            try {
+                await navigator.share({ title: hasThaiFon ? 'ยอดตีออก' : 'Transfer Report', files: [pdfFile] })
+            } catch (error) {
+                if (error.name !== 'AbortError') doc.save(filename)
+            }
+        } else {
+            doc.save(filename)
+        }
+    }
+
     const toggleExcessItem = (item) => {
         const key = `${item.bet_type}|${item.numbers}`
         setSelectedExcessItems(prev => ({
@@ -1973,7 +2138,7 @@ function SubmissionsModal({ round, onClose }) {
                                     </div>
 
                                     {/* Batch Filter */}
-                                    {uniqueBatches.length > 1 && (
+                                    {uniqueBatches.length >= 1 && (
                                         <div className="filter-section">
                                             <label className="filter-label"><FiClock /> ดูตาม:</label>
                                             <div className="filter-row">
@@ -2000,14 +2165,28 @@ function SubmissionsModal({ round, onClose }) {
                                         </div>
                                     )}
 
-                                    {/* Bulk Undo Button */}
+                                    {/* Action Buttons */}
                                     {filteredTransfers.length > 0 && (
-                                        <div className="bulk-actions" style={{ marginBottom: '1rem' }}>
+                                        <div className="transfer-actions">
+                                            <div className="action-group">
+                                                <button
+                                                    className="btn btn-outline"
+                                                    onClick={handleCopyTransfers}
+                                                >
+                                                    <FiCopy /> คัดลอก
+                                                </button>
+                                                <button
+                                                    className="btn btn-outline"
+                                                    onClick={handleShareTransfers}
+                                                >
+                                                    <FiShare2 /> แชร์ PDF
+                                                </button>
+                                            </div>
                                             <button
                                                 className="btn btn-danger"
                                                 onClick={handleUndoTransfer}
                                             >
-                                                <FiRotateCcw /> เอาคืน{selectedBatch === 'all' ? 'ทั้งหมด' : 'ครั้งนี้'} ({filteredTransfers.length} รายการ)
+                                                <FiRotateCcw /> เอาคืน{selectedBatch === 'all' ? 'ทั้งหมด' : 'ครั้งนี้'} ({filteredTransfers.length})
                                             </button>
                                         </div>
                                     )}
