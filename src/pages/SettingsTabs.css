@@ -37,8 +37,8 @@
 }
 
 .settings-table-wrap {
-    max-height: 400px;
-    overflow-y: auto;
+    /* max-height: 400px; Removed to show full table */
+    /* overflow-y: auto; Removed to show full table */
     border-radius: var(--radius-md);
     border: 1px solid var(--color-border);
 }

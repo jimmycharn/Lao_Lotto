@@ -380,11 +380,12 @@ export default function Dealer() {
     const [showLimitsModal, setShowLimitsModal] = useState(false)
     const [showSubmissionsModal, setShowSubmissionsModal] = useState(false)
     const [showResultsModal, setShowResultsModal] = useState(false)
-    const [showUserSettingsModal, setShowUserSettingsModal] = useState(false)
+
     const [showNumberLimitsModal, setShowNumberLimitsModal] = useState(false)
     const [showSummaryModal, setShowSummaryModal] = useState(false)
     const [selectedMember, setSelectedMember] = useState(null)
     const [saving, setSaving] = useState(false)
+    const [memberTab, setMemberTab] = useState('info') // 'info' | 'settings'
 
     // Form state for creating round
     const [roundForm, setRoundForm] = useState({
@@ -808,8 +809,8 @@ export default function Dealer() {
 
                     {activeTab === 'members' && (
                         <div className="members-section">
-                            {/* Referral Section */}
-                            <div className="referral-card card">
+                            {/* Referral Section - Moved to top */}
+                            <div className="referral-card card" style={{ marginBottom: '1.5rem' }}>
                                 <div className="referral-header">
                                     <h3><FiShare2 /> ลิงก์รับสมัครสมาชิก</h3>
                                     <p>ส่งลิงก์หรือ QR Code นี้ให้สมาชิกเพื่อเข้ากลุ่มของคุณ</p>
@@ -841,55 +842,113 @@ export default function Dealer() {
                                 </div>
                             </div>
 
-                            {/* Members List */}
-                            <div className="section-header">
-                                <h2>รายชื่อสมาชิก</h2>
-                                <span className="badge">{members.length} คน</span>
+                            {/* Internal Tabs */}
+                            <div className="members-tabs" style={{ marginBottom: '1.5rem', borderBottom: '1px solid var(--color-border)', display: 'flex', gap: '1rem' }}>
+                                <button
+                                    className={`tab-btn ${memberTab === 'info' ? 'active' : ''}`}
+                                    onClick={() => setMemberTab('info')}
+                                    style={{
+                                        padding: '0.75rem 1rem',
+                                        borderBottom: memberTab === 'info' ? '2px solid var(--color-primary)' : 'none',
+                                        color: memberTab === 'info' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontWeight: 500,
+                                        fontSize: '1rem'
+                                    }}
+                                >
+                                    ข้อมูลสมาชิก
+                                </button>
+                                <button
+                                    className={`tab-btn ${memberTab === 'settings' ? 'active' : ''}`}
+                                    onClick={() => setMemberTab('settings')}
+                                    style={{
+                                        padding: '0.75rem 1rem',
+                                        borderBottom: memberTab === 'settings' ? '2px solid var(--color-primary)' : 'none',
+                                        color: memberTab === 'settings' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontWeight: 500,
+                                        fontSize: '1rem'
+                                    }}
+                                >
+                                    ตั้งค่า
+                                </button>
                             </div>
 
-                            {members.length === 0 ? (
-                                <div className="empty-state card">
-                                    <FiUsers className="empty-icon" />
-                                    <h3>ยังไม่มีสมาชิก</h3>
-                                    <p>ส่งลิงก์ด้านบนให้คนที่ต้องการเข้าร่วม</p>
-                                </div>
-                            ) : (
-                                <div className="table-wrap card">
-                                    <table className="data-table">
-                                        <thead>
-                                            <tr>
-                                                <th>ชื่อ</th>
-                                                <th>อีเมล</th>
-                                                <th>เบอร์โทร</th>
-                                                <th>วันที่สมัคร</th>
-                                                <th>จัดการ</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {members.map(member => (
-                                                <tr key={member.id}>
-                                                    <td>{member.full_name || '-'}</td>
-                                                    <td>{member.email}</td>
-                                                    <td>{member.phone || '-'}</td>
-                                                    <td className="time-cell">
-                                                        {formatDate(member.created_at)}
-                                                    </td>
-                                                    <td>
-                                                        <button
-                                                            className="icon-btn"
-                                                            title="ตั้งค่าคอม"
-                                                            onClick={() => {
-                                                                setSelectedMember(member)
-                                                                setShowUserSettingsModal(true)
-                                                            }}
-                                                        >
-                                                            <FiSettings />
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                            {memberTab === 'info' && (
+                                <>
+                                    {/* Members List */}
+                                    <div className="section-header">
+                                        <h2>รายชื่อสมาชิก</h2>
+                                        <span className="badge">{members.length} คน</span>
+                                    </div>
+
+                                    {members.length === 0 ? (
+                                        <div className="empty-state card">
+                                            <FiUsers className="empty-icon" />
+                                            <h3>ยังไม่มีสมาชิก</h3>
+                                            <p>ส่งลิงก์ด้านบนให้คนที่ต้องการเข้าร่วม</p>
+                                        </div>
+                                    ) : (
+                                        <div className="table-wrap card">
+                                            <table className="data-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>ชื่อ</th>
+                                                        <th>อีเมล</th>
+                                                        <th>เบอร์โทร</th>
+                                                        <th>วันที่สมัคร</th>
+                                                        <th>จัดการ</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {members.map(member => (
+                                                        <tr key={member.id}>
+                                                            <td>{member.full_name || '-'}</td>
+                                                            <td>{member.email}</td>
+                                                            <td>{member.phone || '-'}</td>
+                                                            <td className="time-cell">
+                                                                {formatDate(member.created_at)}
+                                                            </td>
+                                                            <td>
+                                                                <button
+                                                                    className="icon-btn"
+                                                                    title="ตั้งค่าคอม"
+                                                                    onClick={() => {
+                                                                        setSelectedMember(member)
+                                                                        setMemberTab('settings')
+                                                                    }}
+                                                                >
+                                                                    <FiSettings />
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+
+                            {memberTab === 'settings' && (
+                                <div className="member-settings-view">
+                                    {selectedMember ? (
+                                        <MemberSettings
+                                            member={selectedMember}
+                                            onClose={() => { }}
+                                            isInline={true}
+                                        />
+                                    ) : (
+                                        <div className="empty-state card">
+                                            <FiSettings className="empty-icon" />
+                                            <h3>เลือกสมาชิกเพื่อตั้งค่า</h3>
+                                            <p>กรุณาเลือกสมาชิกจากแท็บ "ข้อมูลสมาชิก" หรือกดปุ่มจัดการที่รายชื่อ</p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -1325,16 +1384,7 @@ export default function Dealer() {
                 />
             )}
 
-            {/* User Settings Modal */}
-            {showUserSettingsModal && selectedMember && (
-                <UserSettingsModal
-                    member={selectedMember}
-                    onClose={() => {
-                        setShowUserSettingsModal(false)
-                        setSelectedMember(null)
-                    }}
-                />
-            )}
+
 
             {/* Summary Modal */}
             {showSummaryModal && selectedRound && (
@@ -3010,8 +3060,9 @@ function NumberLimitsModal({ round, onClose }) {
     )
 }
 
-// User Settings Modal Component - With Lottery Type Tabs
-function UserSettingsModal({ member, onClose }) {
+// Member Settings Component - With Lottery Type Tabs
+// Refactored from UserSettingsModal to support inline rendering
+function MemberSettings({ member, onClose, isInline = false }) {
     const { user } = useAuth()
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
@@ -3155,7 +3206,7 @@ function UserSettingsModal({ member, onClose }) {
 
             if (error) throw error
             alert('บันทึกการตั้งค่าสำเร็จ')
-            onClose()
+            if (!isInline) onClose()
         } catch (error) {
             console.error('Error saving user settings:', error)
             alert('เกิดข้อผิดพลาด: ' + error.message)
@@ -3183,87 +3234,104 @@ function UserSettingsModal({ member, onClose }) {
         { key: 'stock', label: 'หวยหุ้น' }
     ]
 
-    return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal modal-xl" onClick={e => e.stopPropagation()}>
+    const content = (
+        <div className={isInline ? "member-settings-inline" : "modal modal-xl"} onClick={e => !isInline && e.stopPropagation()}>
+            {!isInline && (
                 <div className="modal-header">
                     <h3><FiSettings /> ตั้งค่าสมาชิก: {member.full_name}</h3>
                     <button className="modal-close" onClick={onClose}>
                         <FiX />
                     </button>
                 </div>
+            )}
 
-                <div className="modal-body">
-                    {loading ? (
-                        <div className="loading-state">
-                            <div className="spinner"></div>
-                        </div>
-                    ) : (
-                        <div className="settings-form">
-                            <div className="settings-tabs">
-                                {LOTTERY_TABS.map(tab => (
-                                    <button
-                                        key={tab.key}
-                                        className={`settings-tab ${activeTab === tab.key ? 'active' : ''}`}
-                                        onClick={() => setActiveTab(tab.key)}
-                                    >
-                                        {tab.label}
-                                    </button>
-                                ))}
-                            </div>
-
-                            <div className="settings-table-wrap">
-                                <table className="settings-table">
-                                    <thead>
-                                        <tr>
-                                            <th>ประเภท</th>
-                                            <th>ค่าคอม</th>
-                                            <th>อัตราจ่าย</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {Object.entries(settings[activeTab] || {}).map(([key, value]) => (
-                                            <tr key={key} className={value.isFixed ? 'fixed-row' : ''}>
-                                                <td className="type-cell">
-                                                    {BET_LABELS[activeTab]?.[key] || key}
-                                                </td>
-                                                <td>
-                                                    <div className="input-group">
-                                                        <input
-                                                            type="number"
-                                                            className="form-input small"
-                                                            value={value.commission}
-                                                            onChange={e => updateSetting(activeTab, key, 'commission', e.target.value)}
-                                                        />
-                                                        <span className="input-suffix">{value.isFixed ? '฿' : '%'}</span>
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    <div className="input-group">
-                                                        <input
-                                                            type="number"
-                                                            className="form-input small"
-                                                            value={value.payout}
-                                                            onChange={e => updateSetting(activeTab, key, 'payout', e.target.value)}
-                                                        />
-                                                        <span className="input-suffix">เท่า</span>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            {activeTab === 'lao' && (
-                                <p className="text-muted" style={{ marginTop: '1rem', fontSize: '0.85rem' }}>
-                                    * หวยชุด 4 ตัว ขายชุดละ 120 บาท - ค่าคอมเป็นบาทต่อชุด
-                                </p>
-                            )}
-                        </div>
-                    )}
+            {isInline && (
+                <div className="settings-header-inline" style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ margin: 0 }}>ตั้งค่า: {member.full_name}</h3>
+                    <div className="actions">
+                        <button
+                            className="btn btn-primary"
+                            onClick={handleSave}
+                            disabled={loading || saving}
+                        >
+                            {saving ? 'กำลังบันทึก...' : <><FiCheck /> บันทึกการตั้งค่า</>}
+                        </button>
+                    </div>
                 </div>
+            )}
 
+            <div className={isInline ? "settings-body" : "modal-body"}>
+                {loading ? (
+                    <div className="loading-state">
+                        <div className="spinner"></div>
+                    </div>
+                ) : (
+                    <div className="settings-form">
+                        <div className="settings-tabs">
+                            {LOTTERY_TABS.map(tab => (
+                                <button
+                                    key={tab.key}
+                                    className={`settings-tab ${activeTab === tab.key ? 'active' : ''}`}
+                                    onClick={() => setActiveTab(tab.key)}
+                                >
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="settings-table-wrap">
+                            <table className="settings-table">
+                                <thead>
+                                    <tr>
+                                        <th>ประเภท</th>
+                                        <th>ค่าคอม</th>
+                                        <th>อัตราจ่าย</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {Object.entries(settings[activeTab] || {}).map(([key, value]) => (
+                                        <tr key={key} className={value.isFixed ? 'fixed-row' : ''}>
+                                            <td className="type-cell">
+                                                {BET_LABELS[activeTab]?.[key] || key}
+                                            </td>
+                                            <td>
+                                                <div className="input-group">
+                                                    <input
+                                                        type="number"
+                                                        className="form-input small"
+                                                        value={value.commission}
+                                                        onChange={e => updateSetting(activeTab, key, 'commission', e.target.value)}
+                                                    />
+                                                    <span className="input-suffix">{value.isFixed ? '฿' : '%'}</span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div className="input-group">
+                                                    <input
+                                                        type="number"
+                                                        className="form-input small"
+                                                        value={value.payout}
+                                                        onChange={e => updateSetting(activeTab, key, 'payout', e.target.value)}
+                                                    />
+                                                    <span className="input-suffix">เท่า</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {activeTab === 'lao' && (
+                            <p className="text-muted" style={{ marginTop: '1rem', fontSize: '0.85rem' }}>
+                                * หวยชุด 4 ตัว ขายชุดละ 120 บาท - ค่าคอมเป็นบาทต่อชุด
+                            </p>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {!isInline && (
                 <div className="modal-footer">
                     <button className="btn btn-secondary" onClick={onClose}>
                         ยกเลิก
@@ -3276,7 +3344,15 @@ function UserSettingsModal({ member, onClose }) {
                         {saving ? 'กำลังบันทึก...' : <><FiCheck /> บันทึกการตั้งค่า</>}
                     </button>
                 </div>
-            </div>
+            )}
+        </div>
+    )
+
+    if (isInline) return content
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            {content}
         </div>
     )
 }
