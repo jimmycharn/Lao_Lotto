@@ -386,6 +386,7 @@ export default function Dealer() {
     const [showNumberLimitsModal, setShowNumberLimitsModal] = useState(false)
     const [showSummaryModal, setShowSummaryModal] = useState(false)
     const [saving, setSaving] = useState(false)
+    const [expandedMemberId, setExpandedMemberId] = useState(null)
 
     // Form state for creating round
     const [roundForm, setRoundForm] = useState({
@@ -861,6 +862,8 @@ export default function Dealer() {
                                             key={member.id}
                                             member={member}
                                             formatDate={formatDate}
+                                            isExpanded={expandedMemberId === member.id}
+                                            onToggle={() => setExpandedMemberId(expandedMemberId === member.id ? null : member.id)}
                                         />
                                     ))}
                                 </div>
@@ -2975,8 +2978,7 @@ function NumberLimitsModal({ round, onClose }) {
 }
 
 // Member Accordion Item Component
-function MemberAccordionItem({ member, formatDate }) {
-    const [isExpanded, setIsExpanded] = useState(false)
+function MemberAccordionItem({ member, formatDate, isExpanded, onToggle }) {
     const [activeTab, setActiveTab] = useState('info') // 'info' | 'settings'
 
     return (
@@ -2991,7 +2993,7 @@ function MemberAccordionItem({ member, formatDate }) {
             {/* Header - Click to toggle */}
             <div
                 className="member-accordion-header"
-                onClick={() => setIsExpanded(!isExpanded)}
+                onClick={onToggle}
                 style={{
                     padding: '1.25rem 1.5rem',
                     display: 'flex',
@@ -3316,17 +3318,8 @@ function MemberSettings({ member, onClose, isInline = false }) {
             )}
 
             {isInline && (
-                <div className="settings-header-inline" style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="settings-header-inline" style={{ marginBottom: '1rem' }}>
                     <h3 style={{ margin: 0 }}>ตั้งค่า: {member.full_name}</h3>
-                    <div className="actions">
-                        <button
-                            className="btn btn-primary"
-                            onClick={handleSave}
-                            disabled={loading || saving}
-                        >
-                            {saving ? 'กำลังบันทึก...' : <><FiCheck /> บันทึกการตั้งค่า</>}
-                        </button>
-                    </div>
                 </div>
             )}
 
@@ -3396,6 +3389,20 @@ function MemberSettings({ member, onClose, isInline = false }) {
                             <p className="text-muted" style={{ marginTop: '1rem', fontSize: '0.85rem' }}>
                                 * หวยชุด 4 ตัว ขายชุดละ 120 บาท - ค่าคอมเป็นบาทต่อชุด
                             </p>
+                        )}
+
+                        {/* Save Button - Inline mode only */}
+                        {isInline && (
+                            <div className="settings-footer" style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'flex-end' }}>
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={handleSave}
+                                    disabled={loading || saving}
+                                    style={{ minWidth: '180px' }}
+                                >
+                                    {saving ? 'กำลังบันทึก...' : <><FiCheck /> บันทึกการตั้งค่า</>}
+                                </button>
+                            </div>
                         )}
                     </div>
                 )}
