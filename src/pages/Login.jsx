@@ -10,7 +10,7 @@ export default function Login() {
     const [showPassword, setShowPassword] = useState(false)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
-    const { signIn, user, loading: authLoading } = useAuth()
+    const { signIn, user, profile, loading: authLoading, isDealer, isSuperAdmin } = useAuth()
     const navigate = useNavigate()
 
     // Reset local loading state if authLoading finishes
@@ -20,9 +20,14 @@ export default function Login() {
         }
     }, [authLoading])
 
-    // If user is already logged in, redirect immediately
-    if (user && !authLoading) {
-        return <Navigate to="/" replace />
+    // If user is already logged in and profile is loaded, redirect based on role
+    if (user && profile && !authLoading) {
+        // Only dealers go to dealer dashboard
+        if (isDealer) {
+            return <Navigate to="/dealer" replace />
+        }
+        // Regular users and superadmin go to user dashboard
+        return <Navigate to="/dashboard" replace />
     }
 
     const handleSubmit = async (e) => {

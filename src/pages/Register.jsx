@@ -41,7 +41,7 @@ export default function Register() {
 
     // Redirect if already logged in (after all hooks)
     if (user && !authLoading) {
-        return <Navigate to="/" replace />
+        return <Navigate to="/dashboard" replace />
     }
 
     const handleSubmit = async (e) => {
@@ -74,7 +74,7 @@ export default function Register() {
                 // Handle redirect or success message
                 if (data.session) {
                     // Auto login successful
-                    navigate('/')
+                    navigate('/dashboard')
                 } else {
                     // Email confirmation required
                     setSuccess(true)
