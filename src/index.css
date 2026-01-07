@@ -304,6 +304,19 @@ a:hover {
   color: var(--text-muted);
 }
 
+/* Select Dropdown Options - for browser's default dropdown */
+select.form-input option {
+  background: #1a1a2e;
+  color: #ffffff;
+  padding: 0.5rem;
+}
+
+select.form-input option:hover,
+select.form-input option:checked {
+  background: #d4af37;
+  color: #000000;
+}
+
 /* Badge Styles */
 .badge {
   display: inline-flex;
