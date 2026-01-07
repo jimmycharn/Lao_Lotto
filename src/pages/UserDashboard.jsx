@@ -12,12 +12,14 @@ import {
     FiGift,
     FiSend,
     FiList,
-    FiPercent,
+    FiUser,
     FiChevronDown,
     FiChevronUp,
     FiGrid,
     FiLayers,
-    FiAward
+    FiAward,
+    FiEdit2,
+    FiSave
 } from 'react-icons/fi'
 import './UserDashboard.css'
 import './ViewToggle.css'
@@ -763,10 +765,10 @@ export default function UserDashboard() {
                         <FiAward /> ผลรางวัล
                     </button>
                     <button
-                        className={`tab-btn ${activeTab === 'commission' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('commission')}
+                        className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('profile')}
                     >
-                        <FiPercent /> ค่าคอม
+                        <FiUser /> โปรไฟล์
                     </button>
                 </div>
 
@@ -1287,8 +1289,8 @@ export default function UserDashboard() {
                         </div>
                     )}
 
-                    {activeTab === 'commission' && (
-                        <CommissionTab user={user} profile={profile} userSettings={userSettings} />
+                    {activeTab === 'profile' && (
+                        <ProfileTab user={user} profile={profile} />
                     )}
                 </div>
             </div>
@@ -1800,68 +1802,250 @@ function HistoryTab({ user, profile }) {
     )
 }
 
-// Commission Tab Component
-function CommissionTab({ user, profile, userSettings }) {
-    const [loading, setLoading] = useState(false)
-    const [totalCommission, setTotalCommission] = useState(0)
+// Profile Tab Component
+function ProfileTab({ user, profile }) {
+    const [isEditing, setIsEditing] = useState(false)
+    const [saving, setSaving] = useState(false)
+    const [toast, setToast] = useState(null)
+    // Use local state for profile data that can be updated without page reload
+    const [profileData, setProfileData] = useState({
+        full_name: profile?.full_name || '',
+        phone: profile?.phone || '',
+        bank_name: profile?.bank_name || '',
+        bank_account: profile?.bank_account || '',
+        role: profile?.role || 'user'
+    })
+    const [formData, setFormData] = useState({
+        full_name: profile?.full_name || '',
+        phone: profile?.phone || '',
+        bank_name: profile?.bank_name || '',
+        bank_account: profile?.bank_account || ''
+    })
 
+    // Update local state when profile prop changes (initial load)
     useEffect(() => {
-        fetchTotalCommission()
-    }, [])
+        if (profile) {
+            setProfileData({
+                full_name: profile.full_name || '',
+                phone: profile.phone || '',
+                bank_name: profile.bank_name || '',
+                bank_account: profile.bank_account || '',
+                role: profile.role || 'user'
+            })
+            setFormData({
+                full_name: profile.full_name || '',
+                phone: profile.phone || '',
+                bank_name: profile.bank_name || '',
+                bank_account: profile.bank_account || ''
+            })
+        }
+    }, [profile])
 
-    async function fetchTotalCommission() {
-        setLoading(true)
+    // Auto-hide toast
+    useEffect(() => {
+        if (toast) {
+            const timer = setTimeout(() => setToast(null), 3000)
+            return () => clearTimeout(timer)
+        }
+    }, [toast])
+
+    const handleSave = async () => {
+        setSaving(true)
         try {
-            // Get total commission earned
-            const { data: subs } = await supabase
-                .from('submissions')
-                .select('commission_amount')
-                .eq('user_id', user.id)
-                .eq('is_deleted', false)
+            const { error } = await supabase
+                .from('profiles')
+                .update({
+                    full_name: formData.full_name,
+                    phone: formData.phone,
+                    bank_name: formData.bank_name,
+                    bank_account: formData.bank_account
+                })
+                .eq('id', user.id)
 
-            const total = subs?.reduce((sum, s) => sum + (s.commission_amount || 0), 0) || 0
-            setTotalCommission(total)
+            if (error) throw error
 
+            // Update local profile data to reflect saved changes
+            setProfileData({
+                ...profileData,
+                full_name: formData.full_name,
+                phone: formData.phone,
+                bank_name: formData.bank_name,
+                bank_account: formData.bank_account
+            })
+
+            setIsEditing(false)
+            setToast({ type: 'success', message: 'บันทึกข้อมูลสำเร็จ!' })
         } catch (error) {
-            console.error('Error:', error)
+            console.error('Error saving profile:', error)
+            setToast({ type: 'error', message: 'เกิดข้อผิดพลาด: ' + error.message })
         } finally {
-            setLoading(false)
+            setSaving(false)
         }
     }
 
-    if (loading) {
-        return (
-            <div className="loading-state">
-                <div className="spinner"></div>
-            </div>
-        )
-    }
+    const bankOptions = [
+        'ธนาคารกรุงเทพ',
+        'ธนาคารกสิกรไทย',
+        'ธนาคารกรุงไทย',
+        'ธนาคารไทยพาณิชย์',
+        'ธนาคารกรุงศรีอยุธยา',
+        'ธนาคารทหารไทยธนชาต',
+        'ธนาคารออมสิน',
+        'ธนาคารเพื่อการเกษตรฯ (ธกส.)',
+        'ธนาคารอาคารสงเคราะห์',
+        'ธนาคารซีไอเอ็มบี',
+        'ธนาคารยูโอบี',
+        'ธนาคารแลนด์ แอนด์ เฮ้าส์',
+        'ธนาคารเกียรตินาคินภัทร',
+        'อื่นๆ'
+    ]
 
     return (
-        <div className="commission-section">
-            <div className="commission-total card">
-                <FiDollarSign className="big-icon" />
-                <h2>ค่าคอมมิชชั่นรวม</h2>
-                <span className="total-value">฿{totalCommission.toLocaleString()}</span>
+        <div className="profile-section">
+            {/* User Info Card */}
+            <div className="profile-card card">
+                <div className="profile-header">
+                    <div className="profile-avatar">
+                        <FiUser />
+                    </div>
+                    <div className="profile-info">
+                        <h2>{profileData.full_name || 'ไม่ระบุชื่อ'}</h2>
+                        <p className="email">{user?.email}</p>
+                        <span className={`role-badge role-${profileData.role}`}>
+                            {profileData.role === 'dealer' ? 'เจ้ามือ' :
+                                profileData.role === 'superadmin' ? 'Admin' : 'สมาชิก'}
+                        </span>
+                    </div>
+                    {!isEditing && (
+                        <button
+                            className="btn btn-outline edit-btn"
+                            onClick={() => setIsEditing(true)}
+                        >
+                            <FiEdit2 /> แก้ไข
+                        </button>
+                    )}
+                </div>
             </div>
 
-            <div className="commission-rates card">
-                <h3>อัตราค่าคอมมิชชั่น</h3>
-                {userSettings?.commission_rates ? (
-                    <div className="rates-grid">
-                        {Object.entries(BET_TYPES).map(([key, info]) => (
-                            <div key={key} className="rate-item">
-                                <span className="rate-label">{info.label}</span>
-                                <span className="rate-value">
-                                    {userSettings.commission_rates[key] || 0}%
-                                </span>
-                            </div>
-                        ))}
+            {/* Profile Details */}
+            <div className="profile-details card">
+                <h3>ข้อมูลส่วนตัว</h3>
+
+                {isEditing ? (
+                    <div className="profile-form">
+                        <div className="form-group">
+                            <label className="form-label">ชื่อ-นามสกุล</label>
+                            <input
+                                type="text"
+                                className="form-input"
+                                value={formData.full_name}
+                                onChange={e => setFormData({ ...formData, full_name: e.target.value })}
+                                placeholder="ชื่อ-นามสกุล"
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">เบอร์โทรศัพท์</label>
+                            <input
+                                type="tel"
+                                className="form-input"
+                                value={formData.phone}
+                                onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                                placeholder="0xx-xxx-xxxx"
+                            />
+                        </div>
                     </div>
                 ) : (
-                    <p className="text-muted">ยังไม่ได้ตั้งค่าอัตราคอมมิชชั่น</p>
+                    <div className="profile-info-list">
+                        <div className="info-row">
+                            <span className="info-label">ชื่อ-นามสกุล</span>
+                            <span className="info-value">{profileData.full_name || '-'}</span>
+                        </div>
+                        <div className="info-row">
+                            <span className="info-label">อีเมล</span>
+                            <span className="info-value">{user?.email || '-'}</span>
+                        </div>
+                        <div className="info-row">
+                            <span className="info-label">เบอร์โทรศัพท์</span>
+                            <span className="info-value">{profileData.phone || '-'}</span>
+                        </div>
+                    </div>
                 )}
             </div>
+
+            {/* Bank Info */}
+            <div className="profile-details card">
+                <h3>ข้อมูลธนาคาร</h3>
+
+                {isEditing ? (
+                    <div className="profile-form">
+                        <div className="form-group">
+                            <label className="form-label">ธนาคาร</label>
+                            <select
+                                className="form-input"
+                                value={formData.bank_name}
+                                onChange={e => setFormData({ ...formData, bank_name: e.target.value })}
+                            >
+                                <option value="">เลือกธนาคาร</option>
+                                {bankOptions.map(bank => (
+                                    <option key={bank} value={bank}>{bank}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">เลขบัญชี</label>
+                            <input
+                                type="text"
+                                className="form-input"
+                                value={formData.bank_account}
+                                onChange={e => setFormData({ ...formData, bank_account: e.target.value })}
+                                placeholder="xxx-x-xxxxx-x"
+                            />
+                        </div>
+
+                        <div className="form-actions">
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => {
+                                    setIsEditing(false)
+                                    setFormData({
+                                        full_name: profileData.full_name || '',
+                                        phone: profileData.phone || '',
+                                        bank_name: profileData.bank_name || '',
+                                        bank_account: profileData.bank_account || ''
+                                    })
+                                }}
+                            >
+                                ยกเลิก
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleSave}
+                                disabled={saving}
+                            >
+                                {saving ? 'กำลังบันทึก...' : <><FiSave /> บันทึก</>}
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="profile-info-list">
+                        <div className="info-row">
+                            <span className="info-label">ธนาคาร</span>
+                            <span className="info-value">{profileData.bank_name || '-'}</span>
+                        </div>
+                        <div className="info-row">
+                            <span className="info-label">เลขบัญชี</span>
+                            <span className="info-value">{profileData.bank_account || '-'}</span>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Toast Notification */}
+            {toast && (
+                <div className={`toast-notification ${toast.type}`}>
+                    <FiCheck /> {toast.message}
+                </div>
+            )}
         </div>
     )
 }
