@@ -37,8 +37,6 @@
 }
 
 .settings-table-wrap {
-    /* max-height: 400px; Removed to show full table */
-    /* overflow-y: auto; Removed to show full table */
     border-radius: var(--radius-md);
     border: 1px solid var(--color-border);
 }
@@ -111,6 +109,10 @@
     min-width: 30px;
 }
 
+/* =============================================
+   MOBILE RESPONSIVE STYLES
+   ============================================= */
+
 @media (max-width: 600px) {
     .settings-tabs {
         flex-wrap: wrap;
@@ -123,12 +125,55 @@
         font-size: 0.85rem;
     }
 
-    .settings-table .form-input.small {
-        width: 60px;
+    .settings-table-wrap {
+        border: none;
+        border-radius: 0;
+        overflow-x: auto;
+    }
+
+    .settings-table {
+        border-collapse: separate;
+        border-spacing: 0;
     }
 
     .settings-table th,
     .settings-table td {
-        padding: 0.5rem;
+        padding: 0.5rem 0.4rem;
+        font-size: 0.85rem;
+        border-bottom: 1px solid var(--color-border);
+    }
+
+    .settings-table th:first-child,
+    .settings-table td:first-child {
+        padding-left: 0.75rem;
+    }
+
+    .settings-table th:last-child,
+    .settings-table td:last-child {
+        padding-right: 0.75rem;
+    }
+
+    .settings-table th:nth-child(2),
+    .settings-table th:nth-child(3),
+    .settings-table td:nth-child(2),
+    .settings-table td:nth-child(3) {
+        width: auto;
+        min-width: 80px;
+    }
+
+    .settings-table .form-input.small {
+        width: 50px;
+        padding: 0.35rem;
+        font-size: 0.9rem;
+    }
+
+    .settings-table .input-suffix {
+        font-size: 0.75rem;
+        min-width: 25px;
+    }
+
+    .settings-table .type-cell {
+        font-size: 0.85rem;
+        white-space: nowrap;
     }
 }

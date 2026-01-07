@@ -25,7 +25,9 @@ import {
     FiEye,
     FiLock,
     FiSend,
-    FiRotateCcw
+    FiRotateCcw,
+    FiChevronDown,
+    FiChevronUp
 } from 'react-icons/fi'
 import './Dealer.css'
 import './SettingsTabs.css'
@@ -383,9 +385,7 @@ export default function Dealer() {
 
     const [showNumberLimitsModal, setShowNumberLimitsModal] = useState(false)
     const [showSummaryModal, setShowSummaryModal] = useState(false)
-    const [selectedMember, setSelectedMember] = useState(null)
     const [saving, setSaving] = useState(false)
-    const [memberTab, setMemberTab] = useState('info') // 'info' | 'settings'
 
     // Form state for creating round
     const [roundForm, setRoundForm] = useState({
@@ -842,113 +842,27 @@ export default function Dealer() {
                                 </div>
                             </div>
 
-                            {/* Internal Tabs */}
-                            <div className="members-tabs" style={{ marginBottom: '1.5rem', borderBottom: '1px solid var(--color-border)', display: 'flex', gap: '1rem' }}>
-                                <button
-                                    className={`tab-btn ${memberTab === 'info' ? 'active' : ''}`}
-                                    onClick={() => setMemberTab('info')}
-                                    style={{
-                                        padding: '0.75rem 1rem',
-                                        borderBottom: memberTab === 'info' ? '2px solid var(--color-primary)' : 'none',
-                                        color: memberTab === 'info' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                                        background: 'none',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        fontWeight: 500,
-                                        fontSize: '1rem'
-                                    }}
-                                >
-                                    ข้อมูลสมาชิก
-                                </button>
-                                <button
-                                    className={`tab-btn ${memberTab === 'settings' ? 'active' : ''}`}
-                                    onClick={() => setMemberTab('settings')}
-                                    style={{
-                                        padding: '0.75rem 1rem',
-                                        borderBottom: memberTab === 'settings' ? '2px solid var(--color-primary)' : 'none',
-                                        color: memberTab === 'settings' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                                        background: 'none',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        fontWeight: 500,
-                                        fontSize: '1rem'
-                                    }}
-                                >
-                                    ตั้งค่า
-                                </button>
+                            {/* Members List - Accordion Style */}
+                            <div className="section-header">
+                                <h2>รายชื่อสมาชิก</h2>
+                                <span className="badge">{members.length} คน</span>
                             </div>
 
-                            {memberTab === 'info' && (
-                                <>
-                                    {/* Members List */}
-                                    <div className="section-header">
-                                        <h2>รายชื่อสมาชิก</h2>
-                                        <span className="badge">{members.length} คน</span>
-                                    </div>
-
-                                    {members.length === 0 ? (
-                                        <div className="empty-state card">
-                                            <FiUsers className="empty-icon" />
-                                            <h3>ยังไม่มีสมาชิก</h3>
-                                            <p>ส่งลิงก์ด้านบนให้คนที่ต้องการเข้าร่วม</p>
-                                        </div>
-                                    ) : (
-                                        <div className="table-wrap card">
-                                            <table className="data-table">
-                                                <thead>
-                                                    <tr>
-                                                        <th>ชื่อ</th>
-                                                        <th>อีเมล</th>
-                                                        <th>เบอร์โทร</th>
-                                                        <th>วันที่สมัคร</th>
-                                                        <th>จัดการ</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {members.map(member => (
-                                                        <tr key={member.id}>
-                                                            <td>{member.full_name || '-'}</td>
-                                                            <td>{member.email}</td>
-                                                            <td>{member.phone || '-'}</td>
-                                                            <td className="time-cell">
-                                                                {formatDate(member.created_at)}
-                                                            </td>
-                                                            <td>
-                                                                <button
-                                                                    className="icon-btn"
-                                                                    title="ตั้งค่าคอม"
-                                                                    onClick={() => {
-                                                                        setSelectedMember(member)
-                                                                        setMemberTab('settings')
-                                                                    }}
-                                                                >
-                                                                    <FiSettings />
-                                                                </button>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )}
-                                </>
-                            )}
-
-                            {memberTab === 'settings' && (
-                                <div className="member-settings-view">
-                                    {selectedMember ? (
-                                        <MemberSettings
-                                            member={selectedMember}
-                                            onClose={() => { }}
-                                            isInline={true}
+                            {members.length === 0 ? (
+                                <div className="empty-state card">
+                                    <FiUsers className="empty-icon" />
+                                    <h3>ยังไม่มีสมาชิก</h3>
+                                    <p>ส่งลิงก์ด้านบนให้คนที่ต้องการเข้าร่วม</p>
+                                </div>
+                            ) : (
+                                <div className="members-accordion-list">
+                                    {members.map(member => (
+                                        <MemberAccordionItem
+                                            key={member.id}
+                                            member={member}
+                                            formatDate={formatDate}
                                         />
-                                    ) : (
-                                        <div className="empty-state card">
-                                            <FiSettings className="empty-icon" />
-                                            <h3>เลือกสมาชิกเพื่อตั้งค่า</h3>
-                                            <p>กรุณาเลือกสมาชิกจากแท็บ "ข้อมูลสมาชิก" หรือกดปุ่มจัดการที่รายชื่อ</p>
-                                        </div>
-                                    )}
+                                    ))}
                                 </div>
                             )}
                         </div>
@@ -3056,6 +2970,162 @@ function NumberLimitsModal({ round, onClose }) {
                     </button>
                 </div>
             </div>
+        </div>
+    )
+}
+
+// Member Accordion Item Component
+function MemberAccordionItem({ member, formatDate }) {
+    const [isExpanded, setIsExpanded] = useState(false)
+    const [activeTab, setActiveTab] = useState('info') // 'info' | 'settings'
+
+    return (
+        <div className={`member-accordion-item ${isExpanded ? 'expanded' : ''}`} style={{
+            background: 'var(--color-surface)',
+            borderRadius: 'var(--radius-lg)',
+            marginBottom: '1rem',
+            border: '1px solid var(--color-border)',
+            overflow: 'hidden',
+            transition: 'all 0.3s ease'
+        }}>
+            {/* Header - Click to toggle */}
+            <div
+                className="member-accordion-header"
+                onClick={() => setIsExpanded(!isExpanded)}
+                style={{
+                    padding: '1.25rem 1.5rem',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    background: isExpanded ? 'var(--color-surface-light)' : 'transparent',
+                    borderBottom: isExpanded ? '1px solid var(--color-border)' : 'none'
+                }}
+            >
+                <div className="member-info-summary" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <div className="member-avatar" style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '50%',
+                        background: 'var(--color-primary)',
+                        color: '#000',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '1.2rem',
+                        fontWeight: 'bold'
+                    }}>
+                        {member.full_name ? member.full_name.charAt(0).toUpperCase() : <FiUsers />}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span className="member-name" style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '1.1rem' }}>
+                            {member.full_name || 'ไม่ระบุชื่อ'}
+                        </span>
+                        <span className="member-email" style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+                            {member.email}
+                        </span>
+                    </div>
+                </div>
+                <div className="accordion-icon" style={{
+                    color: isExpanded ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.3s ease'
+                }}>
+                    <FiChevronDown size={24} />
+                </div>
+            </div>
+
+            {/* Body - Only visible if expanded */}
+            {isExpanded && (
+                <div className="member-accordion-body" style={{ padding: '1.5rem' }}>
+                    {/* Internal Tabs */}
+                    <div className="member-internal-tabs" style={{
+                        display: 'flex',
+                        gap: '1rem',
+                        marginBottom: '1.5rem',
+                        borderBottom: '1px solid var(--color-border)'
+                    }}>
+                        <button
+                            onClick={() => setActiveTab('info')}
+                            style={{
+                                padding: '0.75rem 1rem',
+                                background: 'transparent',
+                                border: 'none',
+                                borderBottom: activeTab === 'info' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                                color: activeTab === 'info' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                fontWeight: '500',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <FiUsers style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                            ข้อมูลทั่วไป
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('settings')}
+                            style={{
+                                padding: '0.75rem 1rem',
+                                background: 'transparent',
+                                border: 'none',
+                                borderBottom: activeTab === 'settings' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                                color: activeTab === 'settings' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                fontWeight: '500',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <FiSettings style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                            ตั้งค่า
+                        </button>
+                    </div>
+
+                    {/* Tab Content */}
+                    <div className="member-tab-content">
+                        {activeTab === 'info' && (
+                            <div className="member-info-view" style={{ animation: 'fadeIn 0.3s ease' }}>
+                                <div className="info-grid" style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                                    gap: '1.5rem'
+                                }}>
+                                    <div className="info-item">
+                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>เบอร์โทรศัพท์</label>
+                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{member.phone || '-'}</div>
+                                    </div>
+                                    <div className="info-item">
+                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>ธนาคาร</label>
+                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{member.bank_name || '-'}</div>
+                                    </div>
+                                    <div className="info-item">
+                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>เลขบัญชี</label>
+                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{member.bank_account || '-'}</div>
+                                    </div>
+                                    <div className="info-item">
+                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>วันที่สมัคร</label>
+                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{formatDate(member.created_at)}</div>
+                                    </div>
+                                    <div className="info-item">
+                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>สถานะ</label>
+                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-success)' }}>
+                                            <span className="status-badge open" style={{ fontSize: '0.9rem' }}>ปกติ</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'settings' && (
+                            <div className="member-settings-wrapper" style={{ animation: 'fadeIn 0.3s ease' }}>
+                                <MemberSettings
+                                    member={member}
+                                    isInline={true}
+                                    onClose={() => { }}
+                                />
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
