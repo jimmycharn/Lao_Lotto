@@ -141,6 +141,11 @@ export default function UserDashboard() {
     const [activeTab, setActiveTab] = useState('rounds') // rounds, results, commission
     const [userSettings, setUserSettings] = useState(null)
 
+    // Multi-dealer support
+    const [dealers, setDealers] = useState([])
+    const [selectedDealer, setSelectedDealer] = useState(null)
+    const [dealersLoading, setDealersLoading] = useState(true)
+
     // Results tab state
     const [resultsRounds, setResultsRounds] = useState([])
     const [selectedResultRound, setSelectedResultRound] = useState(null)
@@ -177,20 +182,67 @@ export default function UserDashboard() {
         }
     }, [toast])
 
+    // Fetch active dealer memberships
     useEffect(() => {
-        if (profile?.dealer_id) {
+        if (user) {
+            fetchDealerMemberships()
+        }
+    }, [user])
+
+    async function fetchDealerMemberships() {
+        setDealersLoading(true)
+        try {
+            const { data, error } = await supabase
+                .from('user_dealer_memberships')
+                .select(`
+                    dealer_id,
+                    status,
+                    profiles:dealer_id (
+                        id,
+                        full_name,
+                        email
+                    )
+                `)
+                .eq('user_id', user.id)
+                .eq('status', 'active')
+
+            if (!error && data) {
+                const dealerList = data.map(m => ({
+                    id: m.profiles?.id,
+                    full_name: m.profiles?.full_name,
+                    email: m.profiles?.email
+                })).filter(d => d.id)
+
+                setDealers(dealerList)
+
+                // Auto-select first dealer if none selected
+                if (dealerList.length > 0 && !selectedDealer) {
+                    setSelectedDealer(dealerList[0])
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching dealer memberships:', error)
+        } finally {
+            setDealersLoading(false)
+        }
+    }
+
+    // Fetch data when selectedDealer changes
+    useEffect(() => {
+        if (selectedDealer) {
             fetchRounds()
             fetchUserSettings()
         }
-    }, [profile])
+    }, [selectedDealer])
 
     async function fetchUserSettings() {
+        if (!selectedDealer) return
         try {
             const { data } = await supabase
                 .from('user_settings')
                 .select('*')
                 .eq('user_id', user.id)
-                .eq('dealer_id', profile.dealer_id)
+                .eq('dealer_id', selectedDealer.id)
                 .single()
 
             if (data) setUserSettings(data)
@@ -207,10 +259,10 @@ export default function UserDashboard() {
 
     // Fetch results when switching to results tab
     useEffect(() => {
-        if (activeTab === 'results' && profile?.dealer_id) {
+        if (activeTab === 'results' && selectedDealer) {
             fetchResultsRounds()
         }
-    }, [activeTab, profile])
+    }, [activeTab, selectedDealer])
 
     // Fetch submissions when selecting a result round or changing view mode
     useEffect(() => {
@@ -220,6 +272,7 @@ export default function UserDashboard() {
     }, [selectedResultRound, resultViewMode])
 
     async function fetchRounds() {
+        if (!selectedDealer) return
         setLoading(true)
         try {
             // Get open rounds from my dealer
@@ -229,7 +282,7 @@ export default function UserDashboard() {
                     *,
                     type_limits (*)
                 `)
-                .eq('dealer_id', profile.dealer_id)
+                .eq('dealer_id', selectedDealer.id)
                 .in('status', ['open', 'closed'])
                 .order('round_date', { ascending: false })
                 .limit(10)
@@ -269,12 +322,13 @@ export default function UserDashboard() {
 
     // Fetch rounds with announced results for Results tab
     async function fetchResultsRounds() {
+        if (!selectedDealer) return
         setResultsLoading(true)
         try {
             const { data, error } = await supabase
                 .from('lottery_rounds')
                 .select('*')
-                .eq('dealer_id', profile.dealer_id)
+                .eq('dealer_id', selectedDealer.id)
                 .eq('is_result_announced', true)
                 .order('round_date', { ascending: false })
                 .limit(20)
@@ -726,15 +780,29 @@ export default function UserDashboard() {
         return sub.amount * (defaultRate / 100)
     }
 
-    // No dealer assigned
-    if (!profile?.dealer_id) {
+    // Loading dealers
+    if (dealersLoading) {
+        return (
+            <div className="user-dashboard">
+                <div className="container">
+                    <div className="loading-state" style={{ padding: '3rem' }}>
+                        <div className="spinner"></div>
+                        <p>กำลังโหลด...</p>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    // No active dealer membership
+    if (dealers.length === 0) {
         return (
             <div className="user-dashboard">
                 <div className="container">
                     <div className="no-dealer-card card">
                         <FiGift className="big-icon" />
                         <h2>ยังไม่มีเจ้ามือ</h2>
-                        <p>กรุณาสมัครผ่านลิงก์ของเจ้ามือเพื่อเข้าร่วมกลุ่ม</p>
+                        <p>กรุณาสมัครผ่านลิงก์ของเจ้ามือเพื่อเข้าร่วมกลุ่ม หรือรอเจ้ามืออนุมัติคำขอของคุณ</p>
                     </div>
                 </div>
             </div>
@@ -749,6 +817,25 @@ export default function UserDashboard() {
                     <h1><FiSend /> ส่งเลข</h1>
                     <p>ส่งเลขหวยให้เจ้ามือของคุณ</p>
                 </div>
+
+                {/* Dealer Selector Pills */}
+                {dealers.length > 1 && (
+                    <div className="dealer-selector-bar">
+                        {dealers.map(dealer => (
+                            <button
+                                key={dealer.id}
+                                className={`dealer-pill ${selectedDealer?.id === dealer.id ? 'active' : ''}`}
+                                onClick={() => {
+                                    setSelectedDealer(dealer)
+                                    setSelectedRound(null) // Reset round selection
+                                    setRounds([])
+                                }}
+                            >
+                                {dealer.full_name || dealer.email}
+                            </button>
+                        ))}
+                    </div>
+                )}
 
                 {/* Tabs */}
                 <div className="user-tabs">

@@ -376,6 +376,8 @@ export default function Dealer() {
     const [activeTab, setActiveTab] = useState('rounds')
     const [rounds, setRounds] = useState([])
     const [members, setMembers] = useState([])
+    const [pendingMembers, setPendingMembers] = useState([])
+    const [blockedMembers, setBlockedMembers] = useState([])
     const [loading, setLoading] = useState(true)
     const [selectedRound, setSelectedRound] = useState(null)
 
@@ -471,14 +473,35 @@ export default function Dealer() {
                 }
             }
 
-            // Fetch members
-            const { data: membersData } = await supabase
-                .from('profiles')
-                .select('*')
+            // Fetch members from memberships table
+            const { data: membershipsData } = await supabase
+                .from('user_dealer_memberships')
+                .select(`
+                    *,
+                    profiles:user_id (
+                        id,
+                        email,
+                        full_name,
+                        phone,
+                        created_at
+                    )
+                `)
                 .eq('dealer_id', user.id)
                 .order('created_at', { ascending: false })
 
-            setMembers(membersData || [])
+            // Transform and categorize memberships
+            const allMemberships = (membershipsData || []).map(m => ({
+                ...m.profiles,
+                membership_id: m.id,
+                membership_status: m.status,
+                membership_created_at: m.created_at,
+                approved_at: m.approved_at,
+                blocked_at: m.blocked_at
+            }))
+
+            setMembers(allMemberships.filter(m => m.membership_status === 'active'))
+            setPendingMembers(allMemberships.filter(m => m.membership_status === 'pending'))
+            setBlockedMembers(allMemberships.filter(m => m.membership_status === 'blocked'))
 
             // Fetch subscription (if table exists)
             try {
@@ -513,6 +536,71 @@ export default function Dealer() {
             console.error('Error:', error)
         } finally {
             setLoading(false)
+        }
+    }
+
+    // Membership Management Functions
+    async function handleApproveMember(member) {
+        try {
+            const { error } = await supabase
+                .from('user_dealer_memberships')
+                .update({ status: 'active' })
+                .eq('id', member.membership_id)
+
+            if (error) throw error
+            fetchData()
+        } catch (error) {
+            console.error('Error approving member:', error)
+            alert('เกิดข้อผิดพลาดในการอนุมัติสมาชิก')
+        }
+    }
+
+    async function handleRejectMember(member) {
+        if (!confirm(`ต้องการปฏิเสธ "${member.full_name || member.email}" หรือไม่?`)) return
+
+        try {
+            const { error } = await supabase
+                .from('user_dealer_memberships')
+                .update({ status: 'rejected' })
+                .eq('id', member.membership_id)
+
+            if (error) throw error
+            fetchData()
+        } catch (error) {
+            console.error('Error rejecting member:', error)
+            alert('เกิดข้อผิดพลาดในการปฏิเสธสมาชิก')
+        }
+    }
+
+    async function handleBlockMember(member) {
+        if (!confirm(`ต้องการบล็อค "${member.full_name || member.email}" หรือไม่?\nสมาชิกจะไม่สามารถส่งเลขให้คุณได้`)) return
+
+        try {
+            const { error } = await supabase
+                .from('user_dealer_memberships')
+                .update({ status: 'blocked' })
+                .eq('id', member.membership_id)
+
+            if (error) throw error
+            fetchData()
+        } catch (error) {
+            console.error('Error blocking member:', error)
+            alert('เกิดข้อผิดพลาดในการบล็อคสมาชิก')
+        }
+    }
+
+    async function handleUnblockMember(member) {
+        try {
+            const { error } = await supabase
+                .from('user_dealer_memberships')
+                .update({ status: 'active' })
+                .eq('id', member.membership_id)
+
+            if (error) throw error
+            fetchData()
+        } catch (error) {
+            console.error('Error unblocking member:', error)
+            alert('เกิดข้อผิดพลาดในการปลดบล็อคสมาชิก')
         }
     }
 
@@ -917,17 +1005,68 @@ export default function Dealer() {
                                 </div>
                             </div>
 
+                            {/* Pending Members Section */}
+                            {pendingMembers.length > 0 && (
+                                <div className="pending-members-section" style={{ marginBottom: '1.5rem' }}>
+                                    <div className="section-header" style={{ marginBottom: '0.75rem' }}>
+                                        <h3 style={{ fontSize: '1rem', color: 'var(--color-warning)' }}>
+                                            <FiClock /> รอการอนุมัติ
+                                        </h3>
+                                        <span className="badge" style={{ background: 'var(--color-warning)', color: '#000' }}>
+                                            {pendingMembers.length} คน
+                                        </span>
+                                    </div>
+                                    <div className="pending-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                        {pendingMembers.map(member => (
+                                            <div key={member.id} className="pending-member-item card" style={{
+                                                padding: '0.75rem 1rem',
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                flexWrap: 'wrap',
+                                                gap: '0.5rem'
+                                            }}>
+                                                <div className="member-info">
+                                                    <div style={{ fontWeight: 500 }}>{member.full_name || 'ไม่มีชื่อ'}</div>
+                                                    <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{member.email}</div>
+                                                </div>
+                                                <div className="member-actions" style={{ display: 'flex', gap: '0.5rem' }}>
+                                                    <button
+                                                        className="btn btn-success btn-sm"
+                                                        onClick={() => handleApproveMember(member)}
+                                                        style={{ padding: '0.35rem 0.75rem' }}
+                                                    >
+                                                        <FiCheck /> อนุมัติ
+                                                    </button>
+                                                    <button
+                                                        className="btn btn-danger btn-sm"
+                                                        onClick={() => handleRejectMember(member)}
+                                                        style={{ padding: '0.35rem 0.75rem' }}
+                                                    >
+                                                        <FiX /> ปฏิเสธ
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Members List - Accordion Style */}
                             <div className="section-header">
-                                <h2>รายชื่อสมาชิก</h2>
+                                <h2>สมาชิกที่อนุมัติแล้ว</h2>
                                 <span className="badge">{members.length} คน</span>
                             </div>
 
-                            {members.length === 0 ? (
+                            {members.length === 0 && pendingMembers.length === 0 ? (
                                 <div className="empty-state card">
                                     <FiUsers className="empty-icon" />
                                     <h3>ยังไม่มีสมาชิก</h3>
                                     <p>ส่งลิงก์ด้านบนให้คนที่ต้องการเข้าร่วม</p>
+                                </div>
+                            ) : members.length === 0 ? (
+                                <div className="empty-state card" style={{ padding: '1.5rem' }}>
+                                    <p style={{ opacity: 0.7 }}>ยังไม่มีสมาชิกที่อนุมัติแล้ว</p>
                                 </div>
                             ) : (
                                 <div className="members-accordion-list">
@@ -938,8 +1077,46 @@ export default function Dealer() {
                                             formatDate={formatDate}
                                             isExpanded={expandedMemberId === member.id}
                                             onToggle={() => setExpandedMemberId(expandedMemberId === member.id ? null : member.id)}
+                                            onBlock={() => handleBlockMember(member)}
                                         />
                                     ))}
+                                </div>
+                            )}
+
+                            {/* Blocked Members Section */}
+                            {blockedMembers.length > 0 && (
+                                <div className="blocked-members-section" style={{ marginTop: '1.5rem' }}>
+                                    <div className="section-header" style={{ marginBottom: '0.75rem' }}>
+                                        <h3 style={{ fontSize: '1rem', color: 'var(--color-error)' }}>
+                                            <FiLock /> สมาชิกที่บล็อค
+                                        </h3>
+                                        <span className="badge" style={{ background: 'var(--color-error)' }}>
+                                            {blockedMembers.length} คน
+                                        </span>
+                                    </div>
+                                    <div className="blocked-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                        {blockedMembers.map(member => (
+                                            <div key={member.id} className="blocked-member-item card" style={{
+                                                padding: '0.75rem 1rem',
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                opacity: 0.7
+                                            }}>
+                                                <div className="member-info">
+                                                    <div style={{ fontWeight: 500 }}>{member.full_name || 'ไม่มีชื่อ'}</div>
+                                                    <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{member.email}</div>
+                                                </div>
+                                                <button
+                                                    className="btn btn-outline btn-sm"
+                                                    onClick={() => handleUnblockMember(member)}
+                                                    style={{ padding: '0.35rem 0.75rem' }}
+                                                >
+                                                    ปลดบล็อค
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -3515,7 +3692,7 @@ function DealerProfileTab({ user, profile }) {
 }
 
 // Member Accordion Item Component
-function MemberAccordionItem({ member, formatDate, isExpanded, onToggle }) {
+function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock }) {
     const [activeTab, setActiveTab] = useState('info') // 'info' | 'settings'
 
     return (
@@ -3650,6 +3827,18 @@ function MemberAccordionItem({ member, formatDate, isExpanded, onToggle }) {
                                         </div>
                                     </div>
                                 </div>
+                                {/* Block Button */}
+                                {onBlock && (
+                                    <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)' }}>
+                                        <button
+                                            className="btn btn-outline btn-sm"
+                                            onClick={(e) => { e.stopPropagation(); onBlock(); }}
+                                            style={{ color: 'var(--color-error)', borderColor: 'var(--color-error)' }}
+                                        >
+                                            <FiLock style={{ marginRight: '0.5rem' }} /> บล็อคสมาชิก
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
 

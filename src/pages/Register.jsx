@@ -63,9 +63,10 @@ export default function Register() {
         setLoading(true)
 
         try {
-            // Pass role for dealer registration
+            // Pass role for dealer registration, but don't pass dealer_id anymore
+            // Membership will be created separately
             const role = isDealerRegistration ? 'dealer' : 'user'
-            const { data, error } = await signUp(email, password, fullName, dealerId, role)
+            const { data, error } = await signUp(email, password, fullName, null, role)
 
             if (error) {
                 let msg = error.message
@@ -73,7 +74,27 @@ export default function Register() {
                 setError(msg)
                 setLoading(false)
             } else {
-                // Profile is auto-created by database trigger including dealer_id and role from metadata
+                // Profile is auto-created by database trigger
+
+                // If there's a dealer ref, create a pending membership
+                if (dealerId && data.user && !isDealerRegistration) {
+                    try {
+                        const { error: membershipError } = await supabase
+                            .from('user_dealer_memberships')
+                            .insert({
+                                user_id: data.user.id,
+                                dealer_id: dealerId,
+                                status: 'pending'
+                            })
+
+                        if (membershipError) {
+                            console.error('Error creating membership:', membershipError)
+                            // Don't fail registration if membership creation fails
+                        }
+                    } catch (membershipErr) {
+                        console.error('Error creating membership:', membershipErr)
+                    }
+                }
 
                 // Handle redirect or success message
                 if (data.session) {

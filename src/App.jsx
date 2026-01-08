@@ -4,6 +4,7 @@ import Navbar from './components/Navbar'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import InvitationAccept from './pages/InvitationAccept'
 import BuyLottery from './pages/BuyLottery'
 import Results from './pages/Results'
 import History from './pages/History'
@@ -64,12 +65,12 @@ function HomeRedirect() {
     return <Navigate to="/dealer" replace />
   }
 
-  // Redirect logged-in regular users (with dealer) to user dashboard
-  if (user && profile?.dealer_id) {
+  // Redirect logged-in regular users to user dashboard
+  if (user) {
     return <Navigate to="/dashboard" replace />
   }
 
-  // Guests or users without dealer see the Home page
+  // Guests see the Home page
   return <Home />
 }
 
@@ -82,6 +83,7 @@ function AppContent() {
           <Route path="/" element={<HomeRedirect />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/invite" element={<InvitationAccept />} />
           <Route path="/results" element={<Results />} />
           <Route
             path="/buy"
