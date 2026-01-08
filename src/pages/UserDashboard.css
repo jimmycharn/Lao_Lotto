@@ -1910,10 +1910,6 @@
     }
 }
 
-/* =============================================
-   DRAFTS SECTION TOGGLE
-   ============================================= */
-
 .drafts-section .section-header {
     display: flex;
     justify-content: space-between;
@@ -1925,36 +1921,6 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
-}
-
-.toggle-btn.compact {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.35rem 0.75rem;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    background: rgba(255, 255, 255, 0.05);
-    color: var(--color-text-muted);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    font-size: 0.8rem;
-    font-weight: 500;
-    transition: all 0.2s ease;
-}
-
-.toggle-btn.compact:hover {
-    border-color: rgba(212, 175, 55, 0.4);
-    color: var(--color-primary);
-}
-
-.toggle-btn.compact.active {
-    border-color: var(--color-primary);
-    background: rgba(212, 175, 55, 0.1);
-    color: var(--color-primary);
-}
-
-.toggle-btn.compact svg {
-    font-size: 0.9rem;
 }
 
 .drafts-list.collapsed {
@@ -2296,4 +2262,81 @@
     font-size: 0.85rem;
     color: var(--color-text-muted);
     margin-bottom: 1rem;
+}
+
+/* DEALER SELECTOR STYLES */
+.dealer-selector-bar {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    padding: 0.5rem;
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+
+.dealer-selector-bar::-webkit-scrollbar {
+    display: none;
+}
+
+.dealer-pill {
+    flex-shrink: 0;
+    padding: 0.75rem 1.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    min-width: 160px;
+}
+
+.dealer-info-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    text-align: left;
+}
+
+.dealer-label {
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 500;
+}
+
+.dealer-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--color-text);
+    line-height: 1.2;
+}
+
+.dealer-pill:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(-1px);
+}
+
+.dealer-pill:hover .dealer-label {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.dealer-pill.active {
+    border-color: var(--color-primary);
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.15), rgba(212, 175, 55, 0.05));
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.dealer-pill.active .dealer-label {
+    color: var(--color-primary);
+    opacity: 0.8;
+}
+
+.dealer-pill.active .dealer-name {
+    color: var(--color-primary);
 }

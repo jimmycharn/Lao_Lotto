@@ -834,7 +834,10 @@ export default function UserDashboard() {
                                     setRounds([])
                                 }}
                             >
-                                {dealer.full_name || dealer.email}
+                                <div className="dealer-info-row">
+                                    <span className="dealer-label">เจ้ามือ</span>
+                                    <span className="dealer-name">{dealer.full_name || dealer.email}</span>
+                                </div>
                             </button>
                         ))}
                     </div>
