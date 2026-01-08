@@ -36,8 +36,7 @@ export default function Navbar() {
         { path: '/', label: 'หน้าแรก', icon: <FiHome />, hideForDealer: true, hideForSuperAdmin: true },
         { path: '/dashboard', label: 'ส่งเลข', icon: <FiSend />, requireAuth: true, requireDealer: true, hideForDealer: true, hideForSuperAdmin: true },
         { path: '/buy', label: 'ซื้อหวย', icon: <FiEdit />, requireAuth: true, hide: hasDealer, hideForDealer: true, hideForSuperAdmin: true },
-        { path: '/results', label: 'ผลหวย', icon: <FiList />, hideForDealer: true, hideForSuperAdmin: true },
-        { path: '/history', label: 'ประวัติ', icon: <FiClock />, requireAuth: true, hideForDealer: true, hideForSuperAdmin: true },
+        { path: '/profile', label: 'โปรไฟล์', icon: <FiUser />, requireAuth: true, hideForDealer: true, hideForSuperAdmin: true },
     ]
 
     const adminLinks = [

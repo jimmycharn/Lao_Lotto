@@ -858,10 +858,10 @@ export default function UserDashboard() {
                         <FiAward /> ผลรางวัล
                     </button>
                     <button
-                        className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('profile')}
+                        className={`tab-btn ${activeTab === 'dealer' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('dealer')}
                     >
-                        <FiUser /> โปรไฟล์
+                        <FiUser /> เจ้ามือ
                     </button>
                 </div>
 
@@ -1382,8 +1382,8 @@ export default function UserDashboard() {
                         </div>
                     )}
 
-                    {activeTab === 'profile' && (
-                        <ProfileTab user={user} profile={profile} />
+                    {activeTab === 'dealer' && selectedDealer && (
+                        <DealerInfoTab dealer={selectedDealer} userSettings={userSettings} />
                     )}
                 </div>
             </div>
@@ -1790,6 +1790,132 @@ export default function UserDashboard() {
                     </div>
                 </div>
             )}
+        </div>
+    )
+}
+
+// Dealer Info Tab Component - Shows selected dealer's information
+function DealerInfoTab({ dealer, userSettings }) {
+    const [dealerProfile, setDealerProfile] = useState(null)
+    const [dealerBankAccounts, setDealerBankAccounts] = useState([])
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        if (dealer?.id) {
+            fetchDealerInfo()
+        }
+    }, [dealer?.id])
+
+    async function fetchDealerInfo() {
+        setLoading(true)
+        try {
+            // Fetch dealer profile
+            const { data: profileData } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', dealer.id)
+                .single()
+
+            if (profileData) {
+                setDealerProfile(profileData)
+            }
+
+            // Fetch dealer bank accounts
+            const { data: bankData } = await supabase
+                .from('dealer_bank_accounts')
+                .select('*')
+                .eq('dealer_id', dealer.id)
+                .order('is_default', { ascending: false })
+
+            if (bankData) {
+                setDealerBankAccounts(bankData)
+            }
+        } catch (error) {
+            console.error('Error fetching dealer info:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    // Get default or first bank account
+    const primaryBank = dealerBankAccounts.find(b => b.is_default) || dealerBankAccounts[0]
+
+    // Commission and payout rates from user settings
+    const commissionRates = userSettings?.commission_rates || {}
+    const payoutRates = userSettings?.payout_rates || {}
+
+    if (loading) {
+        return (
+            <div className="loading-state">
+                <div className="spinner"></div>
+            </div>
+        )
+    }
+
+    return (
+        <div className="dealer-info-section">
+            {/* Dealer Info Card */}
+            <div className="profile-card card">
+                <div className="profile-header">
+                    <div className="profile-avatar dealer-avatar">
+                        <FiUser />
+                    </div>
+                    <div className="profile-info">
+                        <h2>{dealerProfile?.full_name || dealer.full_name || 'ไม่ระบุชื่อ'}</h2>
+                        <p className="email">{dealerProfile?.email || dealer.email}</p>
+                        <span className="role-badge role-dealer">เจ้ามือ</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Contact Info */}
+            <div className="profile-details card">
+                <h3>ข้อมูลติดต่อ</h3>
+                <div className="profile-info-list">
+                    <div className="info-row">
+                        <span className="info-label">ชื่อ</span>
+                        <span className="info-value">{dealerProfile?.full_name || '-'}</span>
+                    </div>
+                    <div className="info-row">
+                        <span className="info-label">อีเมล</span>
+                        <span className="info-value">{dealerProfile?.email || '-'}</span>
+                    </div>
+                    <div className="info-row">
+                        <span className="info-label">เบอร์โทร</span>
+                        <span className="info-value">{dealerProfile?.phone || '-'}</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Bank Account for Transfer */}
+            <div className="profile-details card">
+                <h3>บัญชีธนาคาร (สำหรับโอนเงิน)</h3>
+                {primaryBank ? (
+                    <div className="profile-info-list">
+                        <div className="info-row">
+                            <span className="info-label">ธนาคาร</span>
+                            <span className="info-value">{primaryBank.bank_name}</span>
+                        </div>
+                        <div className="info-row">
+                            <span className="info-label">ชื่อบัญชี</span>
+                            <span className="info-value">{primaryBank.account_name || '-'}</span>
+                        </div>
+                        <div className="info-row">
+                            <span className="info-label">เลขบัญชี</span>
+                            <span className="info-value bank-account-number">{primaryBank.bank_account}</span>
+                        </div>
+                        {primaryBank.is_default && (
+                            <div className="default-badge">
+                                <FiCheck /> บัญชีหลัก
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="empty-state small">
+                        <p>ยังไม่มีข้อมูลบัญชีธนาคาร</p>
+                    </div>
+                )}
+            </div>
         </div>
     )
 }

@@ -6,8 +6,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import InvitationAccept from './pages/InvitationAccept'
 import BuyLottery from './pages/BuyLottery'
-import Results from './pages/Results'
-import History from './pages/History'
+import Profile from './pages/Profile'
 import Dealer from './pages/Dealer'
 import Admin from './pages/Admin'
 import SuperAdmin from './pages/SuperAdmin'
@@ -84,7 +83,14 @@ function AppContent() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/invite" element={<InvitationAccept />} />
-          <Route path="/results" element={<Results />} />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute requireAuth>
+                <Profile />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/buy"
             element={
@@ -101,14 +107,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/history"
-            element={
-              <ProtectedRoute requireAuth>
-                <History />
-              </ProtectedRoute>
-            }
-          />
+
           <Route
             path="/dealer"
             element={
