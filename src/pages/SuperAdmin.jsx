@@ -204,42 +204,47 @@ export default function SuperAdmin() {
 
     const fetchDealers = async () => {
         try {
-            // First try with subscription join
-            let { data, error } = await supabase
+            // Fetch dealers
+            const { data: dealersData, error: dealersError } = await supabase
                 .from('profiles')
-                .select(`
-                    *,
-                    dealer_subscriptions (
-                        id,
-                        status,
-                        billing_model,
-                        start_date,
-                        end_date,
-                        is_trial,
-                        package_id,
-                        subscription_packages (
-                            name
-                        )
-                    )
-                `)
+                .select('*')
                 .eq('role', 'dealer')
                 .order('created_at', { ascending: false })
 
-            // If error (e.g., table doesn't exist), fallback to simple query
-            if (error) {
-                console.warn('Subscription tables not available, using simple query:', error.message)
-                const result = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .eq('role', 'dealer')
+            if (dealersError) throw dealersError
+
+            // Fetch subscriptions separately
+            let subscriptionsData = []
+            try {
+                const { data: subData, error: subError } = await supabase
+                    .from('dealer_subscriptions')
+                    .select(`
+                        *,
+                        subscription_packages (
+                            id,
+                            name,
+                            billing_model
+                        )
+                    `)
                     .order('created_at', { ascending: false })
 
-                data = result.data
-                error = result.error
+                if (!subError) {
+                    subscriptionsData = subData || []
+                }
+            } catch (e) {
+                console.log('Could not fetch subscriptions:', e)
             }
 
-            if (error) throw error
-            setDealers(data || [])
+            // Map subscriptions to dealers
+            const dealersWithSubs = (dealersData || []).map(dealer => {
+                const dealerSubs = subscriptionsData.filter(sub => sub.dealer_id === dealer.id)
+                return {
+                    ...dealer,
+                    dealer_subscriptions: dealerSubs
+                }
+            })
+
+            setDealers(dealersWithSubs)
         } catch (error) {
             console.error('Error fetching dealers:', error)
             setDealers([])
