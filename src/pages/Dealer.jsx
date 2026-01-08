@@ -29,7 +29,9 @@ import {
     FiChevronDown,
     FiChevronUp,
     FiSave,
-    FiStar
+    FiStar,
+    FiPackage,
+    FiAlertCircle
 } from 'react-icons/fi'
 import './Dealer.css'
 import './SettingsTabs.css'
@@ -389,6 +391,7 @@ export default function Dealer() {
     const [showSummaryModal, setShowSummaryModal] = useState(false)
     const [saving, setSaving] = useState(false)
     const [expandedMemberId, setExpandedMemberId] = useState(null)
+    const [subscription, setSubscription] = useState(null)
 
     // Form state for creating round
     const [roundForm, setRoundForm] = useState({
@@ -476,6 +479,35 @@ export default function Dealer() {
                 .order('created_at', { ascending: false })
 
             setMembers(membersData || [])
+
+            // Fetch subscription (if table exists)
+            try {
+                const { data: subData } = await supabase
+                    .from('dealer_subscriptions')
+                    .select(`
+                        *,
+                        subscription_packages (
+                            id,
+                            name,
+                            description,
+                            billing_model,
+                            monthly_price,
+                            yearly_price,
+                            max_users,
+                            features
+                        )
+                    `)
+                    .eq('dealer_id', user.id)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .single()
+
+                setSubscription(subData)
+            } catch (subError) {
+                // Table might not exist yet
+                console.log('Subscription table not available')
+                setSubscription(null)
+            }
 
         } catch (error) {
             console.error('Error:', error)
@@ -763,6 +795,46 @@ export default function Dealer() {
                 <div className="dealer-content">
                     {activeTab === 'rounds' && (
                         <div className="rounds-section">
+                            {/* Subscription Status Card */}
+                            <div className="subscription-status-card">
+                                <div className="sub-icon">
+                                    <FiPackage />
+                                </div>
+                                <div className="sub-info">
+                                    {subscription?.subscription_packages ? (
+                                        <>
+                                            <div className="sub-name">
+                                                {subscription.subscription_packages.name}
+                                                {subscription.is_trial && (
+                                                    <span className="trial-badge">ทดลองใช้</span>
+                                                )}
+                                            </div>
+                                            <div className="sub-details">
+                                                <span className={`sub-status status-${subscription.status}`}>
+                                                    {subscription.status === 'active' ? 'ใช้งานอยู่' :
+                                                        subscription.status === 'trial' ? 'ทดลองใช้' :
+                                                            subscription.status === 'expired' ? 'หมดอายุ' : subscription.status}
+                                                </span>
+                                                {subscription.end_date && (
+                                                    <span className="sub-expiry">
+                                                        หมดอายุ: {formatDate(subscription.end_date)}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="sub-name no-package">
+                                                <FiAlertCircle /> ยังไม่มีแพ็คเกจ
+                                            </div>
+                                            <div className="sub-details">
+                                                กรุณาติดต่อผู้ดูแลระบบเพื่อเลือกแพ็คเกจ
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+
                             {/* Create Button */}
                             <div className="section-header">
                                 <h2>งวดหวยทั้งหมด</h2>

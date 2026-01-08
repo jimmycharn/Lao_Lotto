@@ -1176,3 +1176,18 @@
         width: 100%;
     }
 }
+
+/* Assign Package Modal */
+.dealer-assign-info {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    color: #fff;
+}
+
+.dealer-assign-info strong {
+    color: rgba(255, 255, 255, 0.7);
+    margin-right: 0.5rem;
+}

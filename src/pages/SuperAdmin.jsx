@@ -69,6 +69,13 @@ export default function SuperAdmin() {
     const [selectedDealer, setSelectedDealer] = useState(null)
     const [showPaymentModal, setShowPaymentModal] = useState(false)
     const [selectedPayment, setSelectedPayment] = useState(null)
+    const [showAssignPackageModal, setShowAssignPackageModal] = useState(false)
+    const [assignPackageForm, setAssignPackageForm] = useState({
+        package_id: '',
+        billing_cycle: 'monthly',
+        is_trial: false,
+        trial_days: 30
+    })
 
     // Form States
     const [packageForm, setPackageForm] = useState({
@@ -519,6 +526,78 @@ export default function SuperAdmin() {
         }
     }
 
+    // === ASSIGN PACKAGE TO DEALER ===
+    const handleAssignPackage = async () => {
+        if (!selectedDealer || !assignPackageForm.package_id) {
+            alert('กรุณาเลือกแพ็คเกจ')
+            return
+        }
+
+        try {
+            const selectedPackage = packages.find(p => p.id === assignPackageForm.package_id)
+            if (!selectedPackage) throw new Error('Package not found')
+
+            // Calculate dates
+            const startDate = new Date()
+            let endDate = new Date()
+
+            if (assignPackageForm.is_trial) {
+                endDate.setDate(endDate.getDate() + (assignPackageForm.trial_days || 30))
+            } else if (assignPackageForm.billing_cycle === 'yearly') {
+                endDate.setFullYear(endDate.getFullYear() + 1)
+            } else {
+                endDate.setMonth(endDate.getMonth() + 1)
+            }
+
+            // Create subscription
+            const { error: subError } = await supabase
+                .from('dealer_subscriptions')
+                .insert({
+                    dealer_id: selectedDealer.id,
+                    package_id: assignPackageForm.package_id,
+                    billing_model: selectedPackage.billing_model,
+                    billing_cycle: assignPackageForm.billing_cycle,
+                    start_date: startDate.toISOString().split('T')[0],
+                    end_date: endDate.toISOString().split('T')[0],
+                    status: assignPackageForm.is_trial ? 'trial' : 'active',
+                    is_trial: assignPackageForm.is_trial,
+                    trial_days: assignPackageForm.is_trial ? assignPackageForm.trial_days : null,
+                    package_snapshot: selectedPackage // Store package info at time of assignment
+                })
+
+            if (subError) throw subError
+
+            // Update dealer profile
+            await supabase
+                .from('profiles')
+                .update({
+                    subscription_status: assignPackageForm.is_trial ? 'trial' : 'active',
+                    is_active: true
+                })
+                .eq('id', selectedDealer.id)
+
+            // Log activity
+            await supabase
+                .from('dealer_activity_log')
+                .insert({
+                    dealer_id: selectedDealer.id,
+                    action: 'package_assigned',
+                    description: `กำหนดแพ็คเกจ "${selectedPackage.name}" ${assignPackageForm.is_trial ? '(ทดลองใช้)' : ''}`,
+                    performed_by: user.id,
+                    metadata: { package_id: selectedPackage.id, package_name: selectedPackage.name }
+                })
+
+            setShowAssignPackageModal(false)
+            setAssignPackageForm({ package_id: '', billing_cycle: 'monthly', is_trial: false, trial_days: 30 })
+            fetchDealers()
+            fetchStats()
+            alert('กำหนดแพ็คเกจสำเร็จ!')
+        } catch (error) {
+            console.error('Error assigning package:', error)
+            alert('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+
     // === SETTINGS MANAGEMENT ===
     const handleUpdateSetting = async (key, value) => {
         try {
@@ -870,6 +949,16 @@ export default function SuperAdmin() {
                                                 }}
                                             >
                                                 <FiEye />
+                                            </button>
+                                            <button
+                                                className="btn btn-icon btn-sm btn-primary"
+                                                title="กำหนดแพ็คเกจ"
+                                                onClick={() => {
+                                                    setSelectedDealer(dealer)
+                                                    setShowAssignPackageModal(true)
+                                                }}
+                                            >
+                                                <FiPackage />
                                             </button>
                                             <button
                                                 className={`btn btn-icon btn-sm ${dealer.is_active ? 'btn-danger' : 'btn-success'}`}
@@ -1352,6 +1441,84 @@ export default function SuperAdmin() {
                             </button>
                             <button className="btn btn-primary" onClick={handleSavePackage}>
                                 <FiSave /> บันทึก
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Assign Package Modal */}
+            {showAssignPackageModal && selectedDealer && (
+                <div className="modal-overlay" onClick={() => setShowAssignPackageModal(false)}>
+                    <div className="modal" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h2><FiPackage /> กำหนดแพ็คเกจ</h2>
+                            <button className="close-btn" onClick={() => setShowAssignPackageModal(false)}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="dealer-assign-info">
+                                <strong>เจ้ามือ:</strong> {selectedDealer.full_name || selectedDealer.email}
+                            </div>
+
+                            <div className="form-group">
+                                <label>เลือกแพ็คเกจ</label>
+                                <select
+                                    value={assignPackageForm.package_id}
+                                    onChange={(e) => setAssignPackageForm({ ...assignPackageForm, package_id: e.target.value })}
+                                >
+                                    <option value="">-- เลือกแพ็คเกจ --</option>
+                                    {packages.filter(p => p.is_active).map(pkg => (
+                                        <option key={pkg.id} value={pkg.id}>
+                                            {pkg.name} - {formatCurrency(pkg.monthly_price)}/เดือน
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="form-group">
+                                <label>รอบการเรียกเก็บ</label>
+                                <select
+                                    value={assignPackageForm.billing_cycle}
+                                    onChange={(e) => setAssignPackageForm({ ...assignPackageForm, billing_cycle: e.target.value })}
+                                    disabled={assignPackageForm.is_trial}
+                                >
+                                    <option value="monthly">รายเดือน</option>
+                                    <option value="yearly">รายปี</option>
+                                </select>
+                            </div>
+
+                            <div className="form-row checkboxes">
+                                <label className="checkbox-label">
+                                    <input
+                                        type="checkbox"
+                                        checked={assignPackageForm.is_trial}
+                                        onChange={(e) => setAssignPackageForm({ ...assignPackageForm, is_trial: e.target.checked })}
+                                    />
+                                    ทดลองใช้
+                                </label>
+                            </div>
+
+                            {assignPackageForm.is_trial && (
+                                <div className="form-group">
+                                    <label>จำนวนวันทดลอง</label>
+                                    <input
+                                        type="number"
+                                        value={assignPackageForm.trial_days}
+                                        onChange={(e) => setAssignPackageForm({ ...assignPackageForm, trial_days: parseInt(e.target.value) || 30 })}
+                                        min="1"
+                                        max="365"
+                                    />
+                                </div>
+                            )}
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn" onClick={() => setShowAssignPackageModal(false)}>
+                                ยกเลิก
+                            </button>
+                            <button className="btn btn-primary" onClick={handleAssignPackage}>
+                                <FiCheck /> กำหนดแพ็คเกจ
                             </button>
                         </div>
                     </div>

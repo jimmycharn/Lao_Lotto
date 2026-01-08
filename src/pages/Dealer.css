@@ -2558,3 +2558,111 @@
         gap: 0.25rem;
     }
 }
+
+/* =============================================
+   Subscription Status Card
+   ============================================= */
+
+.subscription-status-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+    border: 1px solid rgba(102, 126, 234, 0.3);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.subscription-status-card .sub-icon {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.subscription-status-card .sub-icon svg {
+    width: 24px;
+    height: 24px;
+    color: #fff;
+}
+
+.subscription-status-card .sub-info {
+    flex: 1;
+}
+
+.subscription-status-card .sub-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.subscription-status-card .sub-name.no-package {
+    color: #ffc107;
+}
+
+.subscription-status-card .sub-name.no-package svg {
+    width: 18px;
+    height: 18px;
+}
+
+.subscription-status-card .trial-badge {
+    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.2rem 0.5rem;
+    border-radius: 12px;
+}
+
+.subscription-status-card .sub-details {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 0.25rem;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.subscription-status-card .sub-status {
+    font-weight: 500;
+}
+
+.subscription-status-card .sub-status.status-active {
+    color: #38ef7d;
+}
+
+.subscription-status-card .sub-status.status-trial {
+    color: #17a2b8;
+}
+
+.subscription-status-card .sub-status.status-expired {
+    color: #f5576c;
+}
+
+.subscription-status-card .sub-expiry {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+@media (max-width: 480px) {
+    .subscription-status-card {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .subscription-status-card .sub-name {
+        justify-content: center;
+    }
+    
+    .subscription-status-card .sub-details {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+}
