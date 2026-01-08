@@ -41,13 +41,45 @@ function ProtectedRoute({ children, requireAuth = false, requireDealer = false, 
   return children
 }
 
+// Home Redirect Component - Redirects Super Admin/Dealer/User to their respective dashboards
+function HomeRedirect() {
+  const { user, profile, loading, isDealer, isSuperAdmin } = useAuth()
+
+  if (loading) {
+    return (
+      <div className="loading-screen">
+        <div className="spinner"></div>
+        <p>กำลังโหลด...</p>
+      </div>
+    )
+  }
+
+  // Redirect Super Admin to Super Admin dashboard
+  if (user && isSuperAdmin) {
+    return <Navigate to="/superadmin" replace />
+  }
+
+  // Redirect Dealer to Dealer dashboard
+  if (user && isDealer) {
+    return <Navigate to="/dealer" replace />
+  }
+
+  // Redirect logged-in regular users (with dealer) to user dashboard
+  if (user && profile?.dealer_id) {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  // Guests or users without dealer see the Home page
+  return <Home />
+}
+
 function AppContent() {
   return (
     <Router>
       <Navbar />
       <main className="main-content">
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<HomeRedirect />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/results" element={<Results />} />

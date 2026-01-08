@@ -33,11 +33,11 @@ export default function Navbar() {
     const hasDealer = profile?.dealer_id
 
     const navLinks = [
-        { path: '/', label: 'หน้าแรก', icon: <FiHome />, hideForDealer: true },
-        { path: '/dashboard', label: 'ส่งเลข', icon: <FiSend />, requireAuth: true, requireDealer: true, hideForDealer: true },
-        { path: '/buy', label: 'ซื้อหวย', icon: <FiEdit />, requireAuth: true, hide: hasDealer, hideForDealer: true },
-        { path: '/results', label: 'ผลหวย', icon: <FiList />, hideForDealer: true },
-        { path: '/history', label: 'ประวัติ', icon: <FiClock />, requireAuth: true, hideForDealer: true },
+        { path: '/', label: 'หน้าแรก', icon: <FiHome />, hideForDealer: true, hideForSuperAdmin: true },
+        { path: '/dashboard', label: 'ส่งเลข', icon: <FiSend />, requireAuth: true, requireDealer: true, hideForDealer: true, hideForSuperAdmin: true },
+        { path: '/buy', label: 'ซื้อหวย', icon: <FiEdit />, requireAuth: true, hide: hasDealer, hideForDealer: true, hideForSuperAdmin: true },
+        { path: '/results', label: 'ผลหวย', icon: <FiList />, hideForDealer: true, hideForSuperAdmin: true },
+        { path: '/history', label: 'ประวัติ', icon: <FiClock />, requireAuth: true, hideForDealer: true, hideForSuperAdmin: true },
     ]
 
     const adminLinks = [
@@ -67,6 +67,7 @@ export default function Navbar() {
                             // Check conditions
                             if (link.hide) return null
                             if (link.hideForDealer && isDealer) return null
+                            if (link.hideForSuperAdmin && isSuperAdmin) return null
                             if (link.requireAuth && !user) return null
                             if (link.requireDealer && !hasDealer) return null
 
@@ -145,6 +146,7 @@ export default function Navbar() {
                     {navLinks.map(link => {
                         if (link.hide) return null
                         if (link.hideForDealer && isDealer) return null
+                        if (link.hideForSuperAdmin && isSuperAdmin) return null
                         if (link.requireAuth && !user) return null
                         if (link.requireDealer && !hasDealer) return null
 
