@@ -200,7 +200,8 @@ export default function UserDashboard() {
                     profiles:dealer_id (
                         id,
                         full_name,
-                        email
+                        email,
+                        role
                     )
                 `)
                 .eq('user_id', user.id)
@@ -210,8 +211,10 @@ export default function UserDashboard() {
                 const dealerList = data.map(m => ({
                     id: m.profiles?.id,
                     full_name: m.profiles?.full_name,
-                    email: m.profiles?.email
-                })).filter(d => d.id)
+                    email: m.profiles?.email,
+                    role: m.profiles?.role
+                }))
+                    .filter(d => d.id && d.role === 'dealer')
 
                 setDealers(dealerList)
 
@@ -819,7 +822,7 @@ export default function UserDashboard() {
                 </div>
 
                 {/* Dealer Selector Pills */}
-                {dealers.length > 1 && (
+                {dealers.length > 0 && (
                     <div className="dealer-selector-bar">
                         {dealers.map(dealer => (
                             <button

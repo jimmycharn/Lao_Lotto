@@ -43,6 +43,9 @@ export default function Register() {
 
     // Redirect if already logged in (after all hooks)
     if (user && !authLoading) {
+        if (dealerId) {
+            return <Navigate to={`/invite?ref=${dealerId}`} replace />
+        }
         return <Navigate to="/dashboard" replace />
     }
 

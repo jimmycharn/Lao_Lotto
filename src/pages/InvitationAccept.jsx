@@ -142,6 +142,27 @@ export default function InvitationAccept() {
         )
     }
 
+    async function handleReapply() {
+        setSubmitting(true)
+        setError('')
+
+        try {
+            const { error } = await supabase
+                .from('user_dealer_memberships')
+                .update({ status: 'pending' })
+                .eq('id', existingMembership.id)
+
+            if (error) throw error
+
+            setSuccess(true)
+        } catch (err) {
+            console.error('Error reapplying:', err)
+            setError('เกิดข้อผิดพลาด กรุณาลองใหม่')
+        } finally {
+            setSubmitting(false)
+        }
+    }
+
     // Already has membership
     if (existingMembership) {
         const statusMessages = {
@@ -163,12 +184,38 @@ export default function InvitationAccept() {
                         <FiUsers />
                         <span>เจ้ามือ: <strong>{dealerInfo?.full_name}</strong></span>
                     </div>
-                    <button
-                        className="btn btn-primary btn-lg auth-submit"
-                        onClick={() => navigate('/dashboard')}
-                    >
-                        ไปยังหน้าหลัก
-                    </button>
+
+                    {existingMembership.status === 'rejected' ? (
+                        <div className="invite-actions" style={{ marginTop: '1.5rem' }}>
+                            <button
+                                className="btn btn-primary btn-lg"
+                                onClick={handleReapply}
+                                disabled={submitting}
+                                style={{ flex: 1 }}
+                            >
+                                {submitting ? (
+                                    <div className="spinner" style={{ width: 20, height: 20 }}></div>
+                                ) : (
+                                    'ขอเข้าร่วมอีกครั้ง'
+                                )}
+                            </button>
+                            <button
+                                className="btn btn-secondary btn-lg"
+                                onClick={() => navigate('/dashboard')}
+                                disabled={submitting}
+                                style={{ flex: 1 }}
+                            >
+                                กลับหน้าหลัก
+                            </button>
+                        </div>
+                    ) : (
+                        <button
+                            className="btn btn-primary btn-lg auth-submit"
+                            onClick={() => navigate('/dashboard')}
+                        >
+                            ไปยังหน้าหลัก
+                        </button>
+                    )}
                 </div>
             </div>
         )
