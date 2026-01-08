@@ -9,6 +9,7 @@ import Results from './pages/Results'
 import History from './pages/History'
 import Dealer from './pages/Dealer'
 import Admin from './pages/Admin'
+import SuperAdmin from './pages/SuperAdmin'
 import UserDashboard from './pages/UserDashboard'
 import './index.css'
 
@@ -87,6 +88,14 @@ function AppContent() {
             element={
               <ProtectedRoute requireAuth requireAdmin>
                 <Admin />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/superadmin"
+            element={
+              <ProtectedRoute requireAuth requireAdmin>
+                <SuperAdmin />
               </ProtectedRoute>
             }
           />

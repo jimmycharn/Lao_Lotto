@@ -19,6 +19,8 @@ export default function Register() {
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
     const dealerId = searchParams.get('ref')
+    const registerRole = searchParams.get('role') // For dealer registration
+    const isDealerRegistration = registerRole === 'dealer'
 
     // Fetch dealer info if ref exists
     useEffect(() => {
@@ -61,7 +63,9 @@ export default function Register() {
         setLoading(true)
 
         try {
-            const { data, error } = await signUp(email, password, fullName, dealerId)
+            // Pass role for dealer registration
+            const role = isDealerRegistration ? 'dealer' : 'user'
+            const { data, error } = await signUp(email, password, fullName, dealerId, role)
 
             if (error) {
                 let msg = error.message
@@ -69,12 +73,12 @@ export default function Register() {
                 setError(msg)
                 setLoading(false)
             } else {
-                // Profile is auto-created by database trigger including dealer_id from metadata
+                // Profile is auto-created by database trigger including dealer_id and role from metadata
 
                 // Handle redirect or success message
                 if (data.session) {
-                    // Auto login successful
-                    navigate('/dashboard')
+                    // Auto login successful - redirect based on role
+                    navigate(isDealerRegistration ? '/dealer' : '/dashboard')
                 } else {
                     // Email confirmation required
                     setSuccess(true)
@@ -93,10 +97,12 @@ export default function Register() {
             <div className="auth-page">
                 <div className="auth-container animate-slideUp">
                     <div className="auth-header">
-                        <FiGift className="auth-logo success" />
+                        <FiGift className={`auth-logo success ${isDealerRegistration ? 'dealer' : ''}`} />
                         <h1>สมัครสำเร็จ!</h1>
                         <p>กรุณาตรวจสอบอีเมลเพื่อยืนยันบัญชี</p>
-                        {dealerInfo && (
+                        {isDealerRegistration ? (
+                            <p className="dealer-welcome">คุณสมัครเป็นเจ้ามือสำเร็จแล้ว!</p>
+                        ) : dealerInfo && (
                             <p className="dealer-welcome">คุณเป็นสมาชิกของ {dealerInfo.full_name} แล้ว</p>
                         )}
                     </div>
@@ -112,9 +118,14 @@ export default function Register() {
         <div className="auth-page">
             <div className="auth-container animate-slideUp">
                 <div className="auth-header">
-                    <FiGift className="auth-logo" />
-                    <h1>สมัครสมาชิก</h1>
-                    {dealerInfo ? (
+                    <FiGift className={`auth-logo ${isDealerRegistration ? 'dealer' : ''}`} />
+                    <h1>{isDealerRegistration ? 'สมัครเป็นเจ้ามือ' : 'สมัครสมาชิก'}</h1>
+                    {isDealerRegistration ? (
+                        <div className="referral-info dealer">
+                            <FiUsers />
+                            <span>เริ่มต้นเป็นเจ้ามือในระบบ ลาวหวย</span>
+                        </div>
+                    ) : dealerInfo ? (
                         <div className="referral-info">
                             <FiUsers />
                             <span>เจ้ามือ: <strong>{dealerInfo.full_name}</strong></span>

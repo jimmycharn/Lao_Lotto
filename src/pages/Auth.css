@@ -150,3 +150,17 @@
         font-size: 3rem;
     }
 }
+/* Dealer Registration */
+.auth-logo.dealer {
+    color: #38ef7d;
+}
+
+.referral-info.dealer {
+    background: linear-gradient(135deg, rgba(56, 239, 125, 0.15) 0%, rgba(17, 153, 142, 0.15) 100%);
+    border-color: rgba(56, 239, 125, 0.3);
+    color: #38ef7d;
+}
+
+.referral-info.dealer svg {
+    color: #38ef7d;
+}

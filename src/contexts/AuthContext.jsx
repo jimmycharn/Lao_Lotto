@@ -78,7 +78,7 @@ export function AuthProvider({ children }) {
                         id: userId,
                         email: userEmail,
                         full_name: userOrId.user_metadata?.full_name || userEmail.split('@')[0],
-                        role: 'user',
+                        role: userOrId.user_metadata?.role || 'user',
                         balance: 0,
                         dealer_id: userOrId.user_metadata?.dealer_id || null
                     }
@@ -106,7 +106,7 @@ export function AuthProvider({ children }) {
         }
     }
 
-    const signUp = async (email, password, fullName, dealerId = null) => {
+    const signUp = async (email, password, fullName, dealerId = null, role = 'user') => {
         if (!supabase) return { data: null, error: { message: 'Supabase not configured' } }
 
         const { data, error } = await supabase.auth.signUp({
@@ -115,7 +115,8 @@ export function AuthProvider({ children }) {
             options: {
                 data: {
                     full_name: fullName,
-                    dealer_id: dealerId || null
+                    dealer_id: dealerId || null,
+                    role: role // Pass role to be used in profile creation
                 }
             }
         })
