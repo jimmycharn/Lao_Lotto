@@ -583,8 +583,8 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                                     className="form-input"
                                                 >
                                                     <option value="all">ทุกประเภท</option>
-                                                    {[...new Set(inlineSubmissions.map(s => s.bet_type))].map(type => (
-                                                        <option key={type} value={type}>{BET_TYPES[type] || type}</option>
+                                                    {Object.entries(BET_TYPES_BY_LOTTERY[round.lottery_type] || {}).map(([type, config]) => (
+                                                        <option key={type} value={type}>{config.label || BET_TYPES[type] || type}</option>
                                                     ))}
                                                 </select>
                                                 <label className="toggle-switch">
@@ -891,16 +891,37 @@ export default function Dealer() {
                 .select(`
                     *,
                     type_limits (*),
-                    submissions (id)
+                    submissions!inner (id)
+                `)
+                .eq('dealer_id', user.id)
+                .eq('submissions.is_deleted', false)
+                .order('round_date', { ascending: false })
+                .limit(20)
+
+            // For rounds without any submissions, fetch separately
+            const { data: allRoundsData } = await supabase
+                .from('lottery_rounds')
+                .select(`
+                    *,
+                    type_limits (*)
                 `)
                 .eq('dealer_id', user.id)
                 .order('round_date', { ascending: false })
                 .limit(20)
 
+            // Merge the submission counts - this ensures rounds with 0 submissions are included
+            const mergedRounds = (allRoundsData || []).map(round => {
+                const roundWithSubs = roundsData?.find(r => r.id === round.id)
+                return {
+                    ...round,
+                    submissions: roundWithSubs?.submissions || []
+                }
+            })
+
             if (!roundsError) {
-                setRounds(roundsData || [])
-                if (!selectedRound && roundsData?.length > 0) {
-                    setSelectedRound(roundsData[0])
+                setRounds(mergedRounds)
+                if (!selectedRound && mergedRounds.length > 0) {
+                    setSelectedRound(mergedRounds[0])
                 }
             }
 
