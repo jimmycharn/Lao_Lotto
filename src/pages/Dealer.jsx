@@ -825,6 +825,7 @@ export default function Dealer() {
     const [saving, setSaving] = useState(false)
     const [expandedMemberId, setExpandedMemberId] = useState(null)
     const [subscription, setSubscription] = useState(null)
+    const [dealerBankAccounts, setDealerBankAccounts] = useState([])
 
     // Form state for creating round
     const [roundForm, setRoundForm] = useState({
@@ -948,7 +949,8 @@ export default function Dealer() {
                 membership_status: m.status,
                 membership_created_at: m.created_at,
                 approved_at: m.approved_at,
-                blocked_at: m.blocked_at
+                blocked_at: m.blocked_at,
+                assigned_bank_account_id: m.assigned_bank_account_id
             }))
 
             setMembers(allMemberships.filter(m => m.membership_status === 'active'))
@@ -983,6 +985,15 @@ export default function Dealer() {
                 console.log('Subscription table not available')
                 setSubscription(null)
             }
+
+            // Fetch dealer bank accounts for member assignment
+            const { data: bankAccountsData } = await supabase
+                .from('dealer_bank_accounts')
+                .select('*')
+                .eq('dealer_id', user.id)
+                .order('is_default', { ascending: false })
+
+            setDealerBankAccounts(bankAccountsData || [])
 
         } catch (error) {
             console.error('Error:', error)
@@ -1053,6 +1064,28 @@ export default function Dealer() {
         } catch (error) {
             console.error('Error unblocking member:', error)
             alert('เกิดข้อผิดพลาดในการปลดบล็อคสมาชิก')
+        }
+    }
+
+    // Update assigned bank account for member
+    async function handleUpdateMemberBank(member, bankAccountId) {
+        try {
+            const { error } = await supabase
+                .from('user_dealer_memberships')
+                .update({ assigned_bank_account_id: bankAccountId || null })
+                .eq('id', member.membership_id)
+
+            if (error) throw error
+
+            // Update local state immediately
+            setMembers(prev => prev.map(m =>
+                m.membership_id === member.membership_id
+                    ? { ...m, assigned_bank_account_id: bankAccountId || null }
+                    : m
+            ))
+        } catch (error) {
+            console.error('Error updating member bank:', error)
+            alert('เกิดข้อผิดพลาดในการอัปเดตบัญชีธนาคาร')
         }
     }
 
@@ -1490,6 +1523,8 @@ export default function Dealer() {
                                             isExpanded={expandedMemberId === member.id}
                                             onToggle={() => setExpandedMemberId(expandedMemberId === member.id ? null : member.id)}
                                             onBlock={() => handleBlockMember(member)}
+                                            dealerBankAccounts={dealerBankAccounts}
+                                            onUpdateBank={(bankAccountId) => handleUpdateMemberBank(member, bankAccountId)}
                                         />
                                     ))}
                                 </div>
@@ -4146,7 +4181,7 @@ function DealerProfileTab({ user, profile, subscription, formatDate }) {
 }
 
 // Member Accordion Item Component
-function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock }) {
+function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock, dealerBankAccounts = [], onUpdateBank }) {
     const [activeTab, setActiveTab] = useState('info') // 'info' | 'settings'
 
     return (
@@ -4281,6 +4316,59 @@ function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock
                                         </div>
                                     </div>
                                 </div>
+
+                                {/* Bank Account Assignment for this member */}
+                                {dealerBankAccounts.length > 0 && onUpdateBank && (
+                                    <div className="bank-assignment-section" style={{
+                                        marginTop: '1.5rem',
+                                        padding: '1rem',
+                                        background: 'rgba(212, 175, 55, 0.1)',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid rgba(212, 175, 55, 0.3)'
+                                    }}>
+                                        <label style={{
+                                            display: 'block',
+                                            color: 'var(--color-primary)',
+                                            fontSize: '0.9rem',
+                                            marginBottom: '0.5rem',
+                                            fontWeight: '500'
+                                        }}>
+                                            <FiStar style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                                            บัญชีธนาคารสำหรับโอนเงิน
+                                        </label>
+                                        <select
+                                            className="form-input"
+                                            value={member.assigned_bank_account_id || ''}
+                                            onChange={(e) => onUpdateBank(e.target.value || null)}
+                                            onClick={(e) => e.stopPropagation()}
+                                            style={{
+                                                background: 'var(--color-surface)',
+                                                border: '1px solid var(--color-border)',
+                                                borderRadius: 'var(--radius-md)',
+                                                padding: '0.75rem 1rem',
+                                                color: 'var(--color-text)',
+                                                width: '100%',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            <option value="">ใช้บัญชีหลัก (Default)</option>
+                                            {dealerBankAccounts.map(bank => (
+                                                <option key={bank.id} value={bank.id}>
+                                                    {bank.bank_name} - {bank.bank_account}
+                                                    {bank.is_default ? ' (หลัก)' : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <p style={{
+                                            fontSize: '0.8rem',
+                                            color: 'var(--color-text-muted)',
+                                            marginTop: '0.5rem',
+                                            opacity: 0.8
+                                        }}>
+                                            ลูกค้าจะเห็นบัญชีนี้ในหน้าข้อมูลเจ้ามือ
+                                        </p>
+                                    </div>
+                                )}
                                 {/* Block Button */}
                                 {onBlock && (
                                     <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)' }}>

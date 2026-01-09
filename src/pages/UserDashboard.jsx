@@ -1877,8 +1877,10 @@ export default function UserDashboard() {
 
 // Dealer Info Tab Component - Shows selected dealer's information
 function DealerInfoTab({ dealer, userSettings }) {
+    const { user } = useAuth()
     const [dealerProfile, setDealerProfile] = useState(null)
     const [dealerBankAccounts, setDealerBankAccounts] = useState([])
+    const [assignedBankAccountId, setAssignedBankAccountId] = useState(null)
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
@@ -1911,6 +1913,21 @@ function DealerInfoTab({ dealer, userSettings }) {
             if (bankData) {
                 setDealerBankAccounts(bankData)
             }
+
+            // Fetch membership to get assigned_bank_account_id
+            if (user?.id) {
+                const { data: membershipData } = await supabase
+                    .from('user_dealer_memberships')
+                    .select('assigned_bank_account_id')
+                    .eq('user_id', user.id)
+                    .eq('dealer_id', dealer.id)
+                    .eq('status', 'active')
+                    .single()
+
+                if (membershipData) {
+                    setAssignedBankAccountId(membershipData.assigned_bank_account_id)
+                }
+            }
         } catch (error) {
             console.error('Error fetching dealer info:', error)
         } finally {
@@ -1918,8 +1935,10 @@ function DealerInfoTab({ dealer, userSettings }) {
         }
     }
 
-    // Get default or first bank account
-    const primaryBank = dealerBankAccounts.find(b => b.is_default) || dealerBankAccounts[0]
+    // Get assigned bank account or default/first bank account
+    const primaryBank = assignedBankAccountId
+        ? dealerBankAccounts.find(b => b.id === assignedBankAccountId)
+        : (dealerBankAccounts.find(b => b.is_default) || dealerBankAccounts[0])
 
     // Commission and payout rates from user settings
     const commissionRates = userSettings?.commission_rates || {}
