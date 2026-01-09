@@ -196,6 +196,17 @@ function getDefaultSetPricesForType(lotteryType) {
     return setPrices
 }
 
+// Bet types that should normalize numbers (order doesn't matter)
+const PERMUTATION_BET_TYPES = ['2_run', '2_spread', '3_tod', '3_tod_single', '4_run', '4_tod', '4_float', '5_run', '5_float']
+
+// Normalize number by sorting digits (for permutation bet types)
+function normalizeNumber(numbers, betType) {
+    if (PERMUTATION_BET_TYPES.includes(betType)) {
+        return numbers.split('').sort().join('')
+    }
+    return numbers
+}
+
 // Round Accordion Item Component
 function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, onCloseRound, onEditRound, onShowNumberLimits, onDeleteRound, onShowResults, getStatusBadge, formatDate, formatTime, user }) {
     const [isExpanded, setIsExpanded] = useState(false)
@@ -211,6 +222,8 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
     const [inlineLoading, setInlineLoading] = useState(false)
     const [inlineUserFilter, setInlineUserFilter] = useState('all')
     const [inlineBetTypeFilter, setInlineBetTypeFilter] = useState('all')
+    const [isGrouped, setIsGrouped] = useState(false)
+
 
     const isAnnounced = round.status === 'announced' && round.is_result_announced
 
@@ -311,13 +324,26 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
         }
     }
 
-    // Calculate excess items
+    // Calculate excess items (with number normalization for permutation bet types)
     const calculateExcessItems = () => {
         const grouped = {}
         inlineSubmissions.forEach(sub => {
-            const key = `${sub.bet_type}|${sub.numbers}`
+            // Normalize numbers for permutation bet types
+            const normalizedNumbers = normalizeNumber(sub.numbers, sub.bet_type)
+            const key = `${sub.bet_type}|${normalizedNumbers}`
             if (!grouped[key]) {
-                grouped[key] = { bet_type: sub.bet_type, numbers: sub.numbers, total: 0, submissions: [] }
+                grouped[key] = {
+                    bet_type: sub.bet_type,
+                    numbers: normalizedNumbers, // Use normalized number for display
+                    originalNumbers: [sub.numbers], // Keep track of original numbers
+                    total: 0,
+                    submissions: []
+                }
+            } else {
+                // Add to original numbers list if different
+                if (!grouped[key].originalNumbers.includes(sub.numbers)) {
+                    grouped[key].originalNumbers.push(sub.numbers)
+                }
             }
             grouped[key].total += sub.amount
             grouped[key].submissions.push(sub)
@@ -327,8 +353,11 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
         Object.values(grouped).forEach(item => {
             // Check type limit
             const typeLimit = inlineTypeLimits[item.bet_type]
-            // Check number limit
-            const numberLimit = inlineNumberLimits.find(nl => nl.bet_type === item.bet_type && nl.numbers === item.numbers)
+            // Check number limit - also normalize for comparison
+            const numberLimit = inlineNumberLimits.find(nl => {
+                const nlNormalized = normalizeNumber(nl.numbers, nl.bet_type)
+                return nl.bet_type === item.bet_type && nlNormalized === item.numbers
+            })
             const effectiveLimit = numberLimit?.max_amount ?? typeLimit
 
             if (effectiveLimit && item.total > effectiveLimit) {
@@ -535,7 +564,7 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                     {/* Tab: ยอดรวม */}
                                     {inlineTab === 'total' && (
                                         <div className="inline-tab-content">
-                                            {/* Filters */}
+                                            {/* Filters with Toggle Switch */}
                                             <div className="inline-filters">
                                                 <select
                                                     value={inlineUserFilter}
@@ -557,6 +586,11 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                                         <option key={type} value={type}>{BET_TYPES[type] || type}</option>
                                                     ))}
                                                 </select>
+                                                <label className="toggle-switch">
+                                                    <input type="checkbox" checked={isGrouped} onChange={(e) => setIsGrouped(e.target.checked)} />
+                                                    <span className="toggle-slider"></span>
+                                                    <span className="toggle-label">รวมเลข</span>
+                                                </label>
                                             </div>
 
                                             {/* Summary */}
@@ -586,28 +620,63 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                                 <table className="inline-table">
                                                     <thead>
                                                         <tr>
-                                                            <th>ผู้ส่ง</th>
-                                                            <th>ประเภท</th>
                                                             <th>เลข</th>
                                                             <th>จำนวน</th>
-                                                            <th>เวลา</th>
+                                                            {!isGrouped && <th>เวลา</th>}
                                                         </tr>
                                                     </thead>
                                                     <tbody>
-                                                        {inlineSubmissions.filter(s => {
-                                                            const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
-                                                            if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
-                                                            if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
-                                                            return true
-                                                        }).map(sub => (
-                                                            <tr key={sub.id}>
-                                                                <td>{sub.profiles?.full_name || sub.profiles?.email || 'ไม่ระบุ'}</td>
-                                                                <td><span className="type-badge">{BET_TYPES[sub.bet_type] || sub.bet_type}</span></td>
-                                                                <td className="number-cell">{sub.numbers}</td>
-                                                                <td>{round.currency_symbol}{sub.amount.toLocaleString()}</td>
-                                                                <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>
-                                                            </tr>
-                                                        ))}
+                                                        {(() => {
+                                                            // Filter submissions
+                                                            let filteredData = inlineSubmissions.filter(s => {
+                                                                const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
+                                                                if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
+                                                                if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
+                                                                return true
+                                                            })
+
+                                                            if (isGrouped) {
+                                                                // Group by normalized number + bet_type (for permutation bet types)
+                                                                const grouped = {}
+                                                                filteredData.forEach(s => {
+                                                                    const normalizedNumbers = normalizeNumber(s.numbers, s.bet_type)
+                                                                    const key = `${normalizedNumbers}|${s.bet_type}`
+                                                                    if (!grouped[key]) {
+                                                                        grouped[key] = {
+                                                                            numbers: normalizedNumbers, // Use normalized for display
+                                                                            originalNumbers: [s.numbers],
+                                                                            bet_type: s.bet_type,
+                                                                            amount: 0,
+                                                                            count: 0,
+                                                                            id: key
+                                                                        }
+                                                                    } else {
+                                                                        if (!grouped[key].originalNumbers.includes(s.numbers)) {
+                                                                            grouped[key].originalNumbers.push(s.numbers)
+                                                                        }
+                                                                    }
+                                                                    grouped[key].amount += s.amount
+                                                                    grouped[key].count += 1
+                                                                })
+                                                                filteredData = Object.values(grouped).sort((a, b) => b.amount - a.amount)
+                                                            }
+
+                                                            return filteredData.map(sub => (
+                                                                <tr key={isGrouped ? sub.id : sub.id}>
+                                                                    <td className="number-cell">
+                                                                        <div className="number-value">{sub.numbers}</div>
+                                                                        <div className="type-sub-label">{BET_TYPES[sub.bet_type] || sub.bet_type}</div>
+                                                                        {isGrouped && sub.count > 1 && (
+                                                                            <div className="count-sub-label">({sub.count} รายการ)</div>
+                                                                        )}
+                                                                    </td>
+                                                                    <td>{round.currency_symbol}{sub.amount.toLocaleString()}</td>
+                                                                    {!isGrouped && (
+                                                                        <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>
+                                                                    )}
+                                                                </tr>
+                                                            ))
+                                                        })()}
                                                     </tbody>
                                                 </table>
                                             </div>

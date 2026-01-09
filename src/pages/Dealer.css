@@ -2776,6 +2776,7 @@
         gap: 0.15rem;
     }
 }
+
 /* =============================================
    INLINE SUBMISSIONS VIEW
    ============================================= */
@@ -2930,6 +2931,87 @@
 .icon-btn.active {
     background: var(--color-primary);
     color: #000;
+}
+
+/* Toggle Switch */
+.toggle-switch {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.toggle-switch input {
+    display: none;
+}
+
+.toggle-slider {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    background: var(--color-surface-light);
+    border-radius: 11px;
+    transition: all 0.3s ease;
+}
+
+.toggle-slider::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    background: var(--color-text-muted);
+    border-radius: 50%;
+    transition: all 0.3s ease;
+}
+
+.toggle-switch input:checked+.toggle-slider {
+    background: var(--color-primary);
+}
+
+.toggle-switch input:checked+.toggle-slider::after {
+    left: 21px;
+    background: #000;
+}
+
+.toggle-label {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}
+
+.toggle-switch input:checked~.toggle-label {
+    color: var(--color-primary);
+}
+
+/* Updated number cell with sub-labels */
+.inline-table .number-cell {
+    font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.inline-table .number-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--color-primary);
+    letter-spacing: 0.1em;
+}
+
+.inline-table .type-sub-label {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    font-weight: 400;
+    margin-top: 0.15rem;
+    font-family: inherit;
+    letter-spacing: normal;
+}
+
+.inline-table .count-sub-label {
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+    font-family: inherit;
+    letter-spacing: normal;
+    opacity: 0.8;
 }
 
 @media (max-width: 640px) {
