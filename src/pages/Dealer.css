@@ -2178,7 +2178,7 @@
     }
 }
 
- 
+
 /* =============================================
    TRANSFER ACTIONS
    ============================================= */
@@ -2245,6 +2245,7 @@
         padding: 0.75rem 1rem;
     }
 }
+
 /* =============================================
    PROFILE SECTION
    ============================================= */
@@ -2518,6 +2519,7 @@
         opacity: 0;
         transform: translateX(-50%) translateY(20px);
     }
+
     to {
         opacity: 1;
         transform: translateX(-50%) translateY(0);
@@ -2656,13 +2658,121 @@
         flex-direction: column;
         text-align: center;
     }
-    
+
     .subscription-status-card .sub-name {
         justify-content: center;
     }
-    
+
     .subscription-status-card .sub-details {
         flex-direction: column;
         gap: 0.25rem;
+    }
+}
+
+/* =============================================
+   SUBSCRIPTION STATUS INLINE (In Profile Tab)
+   ============================================= */
+
+.subscription-status-inline {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+    border: 1px solid rgba(102, 126, 234, 0.3);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.25rem;
+    margin-top: 1.25rem;
+}
+
+.subscription-status-inline .sub-icon {
+    width: 44px;
+    height: 44px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.subscription-status-inline .sub-icon svg {
+    width: 22px;
+    height: 22px;
+    color: #fff;
+}
+
+.subscription-status-inline .sub-info {
+    flex: 1;
+}
+
+.subscription-status-inline .sub-name {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.subscription-status-inline .sub-name.no-package {
+    color: #ffc107;
+}
+
+.subscription-status-inline .sub-name.no-package svg {
+    width: 16px;
+    height: 16px;
+}
+
+.subscription-status-inline .trial-badge {
+    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 0.15rem 0.4rem;
+    border-radius: 10px;
+}
+
+.subscription-status-inline .sub-details {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.2rem;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.subscription-status-inline .sub-status {
+    font-weight: 500;
+}
+
+.subscription-status-inline .sub-status.status-active {
+    color: #38ef7d;
+}
+
+.subscription-status-inline .sub-status.status-trial {
+    color: #17a2b8;
+}
+
+.subscription-status-inline .sub-status.status-expired {
+    color: #f5576c;
+}
+
+.subscription-status-inline .sub-expiry {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+@media (max-width: 640px) {
+    .subscription-status-inline {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .subscription-status-inline .sub-name {
+        justify-content: center;
+    }
+
+    .subscription-status-inline .sub-details {
+        flex-direction: column;
+        gap: 0.15rem;
     }
 }

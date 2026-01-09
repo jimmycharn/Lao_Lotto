@@ -883,46 +883,6 @@ export default function Dealer() {
                 <div className="dealer-content">
                     {activeTab === 'rounds' && (
                         <div className="rounds-section">
-                            {/* Subscription Status Card */}
-                            <div className="subscription-status-card">
-                                <div className="sub-icon">
-                                    <FiPackage />
-                                </div>
-                                <div className="sub-info">
-                                    {subscription?.subscription_packages ? (
-                                        <>
-                                            <div className="sub-name">
-                                                {subscription.subscription_packages.name}
-                                                {subscription.is_trial && (
-                                                    <span className="trial-badge">ทดลองใช้</span>
-                                                )}
-                                            </div>
-                                            <div className="sub-details">
-                                                <span className={`sub-status status-${subscription.status}`}>
-                                                    {subscription.status === 'active' ? 'ใช้งานอยู่' :
-                                                        subscription.status === 'trial' ? 'ทดลองใช้' :
-                                                            subscription.status === 'expired' ? 'หมดอายุ' : subscription.status}
-                                                </span>
-                                                {subscription.end_date && (
-                                                    <span className="sub-expiry">
-                                                        หมดอายุ: {formatDate(subscription.end_date)}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <div className="sub-name no-package">
-                                                <FiAlertCircle /> ยังไม่มีแพ็คเกจ
-                                            </div>
-                                            <div className="sub-details">
-                                                กรุณาติดต่อผู้ดูแลระบบเพื่อเลือกแพ็คเกจ
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-
                             {/* Create Button */}
                             <div className="section-header">
                                 <h2>งวดหวยทั้งหมด</h2>
@@ -1123,7 +1083,7 @@ export default function Dealer() {
                     )}
 
                     {activeTab === 'profile' && (
-                        <DealerProfileTab user={user} profile={profile} />
+                        <DealerProfileTab user={user} profile={profile} subscription={subscription} formatDate={formatDate} />
                     )}
                 </div>
             </div>
@@ -3220,7 +3180,7 @@ function NumberLimitsModal({ round, onClose }) {
 }
 
 // Dealer Profile Tab Component
-function DealerProfileTab({ user, profile }) {
+function DealerProfileTab({ user, profile, subscription, formatDate }) {
     const [isEditing, setIsEditing] = useState(false)
     const [saving, setSaving] = useState(false)
     const [bankAccounts, setBankAccounts] = useState([])
@@ -3457,10 +3417,12 @@ function DealerProfileTab({ user, profile }) {
                     <div className="profile-info">
                         <h2>{profileData.full_name || 'ไม่ระบุชื่อ'}</h2>
                         <p className="email">{user?.email}</p>
-                        <span className={`role-badge role-${profileData.role}`}>
-                            {profileData.role === 'dealer' ? 'เจ้ามือ' :
-                                profileData.role === 'superadmin' ? 'Admin' : 'สมาชิก'}
-                        </span>
+                        <div className="profile-badges">
+                            <span className={`role-badge role-${profileData.role}`}>
+                                {profileData.role === 'dealer' ? 'เจ้ามือ' :
+                                    profileData.role === 'superadmin' ? 'Admin' : 'สมาชิก'}
+                            </span>
+                        </div>
                     </div>
                     {!isEditing && (
                         <button
@@ -3470,6 +3432,46 @@ function DealerProfileTab({ user, profile }) {
                             <FiEdit2 /> แก้ไข
                         </button>
                     )}
+                </div>
+
+                {/* Subscription/Package Info */}
+                <div className="subscription-status-inline">
+                    <div className="sub-icon">
+                        <FiPackage />
+                    </div>
+                    <div className="sub-info">
+                        {subscription?.subscription_packages ? (
+                            <>
+                                <div className="sub-name">
+                                    {subscription.subscription_packages.name}
+                                    {subscription.is_trial && (
+                                        <span className="trial-badge">ทดลองใช้</span>
+                                    )}
+                                </div>
+                                <div className="sub-details">
+                                    <span className={`sub-status status-${subscription.status}`}>
+                                        {subscription.status === 'active' ? 'ใช้งานอยู่' :
+                                            subscription.status === 'trial' ? 'ทดลองใช้' :
+                                                subscription.status === 'expired' ? 'หมดอายุ' : subscription.status}
+                                    </span>
+                                    {subscription.end_date && (
+                                        <span className="sub-expiry">
+                                            หมดอายุ: {formatDate(subscription.end_date)}
+                                        </span>
+                                    )}
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="sub-name no-package">
+                                    <FiAlertCircle /> ยังไม่มีแพ็คเกจ
+                                </div>
+                                <div className="sub-details">
+                                    กรุณาติดต่อผู้ดูแลระบบเพื่อเลือกแพ็คเกจ
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
 
