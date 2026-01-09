@@ -122,14 +122,56 @@ const BET_TYPES_BY_LOTTERY = {
 
 // Legacy bet type labels (for displaying results/submissions)
 const BET_TYPES = {
+    // 1 Digit
+    'run_top': 'วิ่งบน',
+    'run_bottom': 'วิ่งล่าง',
+    'front_top_1': 'หน้าบน',
+    'middle_top_1': 'กลางบน',
+    'back_top_1': 'หลังบน',
+    'front_bottom_1': 'หน้าล่าง',
+    'back_bottom_1': 'หลังล่าง',
+    'pak_top': 'ปักบน',
+    'pak_bottom': 'ปักล่าง',
+
+    // 2 Digits
     '2_top': '2 ตัวบน',
     '2_bottom': '2 ตัวล่าง',
+    '2_front': '2 ตัวหน้า',
+    '2_front_single': '2 ตัวหน้า',
+    '2_back': '2 ตัวหลัง',
+    '2_center': '2 ตัวถ่าง',
+    '2_spread': '2 ตัวถ่าง',
+    '2_have': '2 ตัวมี',
+    '2_run': '2 ตัวลอย',
+
+    // 2 Digits Reversed (กลับ)
+    '2_top_rev': '2 บนกลับ',
+    '2_front_rev': '2 หน้ากลับ',
+    '2_spread_rev': '2 ถ่างกลับ',
+    '2_bottom_rev': '2 ล่างกลับ',
+
+    // 3 Digits
     '3_top': '3 ตัวบน',
     '3_tod': '3 ตัวโต๊ด',
     '3_front': '3 ตัวหน้า',
-    '3_back': '3 ตัวล่าง',
+    '3_back': '3 ตัวหลัง',
+    '3_bottom': '3 ตัวล่าง',
+    '3_straight': '3 ตัวตรง',
+    '3_tod_single': '3 ตัวโต๊ด',
+
+    // 4 Digits
+    '4_top': '4 ตัวตรง',
     '4_tod': '4 ตัวโต๊ด',
-    '6_top': '6 ตัวบน (รางวัลที่ 1)'
+    '4_set': '4 ตัวชุด',
+    '4_float': '4 ตัวลอย',
+    '4_run': '4 ตัวลอย',
+
+    // 5 Digits
+    '5_float': '5 ตัวลอย',
+    '5_run': '5 ตัวลอย',
+
+    // 6 Digits
+    '6_top': '6 ตัว (รางวัลที่ 1)'
 }
 
 // Helper to get default limits for a lottery type
