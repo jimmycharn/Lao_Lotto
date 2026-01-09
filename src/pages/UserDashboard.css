@@ -2340,6 +2340,7 @@
 .dealer-pill.active .dealer-name {
     color: var(--color-primary);
 }
+
 /* =============================================
    DEALER INFO TAB
    ============================================= */
@@ -2419,4 +2420,92 @@
 
 .commission-rate-item.payout .rate-value {
     color: #22c55e;
+}
+
+/* =============================================
+   SEARCH BAR
+   ============================================= */
+
+.search-bar-container {
+    margin-bottom: 1rem;
+}
+
+.search-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.search-input-wrapper .search-icon {
+    position: absolute;
+    left: 1rem;
+    color: var(--color-text-muted);
+    font-size: 1.1rem;
+    pointer-events: none;
+}
+
+.search-input {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    padding-left: 2.75rem;
+    padding-right: 2.75rem;
+    background: var(--color-surface-light);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-lg);
+    color: var(--color-text);
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+}
+
+.search-input::placeholder {
+    color: var(--color-text-muted);
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    background: var(--color-surface);
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1);
+}
+
+.search-clear-btn {
+    position: absolute;
+    right: 0.75rem;
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease;
+}
+
+.search-clear-btn:hover {
+    color: var(--color-text);
+}
+
+/* Search Results Count */
+.search-results-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}
+
+.search-results-info .highlight {
+    color: var(--color-primary);
+    font-weight: 600;
+}
+
+@media (max-width: 640px) {
+    .search-input {
+        padding: 0.75rem 1rem;
+        padding-left: 2.5rem;
+        padding-right: 2.5rem;
+        font-size: 0.9rem;
+    }
 }

@@ -19,7 +19,8 @@ import {
     FiLayers,
     FiAward,
     FiEdit2,
-    FiSave
+    FiSave,
+    FiSearch
 } from 'react-icons/fi'
 import './UserDashboard.css'
 import './ViewToggle.css'
@@ -170,6 +171,7 @@ export default function UserDashboard() {
     const [currentBillId, setCurrentBillId] = useState(null)
     const [billNote, setBillNote] = useState('')
     const [isDraftsExpanded, setIsDraftsExpanded] = useState(false)
+    const [searchQuery, setSearchQuery] = useState('')
     const numberInputRef = useRef(null)
     const amountInputRef = useRef(null)
 
@@ -390,6 +392,46 @@ export default function UserDashboard() {
         return new Date() < deleteDeadline
     }
 
+    // Default commission rates per bet type (percentage) - moved up for use in addToDraft
+    const DEFAULT_COMMISSIONS_DRAFT = {
+        'run_top': 15, 'run_bottom': 15,
+        'pak_top': 15, 'pak_bottom': 15,
+        '2_top': 15, '2_front': 15, '2_center': 15, '2_spread': 15, '2_run': 15, '2_bottom': 15,
+        '3_top': 30, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
+        '4_run': 15, '4_tod': 15, '4_set': 15, '4_float': 15, '5_run': 15, '5_float': 15, '6_top': 15
+    }
+
+    // Get lottery type key for settings lookup
+    const getLotteryKeyForDraft = (lotteryType) => {
+        if (lotteryType === 'thai') return 'thai'
+        if (lotteryType === 'lao' || lotteryType === 'hanoi') return 'lao'
+        if (lotteryType === 'stock') return 'stock'
+        return 'thai'
+    }
+
+    // Helper function to get commission rate for a bet type from lottery_settings
+    const getCommissionForBetType = (betType) => {
+        if (!selectedRound) return DEFAULT_COMMISSIONS_DRAFT[betType] || 15
+
+        const lotteryKey = getLotteryKeyForDraft(selectedRound.lottery_type)
+        const settings = userSettings?.lottery_settings?.[lotteryKey]?.[betType]
+
+        if (settings && settings.commission !== undefined) {
+            return { rate: settings.commission, isFixed: settings.isFixed || false }
+        }
+
+        return { rate: DEFAULT_COMMISSIONS_DRAFT[betType] || 15, isFixed: false }
+    }
+
+    // Calculate commission amount based on rate and amount
+    const calculateCommissionAmount = (amount, betType) => {
+        const commissionInfo = getCommissionForBetType(betType)
+        if (commissionInfo.isFixed) {
+            return commissionInfo.rate
+        }
+        return (amount * commissionInfo.rate) / 100
+    }
+
     // Add to draft list
     function addToDraft(betTypeOverride = null) {
         console.log('addToDraft called with:', betTypeOverride)
@@ -456,15 +498,15 @@ export default function UserDashboard() {
             else if (betType === '3_perm_from_5') perms = getUnique3DigitPermsFrom5(cleanNumbers)
             else if (betType === '3_perm_from_3') perms = getPermutations(cleanNumbers)
 
-            const rate = userSettings?.commission_rates?.['3_top'] || 0
+            const commInfo = getCommissionForBetType('3_top')
             perms.forEach(p => {
                 newDrafts.push({
                     entry_id: entryId,
                     bet_type: '3_top',
                     numbers: p,
                     amount: totalAmount,
-                    commission_rate: rate,
-                    commission_amount: (totalAmount * rate) / 100,
+                    commission_rate: commInfo.rate,
+                    commission_amount: commInfo.isFixed ? commInfo.rate : (totalAmount * commInfo.rate) / 100,
                     display_numbers: cleanNumbers,
                     display_amount: submitForm.amount,
                     display_bet_type: displayLabel,
@@ -474,14 +516,14 @@ export default function UserDashboard() {
         } else if (betType === '3_straight_tod') {
             const [straightAmt, todAmt] = amountParts
             if (straightAmt > 0) {
-                const rate = userSettings?.commission_rates?.['3_top'] || 0
+                const commInfo = getCommissionForBetType('3_top')
                 newDrafts.push({
                     entry_id: entryId,
                     bet_type: '3_top',
                     numbers: cleanNumbers,
                     amount: straightAmt,
-                    commission_rate: rate,
-                    commission_amount: (straightAmt * rate) / 100,
+                    commission_rate: commInfo.rate,
+                    commission_amount: commInfo.isFixed ? commInfo.rate : (straightAmt * commInfo.rate) / 100,
                     display_numbers: cleanNumbers,
                     display_amount: submitForm.amount,
                     display_bet_type: displayLabel,
@@ -489,14 +531,14 @@ export default function UserDashboard() {
                 })
             }
             if (todAmt > 0) {
-                const rate = userSettings?.commission_rates?.['3_tod'] || 0
+                const commInfo = getCommissionForBetType('3_tod')
                 newDrafts.push({
                     entry_id: entryId,
                     bet_type: '3_tod',
                     numbers: cleanNumbers,
                     amount: todAmt,
-                    commission_rate: rate,
-                    commission_amount: (todAmt * rate) / 100,
+                    commission_rate: commInfo.rate,
+                    commission_amount: commInfo.isFixed ? commInfo.rate : (todAmt * commInfo.rate) / 100,
                     display_numbers: cleanNumbers,
                     display_amount: submitForm.amount,
                     display_bet_type: displayLabel,
@@ -508,14 +550,14 @@ export default function UserDashboard() {
             const perms = getPermutations(cleanNumbers).filter(p => p !== cleanNumbers)
 
             if (straightAmt > 0) {
-                const rate = userSettings?.commission_rates?.['3_top'] || 0
+                const commInfo = getCommissionForBetType('3_top')
                 newDrafts.push({
                     entry_id: entryId,
                     bet_type: '3_top',
                     numbers: cleanNumbers,
                     amount: straightAmt,
-                    commission_rate: rate,
-                    commission_amount: (straightAmt * rate) / 100,
+                    commission_rate: commInfo.rate,
+                    commission_amount: commInfo.isFixed ? commInfo.rate : (straightAmt * commInfo.rate) / 100,
                     display_numbers: cleanNumbers,
                     display_amount: submitForm.amount,
                     display_bet_type: displayLabel,
@@ -523,15 +565,15 @@ export default function UserDashboard() {
                 })
             }
             if (permAmt > 0 && perms.length > 0) {
-                const rate = userSettings?.commission_rates?.['3_top'] || 0
+                const commInfo = getCommissionForBetType('3_top')
                 perms.forEach(p => {
                     newDrafts.push({
                         entry_id: entryId,
                         bet_type: '3_top',
                         numbers: p,
                         amount: permAmt,
-                        commission_rate: rate,
-                        commission_amount: (permAmt * rate) / 100,
+                        commission_rate: commInfo.rate,
+                        commission_amount: commInfo.isFixed ? commInfo.rate : (permAmt * commInfo.rate) / 100,
                         display_numbers: cleanNumbers,
                         display_amount: submitForm.amount,
                         display_bet_type: displayLabel,
@@ -547,14 +589,14 @@ export default function UserDashboard() {
 
             // First number with first amount
             if (amt1 > 0) {
-                const rate = userSettings?.commission_rates?.[baseBetType] || 0
+                const commInfo = getCommissionForBetType(baseBetType)
                 newDrafts.push({
                     entry_id: entryId,
                     bet_type: baseBetType,
                     numbers: cleanNumbers,
                     amount: amt1,
-                    commission_rate: rate,
-                    commission_amount: (amt1 * rate) / 100,
+                    commission_rate: commInfo.rate,
+                    commission_amount: commInfo.isFixed ? commInfo.rate : (amt1 * commInfo.rate) / 100,
                     display_numbers: cleanNumbers,
                     display_amount: submitForm.amount,
                     display_bet_type: displayLabel,
@@ -564,14 +606,14 @@ export default function UserDashboard() {
 
             // Reversed number with second amount (if different from original)
             if (amt2 > 0 && reversedNumbers !== cleanNumbers) {
-                const rate = userSettings?.commission_rates?.[baseBetType] || 0
+                const commInfo = getCommissionForBetType(baseBetType)
                 newDrafts.push({
                     entry_id: entryId,
                     bet_type: baseBetType,
                     numbers: reversedNumbers,
                     amount: amt2,
-                    commission_rate: rate,
-                    commission_amount: (amt2 * rate) / 100,
+                    commission_rate: commInfo.rate,
+                    commission_amount: commInfo.isFixed ? commInfo.rate : (amt2 * commInfo.rate) / 100,
                     display_numbers: cleanNumbers,
                     display_amount: submitForm.amount,
                     display_bet_type: displayLabel,
@@ -579,14 +621,14 @@ export default function UserDashboard() {
                 })
             } else if (amt2 > 0 && reversedNumbers === cleanNumbers) {
                 // Same number (e.g., 11, 22) - just add the second amount to same number
-                const rate = userSettings?.commission_rates?.[baseBetType] || 0
+                const commInfo = getCommissionForBetType(baseBetType)
                 newDrafts.push({
                     entry_id: entryId,
                     bet_type: baseBetType,
                     numbers: cleanNumbers,
                     amount: amt2,
-                    commission_rate: rate,
-                    commission_amount: (amt2 * rate) / 100,
+                    commission_rate: commInfo.rate,
+                    commission_amount: commInfo.isFixed ? commInfo.rate : (amt2 * commInfo.rate) / 100,
                     display_numbers: cleanNumbers,
                     display_amount: submitForm.amount,
                     display_bet_type: displayLabel,
@@ -594,14 +636,14 @@ export default function UserDashboard() {
                 })
             }
         } else {
-            const rate = userSettings?.commission_rates?.[betType] || 0
+            const commInfo = getCommissionForBetType(betType)
             newDrafts.push({
                 entry_id: entryId,
                 bet_type: betType,
                 numbers: cleanNumbers,
                 amount: totalAmount,
-                commission_rate: rate,
-                commission_amount: (totalAmount * rate) / 100,
+                commission_rate: commInfo.rate,
+                commission_amount: commInfo.isFixed ? commInfo.rate : (totalAmount * commInfo.rate) / 100,
                 display_numbers: cleanNumbers,
                 display_amount: submitForm.amount,
                 display_bet_type: displayLabel,
@@ -972,6 +1014,28 @@ export default function UserDashboard() {
                                                         </div>
                                                     </div>
 
+                                                    {/* Search Bar */}
+                                                    <div className="search-bar-container">
+                                                        <div className="search-input-wrapper">
+                                                            <FiSearch className="search-icon" />
+                                                            <input
+                                                                type="text"
+                                                                className="search-input"
+                                                                placeholder="ค้นหาเลข, ใบโพย, ประเภท..."
+                                                                value={searchQuery}
+                                                                onChange={(e) => setSearchQuery(e.target.value)}
+                                                            />
+                                                            {searchQuery && (
+                                                                <button
+                                                                    className="search-clear-btn"
+                                                                    onClick={() => setSearchQuery('')}
+                                                                >
+                                                                    <FiX />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
                                                     <div className="submissions-list card">
                                                         <div className="list-header">
                                                             <h3>รายการที่ส่ง</h3>
@@ -1017,6 +1081,23 @@ export default function UserDashboard() {
                                                         ) : (
                                                             <div className="submissions-table-wrap">
                                                                 {(() => {
+                                                                    // Filter submissions based on search query
+                                                                    const filterSubmissions = (items) => {
+                                                                        if (!searchQuery.trim()) return items
+                                                                        const query = searchQuery.toLowerCase().trim()
+                                                                        return items.filter(sub => {
+                                                                            if (sub.numbers?.toLowerCase().includes(query)) return true
+                                                                            if (sub.display_numbers?.toLowerCase().includes(query)) return true
+                                                                            if (sub.bill_id?.toLowerCase().includes(query)) return true
+                                                                            const betTypeLabel = BET_TYPES[sub.bet_type]?.label || sub.bet_type || ''
+                                                                            if (betTypeLabel.toLowerCase().includes(query)) return true
+                                                                            if (sub.display_bet_type?.toLowerCase().includes(query)) return true
+                                                                            if (sub.bill_note?.toLowerCase().includes(query)) return true
+                                                                            return false
+                                                                        })
+                                                                    }
+                                                                    const filteredSubs = filterSubmissions(submissions)
+
                                                                     // Helper to process items based on displayMode
                                                                     const processItems = (items) => {
                                                                         if (displayMode === 'detailed') return items
@@ -1037,7 +1118,7 @@ export default function UserDashboard() {
                                                                     }
 
                                                                     if (isGroupByBill) {
-                                                                        const bills = submissions.reduce((acc, sub) => {
+                                                                        const bills = filteredSubs.reduce((acc, sub) => {
                                                                             const billId = sub.bill_id || 'no-bill'
                                                                             if (!acc[billId]) acc[billId] = []
                                                                             acc[billId].push(sub)
@@ -1142,7 +1223,7 @@ export default function UserDashboard() {
                                                                         )
                                                                     } else {
                                                                         // Single table view
-                                                                        const displayItems = processItems(submissions)
+                                                                        const displayItems = processItems(filteredSubs)
                                                                         return (
                                                                             <table className="submissions-table">
                                                                                 <thead>
