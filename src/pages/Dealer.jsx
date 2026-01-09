@@ -31,7 +31,8 @@ import {
     FiSave,
     FiStar,
     FiPackage,
-    FiAlertCircle
+    FiAlertCircle,
+    FiSearch
 } from 'react-icons/fi'
 import './Dealer.css'
 import './SettingsTabs.css'
@@ -223,7 +224,7 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
     const [inlineUserFilter, setInlineUserFilter] = useState('all')
     const [inlineBetTypeFilter, setInlineBetTypeFilter] = useState('all')
     const [isGrouped, setIsGrouped] = useState(false)
-
+    const [inlineSearch, setInlineSearch] = useState('')
 
     const isAnnounced = round.status === 'announced' && round.is_result_announced
 
@@ -597,12 +598,24 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                             <div className="inline-summary">
                                                 <div className="summary-item">
                                                     <span className="label">จำนวน</span>
-                                                    <span className="value">{inlineSubmissions.filter(s => {
-                                                        const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
-                                                        if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
-                                                        if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
-                                                        return true
-                                                    }).length} รายการ</span>
+                                                    <span className="value">{(() => {
+                                                        let filtered = inlineSubmissions.filter(s => {
+                                                            const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
+                                                            if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
+                                                            if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
+                                                            return true
+                                                        })
+                                                        if (isGrouped) {
+                                                            const grouped = {}
+                                                            filtered.forEach(s => {
+                                                                const normalizedNumbers = normalizeNumber(s.numbers, s.bet_type)
+                                                                const key = `${normalizedNumbers}|${s.bet_type}`
+                                                                if (!grouped[key]) grouped[key] = true
+                                                            })
+                                                            return Object.keys(grouped).length
+                                                        }
+                                                        return filtered.length
+                                                    })()} รายการ</span>
                                                 </div>
                                                 <div className="summary-item">
                                                     <span className="label">ยอดรวม</span>
@@ -613,6 +626,23 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                                         return true
                                                     }).reduce((sum, s) => sum + s.amount, 0).toLocaleString()}</span>
                                                 </div>
+                                            </div>
+
+                                            {/* Search */}
+                                            <div className="inline-search">
+                                                <FiSearch className="search-icon" />
+                                                <input
+                                                    type="text"
+                                                    value={inlineSearch}
+                                                    onChange={(e) => setInlineSearch(e.target.value)}
+                                                    placeholder="ค้นหาเลข..."
+                                                    className="form-input"
+                                                />
+                                                {inlineSearch && (
+                                                    <button className="search-clear" onClick={() => setInlineSearch('')}>
+                                                        <FiX />
+                                                    </button>
+                                                )}
                                             </div>
 
                                             {/* Table */}
@@ -632,6 +662,7 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                                                 const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
                                                                 if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
                                                                 if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
+                                                                if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
                                                                 return true
                                                             })
 
