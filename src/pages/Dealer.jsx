@@ -201,6 +201,17 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
     const [isExpanded, setIsExpanded] = useState(false)
     const [summaryData, setSummaryData] = useState({ loading: false, submissions: [], userSettings: {} })
 
+    // Inline submissions view states
+    const [viewMode, setViewMode] = useState('summary') // 'summary' | 'submissions'
+    const [inlineTab, setInlineTab] = useState('total') // 'total' | 'excess' | 'transferred'
+    const [inlineSubmissions, setInlineSubmissions] = useState([])
+    const [inlineTypeLimits, setInlineTypeLimits] = useState({})
+    const [inlineNumberLimits, setInlineNumberLimits] = useState([])
+    const [inlineTransfers, setInlineTransfers] = useState([])
+    const [inlineLoading, setInlineLoading] = useState(false)
+    const [inlineUserFilter, setInlineUserFilter] = useState('all')
+    const [inlineBetTypeFilter, setInlineBetTypeFilter] = useState('all')
+
     const isAnnounced = round.status === 'announced' && round.is_result_announced
 
     // Fetch summary data immediately when announced (to show in header)
@@ -238,6 +249,97 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
             console.error('Error fetching summary:', error)
             setSummaryData(prev => ({ ...prev, loading: false }))
         }
+    }
+
+    // Fetch inline submissions data for eye button view
+    async function fetchInlineSubmissions() {
+        if (inlineSubmissions.length > 0) return // Already fetched
+        setInlineLoading(true)
+        try {
+            // Fetch submissions
+            const { data: subsData } = await supabase
+                .from('submissions')
+                .select(`*, profiles (full_name, email)`)
+                .eq('round_id', round.id)
+                .eq('is_deleted', false)
+                .order('created_at', { ascending: false })
+            setInlineSubmissions(subsData || [])
+
+            // Fetch type limits
+            const { data: typeLimitsData } = await supabase
+                .from('type_limits')
+                .select('*')
+                .eq('round_id', round.id)
+            const limitsObj = {}
+            typeLimitsData?.forEach(l => {
+                limitsObj[l.bet_type] = l.max_per_number
+            })
+            setInlineTypeLimits(limitsObj)
+
+            // Fetch number limits
+            const { data: numLimitsData } = await supabase
+                .from('number_limits')
+                .select('*')
+                .eq('round_id', round.id)
+            setInlineNumberLimits(numLimitsData || [])
+
+            // Fetch transfers
+            const { data: transfersData } = await supabase
+                .from('over_limit_transfers')
+                .select('*')
+                .eq('round_id', round.id)
+                .order('created_at', { ascending: false })
+            setInlineTransfers(transfersData || [])
+        } catch (error) {
+            console.error('Error fetching inline submissions:', error)
+        } finally {
+            setInlineLoading(false)
+        }
+    }
+
+    // Handle eye button click - toggle to submissions view
+    const handleEyeClick = (e) => {
+        e.stopPropagation()
+        if (!isExpanded) {
+            setIsExpanded(true)
+        }
+        if (viewMode === 'submissions') {
+            setViewMode('summary')
+        } else {
+            setViewMode('submissions')
+            fetchInlineSubmissions()
+        }
+    }
+
+    // Calculate excess items
+    const calculateExcessItems = () => {
+        const grouped = {}
+        inlineSubmissions.forEach(sub => {
+            const key = `${sub.bet_type}|${sub.numbers}`
+            if (!grouped[key]) {
+                grouped[key] = { bet_type: sub.bet_type, numbers: sub.numbers, total: 0, submissions: [] }
+            }
+            grouped[key].total += sub.amount
+            grouped[key].submissions.push(sub)
+        })
+
+        const excessItems = []
+        Object.values(grouped).forEach(item => {
+            // Check type limit
+            const typeLimit = inlineTypeLimits[item.bet_type]
+            // Check number limit
+            const numberLimit = inlineNumberLimits.find(nl => nl.bet_type === item.bet_type && nl.numbers === item.numbers)
+            const effectiveLimit = numberLimit?.max_amount ?? typeLimit
+
+            if (effectiveLimit && item.total > effectiveLimit) {
+                excessItems.push({
+                    ...item,
+                    limit: effectiveLimit,
+                    excess: item.total - effectiveLimit
+                })
+            }
+        })
+        return excessItems.sort((a, b) => b.excess - a.excess)
     }
 
     // Calculate summary values
@@ -330,7 +432,7 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                 </div>
                 <div className="round-header-right">
                     <div className="round-actions">
-                        <button className="icon-btn" onClick={(e) => { e.stopPropagation(); onShowSubmissions(); }} title="ดูเลขที่ส่ง"><FiEye /></button>
+                        <button className={`icon-btn ${viewMode === 'submissions' ? 'active' : ''}`} onClick={handleEyeClick} title="ดูเลขที่ส่ง"><FiEye /></button>
                         <button className="icon-btn" onClick={(e) => { e.stopPropagation(); onEditRound(); }} title="แก้ไขงวด"><FiEdit2 /></button>
                         {round.status === 'open' && <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onCloseRound(); }} title="ปิดงวด"><FiLock /></button>}
                         <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onShowNumberLimits(); }} title="ตั้งค่าเลขอั้น"><FiAlertTriangle /></button>
@@ -353,7 +455,7 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                         )}
                     </div>
 
-                    {isAnnounced && (
+                    {isAnnounced && viewMode === 'summary' && (
                         summaryData.loading ? (
                             <div className="loading-state"><div className="spinner"></div></div>
                         ) : (
@@ -401,7 +503,194 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                         )
                     )}
 
-                    {!isAnnounced && (
+                    {/* Inline Submissions View - shown when eye button is clicked */}
+                    {viewMode === 'submissions' && (
+                        <div className="inline-submissions-view">
+                            {/* Tabs */}
+                            <div className="inline-tabs">
+                                <button
+                                    className={`inline-tab ${inlineTab === 'total' ? 'active' : ''}`}
+                                    onClick={() => setInlineTab('total')}
+                                >
+                                    ยอดรวม <span className="tab-count">{inlineSubmissions.length}</span>
+                                </button>
+                                <button
+                                    className={`inline-tab ${inlineTab === 'excess' ? 'active' : ''}`}
+                                    onClick={() => setInlineTab('excess')}
+                                >
+                                    ยอดเกิน <span className="tab-count">{calculateExcessItems().length}</span>
+                                </button>
+                                <button
+                                    className={`inline-tab ${inlineTab === 'transferred' ? 'active' : ''}`}
+                                    onClick={() => setInlineTab('transferred')}
+                                >
+                                    ยอดตีออก <span className="tab-count">{inlineTransfers.length}</span>
+                                </button>
+                            </div>
+
+                            {inlineLoading ? (
+                                <div className="loading-state"><div className="spinner"></div></div>
+                            ) : (
+                                <>
+                                    {/* Tab: ยอดรวม */}
+                                    {inlineTab === 'total' && (
+                                        <div className="inline-tab-content">
+                                            {/* Filters */}
+                                            <div className="inline-filters">
+                                                <select
+                                                    value={inlineUserFilter}
+                                                    onChange={(e) => setInlineUserFilter(e.target.value)}
+                                                    className="form-input"
+                                                >
+                                                    <option value="all">ทุกคน</option>
+                                                    {[...new Set(inlineSubmissions.map(s => s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'))].map(name => (
+                                                        <option key={name} value={name}>{name}</option>
+                                                    ))}
+                                                </select>
+                                                <select
+                                                    value={inlineBetTypeFilter}
+                                                    onChange={(e) => setInlineBetTypeFilter(e.target.value)}
+                                                    className="form-input"
+                                                >
+                                                    <option value="all">ทุกประเภท</option>
+                                                    {[...new Set(inlineSubmissions.map(s => s.bet_type))].map(type => (
+                                                        <option key={type} value={type}>{BET_TYPES[type] || type}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            {/* Summary */}
+                                            <div className="inline-summary">
+                                                <div className="summary-item">
+                                                    <span className="label">จำนวน</span>
+                                                    <span className="value">{inlineSubmissions.filter(s => {
+                                                        const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
+                                                        if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
+                                                        if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
+                                                        return true
+                                                    }).length} รายการ</span>
+                                                </div>
+                                                <div className="summary-item">
+                                                    <span className="label">ยอดรวม</span>
+                                                    <span className="value">{round.currency_symbol}{inlineSubmissions.filter(s => {
+                                                        const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
+                                                        if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
+                                                        if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
+                                                        return true
+                                                    }).reduce((sum, s) => sum + s.amount, 0).toLocaleString()}</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Table */}
+                                            <div className="inline-table-wrap">
+                                                <table className="inline-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>ผู้ส่ง</th>
+                                                            <th>ประเภท</th>
+                                                            <th>เลข</th>
+                                                            <th>จำนวน</th>
+                                                            <th>เวลา</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {inlineSubmissions.filter(s => {
+                                                            const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
+                                                            if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
+                                                            if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
+                                                            return true
+                                                        }).map(sub => (
+                                                            <tr key={sub.id}>
+                                                                <td>{sub.profiles?.full_name || sub.profiles?.email || 'ไม่ระบุ'}</td>
+                                                                <td><span className="type-badge">{BET_TYPES[sub.bet_type] || sub.bet_type}</span></td>
+                                                                <td className="number-cell">{sub.numbers}</td>
+                                                                <td>{round.currency_symbol}{sub.amount.toLocaleString()}</td>
+                                                                <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Tab: ยอดเกิน */}
+                                    {inlineTab === 'excess' && (
+                                        <div className="inline-tab-content">
+                                            {calculateExcessItems().length === 0 ? (
+                                                <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
+                                                    <p style={{ color: 'var(--color-text-muted)' }}>ไม่มียอดเกิน</p>
+                                                </div>
+                                            ) : (
+                                                <div className="inline-table-wrap">
+                                                    <table className="inline-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>ประเภท</th>
+                                                                <th>เลข</th>
+                                                                <th>ยอดรวม</th>
+                                                                <th>Limit</th>
+                                                                <th>เกิน</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {calculateExcessItems().map(item => (
+                                                                <tr key={`${item.bet_type}|${item.numbers}`}>
+                                                                    <td><span className="type-badge">{BET_TYPES[item.bet_type] || item.bet_type}</span></td>
+                                                                    <td className="number-cell">{item.numbers}</td>
+                                                                    <td>{round.currency_symbol}{item.total.toLocaleString()}</td>
+                                                                    <td>{round.currency_symbol}{item.limit.toLocaleString()}</td>
+                                                                    <td className="text-danger">{round.currency_symbol}{item.excess.toLocaleString()}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Tab: ยอดตีออก */}
+                                    {inlineTab === 'transferred' && (
+                                        <div className="inline-tab-content">
+                                            {inlineTransfers.length === 0 ? (
+                                                <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
+                                                    <p style={{ color: 'var(--color-text-muted)' }}>ยังไม่มียอดตีออก</p>
+                                                </div>
+                                            ) : (
+                                                <div className="inline-table-wrap">
+                                                    <table className="inline-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>ประเภท</th>
+                                                                <th>เลข</th>
+                                                                <th>จำนวน</th>
+                                                                <th>ผู้รับ</th>
+                                                                <th>สถานะ</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {inlineTransfers.map(transfer => (
+                                                                <tr key={transfer.id}>
+                                                                    <td><span className="type-badge">{BET_TYPES[transfer.bet_type] || transfer.bet_type}</span></td>
+                                                                    <td className="number-cell">{transfer.numbers}</td>
+                                                                    <td>{round.currency_symbol}{transfer.amount.toLocaleString()}</td>
+                                                                    <td>{transfer.target_dealer_name || '-'}</td>
+                                                                    <td><span className={`status-badge ${transfer.status}`}>{transfer.status}</span></td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    {!isAnnounced && viewMode === 'summary' && (
                         <div className="empty-state" style={{ padding: '1.5rem', textAlign: 'center' }}>
                             <p style={{ color: 'var(--color-text-muted)' }}>ยังไม่ได้ประกาศผลรางวัล</p>
                         </div>
