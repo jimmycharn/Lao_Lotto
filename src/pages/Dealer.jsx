@@ -826,6 +826,15 @@ export default function Dealer() {
     const [expandedMemberId, setExpandedMemberId] = useState(null)
     const [subscription, setSubscription] = useState(null)
     const [dealerBankAccounts, setDealerBankAccounts] = useState([])
+    const [roundsTab, setRoundsTab] = useState('open') // 'open' | 'closed'
+
+    // Helper to check if a round is still open
+    const isRoundOpen = (round) => {
+        if (round.status === 'announced' || round.status === 'closed') return false
+        const now = new Date()
+        const closeTime = new Date(round.close_time)
+        return now <= closeTime
+    }
 
     // Form state for creating round
     const [roundForm, setRoundForm] = useState({
@@ -1366,54 +1375,77 @@ export default function Dealer() {
 
                 {/* Tab Content */}
                 <div className="dealer-content">
-                    {activeTab === 'rounds' && (
-                        <div className="rounds-section">
-                            {/* Create Button */}
-                            <div className="section-header">
-                                <h2>งวดหวยทั้งหมด</h2>
-                                <button
-                                    className="btn btn-primary"
-                                    onClick={() => setShowCreateModal(true)}
-                                >
-                                    <FiPlus /> สร้างงวดใหม่
-                                </button>
-                            </div>
+                    {activeTab === 'rounds' && (() => {
+                        // Filter rounds based on selected tab
+                        const openRounds = rounds.filter(r => isRoundOpen(r))
+                        const closedRounds = rounds.filter(r => !isRoundOpen(r))
+                        const displayedRounds = roundsTab === 'open' ? openRounds : closedRounds
 
-                            {/* Rounds List */}
-                            {loading ? (
-                                <div className="loading-state">
-                                    <div className="spinner"></div>
+                        return (
+                            <div className="rounds-section">
+                                {/* Create Button */}
+                                <div className="section-header">
+                                    <h2>งวดหวยทั้งหมด</h2>
+                                    <button
+                                        className="btn btn-primary"
+                                        onClick={() => setShowCreateModal(true)}
+                                    >
+                                        <FiPlus /> สร้างงวดใหม่
+                                    </button>
                                 </div>
-                            ) : rounds.length === 0 ? (
-                                <div className="empty-state card">
-                                    <FiCalendar className="empty-icon" />
-                                    <h3>ยังไม่มีงวดหวย</h3>
-                                    <p>กดปุ่ม "สร้างงวดใหม่" เพื่อเริ่มต้น</p>
+
+                                {/* Sub-tabs for Open/Closed Rounds */}
+                                <div className="rounds-sub-tabs">
+                                    <button
+                                        className={`sub-tab-btn ${roundsTab === 'open' ? 'active' : ''}`}
+                                        onClick={() => setRoundsTab('open')}
+                                    >
+                                        งวดที่เปิดอยู่ ({openRounds.length})
+                                    </button>
+                                    <button
+                                        className={`sub-tab-btn ${roundsTab === 'closed' ? 'active' : ''}`}
+                                        onClick={() => setRoundsTab('closed')}
+                                    >
+                                        งวดที่ปิดแล้ว ({closedRounds.length})
+                                    </button>
                                 </div>
-                            ) : (
-                                <div className="rounds-list">
-                                    {rounds.map(round => (
-                                        <RoundAccordionItem
-                                            key={round.id}
-                                            round={round}
-                                            isSelected={selectedRound?.id === round.id}
-                                            onSelect={setSelectedRound}
-                                            onShowSubmissions={() => { setSelectedRound(round); setShowSubmissionsModal(true); }}
-                                            onCloseRound={() => handleCloseRound(round.id)}
-                                            onEditRound={() => handleOpenEditModal(round)}
-                                            onShowNumberLimits={() => { setSelectedRound(round); setShowNumberLimitsModal(true); }}
-                                            onDeleteRound={() => handleDeleteRound(round.id)}
-                                            onShowResults={() => { setSelectedRound(round); setShowResultsModal(true); }}
-                                            getStatusBadge={getStatusBadge}
-                                            formatDate={formatDate}
-                                            formatTime={formatTime}
-                                            user={user}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
+
+                                {/* Rounds List */}
+                                {loading ? (
+                                    <div className="loading-state">
+                                        <div className="spinner"></div>
+                                    </div>
+                                ) : displayedRounds.length === 0 ? (
+                                    <div className="empty-state card">
+                                        <FiCalendar className="empty-icon" />
+                                        <h3>{roundsTab === 'open' ? 'ไม่มีงวดที่เปิดอยู่' : 'ไม่มีงวดที่ปิดแล้ว'}</h3>
+                                        <p>{roundsTab === 'open' ? 'กดปุ่ม "สร้างงวดใหม่" เพื่อเริ่มต้น' : 'สลับไปที่แท็บ "งวดที่เปิดอยู่" เพื่อดูงวดที่ยังเปิดรับ'}</p>
+                                    </div>
+                                ) : (
+                                    <div className="rounds-list">
+                                        {displayedRounds.map(round => (
+                                            <RoundAccordionItem
+                                                key={round.id}
+                                                round={round}
+                                                isSelected={selectedRound?.id === round.id}
+                                                onSelect={setSelectedRound}
+                                                onShowSubmissions={() => { setSelectedRound(round); setShowSubmissionsModal(true); }}
+                                                onCloseRound={() => handleCloseRound(round.id)}
+                                                onEditRound={() => handleOpenEditModal(round)}
+                                                onShowNumberLimits={() => { setSelectedRound(round); setShowNumberLimitsModal(true); }}
+                                                onDeleteRound={() => handleDeleteRound(round.id)}
+                                                onShowResults={() => { setSelectedRound(round); setShowResultsModal(true); }}
+                                                getStatusBadge={getStatusBadge}
+                                                formatDate={formatDate}
+                                                formatTime={formatTime}
+                                                user={user}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    })()}
 
                     {activeTab === 'members' && (
                         <div className="members-section">
