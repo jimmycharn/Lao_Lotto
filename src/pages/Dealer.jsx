@@ -228,12 +228,20 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
 
     const isAnnounced = round.status === 'announced' && round.is_result_announced
 
-    // Fetch summary data immediately when announced (to show in header)
+    // Check if round is currently open
+    const isOpen = (() => {
+        if (round.status === 'announced' || round.status === 'closed') return false
+        const now = new Date()
+        const closeTime = new Date(round.close_time)
+        return now <= closeTime
+    })()
+
+    // Fetch summary data immediately when announced OR when open (to show totals in header)
     useEffect(() => {
-        if (isAnnounced && summaryData.submissions.length === 0 && !summaryData.loading) {
+        if ((isAnnounced || isOpen) && summaryData.submissions.length === 0 && !summaryData.loading) {
             fetchSummaryData()
         }
-    }, [isAnnounced])
+    }, [isAnnounced, isOpen])
 
     async function fetchSummaryData() {
         setSummaryData(prev => ({ ...prev, loading: true }))
@@ -394,11 +402,17 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
     }
 
     const getCommission = (sub) => {
+        // Priority 1: Calculate from user_settings (authoritative source)
         const lotteryKey = getLotteryTypeKey()
         const settings = summaryData.userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[sub.bet_type]
         if (settings?.commission !== undefined) {
             return settings.isFixed ? settings.commission : sub.amount * (settings.commission / 100)
         }
+        // Priority 2: Use stored commission_amount from submission if available
+        if (sub.commission_amount !== undefined && sub.commission_amount !== null) {
+            return sub.commission_amount
+        }
+        // Priority 3: Use default rates
         return sub.amount * ((DEFAULT_COMMISSIONS[sub.bet_type] || 15) / 100)
     }
 
@@ -410,8 +424,8 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
         return sub.amount * (DEFAULT_PAYOUTS[sub.bet_type] || 1)
     }
 
-    // Calculate user summaries (always calculate for announced rounds to show in header)
-    const userSummaries = isAnnounced && !summaryData.loading ? Object.values(
+    // Calculate user summaries (for announced AND open rounds to show in header)
+    const userSummaries = (isAnnounced || isOpen) && !summaryData.loading ? Object.values(
         summaryData.submissions.reduce((acc, sub) => {
             const userId = sub.user_id
             if (!acc[userId]) {
@@ -457,6 +471,13 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                             <span className={`summary-item profit ${dealerProfit >= 0 ? 'positive' : 'negative'}`}>
                                 <span className="label">กำไร</span> {dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}
                             </span>
+                        </div>
+                    )}
+                    {/* Show summary inline in header for open rounds (total bet and commission only) */}
+                    {isOpen && !summaryData.loading && grandTotalBet > 0 && (
+                        <div className="header-summary">
+                            <span className="summary-item"><span className="label">ยอดรวม</span> {round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
+                            <span className="summary-item"><span className="label">คอม</span> <span style={{ color: 'var(--color-warning)' }}>{round.currency_symbol}{grandTotalCommission.toLocaleString()}</span></span>
                         </div>
                     )}
                 </div>
