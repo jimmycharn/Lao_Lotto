@@ -910,7 +910,7 @@
     display: flex;
     background: rgba(0, 0, 0, 0.4);
     padding: 0.25rem;
-    border-radius: var(--radius-md);
+    border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     backdrop-filter: blur(12px);
 }
@@ -929,7 +929,7 @@
     border: none;
     background: transparent;
     color: var(--color-text-muted);
-    border-radius: var(--radius-sm);
+    border-radius: 6px;
     cursor: pointer;
     font-size: 0.85rem;
     font-weight: 500;
@@ -2509,6 +2509,7 @@
         font-size: 0.9rem;
     }
 }
+
 /* =============================================
    RESULTS HEADER SUMMARY
    ============================================= */
