@@ -149,6 +149,7 @@ export default function UserDashboard() {
 
     // Results tab state
     const [resultsRounds, setResultsRounds] = useState([])
+    const [resultsSummaries, setResultsSummaries] = useState({}) // { roundId: { totalAmount, totalCommission, totalPrize, netResult, winCount } }
     const [selectedResultRound, setSelectedResultRound] = useState(null)
     const [resultSubmissions, setResultSubmissions] = useState([])
     const [allResultSubmissions, setAllResultSubmissions] = useState([]) // All submissions for summary calculations
@@ -338,8 +339,69 @@ export default function UserDashboard() {
                 .order('round_date', { ascending: false })
                 .limit(20)
 
-            if (!error) {
-                setResultsRounds(data || [])
+            if (!error && data) {
+                setResultsRounds(data)
+
+                // Fetch submissions for each round to calculate summaries
+                const summaries = {}
+                for (const round of data) {
+                    const { data: subs } = await supabase
+                        .from('submissions')
+                        .select('*')
+                        .eq('round_id', round.id)
+                        .eq('user_id', user.id)
+                        .eq('is_deleted', false)
+
+                    if (subs && subs.length > 0) {
+                        const totalAmount = subs.reduce((sum, s) => sum + (s.amount || 0), 0)
+                        const winCount = subs.filter(s => s.is_winner).length
+
+                        // Calculate total prize and commission using same logic as getCalculatedPrize/getCalculatedCommission
+                        const lotteryKey = (() => {
+                            if (round.lottery_type === 'thai') return 'thai'
+                            if (round.lottery_type === 'lao' || round.lottery_type === 'hanoi') return 'lao'
+                            if (round.lottery_type === 'stock') return 'stock'
+                            return 'thai'
+                        })()
+
+                        // Commission from user_settings (priority) or commission_amount from submission (fallback)
+                        const totalCommission = subs.reduce((sum, s) => {
+                            const settings = userSettings?.lottery_settings?.[lotteryKey]?.[s.bet_type]
+                            if (settings?.commission !== undefined) {
+                                return sum + (settings.isFixed ? settings.commission : s.amount * (settings.commission / 100))
+                            }
+                            // Fallback: use commission_amount that was recorded when submission was made
+                            return sum + (s.commission_amount || 0)
+                        }, 0)
+
+                        const totalPrize = subs.reduce((sum, s) => {
+                            if (!s.is_winner) return sum
+                            const settings = userSettings?.lottery_settings?.[lotteryKey]?.[s.bet_type]
+                            if (settings?.payout !== undefined) {
+                                return sum + (s.amount * settings.payout)
+                            }
+                            const defaultPayouts = {
+                                'run_top': 3, 'run_bottom': 4, 'pak_top': 8, 'pak_bottom': 6,
+                                '2_top': 65, '2_front': 65, '2_center': 65, '2_spread': 65, '2_run': 10, '2_bottom': 65,
+                                '3_top': 550, '3_tod': 100, '3_bottom': 135, '3_front': 100, '3_back': 135,
+                                '4_run': 20, '4_tod': 100, '4_set': 100, '4_float': 20, '5_float': 10, '6_top': 1000000
+                            }
+                            return sum + (s.amount * (defaultPayouts[s.bet_type] || 1))
+                        }, 0)
+
+                        const netResult = totalCommission + totalPrize - totalAmount
+
+                        summaries[round.id] = {
+                            totalAmount,
+                            totalCommission,
+                            totalPrize,
+                            netResult,
+                            winCount,
+                            ticketCount: subs.length
+                        }
+                    }
+                }
+                setResultsSummaries(summaries)
             }
         } catch (error) {
             console.error('Error fetching results rounds:', error)
@@ -820,9 +882,8 @@ export default function UserDashboard() {
             return sub.amount * (settings.commission / 100) // Percentage
         }
 
-        // Use default commission rate for this bet type
-        const defaultRate = DEFAULT_COMMISSIONS[sub.bet_type] || 15
-        return sub.amount * (defaultRate / 100)
+        // Fallback: use commission_amount that was recorded when submission was made
+        return sub.commission_amount || 0
     }
 
     // Loading dealers
@@ -1308,6 +1369,10 @@ export default function UserDashboard() {
                                 resultsRounds.map(round => {
                                     const isExpanded = selectedResultRound?.id === round.id
 
+                                    // Get pre-fetched summary from resultsSummaries
+                                    const summary = resultsSummaries[round.id] || {}
+                                    const hasSummary = Object.keys(summary).length > 0
+
                                     // Calculate summary for expanded round using ALL submissions (not filtered)
                                     const totalPrize = allResultSubmissions.reduce((sum, s) => {
                                         if (s.is_winner) return sum + getCalculatedPrize(s, round)
@@ -1329,6 +1394,9 @@ export default function UserDashboard() {
                                         acc[billId].push(sub)
                                         return acc
                                     }, {})
+
+                                    // Parse winning numbers for display
+                                    const winningNumbers = round.winning_numbers || {}
 
                                     return (
                                         <div key={round.id} className={`round-accordion-item ${round.lottery_type} ${isExpanded ? 'expanded' : ''}`}>
@@ -1357,40 +1425,96 @@ export default function UserDashboard() {
                                                         <span className="status-badge announced">
                                                             <FiCheck /> ประกาศผลแล้ว
                                                         </span>
-                                                        <FiChevronDown />
+                                                        <FiChevronDown className={isExpanded ? 'rotated' : ''} />
                                                     </div>
                                                 </div>
+                                                {/* Summary in Header */}
+                                                {hasSummary && (
+                                                    <div className="header-summary results-header-summary">
+                                                        <span className="summary-item">
+                                                            <span className="label">ยอดส่งรวม</span>
+                                                            {round.currency_symbol || '฿'}{summary.totalAmount?.toLocaleString()}
+                                                        </span>
+                                                        <span className="summary-item">
+                                                            <span className="label">ค่าคอม</span>
+                                                            {round.currency_symbol || '฿'}{summary.totalCommission?.toLocaleString()}
+                                                        </span>
+                                                        <span className="summary-item highlight">
+                                                            <span className="label">รางวัลที่ได้</span>
+                                                            <span style={{ color: 'var(--color-success)' }}>{round.currency_symbol || '฿'}{summary.totalPrize?.toLocaleString()}</span>
+                                                        </span>
+                                                        <span className={`summary-item profit ${summary.netResult >= 0 ? 'positive' : 'negative'}`}>
+                                                            <span className="label">ผลกำไร/ขาดทุน</span>
+                                                            {summary.netResult >= 0 ? '+' : ''}{round.currency_symbol || '฿'}{summary.netResult?.toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </div>
 
                                             {isExpanded && (
                                                 <div className="round-accordion-content">
-                                                    {/* Summary Cards */}
-                                                    <div className="submissions-summary results-summary">
-                                                        <div className="summary-card">
-                                                            <span className="summary-value">
-                                                                {round.currency_symbol || '฿'}{resultTotalAmount.toLocaleString()}
-                                                            </span>
-                                                            <span className="summary-label">ยอดส่งรวม</span>
+                                                    {/* Winning Numbers Display */}
+                                                    {Object.keys(winningNumbers).length > 0 && (
+                                                        <div className="winning-numbers-section">
+                                                            <h4><FiAward /> ผลรางวัลที่ออก</h4>
+                                                            <div className="winning-numbers-grid">
+                                                                {/* Ordered display: รางวัลที่ 1 | 3 ตัวบน | 2 ตัวล่าง | 3 ตัวล่าง */}
+                                                                {['6_top', '3_top', '2_bottom', '3_bottom'].map(betType => {
+                                                                    const number = winningNumbers[betType]
+                                                                    if (!number) return null
+                                                                    const betTypeLabels = {
+                                                                        '6_top': 'รางวัลที่ 1',
+                                                                        '3_top': '3 ตัวบน',
+                                                                        '3_bottom': '3 ตัวล่าง',
+                                                                        '3_tod': '3 ตัวโต๊ด',
+                                                                        '2_top': '2 ตัวบน',
+                                                                        '2_bottom': '2 ตัวล่าง',
+                                                                        'run_top': 'วิ่งบน',
+                                                                        'run_bottom': 'วิ่งล่าง'
+                                                                    }
+                                                                    const label = betTypeLabels[betType] || betType
+                                                                    const displayNumber = Array.isArray(number) ? number.join(', ') : number
+
+                                                                    return (
+                                                                        <div key={betType} className="winning-number-item">
+                                                                            <span className="winning-label">{label}</span>
+                                                                            <span className="winning-value">{displayNumber}</span>
+                                                                        </div>
+                                                                    )
+                                                                })}
+                                                            </div>
                                                         </div>
-                                                        <div className="summary-card">
-                                                            <span className="summary-value">
-                                                                {round.currency_symbol || '฿'}{resultTotalCommission.toLocaleString()}
-                                                            </span>
-                                                            <span className="summary-label">ค่าคอม</span>
+                                                    )}
+
+                                                    {/* Summary Cards - use same data as header for consistency */}
+                                                    {hasSummary && (
+                                                        <div className="submissions-summary results-summary">
+                                                            <div className="summary-card">
+                                                                <span className="summary-value">
+                                                                    {round.currency_symbol || '฿'}{summary.totalAmount?.toLocaleString()}
+                                                                </span>
+                                                                <span className="summary-label">ยอดส่งรวม</span>
+                                                            </div>
+                                                            <div className="summary-card">
+                                                                <span className="summary-value">
+                                                                    {round.currency_symbol || '฿'}{summary.totalCommission?.toLocaleString()}
+                                                                </span>
+                                                                <span className="summary-label">ค่าคอม</span>
+                                                            </div>
+                                                            <div className="summary-card highlight">
+                                                                <span className="summary-value">
+                                                                    {round.currency_symbol || '฿'}{summary.totalPrize?.toLocaleString()}
+                                                                </span>
+                                                                <span className="summary-label">รางวัลที่ได้</span>
+                                                            </div>
+                                                            <div className={`summary-card ${summary.netResult >= 0 ? 'profit' : 'loss'}`}>
+                                                                <span className="summary-value">
+                                                                    {summary.netResult >= 0 ? '+' : ''}{round.currency_symbol || '฿'}{summary.netResult?.toLocaleString()}
+                                                                </span>
+                                                                <span className="summary-label">ผลกำไร/ขาดทุน</span>
+                                                            </div>
                                                         </div>
-                                                        <div className="summary-card highlight">
-                                                            <span className="summary-value">
-                                                                {round.currency_symbol || '฿'}{totalPrize.toLocaleString()}
-                                                            </span>
-                                                            <span className="summary-label">รางวัลที่ได้</span>
-                                                        </div>
-                                                        <div className={`summary-card ${netResult >= 0 ? 'profit' : 'loss'}`}>
-                                                            <span className="summary-value">
-                                                                {netResult >= 0 ? '+' : ''}{round.currency_symbol || '฿'}{netResult.toLocaleString()}
-                                                            </span>
-                                                            <span className="summary-label">ผลกำไร/ขาดทุน</span>
-                                                        </div>
-                                                    </div>
+                                                    )}
 
                                                     {/* View Mode Toggle */}
                                                     <div className="view-toggle-container">

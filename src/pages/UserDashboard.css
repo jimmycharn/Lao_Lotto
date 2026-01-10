@@ -2509,3 +2509,89 @@
         font-size: 0.9rem;
     }
 }
+/* =============================================
+   RESULTS HEADER SUMMARY
+   ============================================= */
+
+.results-header-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding-top: 1rem;
+    margin-top: 0.75rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.results-header-summary .summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.results-header-summary .summary-item .label {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+}
+
+.results-header-summary .summary-item.profit.positive {
+    color: var(--color-success);
+}
+
+.results-header-summary .summary-item.profit.negative {
+    color: var(--color-danger);
+}
+
+/* =============================================
+   WINNING NUMBERS SECTION
+   ============================================= */
+
+.winning-numbers-section {
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.1), rgba(0, 210, 106, 0.05));
+    border: 1px solid rgba(212, 175, 55, 0.2);
+    border-radius: var(--radius-md);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.winning-numbers-section h4 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--color-primary);
+    font-size: 1rem;
+    margin-bottom: 1rem;
+}
+
+.winning-numbers-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 0.75rem;
+}
+
+.winning-number-item {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem;
+    text-align: center;
+}
+
+.winning-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-bottom: 0.25rem;
+}
+
+.winning-value {
+    display: block;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--color-primary);
+    font-family: 'Monaco', 'Menlo', monospace;
+    letter-spacing: 0.1em;
+}
+
+/* Rotated chevron for accordion */
+.round-header-status svg.rotated {
+    transform: rotate(180deg);
+}
