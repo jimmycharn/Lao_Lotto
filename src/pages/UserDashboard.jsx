@@ -502,12 +502,7 @@ export default function UserDashboard() {
         // These match the defaults in Dealer.jsx MemberSettings
         if (lotteryKey === 'lao') {
             const LAO_SET_DEFAULTS = {
-                '4_top': { commission: 25, isFixed: true },
-                '4_tod': { commission: 25, isFixed: true },
-                '3_top': { commission: 25, isFixed: true },
-                '3_tod': { commission: 25, isFixed: true },
-                '2_front': { commission: 25, isFixed: true },
-                '2_back': { commission: 25, isFixed: true }
+                '4_top': { commission: 25, isFixed: true }
             }
             if (LAO_SET_DEFAULTS[betType]) {
                 console.log('Using Lao default for', betType, LAO_SET_DEFAULTS[betType])
@@ -692,10 +687,12 @@ export default function UserDashboard() {
             }
             if (todAmt > 0) {
                 const commInfo = getCommissionForBetType('3_tod', freshUserSettings)
+                // Sort digits from low to high for tod bets (e.g., 934 → 349)
+                const sortedNumbers = cleanNumbers.split('').sort().join('')
                 newDrafts.push({
                     entry_id: entryId,
                     bet_type: '3_tod',
-                    numbers: cleanNumbers,
+                    numbers: sortedNumbers,
                     amount: todAmt,
                     commission_rate: commInfo.rate,
                     commission_amount: commInfo.isFixed ? commInfo.rate : (todAmt * commInfo.rate) / 100,
@@ -1363,11 +1360,15 @@ export default function UserDashboard() {
                                                                                                                 <tr key={sub.id || sub.entry_id}>
                                                                                                                     <td className="number-cell">
                                                                                                                         <div className="number-display">
-                                                                                                                            <span className="main-number">{sub.display_numbers || sub.numbers}</span>
-                                                                                                                            <span className="sub-type">{sub.display_bet_type || BET_TYPES[sub.bet_type]?.label}</span>
+                                                                                                                            <span className="main-number">
+                                                                                                                                {displayMode === 'summary' ? (sub.display_numbers || sub.numbers) : sub.numbers}
+                                                                                                                            </span>
+                                                                                                                            <span className="sub-type">
+                                                                                                                                {displayMode === 'summary' ? (sub.display_bet_type || BET_TYPES[sub.bet_type]?.label) : BET_TYPES[sub.bet_type]?.label}
+                                                                                                                            </span>
                                                                                                                         </div>
                                                                                                                     </td>
-                                                                                                                    <td>{sub.display_amount || sub.amount?.toLocaleString()}</td>
+                                                                                                                    <td>{displayMode === 'summary' ? (sub.display_amount || sub.amount?.toLocaleString()) : sub.amount?.toLocaleString()}</td>
                                                                                                                     <td>{sub.commission_amount?.toLocaleString()}</td>
                                                                                                                     <td>
                                                                                                                         {canDelete(sub) && (
@@ -1570,12 +1571,18 @@ export default function UserDashboard() {
                                                         <div className="winning-numbers-section">
                                                             <h4><FiAward /> ผลรางวัลที่ออก</h4>
                                                             <div className="winning-numbers-grid">
-                                                                {/* Ordered display: รางวัลที่ 1 | 3 ตัวบน | 2 ตัวล่าง | 3 ตัวล่าง */}
-                                                                {['6_top', '3_top', '2_bottom', '3_bottom'].map(betType => {
-                                                                    const number = winningNumbers[betType]
-                                                                    if (!number) return null
+                                                                {/* Different display order based on lottery type */}
+                                                                {(() => {
+                                                                    // Lao/Hanoi: 4 ตัว, 3 ตัวบน, 2 ตัวบน, 2 ตัวล่าง
+                                                                    const isLaoHanoi = ['lao', 'hanoi'].includes(round.lottery_type)
+                                                                    const displayOrder = isLaoHanoi
+                                                                        ? ['4_set', '3_top', '2_top', '2_bottom']
+                                                                        : ['6_top', '3_top', '2_bottom', '3_bottom']
+
                                                                     const betTypeLabels = {
                                                                         '6_top': 'รางวัลที่ 1',
+                                                                        '4_set': 'เลขชุด 4 ตัว',
+                                                                        '4_top': 'เลขชุด 4 ตัว',
                                                                         '3_top': '3 ตัวบน',
                                                                         '3_bottom': '3 ตัวล่าง',
                                                                         '3_tod': '3 ตัวโต๊ด',
@@ -1584,16 +1591,21 @@ export default function UserDashboard() {
                                                                         'run_top': 'วิ่งบน',
                                                                         'run_bottom': 'วิ่งล่าง'
                                                                     }
-                                                                    const label = betTypeLabels[betType] || betType
-                                                                    const displayNumber = Array.isArray(number) ? number.join(', ') : number
 
-                                                                    return (
-                                                                        <div key={betType} className="winning-number-item">
-                                                                            <span className="winning-label">{label}</span>
-                                                                            <span className="winning-value">{displayNumber}</span>
-                                                                        </div>
-                                                                    )
-                                                                })}
+                                                                    return displayOrder.map(betType => {
+                                                                        const number = winningNumbers[betType]
+                                                                        if (!number) return null
+                                                                        const label = betTypeLabels[betType] || betType
+                                                                        const displayNumber = Array.isArray(number) ? number.join(', ') : number
+
+                                                                        return (
+                                                                            <div key={betType} className="winning-number-item">
+                                                                                <span className="winning-label">{label}</span>
+                                                                                <span className="winning-value">{displayNumber}</span>
+                                                                            </div>
+                                                                        )
+                                                                    })
+                                                                })()}
                                                             </div>
                                                         </div>
                                                     )}
