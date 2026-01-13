@@ -1152,7 +1152,8 @@ export default function Dealer() {
                     close_time: closeDateTime.toISOString(),
                     delete_before_minutes: roundForm.delete_before_minutes,
                     currency_symbol: roundForm.currency_symbol,
-                    currency_name: roundForm.currency_name
+                    currency_name: roundForm.currency_name,
+                    set_prices: roundForm.set_prices
                 })
                 .select()
                 .single()
@@ -1230,7 +1231,7 @@ export default function Dealer() {
 
         // Build type_limits object from fetched data
         const limitsObj = {}
-        const setPricesObj = {}
+        const setPricesObj = round.set_prices || {}
         if (typeLimits) {
             typeLimits.forEach(limit => {
                 limitsObj[limit.bet_type] = limit.max_per_number || 0
@@ -1283,7 +1284,8 @@ export default function Dealer() {
                     close_time: closeDateTime.toISOString(),
                     delete_before_minutes: roundForm.delete_before_minutes,
                     currency_symbol: roundForm.currency_symbol,
-                    currency_name: roundForm.currency_name
+                    currency_name: roundForm.currency_name,
+                    set_prices: roundForm.set_prices
                 })
                 .eq('id', editingRound.id)
 

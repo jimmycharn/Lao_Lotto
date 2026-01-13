@@ -243,15 +243,22 @@ export default function UserDashboard() {
 
     async function fetchUserSettings() {
         if (!selectedDealer) return
+        console.log('fetchUserSettings: fetching for user_id:', user.id, 'dealer_id:', selectedDealer.id)
         try {
-            const { data } = await supabase
+            const { data, error } = await supabase
                 .from('user_settings')
                 .select('*')
                 .eq('user_id', user.id)
                 .eq('dealer_id', selectedDealer.id)
-                .single()
+                .maybeSingle()
 
-            if (data) setUserSettings(data)
+            console.log('fetchUserSettings result:', { data, error })
+            if (error) {
+                console.error('Error fetching user settings:', error)
+                return
+            }
+            // Even if data is null, we'll use defaults in the commission calculation
+            setUserSettings(data)
         } catch (error) {
             console.error('Error fetching user settings:', error)
         }
@@ -472,14 +479,40 @@ export default function UserDashboard() {
     }
 
     // Helper function to get commission rate for a bet type from lottery_settings
-    const getCommissionForBetType = (betType) => {
-        if (!selectedRound) return DEFAULT_COMMISSIONS_DRAFT[betType] || 15
+    // settingsOverride can be passed with fresh settings from database
+    const getCommissionForBetType = (betType, settingsOverride = null) => {
+        if (!selectedRound) return { rate: DEFAULT_COMMISSIONS_DRAFT[betType] || 15, isFixed: false }
 
+        const currentSettings = settingsOverride || userSettings
         const lotteryKey = getLotteryKeyForDraft(selectedRound.lottery_type)
-        const settings = userSettings?.lottery_settings?.[lotteryKey]?.[betType]
+        const settings = currentSettings?.lottery_settings?.[lotteryKey]?.[betType]
+
+        console.log('getCommissionForBetType:', {
+            betType,
+            lotteryKey,
+            settings,
+            currentSettings: currentSettings?.lottery_settings?.[lotteryKey]
+        })
 
         if (settings && settings.commission !== undefined) {
             return { rate: settings.commission, isFixed: settings.isFixed || false }
+        }
+
+        // Default rates for Lao/Hanoi set-based bets (fixed amount per set)
+        // These match the defaults in Dealer.jsx MemberSettings
+        if (lotteryKey === 'lao') {
+            const LAO_SET_DEFAULTS = {
+                '4_top': { commission: 25, isFixed: true },
+                '4_tod': { commission: 25, isFixed: true },
+                '3_top': { commission: 25, isFixed: true },
+                '3_tod': { commission: 25, isFixed: true },
+                '2_front': { commission: 25, isFixed: true },
+                '2_back': { commission: 25, isFixed: true }
+            }
+            if (LAO_SET_DEFAULTS[betType]) {
+                console.log('Using Lao default for', betType, LAO_SET_DEFAULTS[betType])
+                return { rate: LAO_SET_DEFAULTS[betType].commission, isFixed: true }
+            }
         }
 
         return { rate: DEFAULT_COMMISSIONS_DRAFT[betType] || 15, isFixed: false }
@@ -495,23 +528,87 @@ export default function UserDashboard() {
     }
 
     // Add to draft list
-    function addToDraft(betTypeOverride = null) {
+    async function addToDraft(betTypeOverride = null) {
         console.log('addToDraft called with:', betTypeOverride)
         console.log('submitForm:', submitForm)
+
+        // Fetch fresh userSettings before processing to ensure latest commission rates
+        let freshUserSettings = userSettings
+        if (selectedDealer) {
+            try {
+                const { data } = await supabase
+                    .from('user_settings')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .eq('dealer_id', selectedDealer.id)
+                    .maybeSingle()
+
+                if (data) {
+                    freshUserSettings = data
+                    setUserSettings(data) // Update state for future use
+                }
+                console.log('Fresh userSettings fetched:', data)
+            } catch (error) {
+                console.error('Error fetching fresh userSettings:', error)
+            }
+        }
+
+        // Fetch fresh lottery round data to get latest set_prices
+        let freshRound = selectedRound
+        if (selectedRound) {
+            try {
+                const { data } = await supabase
+                    .from('lottery_rounds')
+                    .select('*')
+                    .eq('id', selectedRound.id)
+                    .single()
+
+                if (data) {
+                    freshRound = data
+                    setSelectedRound(data) // Update state for future use
+                }
+                console.log('Fresh round fetched:', data?.set_prices)
+            } catch (error) {
+                console.error('Error fetching fresh round:', error)
+            }
+        }
+
+        console.log('Using userSettings:', freshUserSettings)
+        console.log('lottery_settings:', freshUserSettings?.lottery_settings)
         const betType = betTypeOverride || submitForm.bet_type
         // Clean numbers by removing spaces
         const cleanNumbers = (submitForm.numbers || '').replace(/\s/g, '')
         console.log('cleanNumbers:', cleanNumbers, 'betType:', betType)
-        if (!cleanNumbers || !submitForm.amount || !betType) {
+
+        // Check if this is a set-based bet type for Lao/Hanoi lottery
+        const isLaoOrHanoi = freshRound && ['lao', 'hanoi'].includes(freshRound.lottery_type)
+        const isSetBetType = betType === '4_set'
+        const isSetBasedBet = isLaoOrHanoi && isSetBetType
+
+        // For set-based bets, amount field represents number of sets (default: 1 set if empty)
+        if (!cleanNumbers || (!submitForm.amount && !isSetBasedBet) || !betType) {
             console.log('Validation failed:', { cleanNumbers, amount: submitForm.amount, betType })
             alert('กรุณากรอกเลขและจำนวนเงิน')
             return
         }
 
+        let totalAmount
+        let setCount = 1
+        let displayAmount = submitForm.amount
 
-
-        const amountParts = submitForm.amount.toString().split('*').map(p => parseFloat(p) || 0)
-        const totalAmount = amountParts.reduce((sum, p) => sum + p, 0)
+        if (isSetBasedBet) {
+            // For 4 ตัวชุด on Lao/Hanoi: amount field = number of sets (default: 1)
+            setCount = parseInt(submitForm.amount) || 1
+            // Get set price from fresh round settings or use default (120 baht)
+            const setPrice = freshRound?.set_prices?.['4_top'] || 120
+            totalAmount = setCount * setPrice
+            displayAmount = `${totalAmount} บาท (${setCount} ชุด)`
+            console.log('Set-based bet:', { setCount, setPrice, totalAmount })
+        } else {
+            // Normal amount handling
+            const amountParts = submitForm.amount.toString().split('*').map(p => parseFloat(p) || 0)
+            totalAmount = amountParts.reduce((sum, p) => sum + p, 0)
+        }
 
         if (totalAmount <= 0) {
             alert('จำนวนเงินต้องมากกว่า 0')
@@ -560,7 +657,7 @@ export default function UserDashboard() {
             else if (betType === '3_perm_from_5') perms = getUnique3DigitPermsFrom5(cleanNumbers)
             else if (betType === '3_perm_from_3') perms = getPermutations(cleanNumbers)
 
-            const commInfo = getCommissionForBetType('3_top')
+            const commInfo = getCommissionForBetType('3_top', freshUserSettings)
             perms.forEach(p => {
                 newDrafts.push({
                     entry_id: entryId,
@@ -578,7 +675,7 @@ export default function UserDashboard() {
         } else if (betType === '3_straight_tod') {
             const [straightAmt, todAmt] = amountParts
             if (straightAmt > 0) {
-                const commInfo = getCommissionForBetType('3_top')
+                const commInfo = getCommissionForBetType('3_top', freshUserSettings)
                 newDrafts.push({
                     entry_id: entryId,
                     bet_type: '3_top',
@@ -593,7 +690,7 @@ export default function UserDashboard() {
                 })
             }
             if (todAmt > 0) {
-                const commInfo = getCommissionForBetType('3_tod')
+                const commInfo = getCommissionForBetType('3_tod', freshUserSettings)
                 newDrafts.push({
                     entry_id: entryId,
                     bet_type: '3_tod',
@@ -612,7 +709,7 @@ export default function UserDashboard() {
             const perms = getPermutations(cleanNumbers).filter(p => p !== cleanNumbers)
 
             if (straightAmt > 0) {
-                const commInfo = getCommissionForBetType('3_top')
+                const commInfo = getCommissionForBetType('3_top', freshUserSettings)
                 newDrafts.push({
                     entry_id: entryId,
                     bet_type: '3_top',
@@ -627,7 +724,7 @@ export default function UserDashboard() {
                 })
             }
             if (permAmt > 0 && perms.length > 0) {
-                const commInfo = getCommissionForBetType('3_top')
+                const commInfo = getCommissionForBetType('3_top', freshUserSettings)
                 perms.forEach(p => {
                     newDrafts.push({
                         entry_id: entryId,
@@ -651,7 +748,7 @@ export default function UserDashboard() {
 
             // First number with first amount
             if (amt1 > 0) {
-                const commInfo = getCommissionForBetType(baseBetType)
+                const commInfo = getCommissionForBetType(baseBetType, freshUserSettings)
                 newDrafts.push({
                     entry_id: entryId,
                     bet_type: baseBetType,
@@ -668,7 +765,7 @@ export default function UserDashboard() {
 
             // Reversed number with second amount (if different from original)
             if (amt2 > 0 && reversedNumbers !== cleanNumbers) {
-                const commInfo = getCommissionForBetType(baseBetType)
+                const commInfo = getCommissionForBetType(baseBetType, freshUserSettings)
                 newDrafts.push({
                     entry_id: entryId,
                     bet_type: baseBetType,
@@ -683,7 +780,7 @@ export default function UserDashboard() {
                 })
             } else if (amt2 > 0 && reversedNumbers === cleanNumbers) {
                 // Same number (e.g., 11, 22) - just add the second amount to same number
-                const commInfo = getCommissionForBetType(baseBetType)
+                const commInfo = getCommissionForBetType(baseBetType, freshUserSettings)
                 newDrafts.push({
                     entry_id: entryId,
                     bet_type: baseBetType,
@@ -698,18 +795,32 @@ export default function UserDashboard() {
                 })
             }
         } else {
-            const commInfo = getCommissionForBetType(betType)
+            // For 4_set bet type, get commission from '4_top' settings (4 ตัวตรง ชุด)
+            const commLookupBetType = isSetBasedBet ? '4_top' : betType
+            const commInfo = getCommissionForBetType(commLookupBetType, freshUserSettings)
+            let commissionAmount
+
+            if (isSetBasedBet) {
+                // For set-based bets: commission = setCount × commission_rate_per_set (fixed amount)
+                // Commission rate for 4_set is stored under '4_top' as fixed amount per set in user_settings
+                commissionAmount = setCount * commInfo.rate
+                console.log('Set-based commission:', { setCount, rate: commInfo.rate, commissionAmount })
+            } else if (commInfo.isFixed) {
+                commissionAmount = commInfo.rate
+            } else {
+                commissionAmount = (totalAmount * commInfo.rate) / 100
+            }
+
             newDrafts.push({
                 entry_id: entryId,
                 bet_type: betType,
                 numbers: cleanNumbers,
                 amount: totalAmount,
                 commission_rate: commInfo.rate,
-                commission_amount: commInfo.isFixed ? commInfo.rate : (totalAmount * commInfo.rate) / 100,
+                commission_amount: commissionAmount,
                 display_numbers: cleanNumbers,
-                display_amount: submitForm.amount,
+                display_amount: displayAmount,
                 display_bet_type: displayLabel,
-
                 created_at: timestamp
             })
         }
