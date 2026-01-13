@@ -596,6 +596,7 @@ export default function UserDashboard() {
         let setCount = 1
         let displayAmount = submitForm.amount
 
+        let amountParts = []
         if (isSetBasedBet) {
             // For 4 ตัวชุด on Lao/Hanoi: amount field = number of sets (default: 1)
             setCount = parseInt(submitForm.amount) || 1
@@ -606,7 +607,7 @@ export default function UserDashboard() {
             console.log('Set-based bet:', { setCount, setPrice, totalAmount })
         } else {
             // Normal amount handling
-            const amountParts = submitForm.amount.toString().split('*').map(p => parseFloat(p) || 0)
+            amountParts = submitForm.amount.toString().split('*').map(p => parseFloat(p) || 0)
             totalAmount = amountParts.reduce((sum, p) => sum + p, 0)
         }
 
