@@ -270,8 +270,8 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
     }
 
     // Fetch inline submissions data for eye button view
-    async function fetchInlineSubmissions() {
-        if (inlineSubmissions.length > 0) return // Already fetched
+    async function fetchInlineSubmissions(forceRefresh = false) {
+        if (!forceRefresh && inlineSubmissions.length > 0) return // Already fetched
         setInlineLoading(true)
         try {
             // Fetch submissions
@@ -301,9 +301,9 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                 .eq('round_id', round.id)
             setInlineNumberLimits(numLimitsData || [])
 
-            // Fetch transfers
+            // Fetch transfers - FIXED: use correct table name 'bet_transfers'
             const { data: transfersData } = await supabase
-                .from('over_limit_transfers')
+                .from('bet_transfers')
                 .select('*')
                 .eq('round_id', round.id)
                 .order('created_at', { ascending: false })
@@ -386,24 +386,39 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
             // For set-based bets in Lao/Hanoi, compare by number of sets, not money amount
             const isSetBased = isSetBasedLottery && (item.bet_type === '4_set' || item.bet_type === '4_top')
 
+            // Calculate already transferred amount for this number
+            const transferredForThis = inlineTransfers.filter(t => {
+                // Handle 4_set -> 4_top mapping for transfers
+                const tBetType = t.bet_type === '4_set' ? '4_top' : t.bet_type
+                const tNormalized = normalizeNumber(t.numbers, t.bet_type)
+                return tBetType === limitLookupBetType && tNormalized === item.numbers
+            }).reduce((sum, t) => sum + (t.amount || 0), 0)
+
+            // Convert transferred amount to sets if set-based
+            const transferredSets = isSetBased ? Math.floor(transferredForThis / setPrice) : 0
+
             if (effectiveLimit) {
                 if (isSetBased) {
-                    // For set-based: limit is in "sets", compare setCount vs limit
-                    if (item.setCount > effectiveLimit) {
+                    // For set-based: subtract transferred sets, compare against limit
+                    const effectiveExcess = item.setCount - effectiveLimit - transferredSets
+                    if (effectiveExcess > 0) {
                         excessItems.push({
                             ...item,
                             limit: effectiveLimit,
-                            excess: item.setCount - effectiveLimit, // Excess in number of sets
+                            excess: effectiveExcess, // Excess in number of sets after deducting transferred
+                            transferredSets: transferredSets,
                             isSetBased: true
                         })
                     }
                 } else {
-                    // For normal bets: compare total amount vs limit
-                    if (item.total > effectiveLimit) {
+                    // For normal bets: subtract transferred amount, compare against limit
+                    const effectiveExcess = item.total - effectiveLimit - transferredForThis
+                    if (effectiveExcess > 0) {
                         excessItems.push({
                             ...item,
                             limit: effectiveLimit,
-                            excess: item.total - effectiveLimit
+                            excess: effectiveExcess,
+                            transferredAmount: transferredForThis
                         })
                     }
                 }
@@ -469,13 +484,8 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
             const { error } = await supabase.from('bet_transfers').insert(inserts)
             if (error) throw error
 
-            // Refresh transfers
-            const { data: newTransfers } = await supabase
-                .from('bet_transfers')
-                .select('*')
-                .eq('round_id', round.id)
-                .order('created_at', { ascending: false })
-            setInlineTransfers(newTransfers || [])
+            // Refresh all data including transfers
+            await fetchInlineSubmissions(true)
 
             setShowTransferModal(false)
             setSelectedExcessItems({})
