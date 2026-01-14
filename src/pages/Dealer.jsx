@@ -326,6 +326,12 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
     // Calculate excess items (with number normalization for permutation bet types)
     const calculateExcessItems = () => {
         const grouped = {}
+
+        // Determine if this is a Lao/Hanoi lottery (set-based betting)
+        const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
+        // Get set price for 4_top from round settings
+        const setPrice = round?.set_prices?.['4_top'] || 120
+
         inlineSubmissions.forEach(sub => {
             // Normalize numbers for permutation bet types
             const normalizedNumbers = normalizeNumber(sub.numbers, sub.bet_type)
@@ -336,6 +342,7 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                     numbers: normalizedNumbers, // Use normalized number for display
                     originalNumbers: [sub.numbers], // Keep track of original numbers
                     total: 0,
+                    setCount: 0, // Track number of sets for set-based bets
                     submissions: []
                 }
             } else {
@@ -346,25 +353,54 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
             }
             grouped[key].total += sub.amount
             grouped[key].submissions.push(sub)
+
+            // For set-based bets (4_set, 4_top in Lao/Hanoi), count number of sets
+            if (isSetBasedLottery && (sub.bet_type === '4_set' || sub.bet_type === '4_top')) {
+                // Each submission of 4_set is counted as (amount / setPrice) sets
+                grouped[key].setCount += Math.ceil(sub.amount / setPrice)
+            }
         })
 
         const excessItems = []
         Object.values(grouped).forEach(item => {
+            // For 4_set, map to 4_top for limit lookup (the underlying limit type)
+            const limitLookupBetType = item.bet_type === '4_set' ? '4_top' : item.bet_type
+
             // Check type limit
-            const typeLimit = inlineTypeLimits[item.bet_type]
+            const typeLimit = inlineTypeLimits[limitLookupBetType]
             // Check number limit - also normalize for comparison
             const numberLimit = inlineNumberLimits.find(nl => {
                 const nlNormalized = normalizeNumber(nl.numbers, nl.bet_type)
-                return nl.bet_type === item.bet_type && nlNormalized === item.numbers
+                // Also check for 4_set -> 4_top mapping in number limits
+                const nlBetType = nl.bet_type === '4_set' ? '4_top' : nl.bet_type
+                return nlBetType === limitLookupBetType && nlNormalized === item.numbers
             })
             const effectiveLimit = numberLimit?.max_amount ?? typeLimit
 
-            if (effectiveLimit && item.total > effectiveLimit) {
-                excessItems.push({
-                    ...item,
-                    limit: effectiveLimit,
-                    excess: item.total - effectiveLimit
-                })
+            // For set-based bets in Lao/Hanoi, compare by number of sets, not money amount
+            const isSetBased = isSetBasedLottery && (item.bet_type === '4_set' || item.bet_type === '4_top')
+
+            if (effectiveLimit) {
+                if (isSetBased) {
+                    // For set-based: limit is in "sets", compare setCount vs limit
+                    if (item.setCount > effectiveLimit) {
+                        excessItems.push({
+                            ...item,
+                            limit: effectiveLimit,
+                            excess: item.setCount - effectiveLimit, // Excess in number of sets
+                            isSetBased: true
+                        })
+                    }
+                } else {
+                    // For normal bets: compare total amount vs limit
+                    if (item.total > effectiveLimit) {
+                        excessItems.push({
+                            ...item,
+                            limit: effectiveLimit,
+                            excess: item.total - effectiveLimit
+                        })
+                    }
+                }
             }
         })
         return excessItems.sort((a, b) => b.excess - a.excess)
@@ -749,9 +785,9 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                                                 <tr key={`${item.bet_type}|${item.numbers}`}>
                                                                     <td><span className="type-badge">{BET_TYPES[item.bet_type] || item.bet_type}</span></td>
                                                                     <td className="number-cell">{item.numbers}</td>
-                                                                    <td>{round.currency_symbol}{item.total.toLocaleString()}</td>
-                                                                    <td>{round.currency_symbol}{item.limit.toLocaleString()}</td>
-                                                                    <td className="text-danger">{round.currency_symbol}{item.excess.toLocaleString()}</td>
+                                                                    <td>{item.isSetBased ? `${item.setCount} ชุด` : `${round.currency_symbol}${item.total.toLocaleString()}`}</td>
+                                                                    <td>{item.isSetBased ? `${item.limit} ชุด` : `${round.currency_symbol}${item.limit.toLocaleString()}`}</td>
+                                                                    <td className="text-danger">{item.isSetBased ? `${item.excess} ชุด` : `${round.currency_symbol}${item.excess.toLocaleString()}`}</td>
                                                                 </tr>
                                                             ))}
                                                         </tbody>
@@ -2135,6 +2171,11 @@ function SubmissionsModal({ round, onClose }) {
 
     // Calculate excess items
     const calculateExcessItems = () => {
+        // Determine if this is a Lao/Hanoi lottery (set-based betting)
+        const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
+        // Get set price for 4_top from round settings
+        const setPrice = round?.set_prices?.['4_top'] || 120
+
         // Group submissions by bet_type + numbers
         const grouped = {}
         submissions.forEach(sub => {
@@ -2144,38 +2185,72 @@ function SubmissionsModal({ round, onClose }) {
                     bet_type: sub.bet_type,
                     numbers: sub.numbers,
                     total: 0,
+                    setCount: 0, // Track number of sets for set-based bets
                     submissions: []
                 }
             }
             grouped[key].total += sub.amount
             grouped[key].submissions.push(sub)
+
+            // For set-based bets (4_set, 4_top in Lao/Hanoi), count number of sets
+            if (isSetBasedLottery && (sub.bet_type === '4_set' || sub.bet_type === '4_top')) {
+                grouped[key].setCount += Math.ceil(sub.amount / setPrice)
+            }
         })
 
         // Calculate excess for each group
         const excessItems = []
         Object.values(grouped).forEach(group => {
+            // For 4_set, map to 4_top for limit lookup (the underlying limit type)
+            const limitLookupBetType = group.bet_type === '4_set' ? '4_top' : group.bet_type
+
             // Get limit: first check number_limits, then type_limits
-            const numberLimit = numberLimits.find(
-                nl => nl.bet_type === group.bet_type && nl.numbers === group.numbers
-            )
-            const typeLimit = typeLimits[group.bet_type]
+            const numberLimit = numberLimits.find(nl => {
+                // Also handle 4_set -> 4_top mapping for number limits
+                const nlBetType = nl.bet_type === '4_set' ? '4_top' : nl.bet_type
+                return nlBetType === limitLookupBetType && nl.numbers === group.numbers
+            })
+            const typeLimit = typeLimits[limitLookupBetType]
             const limit = numberLimit ? numberLimit.max_amount : (typeLimit || 999999999)
 
             // Calculate already transferred amount for this number
             const transferredAmount = transfers
-                .filter(t => t.bet_type === group.bet_type && t.numbers === group.numbers)
+                .filter(t => {
+                    // Handle 4_set -> 4_top mapping for transfers
+                    const tBetType = t.bet_type === '4_set' ? '4_top' : t.bet_type
+                    return tBetType === limitLookupBetType && t.numbers === group.numbers
+                })
                 .reduce((sum, t) => sum + (t.amount || 0), 0)
 
-            // Excess = total - limit - already transferred
-            const effectiveExcess = group.total - limit - transferredAmount
+            // For set-based bets in Lao/Hanoi, compare by number of sets, not money amount
+            const isSetBased = isSetBasedLottery && (group.bet_type === '4_set' || group.bet_type === '4_top')
 
-            if (effectiveExcess > 0) {
-                excessItems.push({
-                    ...group,
-                    limit,
-                    excess: effectiveExcess,
-                    transferredAmount
-                })
+            // For set-based bets, transferred amount is also in sets
+            const transferredSets = isSetBased ? Math.floor(transferredAmount / setPrice) : 0
+
+            if (isSetBased) {
+                // For set-based: limit is in "sets", compare setCount vs limit
+                const effectiveExcess = group.setCount - limit - transferredSets
+                if (effectiveExcess > 0) {
+                    excessItems.push({
+                        ...group,
+                        limit,
+                        excess: effectiveExcess, // Excess in number of sets
+                        transferredAmount: transferredSets,
+                        isSetBased: true
+                    })
+                }
+            } else {
+                // For normal bets: compare total amount vs limit
+                const effectiveExcess = group.total - limit - transferredAmount
+                if (effectiveExcess > 0) {
+                    excessItems.push({
+                        ...group,
+                        limit,
+                        excess: effectiveExcess,
+                        transferredAmount
+                    })
+                }
             }
         })
 
@@ -2783,21 +2858,21 @@ function SubmissionsModal({ round, onClose }) {
                                                             <div className="excess-details">
                                                                 <div className="excess-row">
                                                                     <span>ค่าอั้น:</span>
-                                                                    <span>{round.currency_symbol}{item.limit.toLocaleString()}</span>
+                                                                    <span>{item.isSetBased ? `${item.limit} ชุด` : `${round.currency_symbol}${item.limit.toLocaleString()}`}</span>
                                                                 </div>
                                                                 <div className="excess-row">
                                                                     <span>ยอดรับ:</span>
-                                                                    <span>{round.currency_symbol}{item.total.toLocaleString()}</span>
+                                                                    <span>{item.isSetBased ? `${item.setCount} ชุด` : `${round.currency_symbol}${item.total.toLocaleString()}`}</span>
                                                                 </div>
                                                                 {item.transferredAmount > 0 && (
                                                                     <div className="excess-row transferred">
                                                                         <span>ตีออกแล้ว:</span>
-                                                                        <span>-{round.currency_symbol}{item.transferredAmount.toLocaleString()}</span>
+                                                                        <span>{item.isSetBased ? `-${item.transferredAmount} ชุด` : `-${round.currency_symbol}${item.transferredAmount.toLocaleString()}`}</span>
                                                                     </div>
                                                                 )}
                                                                 <div className="excess-row excess-amount">
                                                                     <span>เกิน:</span>
-                                                                    <span className="text-warning">{round.currency_symbol}{item.excess.toLocaleString()}</span>
+                                                                    <span className="text-warning">{item.isSetBased ? `${item.excess} ชุด` : `${round.currency_symbol}${item.excess.toLocaleString()}`}</span>
                                                                 </div>
                                                             </div>
                                                             <button
