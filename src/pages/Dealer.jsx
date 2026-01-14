@@ -640,15 +640,47 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
         }
 
         const text = generateTransferCopyText(batchesToCopy)
-        await navigator.clipboard.writeText(text)
-        alert(`คัดลอก ${batchesToCopy.length} รายการแล้ว!`)
+        console.log('[Copy] Text to copy:', text)
+
+        try {
+            await navigator.clipboard.writeText(text)
+            alert(`คัดลอก ${batchesToCopy.length} รายการแล้ว!`)
+        } catch (err) {
+            console.error('Clipboard error:', err)
+            // Fallback method
+            const textArea = document.createElement('textarea')
+            textArea.value = text
+            textArea.style.position = 'fixed'
+            textArea.style.left = '-9999px'
+            document.body.appendChild(textArea)
+            textArea.select()
+            document.execCommand('copy')
+            document.body.removeChild(textArea)
+            alert(`คัดลอก ${batchesToCopy.length} รายการแล้ว!`)
+        }
     }
 
     // Copy single batch
     const handleCopySingleBatch = async (batch) => {
         const text = generateTransferCopyText([batch])
-        await navigator.clipboard.writeText(text)
-        alert('คัดลอกแล้ว!')
+        console.log('[Copy Single] Text to copy:', text)
+
+        try {
+            await navigator.clipboard.writeText(text)
+            alert('คัดลอกแล้ว!')
+        } catch (err) {
+            console.error('Clipboard error:', err)
+            // Fallback method
+            const textArea = document.createElement('textarea')
+            textArea.value = text
+            textArea.style.position = 'fixed'
+            textArea.style.left = '-9999px'
+            document.body.appendChild(textArea)
+            textArea.select()
+            document.execCommand('copy')
+            document.body.removeChild(textArea)
+            alert('คัดลอกแล้ว!')
+        }
     }
 
     // Calculate summary values
