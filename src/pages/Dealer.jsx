@@ -463,9 +463,7 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                 amount: item.isSetBased ? item.excess * (round?.set_prices?.['4_top'] || 120) : item.excess,
                 target_dealer_name: transferForm.target_dealer_name,
                 target_dealer_contact: transferForm.target_dealer_contact || null,
-                notes: transferForm.notes || null,
-                status: 'pending',
-                created_by: user.id
+                notes: transferForm.notes || null
             }))
 
             const { error } = await supabase.from('bet_transfers').insert(inserts)
