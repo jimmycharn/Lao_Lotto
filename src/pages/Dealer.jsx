@@ -491,6 +491,9 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                 selectedExcessItems[`${item.bet_type}|${item.numbers}`]
             )
 
+            // Generate a batch ID for this transfer session
+            const batchId = generateBatchId()
+
             const inserts = selectedItems.map(item => ({
                 round_id: round.id,
                 bet_type: item.bet_type,
@@ -498,7 +501,8 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                 amount: item.isSetBased ? item.excess * (round?.set_prices?.['4_top'] || 120) : item.excess,
                 target_dealer_name: transferForm.target_dealer_name,
                 target_dealer_contact: transferForm.target_dealer_contact || null,
-                notes: transferForm.notes || null
+                notes: transferForm.notes || null,
+                transfer_batch_id: batchId
             }))
 
             const { error } = await supabase.from('bet_transfers').insert(inserts)
