@@ -80,10 +80,14 @@ const BET_TYPES_BY_LOTTERY = {
         'pak_top': { label: 'ปักบน (หน้า/กลาง/หลัง)', defaultLimit: 5000 },
         'pak_bottom': { label: 'ปักล่าง (หน้า/หลัง)', defaultLimit: 5000 },
         '2_top': { label: '2 ตัวบน', defaultLimit: 1000 },
+        '2_bottom': { label: '2 ตัวล่าง', defaultLimit: 1000 },
         '2_front_single': { label: '2 ตัวหน้า', defaultLimit: 1000 },
         '2_center': { label: '2 ตัวถ่าง', defaultLimit: 1000 },
         '2_run': { label: '2 ตัวลอย', defaultLimit: 1000 },
-        '2_bottom': { label: '2 ตัวล่าง', defaultLimit: 1000 },
+        '3_top': { label: '3 ตัวบน', defaultLimit: 500 },
+        '3_tod': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
+        '3_front': { label: '3 ตัวหน้า', defaultLimit: 500 },
+        '3_back': { label: '3 ตัวหลัง', defaultLimit: 500 },
         '3_straight': { label: '3 ตัวตรง', defaultLimit: 500 },
         '3_tod_single': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
         '4_run': { label: '4 ตัวลอย', defaultLimit: 200 },
@@ -96,10 +100,14 @@ const BET_TYPES_BY_LOTTERY = {
         'pak_top': { label: 'ปักบน (หน้า/กลาง/หลัง)', defaultLimit: 5000 },
         'pak_bottom': { label: 'ปักล่าง (หน้า/หลัง)', defaultLimit: 5000 },
         '2_top': { label: '2 ตัวบน', defaultLimit: 1000 },
+        '2_bottom': { label: '2 ตัวล่าง', defaultLimit: 1000 },
         '2_front_single': { label: '2 ตัวหน้า', defaultLimit: 1000 },
         '2_center': { label: '2 ตัวถ่าง', defaultLimit: 1000 },
         '2_run': { label: '2 ตัวลอย', defaultLimit: 1000 },
-        '2_bottom': { label: '2 ตัวล่าง', defaultLimit: 1000 },
+        '3_top': { label: '3 ตัวบน', defaultLimit: 500 },
+        '3_tod': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
+        '3_front': { label: '3 ตัวหน้า', defaultLimit: 500 },
+        '3_back': { label: '3 ตัวหลัง', defaultLimit: 500 },
         '3_straight': { label: '3 ตัวตรง', defaultLimit: 500 },
         '3_tod_single': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
         '4_run': { label: '4 ตัวลอย', defaultLimit: 200 },
@@ -292,10 +300,17 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                 .from('type_limits')
                 .select('*')
                 .eq('round_id', round.id)
-            const limitsObj = {}
+
+            // Start with default limits for this lottery type
+            const defaultLimits = getDefaultLimitsForType(round.lottery_type)
+            console.log('[DEBUG] lottery_type:', round.lottery_type, 'defaultLimits:', defaultLimits)
+            const limitsObj = { ...defaultLimits }
+
+            // Override with any explicitly set limits from database
             typeLimitsData?.forEach(l => {
                 limitsObj[l.bet_type] = l.max_per_number
             })
+            console.log('[DEBUG] Final limitsObj:', limitsObj, '| 3_top limit:', limitsObj['3_top'])
             setInlineTypeLimits(limitsObj)
 
             // Fetch number limits
@@ -378,6 +393,7 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
 
             // Check type limit
             const typeLimit = inlineTypeLimits[limitLookupBetType]
+
             // Check number limit - also normalize for comparison
             const numberLimit = inlineNumberLimits.find(nl => {
                 const nlNormalized = normalizeNumber(nl.numbers, nl.bet_type)
@@ -749,19 +765,19 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                             <div className="inline-tabs">
                                 <button
                                     className={`inline-tab ${inlineTab === 'total' ? 'active' : ''}`}
-                                    onClick={() => setInlineTab('total')}
+                                    onClick={() => { setInlineTab('total'); fetchInlineSubmissions(true); }}
                                 >
                                     ยอดรวม <span className="tab-count">{inlineSubmissions.length}</span>
                                 </button>
                                 <button
                                     className={`inline-tab ${inlineTab === 'excess' ? 'active' : ''}`}
-                                    onClick={() => setInlineTab('excess')}
+                                    onClick={() => { setInlineTab('excess'); fetchInlineSubmissions(true); }}
                                 >
-                                    ยอดเกิน <span className="tab-count">{calculateExcessItems().length}</span>
+                                    ยอดเกิน <span className="tab-count">{excessItems.length}</span>
                                 </button>
                                 <button
                                     className={`inline-tab ${inlineTab === 'transferred' ? 'active' : ''}`}
-                                    onClick={() => setInlineTab('transferred')}
+                                    onClick={() => { setInlineTab('transferred'); fetchInlineSubmissions(true); }}
                                 >
                                     ยอดตีออก <span className="tab-count">{inlineTransfers.length}</span>
                                 </button>
