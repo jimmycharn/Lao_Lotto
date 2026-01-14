@@ -588,6 +588,69 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
         }
     }
 
+    // Generate copy text for a batch or multiple batches
+    const generateTransferCopyText = (batchesToCopy) => {
+        const lotteryName = round.lottery_name || LOTTERY_TYPES[round.lottery_type] || 'หวย'
+
+        // Count total items
+        const totalItems = batchesToCopy.reduce((sum, b) => sum + b.items.length, 0)
+        const grandTotal = batchesToCopy.reduce((sum, b) => sum + b.totalAmount, 0)
+
+        // Get target dealer name (use first batch's name for header)
+        const targetDealer = batchesToCopy[0]?.target_dealer_name || ''
+
+        let text = `📤 ยอดตีออก - ${lotteryName}\n`
+        text += `📅 ทั้งหมด (${totalItems} รายการ)\n`
+        text += `👤 ตีออกให้: ${targetDealer}\n`
+        text += `💰 ยอดรวม: ${round.currency_symbol}${grandTotal.toLocaleString()}\n`
+        text += `━━━━━━━━━━━━━━━━\n`
+
+        // Group by bet type
+        const byType = {}
+        batchesToCopy.forEach(batch => {
+            batch.items.forEach(item => {
+                const typeName = BET_TYPES[item.bet_type] || item.bet_type
+                if (!byType[typeName]) byType[typeName] = []
+                byType[typeName].push(item)
+            })
+        })
+
+        // Output each type
+        Object.entries(byType).forEach(([typeName, items]) => {
+            text += `${typeName}\n`
+            items.forEach(item => {
+                text += `${item.numbers}=${item.amount?.toLocaleString()}\n`
+            })
+        })
+
+        text += `━━━━━━━━━━━━━━━━\n`
+        text += `รวม: ${round.currency_symbol}${grandTotal.toLocaleString()}`
+
+        return text
+    }
+
+    // Copy selected batches
+    const handleCopySelectedBatches = async (allBatches) => {
+        const selectedBatchIds = Object.keys(selectedTransferBatches).filter(id => selectedTransferBatches[id])
+        const batchesToCopy = allBatches.filter(b => selectedBatchIds.includes(b.id))
+
+        if (batchesToCopy.length === 0) {
+            alert('กรุณาเลือกรายการที่ต้องการคัดลอก')
+            return
+        }
+
+        const text = generateTransferCopyText(batchesToCopy)
+        await navigator.clipboard.writeText(text)
+        alert(`คัดลอก ${batchesToCopy.length} รายการแล้ว!`)
+    }
+
+    // Copy single batch
+    const handleCopySingleBatch = async (batch) => {
+        const text = generateTransferCopyText([batch])
+        await navigator.clipboard.writeText(text)
+        alert('คัดลอกแล้ว!')
+    }
+
     // Calculate summary values
     const getLotteryTypeKey = () => {
         if (round.lottery_type === 'thai') return 'thai'
@@ -1146,8 +1209,8 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                                             </div>
                                                         </div>
 
-                                                        {/* Select All and Revert Button */}
-                                                        <div className="bulk-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-surface)', borderRadius: '8px' }}>
+                                                        {/* Select All and Action Buttons */}
+                                                        <div className="bulk-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-surface)', borderRadius: '8px', flexWrap: 'wrap', gap: '0.5rem' }}>
                                                             <label className="checkbox-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                                                                 <input
                                                                     type="checkbox"
@@ -1157,16 +1220,29 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                                                 />
                                                                 <span>เลือกทั้งหมด ({batchList.length})</span>
                                                             </label>
-                                                            <button
-                                                                className="btn btn-danger"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation()
-                                                                    handleRevertTransfers(batchList.map(b => b.id))
-                                                                }}
-                                                                disabled={getSelectedBatchCount(batchList.map(b => b.id)) === 0 || revertingTransfer}
-                                                            >
-                                                                <FiRotateCcw /> {revertingTransfer ? 'กำลังเอาคืน...' : `เอาคืน (${getSelectedBatchCount(batchList.map(b => b.id))})`}
-                                                            </button>
+                                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                                <button
+                                                                    className="btn btn-outline"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        handleCopySelectedBatches(batchList)
+                                                                    }}
+                                                                    disabled={getSelectedBatchCount(batchList.map(b => b.id)) === 0}
+                                                                    title="คัดลอกรายการที่เลือก"
+                                                                >
+                                                                    <FiCopy /> คัดลอก ({getSelectedBatchCount(batchList.map(b => b.id))})
+                                                                </button>
+                                                                <button
+                                                                    className="btn btn-danger"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        handleRevertTransfers(batchList.map(b => b.id))
+                                                                    }}
+                                                                    disabled={getSelectedBatchCount(batchList.map(b => b.id)) === 0 || revertingTransfer}
+                                                                >
+                                                                    <FiRotateCcw /> {revertingTransfer ? 'กำลังเอาคืน...' : `เอาคืน (${getSelectedBatchCount(batchList.map(b => b.id))})`}
+                                                                </button>
+                                                            </div>
                                                         </div>
 
                                                         {/* Batch List */}
@@ -1211,13 +1287,26 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                                                                     </div>
                                                                                 </div>
                                                                             </div>
-                                                                            <div style={{ textAlign: 'right' }}>
-                                                                                <div style={{ fontWeight: 600, color: 'var(--color-warning)' }}>
-                                                                                    {round.currency_symbol}{batch.totalAmount.toLocaleString()}
+                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                                                <div style={{ textAlign: 'right' }}>
+                                                                                    <div style={{ fontWeight: 600, color: 'var(--color-warning)' }}>
+                                                                                        {round.currency_symbol}{batch.totalAmount.toLocaleString()}
+                                                                                    </div>
+                                                                                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                        {batch.items.length} รายการ
+                                                                                    </div>
                                                                                 </div>
-                                                                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                    {batch.items.length} รายการ
-                                                                                </div>
+                                                                                <button
+                                                                                    className="btn btn-sm btn-outline"
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation()
+                                                                                        handleCopySingleBatch(batch)
+                                                                                    }}
+                                                                                    title="คัดลอกรายการนี้"
+                                                                                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                                                                                >
+                                                                                    <FiCopy />
+                                                                                </button>
                                                                             </div>
                                                                         </div>
                                                                         {/* Batch Items */}
