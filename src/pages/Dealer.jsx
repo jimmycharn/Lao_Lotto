@@ -1011,32 +1011,111 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                                 <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
                                                     <p style={{ color: 'var(--color-text-muted)' }}>ยังไม่มียอดตีออก</p>
                                                 </div>
-                                            ) : (
-                                                <div className="inline-table-wrap">
-                                                    <table className="inline-table">
-                                                        <thead>
-                                                            <tr>
-                                                                <th>ประเภท</th>
-                                                                <th>เลข</th>
-                                                                <th>จำนวน</th>
-                                                                <th>ผู้รับ</th>
-                                                                <th>สถานะ</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {inlineTransfers.map(transfer => (
-                                                                <tr key={transfer.id}>
-                                                                    <td><span className="type-badge">{BET_TYPES[transfer.bet_type] || transfer.bet_type}</span></td>
-                                                                    <td className="number-cell">{transfer.numbers}</td>
-                                                                    <td>{round.currency_symbol}{transfer.amount.toLocaleString()}</td>
-                                                                    <td>{transfer.target_dealer_name || '-'}</td>
-                                                                    <td><span className={`status-badge ${transfer.status}`}>{transfer.status}</span></td>
-                                                                </tr>
+                                            ) : (() => {
+                                                // Group transfers by batch
+                                                const batches = {}
+                                                inlineTransfers.forEach(t => {
+                                                    const batchId = t.transfer_batch_id || t.id
+                                                    if (!batches[batchId]) {
+                                                        batches[batchId] = {
+                                                            id: batchId,
+                                                            target_dealer_name: t.target_dealer_name,
+                                                            created_at: t.created_at,
+                                                            items: [],
+                                                            totalAmount: 0
+                                                        }
+                                                    }
+                                                    batches[batchId].items.push(t)
+                                                    batches[batchId].totalAmount += t.amount || 0
+                                                })
+                                                const batchList = Object.values(batches).sort((a, b) =>
+                                                    new Date(b.created_at) - new Date(a.created_at)
+                                                )
+                                                const grandTotal = inlineTransfers.reduce((sum, t) => sum + (t.amount || 0), 0)
+
+                                                return (
+                                                    <>
+                                                        {/* Summary */}
+                                                        <div className="inline-summary" style={{ marginBottom: '1rem' }}>
+                                                            <div className="summary-item">
+                                                                <span className="label">จำนวนครั้ง</span>
+                                                                <span className="value">{batchList.length} ครั้ง</span>
+                                                            </div>
+                                                            <div className="summary-item">
+                                                                <span className="label">รวมทั้งหมด</span>
+                                                                <span className="value">{round.currency_symbol}{grandTotal.toLocaleString()}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Batch List */}
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                                            {batchList.map(batch => (
+                                                                <div
+                                                                    key={batch.id}
+                                                                    style={{
+                                                                        background: 'var(--color-surface)',
+                                                                        border: '1px solid var(--color-border)',
+                                                                        borderRadius: '8px',
+                                                                        overflow: 'hidden'
+                                                                    }}
+                                                                >
+                                                                    {/* Batch Header */}
+                                                                    <div style={{
+                                                                        display: 'flex',
+                                                                        justifyContent: 'space-between',
+                                                                        alignItems: 'center',
+                                                                        padding: '0.75rem 1rem',
+                                                                        background: 'rgba(255, 193, 7, 0.1)',
+                                                                        borderBottom: '1px solid var(--color-border)'
+                                                                    }}>
+                                                                        <div>
+                                                                            <div style={{ fontWeight: 600 }}>{batch.target_dealer_name}</div>
+                                                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                {new Date(batch.created_at).toLocaleString('th-TH', {
+                                                                                    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+                                                                                })}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div style={{ textAlign: 'right' }}>
+                                                                            <div style={{ fontWeight: 600, color: 'var(--color-warning)' }}>
+                                                                                {round.currency_symbol}{batch.totalAmount.toLocaleString()}
+                                                                            </div>
+                                                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                {batch.items.length} รายการ
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    {/* Batch Items */}
+                                                                    <div style={{ padding: '0.5rem' }}>
+                                                                        {batch.items.map(item => (
+                                                                            <div
+                                                                                key={item.id}
+                                                                                style={{
+                                                                                    display: 'flex',
+                                                                                    justifyContent: 'space-between',
+                                                                                    alignItems: 'center',
+                                                                                    padding: '0.5rem',
+                                                                                    borderBottom: '1px solid var(--color-border)'
+                                                                                }}
+                                                                            >
+                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                                    <span className="type-badge" style={{ fontSize: '0.7rem' }}>
+                                                                                        {BET_TYPES[item.bet_type] || item.bet_type}
+                                                                                    </span>
+                                                                                    <span style={{ fontWeight: 500, color: 'var(--color-primary)' }}>
+                                                                                        {item.numbers}
+                                                                                    </span>
+                                                                                </div>
+                                                                                <span>{round.currency_symbol}{item.amount?.toLocaleString()}</span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
                                                             ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            )}
+                                                        </div>
+                                                    </>
+                                                )
+                                            })()}
                                         </div>
                                     )}
                                 </>
