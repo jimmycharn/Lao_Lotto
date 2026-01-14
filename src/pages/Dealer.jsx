@@ -216,6 +216,12 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
     const [isGrouped, setIsGrouped] = useState(false)
     const [inlineSearch, setInlineSearch] = useState('')
 
+    // Inline excess transfer states
+    const [selectedExcessItems, setSelectedExcessItems] = useState({})
+    const [showTransferModal, setShowTransferModal] = useState(false)
+    const [transferForm, setTransferForm] = useState({ target_dealer_name: '', target_dealer_contact: '', notes: '' })
+    const [savingTransfer, setSavingTransfer] = useState(false)
+
     const isAnnounced = round.status === 'announced' && round.is_result_announced
 
     // Check if round is currently open
@@ -404,6 +410,85 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
             }
         })
         return excessItems.sort((a, b) => b.excess - a.excess)
+    }
+
+    // Get excess items 
+    const excessItems = calculateExcessItems()
+
+    // Toggle selection of excess item
+    const toggleExcessItem = (item) => {
+        const key = `${item.bet_type}|${item.numbers}`
+        setSelectedExcessItems(prev => ({
+            ...prev,
+            [key]: !prev[key]
+        }))
+    }
+
+    // Select/Deselect all excess items
+    const toggleSelectAll = () => {
+        const allSelected = excessItems.every(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+        if (allSelected) {
+            setSelectedExcessItems({})
+        } else {
+            const newSelected = {}
+            excessItems.forEach(item => {
+                newSelected[`${item.bet_type}|${item.numbers}`] = true
+            })
+            setSelectedExcessItems(newSelected)
+        }
+    }
+
+    // Get selected count and total
+    const selectedCount = excessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`]).length
+    const selectedTotalExcess = excessItems
+        .filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+        .reduce((sum, item) => sum + (item.isSetBased ? item.excess : item.excess), 0)
+
+    // Handle save transfer
+    const handleSaveTransfer = async () => {
+        if (!transferForm.target_dealer_name) {
+            alert('กรุณากรอกชื่อเจ้ามือที่ต้องการตีออก')
+            return
+        }
+        setSavingTransfer(true)
+        try {
+            const selectedItems = excessItems.filter(item =>
+                selectedExcessItems[`${item.bet_type}|${item.numbers}`]
+            )
+
+            const inserts = selectedItems.map(item => ({
+                round_id: round.id,
+                bet_type: item.bet_type,
+                numbers: item.numbers,
+                amount: item.isSetBased ? item.excess * (round?.set_prices?.['4_top'] || 120) : item.excess,
+                target_dealer_name: transferForm.target_dealer_name,
+                target_dealer_contact: transferForm.target_dealer_contact || null,
+                notes: transferForm.notes || null,
+                status: 'pending',
+                created_by: user.id
+            }))
+
+            const { error } = await supabase.from('bet_transfers').insert(inserts)
+            if (error) throw error
+
+            // Refresh transfers
+            const { data: newTransfers } = await supabase
+                .from('bet_transfers')
+                .select('*')
+                .eq('round_id', round.id)
+                .order('created_at', { ascending: false })
+            setInlineTransfers(newTransfers || [])
+
+            setShowTransferModal(false)
+            setSelectedExcessItems({})
+            setTransferForm({ target_dealer_name: '', target_dealer_contact: '', notes: '' })
+            alert(`ตีออกสำเร็จ ${selectedItems.length} รายการ!`)
+        } catch (error) {
+            console.error('Error saving transfer:', error)
+            alert('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setSavingTransfer(false)
+        }
     }
 
     // Calculate summary values
@@ -764,50 +849,160 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                     {/* Tab: ยอดเกิน */}
                                     {inlineTab === 'excess' && (
                                         <div className="inline-tab-content">
-                                            {calculateExcessItems().length === 0 ? (
+                                            {excessItems.length === 0 ? (
                                                 <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
+                                                    <FiCheck style={{ fontSize: '2rem', color: 'var(--color-success)', marginBottom: '0.5rem' }} />
                                                     <p style={{ color: 'var(--color-text-muted)' }}>ไม่มียอดเกิน</p>
                                                 </div>
                                             ) : (
                                                 <>
-                                                    {/* Action button to open full modal for transfer */}
-                                                    <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+                                                    {/* Summary */}
+                                                    <div className="inline-summary" style={{ marginBottom: '1rem' }}>
+                                                        <div className="summary-item">
+                                                            <span className="label">ยอดเกินรวม</span>
+                                                            <span className="value text-warning">
+                                                                {excessItems.some(i => i.isSetBased)
+                                                                    ? `${excessItems.reduce((sum, i) => sum + (i.isSetBased ? i.excess : 0), 0)} ชุด`
+                                                                    : `${round.currency_symbol}${excessItems.reduce((sum, i) => sum + i.excess, 0).toLocaleString()}`}
+                                                            </span>
+                                                        </div>
+                                                        {selectedCount > 0 && (
+                                                            <div className="summary-item">
+                                                                <span className="label">เลือกแล้ว ({selectedCount})</span>
+                                                                <span className="value">{selectedTotalExcess} {excessItems.some(i => i.isSetBased) ? 'ชุด' : round.currency_symbol}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Select All and Transfer Button */}
+                                                    <div className="bulk-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-surface)', borderRadius: '8px' }}>
+                                                        <label className="checkbox-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={excessItems.length > 0 && excessItems.every(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])}
+                                                                onChange={toggleSelectAll}
+                                                                style={{ width: '18px', height: '18px', accentColor: 'var(--color-primary)' }}
+                                                            />
+                                                            <span>เลือกทั้งหมด ({excessItems.length})</span>
+                                                        </label>
                                                         <button
                                                             className="btn btn-warning"
                                                             onClick={(e) => {
                                                                 e.stopPropagation()
-                                                                onShowSubmissions()
+                                                                if (selectedCount === 0) {
+                                                                    alert('กรุณาเลือกรายการที่ต้องการตีออก')
+                                                                    return
+                                                                }
+                                                                setShowTransferModal(true)
                                                             }}
+                                                            disabled={selectedCount === 0}
                                                         >
-                                                            <FiSend /> เลือกและตีออก
+                                                            <FiSend /> ตีออก ({selectedCount})
                                                         </button>
                                                     </div>
-                                                    <div className="inline-table-wrap">
-                                                        <table className="inline-table">
-                                                            <thead>
-                                                                <tr>
-                                                                    <th>ประเภท</th>
-                                                                    <th>เลข</th>
-                                                                    <th>ยอดรวม</th>
-                                                                    <th>Limit</th>
-                                                                    <th>เกิน</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                {calculateExcessItems().map(item => (
-                                                                    <tr key={`${item.bet_type}|${item.numbers}`}>
-                                                                        <td><span className="type-badge">{BET_TYPES[item.bet_type] || item.bet_type}</span></td>
-                                                                        <td className="number-cell">{item.numbers}</td>
-                                                                        <td>{item.isSetBased ? `${item.setCount} ชุด` : `${round.currency_symbol}${item.total.toLocaleString()}`}</td>
-                                                                        <td>{item.isSetBased ? `${item.limit} ชุด` : `${round.currency_symbol}${item.limit.toLocaleString()}`}</td>
-                                                                        <td className="text-danger">{item.isSetBased ? `${item.excess} ชุด` : `${round.currency_symbol}${item.excess.toLocaleString()}`}</td>
-                                                                    </tr>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
+
+                                                    {/* Excess Items List */}
+                                                    <div className="excess-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                                        {excessItems.map((item, idx) => {
+                                                            const isSelected = selectedExcessItems[`${item.bet_type}|${item.numbers}`]
+                                                            return (
+                                                                <div
+                                                                    key={idx}
+                                                                    className={`excess-card ${isSelected ? 'selected' : ''}`}
+                                                                    onClick={() => toggleExcessItem(item)}
+                                                                    style={{
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '1rem',
+                                                                        padding: '0.75rem 1rem',
+                                                                        background: isSelected ? 'rgba(255, 193, 7, 0.15)' : 'var(--color-surface)',
+                                                                        border: isSelected ? '2px solid var(--color-warning)' : '1px solid var(--color-border)',
+                                                                        borderRadius: '8px',
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s ease'
+                                                                    }}
+                                                                >
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={isSelected || false}
+                                                                        onChange={() => { }}
+                                                                        style={{ width: '18px', height: '18px', accentColor: 'var(--color-warning)' }}
+                                                                    />
+                                                                    <div style={{ flex: 1 }}>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                                                                            <span className="type-badge">{BET_TYPES[item.bet_type] || item.bet_type}</span>
+                                                                            <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '1.1rem' }}>{item.numbers}</span>
+                                                                        </div>
+                                                                        <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                                                                            <span>ยอด: {item.isSetBased ? `${item.setCount} ชุด` : `${round.currency_symbol}${item.total.toLocaleString()}`}</span>
+                                                                            <span>อั้น: {item.isSetBased ? `${item.limit} ชุด` : `${round.currency_symbol}${item.limit.toLocaleString()}`}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div style={{ textAlign: 'right' }}>
+                                                                        <div style={{ color: 'var(--color-warning)', fontWeight: 600, fontSize: '1.1rem' }}>
+                                                                            {item.isSetBased ? `${item.excess} ชุด` : `${round.currency_symbol}${item.excess.toLocaleString()}`}
+                                                                        </div>
+                                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>เกิน</div>
+                                                                    </div>
+                                                                </div>
+                                                            )
+                                                        })}
                                                     </div>
                                                 </>
                                             )}
+                                        </div>
+                                    )}
+
+                                    {/* Transfer Modal */}
+                                    {showTransferModal && (
+                                        <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); setShowTransferModal(false) }}>
+                                            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+                                                <div className="modal-header">
+                                                    <h3><FiSend /> ตีออกยอดเกิน</h3>
+                                                    <button className="modal-close" onClick={() => setShowTransferModal(false)}><FiX /></button>
+                                                </div>
+                                                <div className="modal-body">
+                                                    <p style={{ marginBottom: '1rem', color: 'var(--color-text-muted)' }}>
+                                                        กำลังตีออก {selectedCount} รายการ
+                                                    </p>
+                                                    <div className="form-group">
+                                                        <label className="form-label">ชื่อเจ้ามือ *</label>
+                                                        <input
+                                                            type="text"
+                                                            className="form-input"
+                                                            value={transferForm.target_dealer_name}
+                                                            onChange={e => setTransferForm({ ...transferForm, target_dealer_name: e.target.value })}
+                                                            placeholder="ชื่อเจ้ามือที่ต้องการตีออก"
+                                                        />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label className="form-label">เบอร์ติดต่อ</label>
+                                                        <input
+                                                            type="text"
+                                                            className="form-input"
+                                                            value={transferForm.target_dealer_contact}
+                                                            onChange={e => setTransferForm({ ...transferForm, target_dealer_contact: e.target.value })}
+                                                            placeholder="เบอร์โทรหรือ Line ID"
+                                                        />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label className="form-label">หมายเหตุ</label>
+                                                        <textarea
+                                                            className="form-input"
+                                                            rows="2"
+                                                            value={transferForm.notes}
+                                                            onChange={e => setTransferForm({ ...transferForm, notes: e.target.value })}
+                                                            placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)"
+                                                        ></textarea>
+                                                    </div>
+                                                </div>
+                                                <div className="modal-footer">
+                                                    <button className="btn btn-outline" onClick={() => setShowTransferModal(false)}>ยกเลิก</button>
+                                                    <button className="btn btn-warning" onClick={handleSaveTransfer} disabled={savingTransfer}>
+                                                        {savingTransfer ? 'กำลังบันทึก...' : 'ยืนยันตีออก'}
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
                                     )}
 
