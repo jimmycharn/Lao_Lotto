@@ -222,6 +222,10 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
     const [transferForm, setTransferForm] = useState({ target_dealer_name: '', target_dealer_contact: '', notes: '' })
     const [savingTransfer, setSavingTransfer] = useState(false)
 
+    // Inline revert transfer states
+    const [selectedTransferBatches, setSelectedTransferBatches] = useState({})
+    const [revertingTransfer, setRevertingTransfer] = useState(false)
+
     const isAnnounced = round.status === 'announced' && round.is_result_announced
 
     // Check if round is currently open
@@ -496,6 +500,71 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
             alert('เกิดข้อผิดพลาด: ' + error.message)
         } finally {
             setSavingTransfer(false)
+        }
+    }
+
+    // Toggle selection of transfer batch
+    const toggleTransferBatch = (batchId) => {
+        setSelectedTransferBatches(prev => ({
+            ...prev,
+            [batchId]: !prev[batchId]
+        }))
+    }
+
+    // Select/Deselect all transfer batches
+    const toggleSelectAllBatches = (batchIds) => {
+        const allSelected = batchIds.every(id => selectedTransferBatches[id])
+        if (allSelected) {
+            setSelectedTransferBatches({})
+        } else {
+            const newSelected = {}
+            batchIds.forEach(id => {
+                newSelected[id] = true
+            })
+            setSelectedTransferBatches(newSelected)
+        }
+    }
+
+    // Get selected batch count
+    const getSelectedBatchCount = (batchIds) => {
+        return batchIds.filter(id => selectedTransferBatches[id]).length
+    }
+
+    // Handle revert selected transfers
+    const handleRevertTransfers = async (batchIds) => {
+        const selectedBatchIds = batchIds.filter(id => selectedTransferBatches[id])
+        if (selectedBatchIds.length === 0) {
+            alert('กรุณาเลือกรายการที่ต้องการเอาคืน')
+            return
+        }
+
+        if (!confirm(`ต้องการเอาคืน ${selectedBatchIds.length} รายการหรือไม่?`)) {
+            return
+        }
+
+        setRevertingTransfer(true)
+        try {
+            // Get all transfer IDs from selected batches
+            const transferIdsToDelete = inlineTransfers
+                .filter(t => selectedBatchIds.includes(t.transfer_batch_id || t.id))
+                .map(t => t.id)
+
+            const { error } = await supabase
+                .from('bet_transfers')
+                .delete()
+                .in('id', transferIdsToDelete)
+
+            if (error) throw error
+
+            // Refresh all data
+            await fetchInlineSubmissions(true)
+            setSelectedTransferBatches({})
+            alert(`เอาคืนสำเร็จ ${selectedBatchIds.length} รายการ!`)
+        } catch (error) {
+            console.error('Error reverting transfers:', error)
+            alert('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setRevertingTransfer(false)
         }
     }
 
@@ -1057,71 +1126,108 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                                             </div>
                                                         </div>
 
+                                                        {/* Select All and Revert Button */}
+                                                        <div className="bulk-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-surface)', borderRadius: '8px' }}>
+                                                            <label className="checkbox-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={batchList.length > 0 && batchList.every(b => selectedTransferBatches[b.id])}
+                                                                    onChange={() => toggleSelectAllBatches(batchList.map(b => b.id))}
+                                                                    style={{ width: '18px', height: '18px', accentColor: 'var(--color-danger)' }}
+                                                                />
+                                                                <span>เลือกทั้งหมด ({batchList.length})</span>
+                                                            </label>
+                                                            <button
+                                                                className="btn btn-danger"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation()
+                                                                    handleRevertTransfers(batchList.map(b => b.id))
+                                                                }}
+                                                                disabled={getSelectedBatchCount(batchList.map(b => b.id)) === 0 || revertingTransfer}
+                                                            >
+                                                                <FiRotateCcw /> {revertingTransfer ? 'กำลังเอาคืน...' : `เอาคืน (${getSelectedBatchCount(batchList.map(b => b.id))})`}
+                                                            </button>
+                                                        </div>
+
                                                         {/* Batch List */}
                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                                            {batchList.map(batch => (
-                                                                <div
-                                                                    key={batch.id}
-                                                                    style={{
-                                                                        background: 'var(--color-surface)',
-                                                                        border: '1px solid var(--color-border)',
-                                                                        borderRadius: '8px',
-                                                                        overflow: 'hidden'
-                                                                    }}
-                                                                >
-                                                                    {/* Batch Header */}
-                                                                    <div style={{
-                                                                        display: 'flex',
-                                                                        justifyContent: 'space-between',
-                                                                        alignItems: 'center',
-                                                                        padding: '0.75rem 1rem',
-                                                                        background: 'rgba(255, 193, 7, 0.1)',
-                                                                        borderBottom: '1px solid var(--color-border)'
-                                                                    }}>
-                                                                        <div>
-                                                                            <div style={{ fontWeight: 600 }}>{batch.target_dealer_name}</div>
-                                                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                {new Date(batch.created_at).toLocaleString('th-TH', {
-                                                                                    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
-                                                                                })}
-                                                                            </div>
-                                                                        </div>
-                                                                        <div style={{ textAlign: 'right' }}>
-                                                                            <div style={{ fontWeight: 600, color: 'var(--color-warning)' }}>
-                                                                                {round.currency_symbol}{batch.totalAmount.toLocaleString()}
-                                                                            </div>
-                                                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                {batch.items.length} รายการ
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                    {/* Batch Items */}
-                                                                    <div style={{ padding: '0.5rem' }}>
-                                                                        {batch.items.map(item => (
-                                                                            <div
-                                                                                key={item.id}
-                                                                                style={{
-                                                                                    display: 'flex',
-                                                                                    justifyContent: 'space-between',
-                                                                                    alignItems: 'center',
-                                                                                    padding: '0.5rem',
-                                                                                    borderBottom: '1px solid var(--color-border)'
-                                                                                }}
-                                                                            >
-                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                                    <span className="type-badge" style={{ fontSize: '0.7rem' }}>
-                                                                                        {BET_TYPES[item.bet_type] || item.bet_type}
-                                                                                    </span>
-                                                                                    <span style={{ fontWeight: 500, color: 'var(--color-primary)' }}>
-                                                                                        {item.numbers}
-                                                                                    </span>
+                                                            {batchList.map(batch => {
+                                                                const isSelected = selectedTransferBatches[batch.id]
+                                                                return (
+                                                                    <div
+                                                                        key={batch.id}
+                                                                        onClick={() => toggleTransferBatch(batch.id)}
+                                                                        style={{
+                                                                            background: isSelected ? 'rgba(239, 68, 68, 0.1)' : 'var(--color-surface)',
+                                                                            border: isSelected ? '2px solid var(--color-danger)' : '1px solid var(--color-border)',
+                                                                            borderRadius: '8px',
+                                                                            overflow: 'hidden',
+                                                                            cursor: 'pointer',
+                                                                            transition: 'all 0.2s ease'
+                                                                        }}
+                                                                    >
+                                                                        {/* Batch Header */}
+                                                                        <div style={{
+                                                                            display: 'flex',
+                                                                            justifyContent: 'space-between',
+                                                                            alignItems: 'center',
+                                                                            padding: '0.75rem 1rem',
+                                                                            background: isSelected ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 193, 7, 0.1)',
+                                                                            borderBottom: '1px solid var(--color-border)'
+                                                                        }}>
+                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                                                <input
+                                                                                    type="checkbox"
+                                                                                    checked={isSelected || false}
+                                                                                    onChange={() => { }}
+                                                                                    style={{ width: '18px', height: '18px', accentColor: 'var(--color-danger)' }}
+                                                                                />
+                                                                                <div>
+                                                                                    <div style={{ fontWeight: 600 }}>{batch.target_dealer_name}</div>
+                                                                                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                        {new Date(batch.created_at).toLocaleString('th-TH', {
+                                                                                            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+                                                                                        })}
+                                                                                    </div>
                                                                                 </div>
-                                                                                <span>{round.currency_symbol}{item.amount?.toLocaleString()}</span>
                                                                             </div>
-                                                                        ))}
+                                                                            <div style={{ textAlign: 'right' }}>
+                                                                                <div style={{ fontWeight: 600, color: 'var(--color-warning)' }}>
+                                                                                    {round.currency_symbol}{batch.totalAmount.toLocaleString()}
+                                                                                </div>
+                                                                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                    {batch.items.length} รายการ
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                        {/* Batch Items */}
+                                                                        <div style={{ padding: '0.5rem' }}>
+                                                                            {batch.items.map(item => (
+                                                                                <div
+                                                                                    key={item.id}
+                                                                                    style={{
+                                                                                        display: 'flex',
+                                                                                        justifyContent: 'space-between',
+                                                                                        alignItems: 'center',
+                                                                                        padding: '0.5rem',
+                                                                                        borderBottom: '1px solid var(--color-border)'
+                                                                                    }}
+                                                                                >
+                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                                        <span className="type-badge" style={{ fontSize: '0.7rem' }}>
+                                                                                            {BET_TYPES[item.bet_type] || item.bet_type}
+                                                                                        </span>
+                                                                                        <span style={{ fontWeight: 500, color: 'var(--color-primary)' }}>
+                                                                                            {item.numbers}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <span>{round.currency_symbol}{item.amount?.toLocaleString()}</span>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
                                                                     </div>
-                                                                </div>
-                                                            ))}
+                                                                )
+                                                            })}
                                                         </div>
                                                     </>
                                                 )
