@@ -769,30 +769,44 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                                     <p style={{ color: 'var(--color-text-muted)' }}>ไม่มียอดเกิน</p>
                                                 </div>
                                             ) : (
-                                                <div className="inline-table-wrap">
-                                                    <table className="inline-table">
-                                                        <thead>
-                                                            <tr>
-                                                                <th>ประเภท</th>
-                                                                <th>เลข</th>
-                                                                <th>ยอดรวม</th>
-                                                                <th>Limit</th>
-                                                                <th>เกิน</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {calculateExcessItems().map(item => (
-                                                                <tr key={`${item.bet_type}|${item.numbers}`}>
-                                                                    <td><span className="type-badge">{BET_TYPES[item.bet_type] || item.bet_type}</span></td>
-                                                                    <td className="number-cell">{item.numbers}</td>
-                                                                    <td>{item.isSetBased ? `${item.setCount} ชุด` : `${round.currency_symbol}${item.total.toLocaleString()}`}</td>
-                                                                    <td>{item.isSetBased ? `${item.limit} ชุด` : `${round.currency_symbol}${item.limit.toLocaleString()}`}</td>
-                                                                    <td className="text-danger">{item.isSetBased ? `${item.excess} ชุด` : `${round.currency_symbol}${item.excess.toLocaleString()}`}</td>
+                                                <>
+                                                    {/* Action button to open full modal for transfer */}
+                                                    <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+                                                        <button
+                                                            className="btn btn-warning"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                onShowSubmissions()
+                                                            }}
+                                                        >
+                                                            <FiSend /> เลือกและตีออก
+                                                        </button>
+                                                    </div>
+                                                    <div className="inline-table-wrap">
+                                                        <table className="inline-table">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>ประเภท</th>
+                                                                    <th>เลข</th>
+                                                                    <th>ยอดรวม</th>
+                                                                    <th>Limit</th>
+                                                                    <th>เกิน</th>
                                                                 </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
+                                                            </thead>
+                                                            <tbody>
+                                                                {calculateExcessItems().map(item => (
+                                                                    <tr key={`${item.bet_type}|${item.numbers}`}>
+                                                                        <td><span className="type-badge">{BET_TYPES[item.bet_type] || item.bet_type}</span></td>
+                                                                        <td className="number-cell">{item.numbers}</td>
+                                                                        <td>{item.isSetBased ? `${item.setCount} ชุด` : `${round.currency_symbol}${item.total.toLocaleString()}`}</td>
+                                                                        <td>{item.isSetBased ? `${item.limit} ชุด` : `${round.currency_symbol}${item.limit.toLocaleString()}`}</td>
+                                                                        <td className="text-danger">{item.isSetBased ? `${item.excess} ชุด` : `${round.currency_symbol}${item.excess.toLocaleString()}`}</td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </>
                                             )}
                                         </div>
                                     )}
