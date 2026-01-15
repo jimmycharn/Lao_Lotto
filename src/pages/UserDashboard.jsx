@@ -178,7 +178,7 @@ export default function UserDashboard() {
 
     // Edit submission state
     const [editingSubmission, setEditingSubmission] = useState(null)
-    const [editForm, setEditForm] = useState({ numbers: '', amount: '' })
+    const [editForm, setEditForm] = useState({ numbers: '', amount: '', bet_type: '' })
     const [editSaving, setEditSaving] = useState(false)
 
 
@@ -933,18 +933,40 @@ export default function UserDashboard() {
         const isLaoOrHanoi = selectedRound && ['lao', 'hanoi'].includes(selectedRound.lottery_type)
         const isSetBasedBet = isLaoOrHanoi && submission.bet_type === '4_set'
 
+        // Detect special bet types by checking display_bet_type or display_amount format
+        const displayBetType = submission.display_bet_type || ''
+        const displayAmount = submission.display_amount || ''
+        const isSpecialBetType = displayBetType.includes('เต็ง-โต๊ด') ||
+            displayBetType.includes('1+กลับ') ||
+            (displayAmount.includes('*') && !isSetBasedBet)
+
+        // Determine the edit bet_type based on display_bet_type
+        let editBetType = submission.bet_type
+        if (displayBetType.includes('เต็ง-โต๊ด')) {
+            editBetType = '3_straight_tod'
+        } else if (displayBetType.includes('1+กลับ')) {
+            editBetType = '3_straight_perm'
+        }
+
         // For set-based bets, convert amount back to set count for editing
         let editAmount = submission.amount?.toString() || ''
+        let editNumbers = submission.numbers || ''
+
         if (isSetBasedBet && submission.amount) {
             const setPrice = selectedRound?.set_prices?.['4_top'] || 120
             const setCount = Math.round(submission.amount / setPrice)
             editAmount = setCount.toString()
+        } else if (isSpecialBetType) {
+            // For special bet types, use display values
+            editNumbers = submission.display_numbers || submission.numbers || ''
+            editAmount = displayAmount || submission.amount?.toString() || ''
         }
 
         setEditingSubmission(submission)
         setEditForm({
-            numbers: submission.numbers || '',
-            amount: editAmount
+            numbers: editNumbers,
+            amount: editAmount,
+            bet_type: editBetType
         })
     }
 
@@ -953,14 +975,21 @@ export default function UserDashboard() {
         if (!editingSubmission) return
 
         const newNumbers = editForm.numbers.replace(/\s/g, '')
+        const currentBetType = editForm.bet_type || editingSubmission.bet_type
 
         // Check if this is a set-based bet (4_set on Lao/Hanoi)
         const isLaoOrHanoi = selectedRound && ['lao', 'hanoi'].includes(selectedRound.lottery_type)
         const isSetBasedBet = isLaoOrHanoi && editingSubmission.bet_type === '4_set'
 
+        // Check if this is a special bet type (เต็ง-โต๊ด, 1+กลับ)
+        const isSpecialBetType = currentBetType === '3_straight_tod' || currentBetType === '3_straight_perm'
+
+        // Check if amount contains * (split amount format)
+        const hasSplitAmount = editForm.amount.includes('*')
+
         let newAmount
         let setCount = 1
-        let displayAmount
+        let displayAmount = editForm.amount
 
         if (isSetBasedBet) {
             // For 4 ตัวชุด on Lao/Hanoi: editForm.amount = number of sets
@@ -968,6 +997,10 @@ export default function UserDashboard() {
             const setPrice = selectedRound?.set_prices?.['4_top'] || 120
             newAmount = setCount * setPrice
             displayAmount = `${newAmount} บาท (${setCount} ชุด)`
+        } else if (hasSplitAmount) {
+            // For split amount format like "100*20"
+            const amountParts = editForm.amount.split('*').map(p => parseFloat(p) || 0)
+            newAmount = amountParts.reduce((sum, p) => sum + p, 0)
         } else {
             newAmount = parseFloat(editForm.amount)
             displayAmount = newAmount.toString()
@@ -984,38 +1017,155 @@ export default function UserDashboard() {
 
         setEditSaving(true)
         try {
-            // Recalculate commission based on new amount using user settings
-            // For 4_set, use '4_top' commission settings
-            const commLookupBetType = isSetBasedBet ? '4_top' : editingSubmission.bet_type
-            const commInfo = getCommissionForBetType(commLookupBetType, userSettings)
+            // If this is a special bet type with entry_id, we need to delete old entries and create new ones
+            if (isSpecialBetType && editingSubmission.entry_id && hasSplitAmount) {
+                // Delete all submissions with this entry_id (soft delete)
+                const { error: deleteError } = await supabase
+                    .from('submissions')
+                    .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+                    .eq('entry_id', editingSubmission.entry_id)
 
-            let newCommission = 0
-            if (isSetBasedBet) {
-                // For set-based bets: commission = setCount × commission_rate_per_set
-                newCommission = setCount * commInfo.rate
-            } else if (commInfo.isFixed) {
-                newCommission = commInfo.rate
+                if (deleteError) throw deleteError
+
+                // Create new submissions based on the updated values
+                const entryId = editingSubmission.entry_id
+                const billId = editingSubmission.bill_id
+                const timestamp = new Date().toISOString()
+                const amountParts = editForm.amount.split('*').map(p => parseFloat(p) || 0)
+                const newSubmissions = []
+
+                // Get label for display
+                let displayLabel = currentBetType === '3_straight_tod' ? 'เต็ง-โต๊ด' :
+                    currentBetType === '3_straight_perm' ? `1+กลับ (${getPermutations(newNumbers).length - 1})` :
+                        BET_TYPES[currentBetType]?.label || currentBetType
+
+                if (currentBetType === '3_straight_tod') {
+                    // เต็ง-โต๊ด: first amount for 3_top, second for 3_tod
+                    const [straightAmt, todAmt] = amountParts
+                    if (straightAmt > 0) {
+                        const commInfo = getCommissionForBetType('3_top', userSettings)
+                        newSubmissions.push({
+                            entry_id: entryId,
+                            round_id: selectedRound.id,
+                            user_id: editingSubmission.user_id,
+                            bill_id: billId,
+                            bet_type: '3_top',
+                            numbers: newNumbers,
+                            amount: straightAmt,
+                            commission_rate: commInfo.rate,
+                            commission_amount: commInfo.isFixed ? commInfo.rate : (straightAmt * commInfo.rate) / 100,
+                            display_numbers: newNumbers,
+                            display_amount: editForm.amount,
+                            display_bet_type: displayLabel,
+                            created_at: timestamp
+                        })
+                    }
+                    if (todAmt > 0) {
+                        const commInfo = getCommissionForBetType('3_tod', userSettings)
+                        const sortedNumbers = newNumbers.split('').sort().join('')
+                        newSubmissions.push({
+                            entry_id: entryId,
+                            round_id: selectedRound.id,
+                            user_id: editingSubmission.user_id,
+                            bill_id: billId,
+                            bet_type: '3_tod',
+                            numbers: sortedNumbers,
+                            amount: todAmt,
+                            commission_rate: commInfo.rate,
+                            commission_amount: commInfo.isFixed ? commInfo.rate : (todAmt * commInfo.rate) / 100,
+                            display_numbers: newNumbers,
+                            display_amount: editForm.amount,
+                            display_bet_type: displayLabel,
+                            created_at: timestamp
+                        })
+                    }
+                } else if (currentBetType === '3_straight_perm') {
+                    // 1+กลับ: first amount for straight 3_top, second amount for permutation 3_tops
+                    const [straightAmt, permAmt] = amountParts
+                    const perms = getPermutations(newNumbers).filter(p => p !== newNumbers)
+
+                    displayLabel = `1+กลับ (${perms.length})`
+
+                    if (straightAmt > 0) {
+                        const commInfo = getCommissionForBetType('3_top', userSettings)
+                        newSubmissions.push({
+                            entry_id: entryId,
+                            round_id: selectedRound.id,
+                            user_id: editingSubmission.user_id,
+                            bill_id: billId,
+                            bet_type: '3_top',
+                            numbers: newNumbers,
+                            amount: straightAmt,
+                            commission_rate: commInfo.rate,
+                            commission_amount: commInfo.isFixed ? commInfo.rate : (straightAmt * commInfo.rate) / 100,
+                            display_numbers: newNumbers,
+                            display_amount: editForm.amount,
+                            display_bet_type: displayLabel,
+                            created_at: timestamp
+                        })
+                    }
+                    if (permAmt > 0 && perms.length > 0) {
+                        const commInfo = getCommissionForBetType('3_top', userSettings)
+                        perms.forEach(p => {
+                            newSubmissions.push({
+                                entry_id: entryId,
+                                round_id: selectedRound.id,
+                                user_id: editingSubmission.user_id,
+                                bill_id: billId,
+                                bet_type: '3_top',
+                                numbers: p,
+                                amount: permAmt,
+                                commission_rate: commInfo.rate,
+                                commission_amount: commInfo.isFixed ? commInfo.rate : (permAmt * commInfo.rate) / 100,
+                                display_numbers: newNumbers,
+                                display_amount: editForm.amount,
+                                display_bet_type: displayLabel,
+                                created_at: timestamp
+                            })
+                        })
+                    }
+                }
+
+                // Insert new submissions
+                if (newSubmissions.length > 0) {
+                    const { error: insertError } = await supabase
+                        .from('submissions')
+                        .insert(newSubmissions)
+
+                    if (insertError) throw insertError
+                }
             } else {
-                newCommission = (newAmount * commInfo.rate) / 100
+                // Normal update for single submission
+                const commLookupBetType = isSetBasedBet ? '4_top' : editingSubmission.bet_type
+                const commInfo = getCommissionForBetType(commLookupBetType, userSettings)
+
+                let newCommission = 0
+                if (isSetBasedBet) {
+                    newCommission = setCount * commInfo.rate
+                } else if (commInfo.isFixed) {
+                    newCommission = commInfo.rate
+                } else {
+                    newCommission = (newAmount * commInfo.rate) / 100
+                }
+
+                const { error } = await supabase
+                    .from('submissions')
+                    .update({
+                        numbers: newNumbers,
+                        amount: newAmount,
+                        display_numbers: newNumbers,
+                        display_amount: displayAmount,
+                        commission_rate: commInfo.rate,
+                        commission_amount: newCommission,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', editingSubmission.id)
+
+                if (error) throw error
             }
 
-            const { error } = await supabase
-                .from('submissions')
-                .update({
-                    numbers: newNumbers,
-                    amount: newAmount,
-                    display_numbers: newNumbers,
-                    display_amount: displayAmount,
-                    commission_rate: commInfo.rate,
-                    commission_amount: newCommission,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', editingSubmission.id)
-
-            if (error) throw error
-
             setEditingSubmission(null)
-            setEditForm({ numbers: '', amount: '' })
+            setEditForm({ numbers: '', amount: '', bet_type: '' })
             fetchSubmissions()
             setToast({ message: 'แก้ไขรายการสำเร็จ', type: 'success' })
         } catch (error) {
@@ -2254,11 +2404,40 @@ export default function UserDashboard() {
                             </button>
                         </div>
                         <div className="modal-body">
-                            <div className="edit-info">
-                                <span className="edit-bet-type">
-                                    {BET_TYPES[editingSubmission.bet_type]?.label || editingSubmission.bet_type}
-                                </span>
-                            </div>
+                            {/* Bet Type Selector for special types or simple badge */}
+                            {(() => {
+                                const isSpecialBetType = editForm.bet_type === '3_straight_tod' || editForm.bet_type === '3_straight_perm'
+
+                                if (isSpecialBetType) {
+                                    return (
+                                        <div className="edit-bet-type-selector">
+                                            <label className="form-label">ประเภทเลข</label>
+                                            <div className="bet-type-buttons">
+                                                <button
+                                                    className={`bet-type-btn ${editForm.bet_type === '3_straight_tod' ? 'active' : ''}`}
+                                                    onClick={() => setEditForm({ ...editForm, bet_type: '3_straight_tod' })}
+                                                >
+                                                    เต็ง-โต๊ด
+                                                </button>
+                                                <button
+                                                    className={`bet-type-btn ${editForm.bet_type === '3_straight_perm' ? 'active' : ''}`}
+                                                    onClick={() => setEditForm({ ...editForm, bet_type: '3_straight_perm' })}
+                                                >
+                                                    1+กลับ
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )
+                                }
+                                return (
+                                    <div className="edit-info">
+                                        <span className="edit-bet-type">
+                                            {BET_TYPES[editingSubmission.bet_type]?.label || editingSubmission.bet_type}
+                                        </span>
+                                    </div>
+                                )
+                            })()}
+
                             <div className="form-group">
                                 <label className="form-label">ตัวเลข</label>
                                 <input
@@ -2278,6 +2457,7 @@ export default function UserDashboard() {
                                     const isLaoOrHanoi = selectedRound && ['lao', 'hanoi'].includes(selectedRound.lottery_type)
                                     const isSetBasedBet = isLaoOrHanoi && editingSubmission.bet_type === '4_set'
                                     const setPrice = selectedRound?.set_prices?.['4_top'] || 120
+                                    const isSpecialBetType = editForm.bet_type === '3_straight_tod' || editForm.bet_type === '3_straight_perm'
 
                                     if (isSetBasedBet) {
                                         return (
@@ -2297,6 +2477,39 @@ export default function UserDashboard() {
                                                 {editForm.amount && (
                                                     <div className="amount-preview">
                                                         รวม: {(parseInt(editForm.amount) || 0) * setPrice} {selectedRound?.currency_name || 'บาท'}
+                                                    </div>
+                                                )}
+                                            </>
+                                        )
+                                    } else if (isSpecialBetType) {
+                                        // For special bet types, show * format input
+                                        const amountParts = editForm.amount.includes('*') ?
+                                            editForm.amount.split('*').map(p => parseFloat(p) || 0) : [parseFloat(editForm.amount) || 0, 0]
+                                        const totalAmount = amountParts.reduce((sum, p) => sum + p, 0)
+
+                                        return (
+                                            <>
+                                                <label className="form-label">
+                                                    {editForm.bet_type === '3_straight_tod' ? 'จำนวนเงิน (ตรง*โต๊ด)' : 'จำนวนเงิน (ตรง*กลับ)'}
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    className="form-input"
+                                                    inputMode="text"
+                                                    value={editForm.amount}
+                                                    onChange={e => setEditForm({
+                                                        ...editForm,
+                                                        amount: e.target.value.replace(/[^0-9*]/g, '')
+                                                    })}
+                                                    placeholder="100*20"
+                                                />
+                                                {editForm.amount && (
+                                                    <div className="amount-preview">
+                                                        {editForm.bet_type === '3_straight_tod' ? (
+                                                            <>ตรง: {amountParts[0] || 0} | โต๊ด: {amountParts[1] || 0} | รวม: {totalAmount}</>
+                                                        ) : (
+                                                            <>ตรง: {amountParts[0] || 0} | กลับ: {amountParts[1] || 0} | รวม: {totalAmount}</>
+                                                        )}
                                                     </div>
                                                 )}
                                             </>

@@ -3194,6 +3194,202 @@
     color: var(--color-text);
 }
 
+.form-row-inline>.form-group {
+    flex: 1;
+    min-width: 0;
+    margin-bottom: 0;
+}
+
+.form-row-inline>.form-group:first-child {
+    flex: 0.85;
+    /* Give number input slightly more space */
+}
+
+.form-row-inline>.form-group:last-child {
+    flex: 1.15;
+    /* Amount input can be smaller */
+}
+
+.form-row-inline .form-label {
+    font-size: 0.75rem;
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.form-row-inline .form-input {
+    width: 100%;
+    padding: 0.5rem 0.5rem;
+}
+
+/* Optimize number input for mobile inline layout */
+.form-row-inline .number-input {
+    font-size: 1.25rem !important;
+    letter-spacing: 0.1em !important;
+    padding: 0.6rem 0.4rem !important;
+}
+
+/* Optimize amount input for mobile inline layout */
+.form-row-inline .amount-input {
+    font-size: 1.1rem;
+    text-align: center;
+    padding: 0.6rem 0.4rem;
+}
+
+/* Ensure the clear button fits well */
+.form-row-inline .input-with-clear {
+    position: relative;
+}
+
+.form-row-inline .input-with-clear .clear-btn {
+    position: absolute;
+    right: 0.25rem;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 0.25rem;
+    width: 20px;
+    height: 20px;
+}
+
+.form-row-inline .input-with-clear .amount-input {
+    padding-right: 1.5rem;
+}
+
+/* =============================================
+   CLICKABLE TABLE ROWS
+   ============================================= */
+
+.clickable-row {
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.clickable-row:hover {
+    background: rgba(212, 175, 55, 0.08) !important;
+}
+
+.clickable-row.editable:hover {
+    background: rgba(212, 175, 55, 0.12) !important;
+}
+
+.clickable-row.editable td:first-child::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: transparent;
+    transition: background 0.15s ease;
+}
+
+.clickable-row.editable:hover td:first-child::before {
+    background: var(--color-primary);
+}
+
+.submissions-table td {
+    position: relative;
+}
+
+/* =============================================
+   EDIT SUBMISSION MODAL
+   ============================================= */
+
+.edit-modal {
+    max-width: 400px;
+    width: 90%;
+}
+
+.edit-modal .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.edit-modal .modal-header h3 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+.edit-modal .modal-body {
+    padding: 1.25rem;
+}
+
+.edit-info {
+    text-align: center;
+    margin-bottom: 1.25rem;
+}
+
+.edit-bet-type {
+    display: inline-block;
+    background: var(--color-primary);
+    color: #000;
+    padding: 0.4rem 1rem;
+    border-radius: var(--radius-full);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.edit-modal .form-group {
+    margin-bottom: 1rem;
+}
+
+.edit-modal .form-label {
+    display: block;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    margin-bottom: 0.4rem;
+}
+
+.edit-modal .form-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    font-size: 1.1rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    color: var(--color-text);
+    transition: border-color 0.2s ease;
+}
+
+.edit-modal .form-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.edit-modal .number-input {
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 1.5rem;
+    font-weight: 700;
+    text-align: center;
+    letter-spacing: 0.2em;
+    color: var(--color-primary);
+}
+
+.edit-modal .form-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+}
+
+.edit-modal .form-actions .btn {
+    flex: 1;
+    padding: 0.75rem;
+    font-size: 1rem;
+}
+
+.btn-secondary {
+    background: var(--color-surface-light);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+}
+
 .btn-secondary:hover {
     background: rgba(255, 255, 255, 0.1);
 }
@@ -3209,4 +3405,45 @@
     font-size: 0.9rem;
     font-weight: 600;
     text-align: center;
+}
+
+/* Edit bet type selector for special types */
+.edit-bet-type-selector {
+    margin-bottom: 1.25rem;
+}
+
+.edit-bet-type-selector .form-label {
+    display: block;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+}
+
+.edit-bet-type-selector .bet-type-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.edit-bet-type-selector .bet-type-btn {
+    flex: 1;
+    padding: 0.6rem 0.75rem;
+    background: var(--color-surface-light);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    color: var(--color-text);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.edit-bet-type-selector .bet-type-btn:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.edit-bet-type-selector .bet-type-btn.active {
+    border-color: var(--color-primary);
+    background: rgba(212, 175, 55, 0.15);
+    color: var(--color-primary);
+    font-weight: 600;
 }
