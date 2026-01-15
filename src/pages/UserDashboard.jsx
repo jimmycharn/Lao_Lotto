@@ -1036,6 +1036,9 @@ export default function UserDashboard() {
             displayBetType.includes('1+กลับ') ||
             (displayAmount.includes('*') && !isSetBasedBet)
 
+        // Check if this is a grouped entry (has entry_id and display values)
+        const isGroupedEntry = submission.entry_id && submission.display_amount
+
         // Determine the edit bet_type based on display_bet_type
         let editBetType = submission.bet_type
         if (displayBetType.includes('เต็ง-โต๊ด')) {
@@ -1052,6 +1055,10 @@ export default function UserDashboard() {
             const setPrice = selectedRound?.set_prices?.['4_top'] || 120
             const setCount = Math.round(submission.amount / setPrice)
             editAmount = setCount.toString()
+        } else if (isGroupedEntry) {
+            // For grouped entries, use display values (per-item amount, not total)
+            editNumbers = submission.display_numbers || submission.numbers || ''
+            editAmount = displayAmount || submission.amount?.toString() || ''
         } else if (isSpecialBetType) {
             // For special bet types, use display values
             editNumbers = submission.display_numbers || submission.numbers || ''
