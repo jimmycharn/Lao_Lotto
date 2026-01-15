@@ -1733,7 +1733,13 @@ export default function UserDashboard() {
                 <div className="user-tabs">
                     <button
                         className={`tab-btn ${activeTab === 'rounds' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('rounds')}
+                        onClick={() => {
+                            setActiveTab('rounds')
+                            // Always fetch rounds to get latest data when clicking this tab
+                            if (selectedDealer) {
+                                fetchRounds()
+                            }
+                        }}
                     >
                         <FiCalendar /> งวดที่เปิด
                     </button>
