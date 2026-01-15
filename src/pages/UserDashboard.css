@@ -3475,6 +3475,7 @@
     border: 1px dashed var(--color-border);
     border-radius: var(--radius-md);
 }
+
 /* Edit Form Row - Number and Amount on same line */
 .edit-form-row {
     display: flex;
@@ -3513,25 +3514,41 @@
     letter-spacing: 0.15em;
     text-align: center;
 }
- 
- 
-/* Bill Action Buttons */
+
+   
+
+/* Bill Action Buttons - Inline with time row */
+.bill-sub-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.bill-info-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex: 1;
+}
+
 .bill-action-buttons {
     display: flex;
     gap: 0.5rem;
-    margin-top: 0.75rem;
-    padding-top: 0.75rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin-left: auto;
 }
 
 .bill-action-btn {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
-    padding: 0.5rem 0.75rem;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
     border-radius: var(--radius-md);
-    font-size: 0.85rem;
-    font-weight: 500;
+    font-size: 1rem;
     cursor: pointer;
     transition: all 0.2s ease;
     border: none;
@@ -3540,19 +3557,19 @@
 .bill-action-btn.edit {
     background: rgba(59, 130, 246, 0.15);
     color: #60a5fa;
-    flex: 1;
 }
 
 .bill-action-btn.edit:hover {
-    background: rgba(59, 130, 246, 0.25);
+    background: rgba(59, 130, 246, 0.3);
+    transform: scale(1.05);
 }
 
 .bill-action-btn.delete {
     background: rgba(239, 68, 68, 0.15);
     color: #f87171;
-    flex: 1;
 }
 
 .bill-action-btn.delete:hover {
-    background: rgba(239, 68, 68, 0.25);
+    background: rgba(239, 68, 68, 0.3);
+    transform: scale(1.05);
 }
