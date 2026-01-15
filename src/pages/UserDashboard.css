@@ -3475,3 +3475,43 @@
     border: 1px dashed var(--color-border);
     border-radius: var(--radius-md);
 }
+/* Edit Form Row - Number and Amount on same line */
+.edit-form-row {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.edit-form-row .form-group {
+    margin-bottom: 0;
+}
+
+.edit-number-group {
+    flex: 0.8;
+    min-width: 0;
+}
+
+.edit-amount-group {
+    flex: 1.2;
+    min-width: 0;
+}
+
+.edit-form-row .form-label {
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.edit-form-row .form-input {
+    width: 100%;
+    padding: 0.65rem 0.75rem;
+}
+
+.edit-form-row .number-input {
+    font-size: 1.25rem;
+    letter-spacing: 0.15em;
+    text-align: center;
+}
+ 
+ 

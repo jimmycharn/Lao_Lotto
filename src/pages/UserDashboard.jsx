@@ -2717,40 +2717,41 @@ export default function UserDashboard() {
                             </button>
                         </div>
                         <div className="modal-body">
-                            {/* Number Input */}
-                            <div className="form-group">
-                                <label className="form-label">ตัวเลข</label>
-                                <input
-                                    type="text"
-                                    className="form-input number-input"
-                                    inputMode="numeric"
-                                    value={editForm.numbers}
-                                    onChange={e => setEditForm({
-                                        ...editForm,
-                                        numbers: e.target.value.replace(/[^0-9]/g, '')
-                                    })}
-                                    autoFocus
-                                    placeholder="กรอกเลข"
-                                />
-                            </div>
+                            {/* Number and Amount Inputs - Same Row */}
+                            <div className="edit-form-row">
+                                <div className="form-group edit-number-group">
+                                    <label className="form-label">ตัวเลข</label>
+                                    <input
+                                        type="text"
+                                        className="form-input number-input"
+                                        inputMode="numeric"
+                                        value={editForm.numbers}
+                                        onChange={e => setEditForm({
+                                            ...editForm,
+                                            numbers: e.target.value.replace(/[^0-9]/g, '')
+                                        })}
+                                        autoFocus
+                                        placeholder="เลข"
+                                    />
+                                </div>
 
-                            {/* Amount Input */}
-                            <div className="form-group">
-                                <label className="form-label">
-                                    จำนวนเงิน ({selectedRound?.currency_name || 'บาท'})
-                                    <span className="amount-hint"> - ใส่ * เพื่อแยกจำนวน เช่น 100*20</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    className="form-input"
-                                    inputMode="text"
-                                    value={editForm.amount}
-                                    onChange={e => setEditForm({
-                                        ...editForm,
-                                        amount: e.target.value.replace(/[^0-9*]/g, '')
-                                    })}
-                                    placeholder="100 หรือ 100*20"
-                                />
+                                <div className="form-group edit-amount-group">
+                                    <label className="form-label">
+                                        จำนวนเงิน
+                                        <span className="amount-hint"> (*แยก)</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        className="form-input"
+                                        inputMode="text"
+                                        value={editForm.amount}
+                                        onChange={e => setEditForm({
+                                            ...editForm,
+                                            amount: e.target.value.replace(/[^0-9*]/g, '')
+                                        })}
+                                        placeholder="100*20"
+                                    />
+                                </div>
                             </div>
 
                             {/* Bet Type Buttons - Dynamic based on digit count */}
