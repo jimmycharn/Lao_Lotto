@@ -2587,6 +2587,201 @@
     display: block;
     font-size: 1.25rem;
     font-weight: 700;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.commission-rate-item .bet-type-label {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+}
+
+.commission-rate-item .rate-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--color-primary);
+}
+
+.empty-state.small {
+    padding: 1rem;
+    text-align: center;
+}
+
+.empty-state.small p {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+}
+
+.commission-rate-item.payout .rate-value {
+    color: #22c55e;
+}
+
+/* =============================================
+   SEARCH BAR
+   ============================================= */
+
+.search-bar-container {
+    margin-bottom: 1rem;
+}
+
+.search-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.search-input-wrapper .search-icon {
+    position: absolute;
+    left: 1rem;
+    color: var(--color-text-muted);
+    font-size: 1.1rem;
+    pointer-events: none;
+}
+
+.search-input {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    padding-left: 2.75rem;
+    padding-right: 2.75rem;
+    background: var(--color-surface-light);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-lg);
+    color: var(--color-text);
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+}
+
+.search-input::placeholder {
+    color: var(--color-text-muted);
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    background: var(--color-surface);
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1);
+}
+
+.search-clear-btn {
+    position: absolute;
+    right: 0.75rem;
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease;
+}
+
+.search-clear-btn:hover {
+    color: var(--color-text);
+}
+
+/* Search Results Count */
+.search-results-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}
+
+.search-results-info .highlight {
+    color: var(--color-primary);
+    font-weight: 600;
+}
+
+@media (max-width: 640px) {
+    .search-input {
+        padding: 0.75rem 1rem;
+        padding-left: 2.5rem;
+        padding-right: 2.5rem;
+        font-size: 0.9rem;
+    }
+}
+
+/* =============================================
+   RESULTS HEADER SUMMARY
+   ============================================= */
+
+.results-header-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding-top: 1rem;
+    margin-top: 0.75rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.results-header-summary .summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.results-header-summary .summary-item .label {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+}
+
+.results-header-summary .summary-item.profit.positive {
+    color: var(--color-success);
+}
+
+.results-header-summary .summary-item.profit.negative {
+    color: var(--color-danger);
+}
+
+/* =============================================
+   WINNING NUMBERS SECTION
+   ============================================= */
+
+.winning-numbers-section {
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.1), rgba(0, 210, 106, 0.05));
+    border: 1px solid rgba(212, 175, 55, 0.2);
+    border-radius: var(--radius-md);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.winning-numbers-section h4 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--color-primary);
+    font-size: 1rem;
+    margin-bottom: 1rem;
+}
+
+.winning-numbers-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 0.75rem;
+}
+
+.winning-number-item {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem;
+    text-align: center;
+}
+
+.winning-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-bottom: 0.25rem;
+}
+
+.winning-value {
+    display: block;
+    font-size: 1.25rem;
+    font-weight: 700;
     color: var(--color-primary);
     font-family: 'Monaco', 'Menlo', monospace;
     letter-spacing: 0.1em;
@@ -2595,4 +2790,77 @@
 /* Rotated chevron for accordion */
 .round-header-status svg.rotated {
     transform: rotate(180deg);
+}
+
+/* =============================================
+   FORM ROW INLINE - Keep inputs side by side on mobile
+   ============================================= */
+
+.form-row-inline {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 0.5rem;
+    align-items: flex-start;
+}
+
+.form-row-inline>.form-group {
+    flex: 1;
+    min-width: 0;
+    margin-bottom: 0;
+}
+
+.form-row-inline>.form-group:first-child {
+    flex: 0.85;
+    /* Give number input slightly more space */
+}
+
+.form-row-inline>.form-group:last-child {
+    flex: 1.15;
+    /* Amount input can be smaller */
+}
+
+.form-row-inline .form-label {
+    font-size: 0.75rem;
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.form-row-inline .form-input {
+    width: 100%;
+    padding: 0.5rem 0.5rem;
+}
+
+/* Optimize number input for mobile inline layout */
+.form-row-inline .number-input {
+    font-size: 1.25rem !important;
+    letter-spacing: 0.1em !important;
+    padding: 0.6rem 0.4rem !important;
+}
+
+/* Optimize amount input for mobile inline layout */
+.form-row-inline .amount-input {
+    font-size: 1.1rem;
+    text-align: center;
+    padding: 0.6rem 0.4rem;
+}
+
+/* Ensure the clear button fits well */
+.form-row-inline .input-with-clear {
+    position: relative;
+}
+
+.form-row-inline .input-with-clear .clear-btn {
+    position: absolute;
+    right: 0.25rem;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 0.25rem;
+    width: 20px;
+    height: 20px;
+}
+
+.form-row-inline .input-with-clear .amount-input {
+    padding-right: 1.5rem;
 }

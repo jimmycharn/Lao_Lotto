@@ -1765,7 +1765,7 @@ export default function UserDashboard() {
 
                             <div className="input-section card">
 
-                                <div className="form-row">
+                                <div className="form-row form-row-inline">
                                     <div className="form-group">
                                         <label className="form-label">ตัวเลข</label>
                                         <input
