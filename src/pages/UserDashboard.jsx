@@ -174,6 +174,7 @@ export default function UserDashboard() {
     const [isEditingBill, setIsEditingBill] = useState(false) // Track if editing existing bill
     const [isDraftsExpanded, setIsDraftsExpanded] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
+    const [filterBetType, setFilterBetType] = useState('') // Filter by bet type
     const numberInputRef = useRef(null)
     const amountInputRef = useRef(null)
 
@@ -1859,15 +1860,14 @@ export default function UserDashboard() {
                                                             <span className="summary-label">ค่าคอม</span>
                                                         </div>
                                                     </div>
-
-                                                    {/* Search Bar */}
+                                                    {/* Search Bar and Filter */}
                                                     <div className="search-bar-container">
                                                         <div className="search-input-wrapper">
                                                             <FiSearch className="search-icon" />
                                                             <input
                                                                 type="text"
                                                                 className="search-input"
-                                                                placeholder="ค้นหาเลข, ใบโพย, ประเภท..."
+                                                                placeholder="ค้นหาเลข, ใบโพย..."
                                                                 value={searchQuery}
                                                                 onChange={(e) => setSearchQuery(e.target.value)}
                                                             />
@@ -1880,6 +1880,16 @@ export default function UserDashboard() {
                                                                 </button>
                                                             )}
                                                         </div>
+                                                        <select
+                                                            className="filter-select"
+                                                            value={filterBetType}
+                                                            onChange={(e) => setFilterBetType(e.target.value)}
+                                                        >
+                                                            <option value="">ทุกประเภท</option>
+                                                            {Object.entries(BET_TYPES).map(([key, { label }]) => (
+                                                                <option key={key} value={key}>{label}</option>
+                                                            ))}
+                                                        </select>
                                                     </div>
 
                                                     <div className="submissions-list card">
@@ -1905,20 +1915,28 @@ export default function UserDashboard() {
                                                         ) : (
                                                             <div className="submissions-table-wrap">
                                                                 {(() => {
-                                                                    // Filter submissions based on search query
+                                                                    // Filter submissions based on search query and bet type
                                                                     const filterSubmissions = (items) => {
-                                                                        if (!searchQuery.trim()) return items
-                                                                        const query = searchQuery.toLowerCase().trim()
-                                                                        return items.filter(sub => {
-                                                                            if (sub.numbers?.toLowerCase().includes(query)) return true
-                                                                            if (sub.display_numbers?.toLowerCase().includes(query)) return true
-                                                                            if (sub.bill_id?.toLowerCase().includes(query)) return true
-                                                                            const betTypeLabel = BET_TYPES[sub.bet_type]?.label || sub.bet_type || ''
-                                                                            if (betTypeLabel.toLowerCase().includes(query)) return true
-                                                                            if (sub.display_bet_type?.toLowerCase().includes(query)) return true
-                                                                            if (sub.bill_note?.toLowerCase().includes(query)) return true
-                                                                            return false
-                                                                        })
+                                                                        let filtered = items
+
+                                                                        // Filter by bet type
+                                                                        if (filterBetType) {
+                                                                            filtered = filtered.filter(sub => sub.bet_type === filterBetType)
+                                                                        }
+
+                                                                        // Filter by search query
+                                                                        if (searchQuery.trim()) {
+                                                                            const query = searchQuery.toLowerCase().trim()
+                                                                            filtered = filtered.filter(sub => {
+                                                                                if (sub.numbers?.toLowerCase().includes(query)) return true
+                                                                                if (sub.display_numbers?.toLowerCase().includes(query)) return true
+                                                                                if (sub.bill_id?.toLowerCase().includes(query)) return true
+                                                                                if (sub.bill_note?.toLowerCase().includes(query)) return true
+                                                                                return false
+                                                                            })
+                                                                        }
+
+                                                                        return filtered
                                                                     }
                                                                     const filteredSubs = filterSubmissions(submissions)
 
