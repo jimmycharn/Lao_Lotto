@@ -59,10 +59,7 @@ const BET_TYPES = {
     '4_float': { label: '4 ตัวลอย', digits: 4 },
 
     // 5 Digits
-    '5_float': { label: '5 ตัวลอย', digits: 5 },
-
-    // 6 Digits
-    '6_top': { label: '6 ตัว (รางวัลที่ 1)', digits: 6 }
+    '5_float': { label: '5 ตัวลอย', digits: 5 }
 }
 
 // Lottery type labels
