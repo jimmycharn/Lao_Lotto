@@ -171,6 +171,7 @@ export default function UserDashboard() {
     const [expandedBills, setExpandedBills] = useState([])
     const [currentBillId, setCurrentBillId] = useState(null)
     const [billNote, setBillNote] = useState('')
+    const [isEditingBill, setIsEditingBill] = useState(false) // Track if editing existing bill
     const [isDraftsExpanded, setIsDraftsExpanded] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
     const numberInputRef = useRef(null)
@@ -854,9 +855,29 @@ export default function UserDashboard() {
         try {
             const billId = currentBillId || generateUUID()
 
+            // If editing an existing bill, delete old submissions first
+            if (isEditingBill && currentBillId) {
+                const { error: deleteError } = await supabase
+                    .from('submissions')
+                    .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+                    .eq('bill_id', currentBillId)
+                    .eq('round_id', selectedRound.id)
+
+                if (deleteError) throw deleteError
+            }
+
             const inserts = drafts.map(d => {
-                // Remove original_count as it's only for UI tracking, not in DB schema
-                const { original_count, ...rest } = d
+                // Remove fields that are only for UI tracking, not in DB schema
+                // Keep entry_id for grouping! Only remove id so DB generates new UUID
+                const {
+                    id,           // Remove so DB generates new UUID
+                    original_count,
+                    commission,   // UI field, DB uses commission_amount
+                    originalId,   // UI tracking
+                    displayBetType,  // UI display
+                    displayAmount,   // UI display
+                    ...rest
+                } = d
                 return {
                     ...rest,
                     round_id: selectedRound.id,
@@ -872,9 +893,10 @@ export default function UserDashboard() {
             setDrafts([])
             setCurrentBillId(null)
             setBillNote('')
+            setIsEditingBill(false) // Reset edit mode
             setShowSubmitModal(false)
             fetchSubmissions()
-            setToast({ message: 'บันทึกโพยสำเร็จ!', type: 'success' })
+            setToast({ message: isEditingBill ? 'แก้ไขโพยสำเร็จ!' : 'บันทึกโพยสำเร็จ!', type: 'success' })
 
         } catch (error) {
             console.error('Error saving bill:', error)
@@ -961,6 +983,7 @@ export default function UserDashboard() {
         setDrafts(newDrafts)
         setCurrentBillId(billId)
         setBillNote(billItems[0]?.bill_note || '')
+        setIsEditingBill(true) // Mark as editing existing bill
         setIsDraftsExpanded(true)
 
         // Reset submit form
