@@ -176,6 +176,11 @@ export default function UserDashboard() {
     const numberInputRef = useRef(null)
     const amountInputRef = useRef(null)
 
+    // Edit submission state
+    const [editingSubmission, setEditingSubmission] = useState(null)
+    const [editForm, setEditForm] = useState({ numbers: '', amount: '' })
+    const [editSaving, setEditSaving] = useState(false)
+
 
     // Auto-hide toast
     useEffect(() => {
@@ -916,6 +921,111 @@ export default function UserDashboard() {
         }
     }
 
+    // Open edit modal for a submission
+    function handleEditSubmission(submission) {
+        // Only allow editing if within delete deadline
+        if (!canDelete(submission)) {
+            alert('ไม่สามารถแก้ไขได้ เนื่องจากเลยเวลาที่กำหนด')
+            return
+        }
+
+        // Check if this is a set-based bet (4_set on Lao/Hanoi)
+        const isLaoOrHanoi = selectedRound && ['lao', 'hanoi'].includes(selectedRound.lottery_type)
+        const isSetBasedBet = isLaoOrHanoi && submission.bet_type === '4_set'
+
+        // For set-based bets, convert amount back to set count for editing
+        let editAmount = submission.amount?.toString() || ''
+        if (isSetBasedBet && submission.amount) {
+            const setPrice = selectedRound?.set_prices?.['4_top'] || 120
+            const setCount = Math.round(submission.amount / setPrice)
+            editAmount = setCount.toString()
+        }
+
+        setEditingSubmission(submission)
+        setEditForm({
+            numbers: submission.numbers || '',
+            amount: editAmount
+        })
+    }
+
+    // Save edited submission
+    async function handleSaveEdit() {
+        if (!editingSubmission) return
+
+        const newNumbers = editForm.numbers.replace(/\s/g, '')
+
+        // Check if this is a set-based bet (4_set on Lao/Hanoi)
+        const isLaoOrHanoi = selectedRound && ['lao', 'hanoi'].includes(selectedRound.lottery_type)
+        const isSetBasedBet = isLaoOrHanoi && editingSubmission.bet_type === '4_set'
+
+        let newAmount
+        let setCount = 1
+        let displayAmount
+
+        if (isSetBasedBet) {
+            // For 4 ตัวชุด on Lao/Hanoi: editForm.amount = number of sets
+            setCount = parseInt(editForm.amount) || 1
+            const setPrice = selectedRound?.set_prices?.['4_top'] || 120
+            newAmount = setCount * setPrice
+            displayAmount = `${newAmount} บาท (${setCount} ชุด)`
+        } else {
+            newAmount = parseFloat(editForm.amount)
+            displayAmount = newAmount.toString()
+        }
+
+        if (!newNumbers) {
+            alert('กรุณากรอกเลข')
+            return
+        }
+        if (!newAmount || newAmount <= 0) {
+            alert(isSetBasedBet ? 'กรุณากรอกจำนวนชุดที่ถูกต้อง' : 'กรุณากรอกจำนวนเงินที่ถูกต้อง')
+            return
+        }
+
+        setEditSaving(true)
+        try {
+            // Recalculate commission based on new amount using user settings
+            // For 4_set, use '4_top' commission settings
+            const commLookupBetType = isSetBasedBet ? '4_top' : editingSubmission.bet_type
+            const commInfo = getCommissionForBetType(commLookupBetType, userSettings)
+
+            let newCommission = 0
+            if (isSetBasedBet) {
+                // For set-based bets: commission = setCount × commission_rate_per_set
+                newCommission = setCount * commInfo.rate
+            } else if (commInfo.isFixed) {
+                newCommission = commInfo.rate
+            } else {
+                newCommission = (newAmount * commInfo.rate) / 100
+            }
+
+            const { error } = await supabase
+                .from('submissions')
+                .update({
+                    numbers: newNumbers,
+                    amount: newAmount,
+                    display_numbers: newNumbers,
+                    display_amount: displayAmount,
+                    commission_rate: commInfo.rate,
+                    commission_amount: newCommission,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', editingSubmission.id)
+
+            if (error) throw error
+
+            setEditingSubmission(null)
+            setEditForm({ numbers: '', amount: '' })
+            fetchSubmissions()
+            setToast({ message: 'แก้ไขรายการสำเร็จ', type: 'success' })
+        } catch (error) {
+            console.error('Error updating submission:', error)
+            alert('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setEditSaving(false)
+        }
+    }
+
     // Format time remaining
     function formatTimeRemaining(closeTime) {
         const now = new Date()
@@ -1357,7 +1467,11 @@ export default function UserDashboard() {
                                                                                                         </thead>
                                                                                                         <tbody>
                                                                                                             {processedBillItems.map(sub => (
-                                                                                                                <tr key={sub.id || sub.entry_id}>
+                                                                                                                <tr
+                                                                                                                    key={sub.id || sub.entry_id}
+                                                                                                                    className={`clickable-row ${canDelete(sub) ? 'editable' : ''}`}
+                                                                                                                    onClick={() => handleEditSubmission(sub)}
+                                                                                                                >
                                                                                                                     <td className="number-cell">
                                                                                                                         <div className="number-display">
                                                                                                                             <span className="main-number">
@@ -1411,7 +1525,11 @@ export default function UserDashboard() {
                                                                                 </thead>
                                                                                 <tbody>
                                                                                     {displayItems.map(sub => (
-                                                                                        <tr key={sub.id || sub.entry_id} className={sub.is_winner ? 'winner' : ''}>
+                                                                                        <tr
+                                                                                            key={sub.id || sub.entry_id}
+                                                                                            className={`${sub.is_winner ? 'winner' : ''} clickable-row ${canDelete(sub) ? 'editable' : ''}`}
+                                                                                            onClick={() => handleEditSubmission(sub)}
+                                                                                        >
                                                                                             <td className="number-cell">
                                                                                                 <div className="number-display">
                                                                                                     <span className="main-number">
@@ -1436,7 +1554,10 @@ export default function UserDashboard() {
                                                                                                 {canDelete(sub) && (
                                                                                                     <button
                                                                                                         className="icon-btn danger"
-                                                                                                        onClick={() => handleDelete(sub)}
+                                                                                                        onClick={(e) => {
+                                                                                                            e.stopPropagation()
+                                                                                                            handleDelete(sub)
+                                                                                                        }}
                                                                                                         title="ลบ"
                                                                                                     >
                                                                                                         <FiTrash2 />
@@ -2118,6 +2239,104 @@ export default function UserDashboard() {
                                 <FiCheck /> {toast.message}
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Submission Modal */}
+            {editingSubmission && (
+                <div className="modal-overlay" onClick={() => setEditingSubmission(null)}>
+                    <div className="modal edit-modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3><FiEdit2 /> แก้ไขรายการ</h3>
+                            <button className="modal-close" onClick={() => setEditingSubmission(null)}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="edit-info">
+                                <span className="edit-bet-type">
+                                    {BET_TYPES[editingSubmission.bet_type]?.label || editingSubmission.bet_type}
+                                </span>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">ตัวเลข</label>
+                                <input
+                                    type="text"
+                                    className="form-input number-input"
+                                    inputMode="numeric"
+                                    value={editForm.numbers}
+                                    onChange={e => setEditForm({
+                                        ...editForm,
+                                        numbers: e.target.value.replace(/[^0-9]/g, '')
+                                    })}
+                                    autoFocus
+                                />
+                            </div>
+                            <div className="form-group">
+                                {(() => {
+                                    const isLaoOrHanoi = selectedRound && ['lao', 'hanoi'].includes(selectedRound.lottery_type)
+                                    const isSetBasedBet = isLaoOrHanoi && editingSubmission.bet_type === '4_set'
+                                    const setPrice = selectedRound?.set_prices?.['4_top'] || 120
+
+                                    if (isSetBasedBet) {
+                                        return (
+                                            <>
+                                                <label className="form-label">จำนวนชุด (ชุดละ {setPrice} {selectedRound?.currency_name || 'บาท'})</label>
+                                                <input
+                                                    type="text"
+                                                    className="form-input"
+                                                    inputMode="numeric"
+                                                    value={editForm.amount}
+                                                    onChange={e => setEditForm({
+                                                        ...editForm,
+                                                        amount: e.target.value.replace(/[^0-9]/g, '')
+                                                    })}
+                                                    placeholder="จำนวนชุด"
+                                                />
+                                                {editForm.amount && (
+                                                    <div className="amount-preview">
+                                                        รวม: {(parseInt(editForm.amount) || 0) * setPrice} {selectedRound?.currency_name || 'บาท'}
+                                                    </div>
+                                                )}
+                                            </>
+                                        )
+                                    } else {
+                                        return (
+                                            <>
+                                                <label className="form-label">จำนวนเงิน ({selectedRound?.currency_name || 'บาท'})</label>
+                                                <input
+                                                    type="text"
+                                                    className="form-input"
+                                                    inputMode="decimal"
+                                                    value={editForm.amount}
+                                                    onChange={e => setEditForm({
+                                                        ...editForm,
+                                                        amount: e.target.value.replace(/[^0-9.]/g, '')
+                                                    })}
+                                                />
+                                            </>
+                                        )
+                                    }
+                                })()}
+                            </div>
+
+                            <div className="form-actions">
+                                <button
+                                    className="btn btn-secondary"
+                                    onClick={() => setEditingSubmission(null)}
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={handleSaveEdit}
+                                    disabled={editSaving}
+                                >
+                                    {editSaving ? 'กำลังบันทึก...' : 'บันทึก'}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
