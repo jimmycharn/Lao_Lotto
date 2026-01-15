@@ -167,7 +167,7 @@ export default function UserDashboard() {
     const [toast, setToast] = useState(null)
     const [drafts, setDrafts] = useState([])
     const [displayMode, setDisplayMode] = useState('summary') // summary, detailed
-    const [isGroupByBill, setIsGroupByBill] = useState(false)
+    const [isGroupByBill, setIsGroupByBill] = useState(true)
     const [expandedBills, setExpandedBills] = useState([])
     const [currentBillId, setCurrentBillId] = useState(null)
     const [billNote, setBillNote] = useState('')
@@ -966,18 +966,36 @@ export default function UserDashboard() {
 
     // Edit bill - load all submissions as drafts and allow adding/removing
     function handleEditBill(billId, billItems) {
+        // Group items by entry_id to calculate original_count
+        const entryGroups = billItems.reduce((acc, item) => {
+            const key = item.entry_id || item.id
+            if (!acc[key]) {
+                acc[key] = []
+            }
+            acc[key].push(item)
+            return acc
+        }, {})
+
         // Convert bill items to draft format matching the drafts state structure
-        const newDrafts = billItems.map((item, index) => ({
-            id: `edit-${billId}-${index}`,
-            originalId: item.id,
-            entry_id: item.entry_id,
-            numbers: item.display_numbers || item.numbers,
-            bet_type: item.bet_type,
-            amount: item.amount,
-            displayBetType: item.display_bet_type || BET_TYPES[item.bet_type]?.label || item.bet_type,
-            displayAmount: item.display_amount || item.amount?.toString(),
-            commission: item.commission_amount
-        }))
+        const newDrafts = billItems.map((item, index) => {
+            const entryId = item.entry_id || item.id
+            const groupSize = entryGroups[entryId]?.length || 1
+
+            return {
+                id: `edit-${billId}-${index}`,
+                originalId: item.id,
+                entry_id: item.entry_id,
+                numbers: item.numbers, // Keep actual numbers for DB
+                bet_type: item.bet_type,
+                amount: item.amount,
+                commission_rate: item.commission_rate,
+                commission_amount: item.commission_amount,
+                display_numbers: item.display_numbers || item.numbers, // For display
+                display_bet_type: item.display_bet_type || BET_TYPES[item.bet_type]?.label || item.bet_type,
+                display_amount: item.display_amount || item.amount?.toString(),
+                original_count: groupSize // Track original group size for collapsed view
+            }
+        })
 
         // Set drafts and bill info for editing
         setDrafts(newDrafts)
@@ -1862,28 +1880,6 @@ export default function UserDashboard() {
                                                             <h3>รายการที่ส่ง</h3>
                                                             <div className="view-toggle-group">
                                                                 <div className="view-toggle-container">
-                                                                    <span className="toggle-label">แสดงผล</span>
-                                                                    <div className="view-toggle">
-                                                                        <button
-                                                                            className={`toggle-btn ${displayMode === 'summary' ? 'active' : ''}`}
-                                                                            onClick={() => setDisplayMode('summary')}
-                                                                            title="แบบย่อ"
-                                                                        >
-                                                                            <FiList /> <span>แบบย่อ</span>
-                                                                        </button>
-                                                                        <button
-                                                                            className={`toggle-btn ${displayMode === 'detailed' ? 'active' : ''}`}
-                                                                            onClick={() => setDisplayMode('detailed')}
-                                                                            title="แบบขยาย"
-                                                                        >
-                                                                            <FiGrid /> <span>แบบขยาย</span>
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-
-                                                                <div className="divider-v"></div>
-
-                                                                <div className="view-toggle-container">
                                                                     <span className="toggle-label">จัดกลุ่ม</span>
                                                                     <button
                                                                         className={`toggle-btn group-toggle ${isGroupByBill ? 'active' : ''}`}
@@ -2659,22 +2655,13 @@ export default function UserDashboard() {
                                     <h4>รายการที่เลือก ({drafts.length})</h4>
                                     <div className="section-header-actions">
                                         {drafts.length > 0 && (
-                                            <>
-                                                <button
-                                                    className={`toggle-btn compact ${isDraftsExpanded ? 'active' : ''}`}
-                                                    onClick={() => setIsDraftsExpanded(!isDraftsExpanded)}
-                                                >
-                                                    {isDraftsExpanded ? <FiChevronUp /> : <FiChevronDown />}
-                                                    {isDraftsExpanded ? 'ย่อ' : 'ขยาย'}
-                                                </button>
-                                                <button className="text-btn danger" onClick={() => setDrafts([])}>
-                                                    ล้างทั้งหมด
-                                                </button>
-                                            </>
+                                            <button className="text-btn danger" onClick={() => setDrafts([])}>
+                                                ล้างทั้งหมด
+                                            </button>
                                         )}
                                     </div>
                                 </div>
-                                <div className={`drafts-list ${isDraftsExpanded ? 'expanded' : 'collapsed'}`}>
+                                <div className="drafts-list">
                                     {drafts.length === 0 ? (
                                         <div className="empty-draft">ยังไม่มีรายการ</div>
                                     ) : (
@@ -2688,90 +2675,49 @@ export default function UserDashboard() {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {isDraftsExpanded ? (
-                                                    // Expanded mode: show all individual items
-                                                    drafts.map((d, idx) => (
-                                                        <tr key={idx}>
-                                                            <td>{d.numbers}</td>
-                                                            <td>{BET_TYPES[d.bet_type]?.label}</td>
-                                                            <td>{d.amount.toLocaleString()}</td>
-                                                            <td>
-                                                                <button
-                                                                    className="icon-btn danger mini"
-                                                                    onClick={() => setDrafts(prev => prev.filter((_, i) => i !== idx))}
-                                                                >
-                                                                    <FiTrash2 />
-                                                                </button>
-                                                            </td>
-                                                        </tr>
-                                                    ))
-                                                ) : (
-                                                    // Summary mode: group by entry_id and show display values
-                                                    // If group is broken (items were deleted), show actual values
-                                                    Object.values(
-                                                        drafts.reduce((acc, d) => {
-                                                            const key = d.entry_id || d.id || Math.random()
-                                                            if (!acc[key]) {
-                                                                acc[key] = {
-                                                                    entry_id: d.entry_id,
-                                                                    display_numbers: d.display_numbers || d.numbers,
-                                                                    display_bet_type: d.display_bet_type || BET_TYPES[d.bet_type]?.label,
-                                                                    display_amount: d.display_amount || d.amount.toString(),
-                                                                    originalCount: d.original_count || 1,
-                                                                    totalAmount: d.amount,
-                                                                    items: [d]
-                                                                }
-                                                            } else {
-                                                                acc[key].totalAmount += d.amount
-                                                                acc[key].items.push(d)
+                                                {/* Summary mode: group by entry_id and show display values */}
+                                                {Object.values(
+                                                    drafts.reduce((acc, d) => {
+                                                        const key = d.entry_id || d.id || Math.random()
+                                                        if (!acc[key]) {
+                                                            acc[key] = {
+                                                                key: key,
+                                                                entry_id: d.entry_id,
+                                                                display_numbers: d.display_numbers || d.numbers,
+                                                                display_bet_type: d.display_bet_type || BET_TYPES[d.bet_type]?.label,
+                                                                display_amount: d.display_amount || d.amount.toString(),
+                                                                totalAmount: d.amount,
+                                                                items: [d]
                                                             }
-                                                            return acc
-                                                        }, {})
-                                                    ).flatMap((group, idx) => {
-                                                        // Check if group is intact (same number of items as original)
-                                                        // A group is only intact if current count equals original count
-                                                        const originalCount = group.items[0]?.original_count || 1
-                                                        const isGroupIntact = group.items.length === originalCount
-
-                                                        if (isGroupIntact && group.items.length > 1) {
-                                                            // Group is intact, show summarized view
-                                                            return [(
-                                                                <tr key={idx}>
-                                                                    <td>{group.display_numbers}</td>
-                                                                    <td>{group.display_bet_type}</td>
-                                                                    <td>{group.display_amount}</td>
-                                                                    <td>
-                                                                        <button
-                                                                            className="icon-btn danger mini"
-                                                                            onClick={() => setDrafts(prev => prev.filter(d => d.entry_id !== group.entry_id))}
-                                                                        >
-                                                                            <FiTrash2 />
-                                                                        </button>
-                                                                    </td>
-                                                                </tr>
-                                                            )]
                                                         } else {
-                                                            // Group is broken or single item, show actual values
-                                                            return group.items.map((d, itemIdx) => (
-                                                                <tr key={`${idx}-${itemIdx}`}>
-                                                                    <td>{d.numbers}</td>
-                                                                    <td>{BET_TYPES[d.bet_type]?.label}</td>
-                                                                    <td>{d.amount.toLocaleString()}</td>
-                                                                    <td>
-                                                                        <button
-                                                                            className="icon-btn danger mini"
-                                                                            onClick={() => setDrafts(prev => prev.filter((_, i) =>
-                                                                                prev.indexOf(d) !== i
-                                                                            ).filter(item => item !== d))}
-                                                                        >
-                                                                            <FiTrash2 />
-                                                                        </button>
-                                                                    </td>
-                                                                </tr>
-                                                            ))
+                                                            acc[key].totalAmount += d.amount
+                                                            acc[key].items.push(d)
                                                         }
-                                                    })
-                                                )}
+                                                        return acc
+                                                    }, {})
+                                                ).map((group, idx) => (
+                                                    <tr key={idx}>
+                                                        <td>{group.display_numbers}</td>
+                                                        <td>{group.display_bet_type}</td>
+                                                        <td>{group.items.length > 1 ? group.display_amount : group.totalAmount.toLocaleString()}</td>
+                                                        <td>
+                                                            <button
+                                                                className="icon-btn danger mini"
+                                                                onClick={() => {
+                                                                    if (group.entry_id) {
+                                                                        // Delete entire group by entry_id
+                                                                        setDrafts(prev => prev.filter(d => d.entry_id !== group.entry_id))
+                                                                    } else {
+                                                                        // Single item, delete by key
+                                                                        setDrafts(prev => prev.filter(d => (d.entry_id || d.id) !== group.key))
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <FiTrash2 />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
                                             </tbody>
                                         </table>
                                     )}
