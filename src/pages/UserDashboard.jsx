@@ -1176,6 +1176,319 @@ export default function UserDashboard() {
         }
     }
 
+    // Save edited submission with new bet type (full form edit)
+    async function handleSaveEditWithBetType(betType) {
+        if (!editingSubmission) return
+
+        const newNumbers = editForm.numbers.replace(/\s/g, '')
+        const amount = editForm.amount.toString()
+
+        if (!newNumbers) {
+            alert('กรุณากรอกเลข')
+            return
+        }
+
+        // Check if amount is valid
+        const amtParts = amount.split('*').filter(p => p && !isNaN(parseFloat(p)))
+        if (amtParts.length === 0) {
+            // Allow empty amount only for 4_set
+            if (betType !== '4_set') {
+                alert('กรุณากรอกจำนวนเงิน')
+                return
+            }
+        }
+
+        setEditSaving(true)
+        try {
+            const timestamp = new Date().toISOString()
+            // Generate UUID with fallback for non-secure contexts (HTTP)
+            const entryId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                    const r = Math.random() * 16 | 0
+                    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
+                })
+            const billId = editingSubmission.bill_id
+            const isLaoOrHanoi = selectedRound && ['lao', 'hanoi'].includes(selectedRound.lottery_type)
+
+            // Delete the original submission(s) by entry_id if exists
+            if (editingSubmission.entry_id) {
+                await supabase
+                    .from('submissions')
+                    .update({ is_deleted: true, deleted_at: timestamp })
+                    .eq('entry_id', editingSubmission.entry_id)
+            } else {
+                // Just delete the single submission
+                await supabase
+                    .from('submissions')
+                    .update({ is_deleted: true, deleted_at: timestamp })
+                    .eq('id', editingSubmission.id)
+            }
+
+            // Create new submission(s) based on bet type
+            const newSubmissions = []
+
+            // Handle special compound bet types
+            if (betType === '3_straight_tod') {
+                // เต็ง-โต๊ด: 100*20 format
+                const [straightAmt, todAmt] = amtParts.map(p => parseFloat(p) || 0)
+
+                if (straightAmt > 0) {
+                    const commInfo = getCommissionForBetType('3_top', userSettings)
+                    newSubmissions.push({
+                        entry_id: entryId,
+                        round_id: selectedRound.id,
+                        user_id: editingSubmission.user_id,
+                        bill_id: billId,
+                        bet_type: '3_top',
+                        numbers: newNumbers,
+                        amount: straightAmt,
+                        commission_rate: commInfo.rate,
+                        commission_amount: commInfo.isFixed ? commInfo.rate : (straightAmt * commInfo.rate) / 100,
+                        display_numbers: newNumbers,
+                        display_amount: amount,
+                        display_bet_type: 'เต็ง-โต๊ด',
+                        created_at: timestamp
+                    })
+                }
+                if (todAmt > 0) {
+                    const commInfo = getCommissionForBetType('3_tod', userSettings)
+                    const sortedNumbers = newNumbers.split('').sort().join('')
+                    newSubmissions.push({
+                        entry_id: entryId,
+                        round_id: selectedRound.id,
+                        user_id: editingSubmission.user_id,
+                        bill_id: billId,
+                        bet_type: '3_tod',
+                        numbers: sortedNumbers,
+                        amount: todAmt,
+                        commission_rate: commInfo.rate,
+                        commission_amount: commInfo.isFixed ? commInfo.rate : (todAmt * commInfo.rate) / 100,
+                        display_numbers: newNumbers,
+                        display_amount: amount,
+                        display_bet_type: 'เต็ง-โต๊ด',
+                        created_at: timestamp
+                    })
+                }
+            } else if (betType === '3_straight_perm') {
+                // 1+กลับ: 100*20 format
+                const [straightAmt, permAmt] = amtParts.map(p => parseFloat(p) || 0)
+                const perms = getPermutations(newNumbers).filter(p => p !== newNumbers)
+                const displayLabel = `1+กลับ (${perms.length})`
+
+                if (straightAmt > 0) {
+                    const commInfo = getCommissionForBetType('3_top', userSettings)
+                    newSubmissions.push({
+                        entry_id: entryId,
+                        round_id: selectedRound.id,
+                        user_id: editingSubmission.user_id,
+                        bill_id: billId,
+                        bet_type: '3_top',
+                        numbers: newNumbers,
+                        amount: straightAmt,
+                        commission_rate: commInfo.rate,
+                        commission_amount: commInfo.isFixed ? commInfo.rate : (straightAmt * commInfo.rate) / 100,
+                        display_numbers: newNumbers,
+                        display_amount: amount,
+                        display_bet_type: displayLabel,
+                        created_at: timestamp
+                    })
+                }
+                if (permAmt > 0 && perms.length > 0) {
+                    const commInfo = getCommissionForBetType('3_top', userSettings)
+                    perms.forEach(p => {
+                        newSubmissions.push({
+                            entry_id: entryId,
+                            round_id: selectedRound.id,
+                            user_id: editingSubmission.user_id,
+                            bill_id: billId,
+                            bet_type: '3_top',
+                            numbers: p,
+                            amount: permAmt,
+                            commission_rate: commInfo.rate,
+                            commission_amount: commInfo.isFixed ? commInfo.rate : (permAmt * commInfo.rate) / 100,
+                            display_numbers: newNumbers,
+                            display_amount: amount,
+                            display_bet_type: displayLabel,
+                            created_at: timestamp
+                        })
+                    })
+                }
+            } else if (betType.includes('_rev')) {
+                // Reversed 2-digit bets: 12 with 100*50 = 12 @100, 21 @50
+                const [amt1, amt2] = amtParts.map(p => parseFloat(p) || 0)
+                const reversed = newNumbers.split('').reverse().join('')
+                const baseBetType = betType.replace('_rev', '')
+                const commInfo = getCommissionForBetType(baseBetType, userSettings)
+                const displayLabel = BET_TYPES[betType]?.label || `${BET_TYPES[baseBetType]?.label || baseBetType}กลับ`
+
+                if (amt1 > 0) {
+                    newSubmissions.push({
+                        entry_id: entryId,
+                        round_id: selectedRound.id,
+                        user_id: editingSubmission.user_id,
+                        bill_id: billId,
+                        bet_type: baseBetType,
+                        numbers: newNumbers,
+                        amount: amt1,
+                        commission_rate: commInfo.rate,
+                        commission_amount: commInfo.isFixed ? commInfo.rate : (amt1 * commInfo.rate) / 100,
+                        display_numbers: newNumbers,
+                        display_amount: amount,
+                        display_bet_type: displayLabel,
+                        created_at: timestamp
+                    })
+                }
+                if (amt2 > 0 && reversed !== newNumbers) {
+                    newSubmissions.push({
+                        entry_id: entryId,
+                        round_id: selectedRound.id,
+                        user_id: editingSubmission.user_id,
+                        bill_id: billId,
+                        bet_type: baseBetType,
+                        numbers: reversed,
+                        amount: amt2,
+                        commission_rate: commInfo.rate,
+                        commission_amount: commInfo.isFixed ? commInfo.rate : (amt2 * commInfo.rate) / 100,
+                        display_numbers: newNumbers,
+                        display_amount: amount,
+                        display_bet_type: displayLabel,
+                        created_at: timestamp
+                    })
+                }
+            } else if (betType === '4_set' && isLaoOrHanoi) {
+                // 4 ตัวชุด for Lao/Hanoi
+                const setCount = parseInt(amount) || 1
+                const setPrice = selectedRound?.set_prices?.['4_top'] || 120
+                const totalAmount = setCount * setPrice
+                const commInfo = getCommissionForBetType('4_top', userSettings)
+
+                newSubmissions.push({
+                    entry_id: entryId,
+                    round_id: selectedRound.id,
+                    user_id: editingSubmission.user_id,
+                    bill_id: billId,
+                    bet_type: '4_set',
+                    numbers: newNumbers,
+                    amount: totalAmount,
+                    commission_rate: commInfo.rate,
+                    commission_amount: setCount * commInfo.rate,
+                    display_numbers: newNumbers,
+                    display_amount: `${totalAmount} บาท (${setCount} ชุด)`,
+                    display_bet_type: BET_TYPES['4_set']?.label || '4 ตัวชุด',
+                    created_at: timestamp
+                })
+            } else if (betType === '3_perm_from_3') {
+                // คูณชุด: all permutations of 3-digit number
+                const perms = [...new Set(getPermutations(newNumbers))]
+                const singleAmt = parseFloat(amtParts[0]) || 0
+                const commInfo = getCommissionForBetType('3_top', userSettings)
+
+                perms.forEach(p => {
+                    newSubmissions.push({
+                        entry_id: entryId,
+                        round_id: selectedRound.id,
+                        user_id: editingSubmission.user_id,
+                        bill_id: billId,
+                        bet_type: '3_top',
+                        numbers: p,
+                        amount: singleAmt,
+                        commission_rate: commInfo.rate,
+                        commission_amount: commInfo.isFixed ? commInfo.rate : (singleAmt * commInfo.rate) / 100,
+                        display_numbers: newNumbers,
+                        display_amount: amount,
+                        display_bet_type: `คูณชุด ${perms.length}`,
+                        created_at: timestamp
+                    })
+                })
+            } else if (betType === '3_perm_from_4' || betType === '3_perm_from_5') {
+                // 3-digit permutations from 4 or 5 digit numbers
+                const perms = betType === '3_perm_from_4'
+                    ? getUnique3DigitPermsFrom4(newNumbers)
+                    : getUnique3DigitPermsFrom5(newNumbers)
+                const singleAmt = parseFloat(amtParts[0]) || 0
+                const commInfo = getCommissionForBetType('3_top', userSettings)
+
+                perms.forEach(p => {
+                    newSubmissions.push({
+                        entry_id: entryId,
+                        round_id: selectedRound.id,
+                        user_id: editingSubmission.user_id,
+                        bill_id: billId,
+                        bet_type: '3_top',
+                        numbers: p,
+                        amount: singleAmt,
+                        commission_rate: commInfo.rate,
+                        commission_amount: commInfo.isFixed ? commInfo.rate : (singleAmt * commInfo.rate) / 100,
+                        display_numbers: newNumbers,
+                        display_amount: amount,
+                        display_bet_type: `3 X ${perms.length}`,
+                        created_at: timestamp
+                    })
+                })
+            } else if (betType === '4_float' || betType === '5_float') {
+                // Float bets
+                const singleAmt = parseFloat(amtParts[0]) || 0
+                const commInfo = getCommissionForBetType(betType, userSettings)
+
+                newSubmissions.push({
+                    entry_id: entryId,
+                    round_id: selectedRound.id,
+                    user_id: editingSubmission.user_id,
+                    bill_id: billId,
+                    bet_type: betType,
+                    numbers: newNumbers,
+                    amount: singleAmt,
+                    commission_rate: commInfo.rate,
+                    commission_amount: commInfo.isFixed ? commInfo.rate : (singleAmt * commInfo.rate) / 100,
+                    display_numbers: newNumbers,
+                    display_amount: singleAmt.toString(),
+                    display_bet_type: BET_TYPES[betType]?.label || betType,
+                    created_at: timestamp
+                })
+            } else {
+                // Simple single submission (2_top, 3_top, run_top, etc.)
+                const singleAmt = parseFloat(amtParts[0]) || 0
+                const commInfo = getCommissionForBetType(betType, userSettings)
+
+                newSubmissions.push({
+                    entry_id: entryId,
+                    round_id: selectedRound.id,
+                    user_id: editingSubmission.user_id,
+                    bill_id: billId,
+                    bet_type: betType,
+                    numbers: betType === '3_tod' ? newNumbers.split('').sort().join('') : newNumbers,
+                    amount: singleAmt,
+                    commission_rate: commInfo.rate,
+                    commission_amount: commInfo.isFixed ? commInfo.rate : (singleAmt * commInfo.rate) / 100,
+                    display_numbers: newNumbers,
+                    display_amount: singleAmt.toString(),
+                    display_bet_type: BET_TYPES[betType]?.label || betType,
+                    created_at: timestamp
+                })
+            }
+
+            // Insert all new submissions
+            if (newSubmissions.length > 0) {
+                const { error: insertError } = await supabase
+                    .from('submissions')
+                    .insert(newSubmissions)
+
+                if (insertError) throw insertError
+            }
+
+            setEditingSubmission(null)
+            setEditForm({ numbers: '', amount: '', bet_type: '' })
+            fetchSubmissions()
+            setToast({ message: 'แก้ไขรายการสำเร็จ', type: 'success' })
+        } catch (error) {
+            console.error('Error updating submission:', error)
+            alert('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setEditSaving(false)
+        }
+    }
+
     // Format time remaining
     function formatTimeRemaining(closeTime) {
         const now = new Date()
@@ -2393,10 +2706,10 @@ export default function UserDashboard() {
                 </div>
             )}
 
-            {/* Edit Submission Modal */}
+            {/* Edit Submission Modal - Full Form like Add */}
             {editingSubmission && (
                 <div className="modal-overlay" onClick={() => setEditingSubmission(null)}>
-                    <div className="modal edit-modal" onClick={e => e.stopPropagation()}>
+                    <div className="modal edit-modal edit-modal-full" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
                             <h3><FiEdit2 /> แก้ไขรายการ</h3>
                             <button className="modal-close" onClick={() => setEditingSubmission(null)}>
@@ -2404,40 +2717,7 @@ export default function UserDashboard() {
                             </button>
                         </div>
                         <div className="modal-body">
-                            {/* Bet Type Selector for special types or simple badge */}
-                            {(() => {
-                                const isSpecialBetType = editForm.bet_type === '3_straight_tod' || editForm.bet_type === '3_straight_perm'
-
-                                if (isSpecialBetType) {
-                                    return (
-                                        <div className="edit-bet-type-selector">
-                                            <label className="form-label">ประเภทเลข</label>
-                                            <div className="bet-type-buttons">
-                                                <button
-                                                    className={`bet-type-btn ${editForm.bet_type === '3_straight_tod' ? 'active' : ''}`}
-                                                    onClick={() => setEditForm({ ...editForm, bet_type: '3_straight_tod' })}
-                                                >
-                                                    เต็ง-โต๊ด
-                                                </button>
-                                                <button
-                                                    className={`bet-type-btn ${editForm.bet_type === '3_straight_perm' ? 'active' : ''}`}
-                                                    onClick={() => setEditForm({ ...editForm, bet_type: '3_straight_perm' })}
-                                                >
-                                                    1+กลับ
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )
-                                }
-                                return (
-                                    <div className="edit-info">
-                                        <span className="edit-bet-type">
-                                            {BET_TYPES[editingSubmission.bet_type]?.label || editingSubmission.bet_type}
-                                        </span>
-                                    </div>
-                                )
-                            })()}
-
+                            {/* Number Input */}
                             <div className="form-group">
                                 <label className="form-label">ตัวเลข</label>
                                 <input
@@ -2450,103 +2730,145 @@ export default function UserDashboard() {
                                         numbers: e.target.value.replace(/[^0-9]/g, '')
                                     })}
                                     autoFocus
+                                    placeholder="กรอกเลข"
                                 />
                             </div>
+
+                            {/* Amount Input */}
                             <div className="form-group">
-                                {(() => {
-                                    const isLaoOrHanoi = selectedRound && ['lao', 'hanoi'].includes(selectedRound.lottery_type)
-                                    const isSetBasedBet = isLaoOrHanoi && editingSubmission.bet_type === '4_set'
-                                    const setPrice = selectedRound?.set_prices?.['4_top'] || 120
-                                    const isSpecialBetType = editForm.bet_type === '3_straight_tod' || editForm.bet_type === '3_straight_perm'
-
-                                    if (isSetBasedBet) {
-                                        return (
-                                            <>
-                                                <label className="form-label">จำนวนชุด (ชุดละ {setPrice} {selectedRound?.currency_name || 'บาท'})</label>
-                                                <input
-                                                    type="text"
-                                                    className="form-input"
-                                                    inputMode="numeric"
-                                                    value={editForm.amount}
-                                                    onChange={e => setEditForm({
-                                                        ...editForm,
-                                                        amount: e.target.value.replace(/[^0-9]/g, '')
-                                                    })}
-                                                    placeholder="จำนวนชุด"
-                                                />
-                                                {editForm.amount && (
-                                                    <div className="amount-preview">
-                                                        รวม: {(parseInt(editForm.amount) || 0) * setPrice} {selectedRound?.currency_name || 'บาท'}
-                                                    </div>
-                                                )}
-                                            </>
-                                        )
-                                    } else if (isSpecialBetType) {
-                                        // For special bet types, show * format input
-                                        const amountParts = editForm.amount.includes('*') ?
-                                            editForm.amount.split('*').map(p => parseFloat(p) || 0) : [parseFloat(editForm.amount) || 0, 0]
-                                        const totalAmount = amountParts.reduce((sum, p) => sum + p, 0)
-
-                                        return (
-                                            <>
-                                                <label className="form-label">
-                                                    {editForm.bet_type === '3_straight_tod' ? 'จำนวนเงิน (ตรง*โต๊ด)' : 'จำนวนเงิน (ตรง*กลับ)'}
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    className="form-input"
-                                                    inputMode="text"
-                                                    value={editForm.amount}
-                                                    onChange={e => setEditForm({
-                                                        ...editForm,
-                                                        amount: e.target.value.replace(/[^0-9*]/g, '')
-                                                    })}
-                                                    placeholder="100*20"
-                                                />
-                                                {editForm.amount && (
-                                                    <div className="amount-preview">
-                                                        {editForm.bet_type === '3_straight_tod' ? (
-                                                            <>ตรง: {amountParts[0] || 0} | โต๊ด: {amountParts[1] || 0} | รวม: {totalAmount}</>
-                                                        ) : (
-                                                            <>ตรง: {amountParts[0] || 0} | กลับ: {amountParts[1] || 0} | รวม: {totalAmount}</>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </>
-                                        )
-                                    } else {
-                                        return (
-                                            <>
-                                                <label className="form-label">จำนวนเงิน ({selectedRound?.currency_name || 'บาท'})</label>
-                                                <input
-                                                    type="text"
-                                                    className="form-input"
-                                                    inputMode="decimal"
-                                                    value={editForm.amount}
-                                                    onChange={e => setEditForm({
-                                                        ...editForm,
-                                                        amount: e.target.value.replace(/[^0-9.]/g, '')
-                                                    })}
-                                                />
-                                            </>
-                                        )
-                                    }
-                                })()}
+                                <label className="form-label">
+                                    จำนวนเงิน ({selectedRound?.currency_name || 'บาท'})
+                                    <span className="amount-hint"> - ใส่ * เพื่อแยกจำนวน เช่น 100*20</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    inputMode="text"
+                                    value={editForm.amount}
+                                    onChange={e => setEditForm({
+                                        ...editForm,
+                                        amount: e.target.value.replace(/[^0-9*]/g, '')
+                                    })}
+                                    placeholder="100 หรือ 100*20"
+                                />
                             </div>
 
+                            {/* Bet Type Buttons - Dynamic based on digit count */}
+                            <div className="form-group">
+                                <label className="form-label">เลือกประเภทเพื่อบันทึก</label>
+                                <div className="bet-type-grid">
+                                    {(() => {
+                                        const digits = editForm.numbers.replace(/\*/g, '').length
+                                        const amount = editForm.amount.toString()
+                                        const hasStarInAmount = amount.includes('*')
+                                        const lotteryType = selectedRound?.lottery_type
+                                        const isAmountEmpty = !amount || amount === '0' || amount === ''
+
+                                        // Check if amount is incomplete (ends with * but no second number)
+                                        const amtParts = amount.split('*').filter(p => p && !isNaN(parseFloat(p)))
+                                        const isIncompleteAmount = amount.includes('*') && amtParts.length < 2
+
+                                        let available = []
+
+                                        // For Lao/Hanoi 4-digit, allow 4_set even without amount
+                                        const isLaoOrHanoi4Digit = digits === 4 && ['lao', 'hanoi'].includes(lotteryType)
+
+                                        if ((isAmountEmpty || isIncompleteAmount) && !isLaoOrHanoi4Digit) {
+                                            available = []
+                                        } else if (digits === 1) {
+                                            available = ['run_top', 'run_bottom', 'front_top_1', 'middle_top_1', 'back_top_1', 'front_bottom_1', 'back_bottom_1']
+                                        } else if (digits === 2) {
+                                            const hasTwoAmounts = amtParts.length === 2
+                                            if (hasTwoAmounts) {
+                                                available = ['2_top_rev', '2_front_rev', '2_spread_rev', '2_bottom_rev']
+                                            } else if (amtParts.length === 1 && !amount.includes('*')) {
+                                                available = ['2_top', '2_front', '2_spread', '2_have', '2_bottom']
+                                            }
+                                        } else if (digits === 3) {
+                                            if (hasStarInAmount && amtParts.length === 2) {
+                                                const permCount = getPermutations(editForm.numbers).length
+                                                available = [
+                                                    { id: '3_straight_tod', label: 'เต็ง-โต๊ด' },
+                                                    { id: '3_straight_perm', label: `1+กลับ (${permCount - 1})` }
+                                                ]
+                                            } else if (!hasStarInAmount) {
+                                                const permCount = getPermutations(editForm.numbers).length
+                                                available = [
+                                                    '3_top',
+                                                    '3_tod',
+                                                    { id: '3_perm_from_3', label: `คูณชุด ${permCount}` }
+                                                ]
+                                                if (lotteryType === 'thai') available.push('3_bottom')
+                                            }
+                                        } else if (digits === 4) {
+                                            const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
+                                            if (isLaoOrHanoi) {
+                                                if (isAmountEmpty) {
+                                                    available = ['4_set']
+                                                } else {
+                                                    const permCount = getUnique3DigitPermsFrom4(editForm.numbers).length
+                                                    available = [
+                                                        '4_set',
+                                                        '4_float',
+                                                        { id: '3_perm_from_4', label: `3 X ${permCount}` }
+                                                    ]
+                                                }
+                                            } else {
+                                                if (!isAmountEmpty) {
+                                                    const permCount = getUnique3DigitPermsFrom4(editForm.numbers).length
+                                                    available = [
+                                                        '4_float',
+                                                        { id: '3_perm_from_4', label: `3 X ${permCount}` }
+                                                    ]
+                                                }
+                                            }
+                                        } else if (digits === 5) {
+                                            if (!isAmountEmpty) {
+                                                const permCount = getUnique3DigitPermsFrom5(editForm.numbers).length
+                                                available = [
+                                                    '5_float',
+                                                    { id: '3_perm_from_5', label: `3 X ${permCount}` }
+                                                ]
+                                            }
+                                        }
+
+                                        if (available.length === 0) {
+                                            return (
+                                                <div className="empty-bet-types">
+                                                    {digits === 0 ? 'กรุณากรอกเลข' :
+                                                        isAmountEmpty ? 'กรุณากรอกจำนวนเงิน' :
+                                                            isIncompleteAmount ? 'กรุณากรอกจำนวนเงินให้ครบ (เช่น 100*20)' :
+                                                                'ไม่มีประเภทเลขสำหรับจำนวนหลักนี้'}
+                                                </div>
+                                            )
+                                        }
+
+                                        return available.map(item => {
+                                            const key = typeof item === 'string' ? item : item.id
+                                            const label = typeof item === 'string' ? (BET_TYPES[key]?.label || key) : item.label
+                                            return (
+                                                <button
+                                                    key={key}
+                                                    type="button"
+                                                    className="bet-type-btn"
+                                                    disabled={editSaving}
+                                                    onClick={() => handleSaveEditWithBetType(key)}
+                                                >
+                                                    {label}
+                                                </button>
+                                            )
+                                        })
+                                    })()}
+                                </div>
+                            </div>
+
+                            {/* Cancel Button */}
                             <div className="form-actions">
                                 <button
-                                    className="btn btn-secondary"
+                                    className="btn btn-secondary btn-block"
                                     onClick={() => setEditingSubmission(null)}
                                 >
                                     ยกเลิก
-                                </button>
-                                <button
-                                    className="btn btn-primary"
-                                    onClick={handleSaveEdit}
-                                    disabled={editSaving}
-                                >
-                                    {editSaving ? 'กำลังบันทึก...' : 'บันทึก'}
                                 </button>
                             </div>
                         </div>
