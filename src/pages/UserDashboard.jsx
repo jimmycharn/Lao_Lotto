@@ -831,13 +831,13 @@ export default function UserDashboard() {
 
         setDrafts(prev => [...prev, ...draftsWithCount])
 
-        // Focus back to number input
+        // Focus back to number input (minimal delay since we prevent blur)
         if (numberInputRef.current) {
             setTimeout(() => {
                 numberInputRef.current.focus()
                 numberInputRef.current.select()
                 numberInputRef.current.setSelectionRange(0, 9999)
-            }, 50)
+            }, 10)
         }
     }
 
@@ -1957,6 +1957,8 @@ export default function UserDashboard() {
                                                         key={key}
                                                         type="button"
                                                         className="bet-type-btn"
+                                                        onMouseDown={(e) => e.preventDefault()}
+                                                        onTouchStart={(e) => e.preventDefault()}
                                                         onClick={() => addToDraft(key)}
                                                     >
                                                         {label}
