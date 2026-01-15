@@ -3515,3 +3515,44 @@
 }
  
  
+/* Bill Action Buttons */
+.bill-action-buttons {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.bill-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+}
+
+.bill-action-btn.edit {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    flex: 1;
+}
+
+.bill-action-btn.edit:hover {
+    background: rgba(59, 130, 246, 0.25);
+}
+
+.bill-action-btn.delete {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    flex: 1;
+}
+
+.bill-action-btn.delete:hover {
+    background: rgba(239, 68, 68, 0.25);
+}

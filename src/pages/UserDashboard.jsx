@@ -921,6 +921,53 @@ export default function UserDashboard() {
         }
     }
 
+    // Delete entire bill (all submissions with the same bill_id)
+    async function handleDeleteBill(billId) {
+        if (!confirm(`ต้องการลบโพยใบที่ ${billId} ทั้งหมด?`)) return
+
+        try {
+            const { error } = await supabase
+                .from('submissions')
+                .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+                .eq('bill_id', billId)
+                .eq('round_id', selectedRound.id)
+
+            if (error) throw error
+
+            fetchSubmissions()
+            setToast({ message: `ลบโพยใบ ${billId} สำเร็จ`, type: 'success' })
+        } catch (error) {
+            console.error('Error deleting bill:', error)
+            alert('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+
+    // Edit bill - load all submissions as drafts and allow adding/removing
+    function handleEditBill(billId, billItems) {
+        // Convert bill items to draft format
+        const drafts = billItems.map(item => ({
+            id: item.id,
+            entry_id: item.entry_id,
+            numbers: item.display_numbers || item.numbers,
+            bet_type: item.bet_type,
+            amount: item.amount,
+            displayBetType: item.display_bet_type || BET_TYPES[item.bet_type]?.label,
+            displayAmount: item.display_amount || item.amount,
+            commission: item.commission_amount
+        }))
+
+        // Set drafts and bill info for editing
+        setDraftItems(drafts)
+        setCurrentBillId(billId)
+        setBillNote(billItems[0]?.bill_note || '')
+        setIsDraftsExpanded(true)
+
+        // Switch to "เพิ่มรายการ" tab to show the form with drafts
+        setActiveTab('add')
+
+        setToast({ message: `กำลังแก้ไขโพยใบ ${billId}`, type: 'info' })
+    }
+
     // Open edit modal for a submission
     function handleEditSubmission(submission) {
         // Only allow editing if within delete deadline
@@ -1911,6 +1958,25 @@ export default function UserDashboard() {
                                                                                                             <span className="bill-note-display">📝 {billItems[0].bill_note}</span>
                                                                                                         )}
                                                                                                     </div>
+                                                                                                    {/* Bill Action Buttons */}
+                                                                                                    {canSubmit() && billId !== 'no-bill' && (
+                                                                                                        <div className="bill-action-buttons" onClick={e => e.stopPropagation()}>
+                                                                                                            <button
+                                                                                                                className="bill-action-btn edit"
+                                                                                                                onClick={() => handleEditBill(billId, billItems)}
+                                                                                                                title="แก้ไขโพย"
+                                                                                                            >
+                                                                                                                <FiEdit2 /> แก้ไข
+                                                                                                            </button>
+                                                                                                            <button
+                                                                                                                className="bill-action-btn delete"
+                                                                                                                onClick={() => handleDeleteBill(billId)}
+                                                                                                                title="ลบโพยทั้งหมด"
+                                                                                                            >
+                                                                                                                <FiTrash2 /> ลบ
+                                                                                                            </button>
+                                                                                                        </div>
+                                                                                                    )}
                                                                                                 </div>
 
                                                                                             </div>
