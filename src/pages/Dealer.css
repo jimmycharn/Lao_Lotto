@@ -3172,3 +3172,120 @@
     min-width: 100px;
     max-width: 150px;
 }
+/* =============================================
+   UPSTREAM DEALERS SECTION
+   ============================================= */
+
+.upstream-dealers-section {
+    animation: fadeIn 0.3s ease;
+}
+
+.upstream-dealers-section .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.upstream-dealers-section .section-header h2 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.25rem;
+    color: var(--color-text);
+}
+
+.upstream-dealers-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1rem;
+}
+
+.upstream-dealer-card {
+    padding: 1.25rem;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+.upstream-dealer-card:hover {
+    border-color: var(--color-primary);
+}
+
+.dealer-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.dealer-info {
+    flex: 1;
+}
+
+.dealer-info .dealer-name {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--color-text);
+    margin: 0 0 0.5rem 0;
+}
+
+.linked-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    background: var(--color-success);
+    color: #fff;
+    border-radius: 50%;
+    font-size: 0.7rem;
+}
+
+.dealer-info .dealer-contact {
+    display: flex;
+    align-items: center;
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    margin: 0 0 0.25rem 0;
+}
+
+.dealer-info .dealer-notes {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+    margin: 0.5rem 0 0 0;
+    opacity: 0.8;
+}
+
+.dealer-actions {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.linked-profile-info {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-border);
+    font-size: 0.85rem;
+    color: var(--color-primary);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .upstream-dealers-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .upstream-dealers-section .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    .upstream-dealers-section .section-header .btn {
+        width: 100%;
+    }
+}

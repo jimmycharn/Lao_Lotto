@@ -41,6 +41,7 @@ export default function Navbar() {
 
     const adminLinks = [
         { path: '/dealer', label: 'จัดการโพย', icon: <FiUsers />, role: 'dealer' },
+        { path: '/dealer?tab=profile', label: 'โปรไฟล์', icon: <FiUser />, role: 'dealer' },
         { path: '/admin', label: 'แอดมิน', icon: <FiSettings />, role: 'superadmin' },
         { path: '/superadmin', label: 'Super Admin', icon: <FiSettings />, role: 'superadmin' },
     ]

@@ -26,109 +26,15 @@ import {
 import './UserDashboard.css'
 import './ViewToggle.css'
 
-// Bet type labels
-const BET_TYPES = {
-    // 1 Digit
-    'run_top': { label: 'วิ่งบน', digits: 1 },
-    'run_bottom': { label: 'วิ่งล่าง', digits: 1 },
-    'front_top_1': { label: 'หน้าบน', digits: 1 },
-    'middle_top_1': { label: 'กลางบน', digits: 1 },
-    'back_top_1': { label: 'หลังบน', digits: 1 },
-    'front_bottom_1': { label: 'หน้าล่าง', digits: 1 },
-    'back_bottom_1': { label: 'หลังล่าง', digits: 1 },
-
-    // 2 Digits
-    '2_top': { label: '2 ตัวบน', digits: 2 },
-    '2_front': { label: '2 ตัวหน้า', digits: 2 },
-    '2_spread': { label: '2 ตัวถ่าง', digits: 2 },
-    '2_have': { label: '2 ตัวมี', digits: 2 },
-    '2_bottom': { label: '2 ตัวล่าง', digits: 2 },
-    // 2 Digits Reversed (กลับ)
-    '2_top_rev': { label: '2 ตัวบนกลับ', digits: 2 },
-    '2_front_rev': { label: '2 ตัวหน้ากลับ', digits: 2 },
-    '2_spread_rev': { label: '2 ตัวถ่างกลับ', digits: 2 },
-    '2_bottom_rev': { label: '2 ตัวล่างกลับ', digits: 2 },
-
-
-    // 3 Digits
-    '3_top': { label: '3 ตัวตรง', digits: 3 },
-    '3_tod': { label: '3 ตัวโต๊ด', digits: 3 },
-    '3_bottom': { label: '3 ตัวล่าง', digits: 3 },
-
-    // 4 Digits
-    '4_set': { label: '4 ตัวชุด', digits: 4 },
-    '4_float': { label: '4 ตัวลอย', digits: 4 },
-
-    // 5 Digits
-    '5_float': { label: '5 ตัวลอย', digits: 5 }
-}
-
-// Lottery type labels
-const LOTTERY_TYPES = {
-    'thai': 'หวยไทย',
-    'lao': 'หวยลาว',
-    'hanoi': 'หวยฮานอย',
-    'yeekee': 'หวยยี่กี',
-    'other': 'อื่นๆ'
-}
-
-// Helper to get all permutations
-const getPermutations = (str) => {
-    if (str.length <= 1) return [str]
-    const perms = []
-    for (let i = 0; i < str.length; i++) {
-        const char = str[i]
-        const remainingChars = str.slice(0, i) + str.slice(i + 1)
-        for (const subPerm of getPermutations(remainingChars)) {
-            perms.push(char + subPerm)
-        }
-    }
-    return [...new Set(perms)]
-}
-
-// Helper to get unique 3-digit permutations from 4 digits
-const getUnique3DigitPermsFrom4 = (str) => {
-    if (str.length !== 4) return []
-    const results = new Set()
-    // Get all combinations of 3 digits out of 4
-    for (let i = 0; i < 4; i++) {
-        const combination = str.slice(0, i) + str.slice(i + 1)
-        const perms = getPermutations(combination)
-        perms.forEach(p => results.add(p))
-    }
-    return Array.from(results)
-}
-
-// Helper to get unique 3-digit permutations from 5 digits
-const getUnique3DigitPermsFrom5 = (str) => {
-    if (str.length !== 5) return []
-    const results = new Set()
-    const chars = str.split('')
-    // Pick 3 out of 5
-    for (let i = 0; i < 5; i++) {
-        for (let j = i + 1; j < 5; j++) {
-            for (let k = j + 1; k < 5; k++) {
-                const combination = chars[i] + chars[j] + chars[k]
-                const perms = getPermutations(combination)
-                perms.forEach(p => results.add(p))
-            }
-        }
-    }
-    return Array.from(results)
-}
-
-// Helper to generate UUID (compatible with older browsers)
-const generateUUID = () => {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-        return crypto.randomUUID()
-    }
-    // Fallback for browsers without crypto.randomUUID
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-        const r = Math.random() * 16 | 0
-        const v = c === 'x' ? r : (r & 0x3 | 0x8)
-        return v.toString(16)
-    })
-}
+// Import constants from centralized file
+import {
+    LOTTERY_TYPES,
+    BET_TYPES_WITH_DIGITS as BET_TYPES,
+    getPermutations,
+    getUnique3DigitPermsFrom4,
+    getUnique3DigitPermsFrom5,
+    generateUUID
+} from '../constants/lotteryTypes'
 
 export default function UserDashboard() {
 

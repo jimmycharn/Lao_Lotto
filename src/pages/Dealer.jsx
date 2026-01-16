@@ -37,1402 +37,27 @@ import {
 import './Dealer.css'
 import './SettingsTabs.css'
 
-// Helper function to generate batch ID (UUID v4 format - works in all browsers)
-const generateBatchId = () => {
-    // Generate UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        const r = Math.random() * 16 | 0
-        const v = c === 'x' ? r : (r & 0x3 | 0x8)
-        return v.toString(16)
-    })
-}
-
-// Lottery type labels
-const LOTTERY_TYPES = {
-    'thai': 'หวยไทย',
-    'lao': 'หวยลาว',
-    'hanoi': 'หวยฮานอย',
-    'stock': 'หวยหุ้น'
-}
-
-// Bet types by lottery type (matching user_settings structure)
-const BET_TYPES_BY_LOTTERY = {
-    thai: {
-        'run_top': { label: 'ลอยบน', defaultLimit: 5000 },
-        'run_bottom': { label: 'ลอยล่าง', defaultLimit: 5000 },
-        'pak_top': { label: 'ปักบน (หน้า/กลาง/หลัง)', defaultLimit: 5000 },
-        'pak_bottom': { label: 'ปักล่าง (หน้า/หลัง)', defaultLimit: 5000 },
-        '2_top': { label: '2 ตัวบน', defaultLimit: 1000 },
-        '2_front': { label: '2 ตัวหน้า', defaultLimit: 1000 },
-        '2_center': { label: '2 ตัวถ่าง', defaultLimit: 1000 },
-        '2_run': { label: '2 ตัวลอย', defaultLimit: 1000 },
-        '2_bottom': { label: '2 ตัวล่าง', defaultLimit: 1000 },
-        '3_top': { label: '3 ตัวตรง', defaultLimit: 500 },
-        '3_tod': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
-        '3_bottom': { label: '3 ตัวล่าง', defaultLimit: 500 },
-        '4_run': { label: '4 ตัวลอย', defaultLimit: 200 },
-        '5_run': { label: '5 ตัวลอย', defaultLimit: 100 }
-    },
-    lao: {
-        '4_top': { label: '4 ตัวตรง', defaultLimit: 200, isSet: true, defaultSetPrice: 120 },
-        'run_top': { label: 'ลอยบน', defaultLimit: 5000 },
-        'run_bottom': { label: 'ลอยล่าง', defaultLimit: 5000 },
-        'pak_top': { label: 'ปักบน (หน้า/กลาง/หลัง)', defaultLimit: 5000 },
-        'pak_bottom': { label: 'ปักล่าง (หน้า/หลัง)', defaultLimit: 5000 },
-        '2_top': { label: '2 ตัวบน', defaultLimit: 1000 },
-        '2_bottom': { label: '2 ตัวล่าง', defaultLimit: 1000 },
-        '2_front_single': { label: '2 ตัวหน้า', defaultLimit: 1000 },
-        '2_center': { label: '2 ตัวถ่าง', defaultLimit: 1000 },
-        '2_run': { label: '2 ตัวลอย', defaultLimit: 1000 },
-        '3_top': { label: '3 ตัวบน', defaultLimit: 500 },
-        '3_tod': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
-        '3_front': { label: '3 ตัวหน้า', defaultLimit: 500 },
-        '3_back': { label: '3 ตัวหลัง', defaultLimit: 500 },
-        '3_straight': { label: '3 ตัวตรง', defaultLimit: 500 },
-        '3_tod_single': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
-        '4_run': { label: '4 ตัวลอย', defaultLimit: 200 },
-        '5_run': { label: '5 ตัวลอย', defaultLimit: 100 }
-    },
-    hanoi: {
-        '4_top': { label: '4 ตัวตรง', defaultLimit: 200, isSet: true, defaultSetPrice: 120 },
-        'run_top': { label: 'ลอยบน', defaultLimit: 5000 },
-        'run_bottom': { label: 'ลอยล่าง', defaultLimit: 5000 },
-        'pak_top': { label: 'ปักบน (หน้า/กลาง/หลัง)', defaultLimit: 5000 },
-        'pak_bottom': { label: 'ปักล่าง (หน้า/หลัง)', defaultLimit: 5000 },
-        '2_top': { label: '2 ตัวบน', defaultLimit: 1000 },
-        '2_bottom': { label: '2 ตัวล่าง', defaultLimit: 1000 },
-        '2_front_single': { label: '2 ตัวหน้า', defaultLimit: 1000 },
-        '2_center': { label: '2 ตัวถ่าง', defaultLimit: 1000 },
-        '2_run': { label: '2 ตัวลอย', defaultLimit: 1000 },
-        '3_top': { label: '3 ตัวบน', defaultLimit: 500 },
-        '3_tod': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
-        '3_front': { label: '3 ตัวหน้า', defaultLimit: 500 },
-        '3_back': { label: '3 ตัวหลัง', defaultLimit: 500 },
-        '3_straight': { label: '3 ตัวตรง', defaultLimit: 500 },
-        '3_tod_single': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
-        '4_run': { label: '4 ตัวลอย', defaultLimit: 200 },
-        '5_run': { label: '5 ตัวลอย', defaultLimit: 100 }
-    },
-    stock: {
-        '2_top': { label: '2 ตัวบน', defaultLimit: 1000 },
-        '2_bottom': { label: '2 ตัวล่าง', defaultLimit: 1000 }
-    }
-}
-
-// Legacy bet type labels (for displaying results/submissions)
-const BET_TYPES = {
-    // 1 Digit
-    'run_top': 'วิ่งบน',
-    'run_bottom': 'วิ่งล่าง',
-    'front_top_1': 'หน้าบน',
-    'middle_top_1': 'กลางบน',
-    'back_top_1': 'หลังบน',
-    'front_bottom_1': 'หน้าล่าง',
-    'back_bottom_1': 'หลังล่าง',
-    'pak_top': 'ปักบน',
-    'pak_bottom': 'ปักล่าง',
-
-    // 2 Digits
-    '2_top': '2 ตัวบน',
-    '2_bottom': '2 ตัวล่าง',
-    '2_front': '2 ตัวหน้า',
-    '2_front_single': '2 ตัวหน้า',
-    '2_back': '2 ตัวหลัง',
-    '2_center': '2 ตัวถ่าง',
-    '2_spread': '2 ตัวถ่าง',
-    '2_have': '2 ตัวมี',
-    '2_run': '2 ตัวลอย',
-
-    // 2 Digits Reversed (กลับ)
-    '2_top_rev': '2 บนกลับ',
-    '2_front_rev': '2 หน้ากลับ',
-    '2_spread_rev': '2 ถ่างกลับ',
-    '2_bottom_rev': '2 ล่างกลับ',
-
-    // 3 Digits
-    '3_top': '3 ตัวบน',
-    '3_tod': '3 ตัวโต๊ด',
-    '3_front': '3 ตัวหน้า',
-    '3_back': '3 ตัวหลัง',
-    '3_bottom': '3 ตัวล่าง',
-    '3_straight': '3 ตัวตรง',
-    '3_tod_single': '3 ตัวโต๊ด',
-
-    // 4 Digits
-    '4_top': '4 ตัวตรง',
-    '4_tod': '4 ตัวโต๊ด',
-    '4_set': '4 ตัวชุด',
-    '4_float': '4 ตัวลอย',
-    '4_run': '4 ตัวลอย',
-
-    // 5 Digits
-    '5_float': '5 ตัวลอย',
-    '5_run': '5 ตัวลอย',
-
-    // 6 Digits
-    '6_top': '6 ตัว (รางวัลที่ 1)'
-}
-
-// Helper to get default limits for a lottery type
-function getDefaultLimitsForType(lotteryType) {
-    const betTypes = BET_TYPES_BY_LOTTERY[lotteryType] || {}
-    const limits = {}
-    Object.entries(betTypes).forEach(([key, config]) => {
-        limits[key] = config.defaultLimit
-    })
-    return limits
-}
-
-// Helper to get default set prices for a lottery type
-function getDefaultSetPricesForType(lotteryType) {
-    const betTypes = BET_TYPES_BY_LOTTERY[lotteryType] || {}
-    const setPrices = {}
-    Object.entries(betTypes).forEach(([key, config]) => {
-        if (config.isSet) {
-            setPrices[key] = config.defaultSetPrice || 120
-        }
-    })
-    return setPrices
-}
-
-// Bet types that should normalize numbers (order doesn't matter)
-const PERMUTATION_BET_TYPES = ['2_run', '2_spread', '3_tod', '3_tod_single', '4_run', '4_tod', '4_float', '5_run', '5_float']
-
-// Normalize number by sorting digits (for permutation bet types)
-function normalizeNumber(numbers, betType) {
-    if (PERMUTATION_BET_TYPES.includes(betType)) {
-        return numbers.split('').sort().join('')
-    }
-    return numbers
-}
-
-// Round Accordion Item Component
-function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, onCloseRound, onEditRound, onShowNumberLimits, onDeleteRound, onShowResults, getStatusBadge, formatDate, formatTime, user }) {
-    const [isExpanded, setIsExpanded] = useState(false)
-    const [summaryData, setSummaryData] = useState({ loading: false, submissions: [], userSettings: {} })
-
-    // Inline submissions view states
-    const [viewMode, setViewMode] = useState('summary') // 'summary' | 'submissions'
-    const [inlineTab, setInlineTab] = useState('total') // 'total' | 'excess' | 'transferred'
-    const [inlineSubmissions, setInlineSubmissions] = useState([])
-    const [inlineTypeLimits, setInlineTypeLimits] = useState({})
-    const [inlineNumberLimits, setInlineNumberLimits] = useState([])
-    const [inlineTransfers, setInlineTransfers] = useState([])
-    const [inlineLoading, setInlineLoading] = useState(false)
-    const [inlineUserFilter, setInlineUserFilter] = useState('all')
-    const [inlineBetTypeFilter, setInlineBetTypeFilter] = useState('all')
-    const [isGrouped, setIsGrouped] = useState(true)
-    const [inlineSearch, setInlineSearch] = useState('')
-
-    // Inline excess transfer states
-    const [selectedExcessItems, setSelectedExcessItems] = useState({})
-    const [showTransferModal, setShowTransferModal] = useState(false)
-    const [transferForm, setTransferForm] = useState({ target_dealer_name: '', target_dealer_contact: '', notes: '' })
-    const [savingTransfer, setSavingTransfer] = useState(false)
-
-    // Inline revert transfer states
-    const [selectedTransferBatches, setSelectedTransferBatches] = useState({})
-    const [revertingTransfer, setRevertingTransfer] = useState(false)
-
-    const isAnnounced = round.status === 'announced' && round.is_result_announced
-
-    // Check if round is currently open
-    const isOpen = (() => {
-        if (round.status === 'announced' || round.status === 'closed') return false
-        const now = new Date()
-        const closeTime = new Date(round.close_time)
-        return now <= closeTime
-    })()
-
-    // Fetch summary data immediately when announced OR when open (to show totals in header)
-    useEffect(() => {
-        if ((isAnnounced || isOpen) && summaryData.submissions.length === 0 && !summaryData.loading) {
-            fetchSummaryData()
-        }
-    }, [isAnnounced, isOpen])
-
-    async function fetchSummaryData() {
-        setSummaryData(prev => ({ ...prev, loading: true }))
-        try {
-            const { data: submissionsData } = await supabase
-                .from('submissions')
-                .select('*, profiles(id, full_name, email)')
-                .eq('round_id', round.id)
-                .eq('is_deleted', false)
-                .order('created_at', { ascending: false })
-
-            const userIds = [...new Set((submissionsData || []).map(s => s.user_id))]
-            const settingsMap = {}
-
-            for (const userId of userIds) {
-                const { data: settingsData } = await supabase
-                    .from('user_settings')
-                    .select('*')
-                    .eq('user_id', userId)
-                    .eq('dealer_id', user?.id)
-                    .single()
-                if (settingsData) settingsMap[userId] = settingsData
-            }
-
-            setSummaryData({ submissions: submissionsData || [], userSettings: settingsMap, loading: false })
-        } catch (error) {
-            console.error('Error fetching summary:', error)
-            setSummaryData(prev => ({ ...prev, loading: false }))
-        }
-    }
-
-    // Fetch inline submissions data for eye button view
-    async function fetchInlineSubmissions(forceRefresh = false) {
-        if (!forceRefresh && inlineSubmissions.length > 0) return // Already fetched
-        setInlineLoading(true)
-        try {
-            // Fetch submissions
-            const { data: subsData } = await supabase
-                .from('submissions')
-                .select(`*, profiles (full_name, email)`)
-                .eq('round_id', round.id)
-                .eq('is_deleted', false)
-                .order('created_at', { ascending: false })
-            setInlineSubmissions(subsData || [])
-
-            // Fetch type limits
-            const { data: typeLimitsData } = await supabase
-                .from('type_limits')
-                .select('*')
-                .eq('round_id', round.id)
-
-            // Start with default limits for this lottery type
-            const defaultLimits = getDefaultLimitsForType(round.lottery_type)
-            console.log('[DEBUG] lottery_type:', round.lottery_type, 'defaultLimits:', defaultLimits)
-            const limitsObj = { ...defaultLimits }
-
-            // Override with any explicitly set limits from database
-            typeLimitsData?.forEach(l => {
-                limitsObj[l.bet_type] = l.max_per_number
-            })
-            console.log('[DEBUG] Final limitsObj:', limitsObj, '| 3_top limit:', limitsObj['3_top'])
-            setInlineTypeLimits(limitsObj)
-
-            // Fetch number limits
-            const { data: numLimitsData } = await supabase
-                .from('number_limits')
-                .select('*')
-                .eq('round_id', round.id)
-            setInlineNumberLimits(numLimitsData || [])
-
-            // Fetch transfers - FIXED: use correct table name 'bet_transfers'
-            const { data: transfersData } = await supabase
-                .from('bet_transfers')
-                .select('*')
-                .eq('round_id', round.id)
-                .order('created_at', { ascending: false })
-            setInlineTransfers(transfersData || [])
-        } catch (error) {
-            console.error('Error fetching inline submissions:', error)
-        } finally {
-            setInlineLoading(false)
-        }
-    }
-
-    // Handle eye button click - toggle to submissions view
-    const handleEyeClick = (e) => {
-        e.stopPropagation()
-        if (!isExpanded) {
-            setIsExpanded(true)
-        }
-        if (viewMode === 'submissions') {
-            setViewMode('summary')
-        } else {
-            setViewMode('submissions')
-            fetchInlineSubmissions()
-        }
-    }
-
-    // Calculate excess items (with number normalization for permutation bet types)
-    const calculateExcessItems = () => {
-        const grouped = {}
-
-        // Determine if this is a Lao/Hanoi lottery (set-based betting)
-        const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
-        // Get set price for 4_top from round settings
-        const setPrice = round?.set_prices?.['4_top'] || 120
-
-        inlineSubmissions.forEach(sub => {
-            // Normalize numbers for permutation bet types
-            const normalizedNumbers = normalizeNumber(sub.numbers, sub.bet_type)
-            const key = `${sub.bet_type}|${normalizedNumbers}`
-            if (!grouped[key]) {
-                grouped[key] = {
-                    bet_type: sub.bet_type,
-                    numbers: normalizedNumbers, // Use normalized number for display
-                    originalNumbers: [sub.numbers], // Keep track of original numbers
-                    total: 0,
-                    setCount: 0, // Track number of sets for set-based bets
-                    submissions: []
-                }
-            } else {
-                // Add to original numbers list if different
-                if (!grouped[key].originalNumbers.includes(sub.numbers)) {
-                    grouped[key].originalNumbers.push(sub.numbers)
-                }
-            }
-            grouped[key].total += sub.amount
-            grouped[key].submissions.push(sub)
-
-            // For set-based bets (4_set, 4_top in Lao/Hanoi), count number of sets
-            if (isSetBasedLottery && (sub.bet_type === '4_set' || sub.bet_type === '4_top')) {
-                // Each submission of 4_set is counted as (amount / setPrice) sets
-                grouped[key].setCount += Math.ceil(sub.amount / setPrice)
-            }
-        })
-
-        const excessItems = []
-        Object.values(grouped).forEach(item => {
-            // For 4_set, map to 4_top for limit lookup (the underlying limit type)
-            const limitLookupBetType = item.bet_type === '4_set' ? '4_top' : item.bet_type
-
-            // Check type limit
-            const typeLimit = inlineTypeLimits[limitLookupBetType]
-
-            // Check number limit - also normalize for comparison
-            const numberLimit = inlineNumberLimits.find(nl => {
-                const nlNormalized = normalizeNumber(nl.numbers, nl.bet_type)
-                // Also check for 4_set -> 4_top mapping in number limits
-                const nlBetType = nl.bet_type === '4_set' ? '4_top' : nl.bet_type
-                return nlBetType === limitLookupBetType && nlNormalized === item.numbers
-            })
-            const effectiveLimit = numberLimit?.max_amount ?? typeLimit
-
-            // For set-based bets in Lao/Hanoi, compare by number of sets, not money amount
-            const isSetBased = isSetBasedLottery && (item.bet_type === '4_set' || item.bet_type === '4_top')
-
-            // Calculate already transferred amount for this number
-            const transferredForThis = inlineTransfers.filter(t => {
-                // Handle 4_set -> 4_top mapping for transfers
-                const tBetType = t.bet_type === '4_set' ? '4_top' : t.bet_type
-                const tNormalized = normalizeNumber(t.numbers, t.bet_type)
-                return tBetType === limitLookupBetType && tNormalized === item.numbers
-            }).reduce((sum, t) => sum + (t.amount || 0), 0)
-
-            // Convert transferred amount to sets if set-based
-            const transferredSets = isSetBased ? Math.floor(transferredForThis / setPrice) : 0
-
-            if (effectiveLimit) {
-                if (isSetBased) {
-                    // For set-based: subtract transferred sets, compare against limit
-                    const effectiveExcess = item.setCount - effectiveLimit - transferredSets
-                    if (effectiveExcess > 0) {
-                        excessItems.push({
-                            ...item,
-                            limit: effectiveLimit,
-                            excess: effectiveExcess, // Excess in number of sets after deducting transferred
-                            transferredSets: transferredSets,
-                            isSetBased: true
-                        })
-                    }
-                } else {
-                    // For normal bets: subtract transferred amount, compare against limit
-                    const effectiveExcess = item.total - effectiveLimit - transferredForThis
-                    if (effectiveExcess > 0) {
-                        excessItems.push({
-                            ...item,
-                            limit: effectiveLimit,
-                            excess: effectiveExcess,
-                            transferredAmount: transferredForThis
-                        })
-                    }
-                }
-            }
-        })
-        return excessItems.sort((a, b) => b.excess - a.excess)
-    }
-
-    // Get excess items 
-    const excessItems = calculateExcessItems()
-
-    // Toggle selection of excess item
-    const toggleExcessItem = (item) => {
-        const key = `${item.bet_type}|${item.numbers}`
-        setSelectedExcessItems(prev => ({
-            ...prev,
-            [key]: !prev[key]
-        }))
-    }
-
-    // Select/Deselect all excess items
-    const toggleSelectAll = () => {
-        const allSelected = excessItems.every(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
-        if (allSelected) {
-            setSelectedExcessItems({})
-        } else {
-            const newSelected = {}
-            excessItems.forEach(item => {
-                newSelected[`${item.bet_type}|${item.numbers}`] = true
-            })
-            setSelectedExcessItems(newSelected)
-        }
-    }
-
-    // Get selected count and total
-    const selectedCount = excessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`]).length
-    const selectedTotalExcess = excessItems
-        .filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
-        .reduce((sum, item) => sum + (item.isSetBased ? item.excess : item.excess), 0)
-
-    // Handle save transfer
-    const handleSaveTransfer = async () => {
-        if (!transferForm.target_dealer_name) {
-            alert('กรุณากรอกชื่อเจ้ามือที่ต้องการตีออก')
-            return
-        }
-        setSavingTransfer(true)
-        try {
-            const selectedItems = excessItems.filter(item =>
-                selectedExcessItems[`${item.bet_type}|${item.numbers}`]
-            )
-
-            // Generate a batch ID for this transfer session
-            const batchId = generateBatchId()
-
-            const inserts = selectedItems.map(item => ({
-                round_id: round.id,
-                bet_type: item.bet_type,
-                numbers: item.numbers,
-                amount: item.isSetBased ? item.excess * (round?.set_prices?.['4_top'] || 120) : item.excess,
-                target_dealer_name: transferForm.target_dealer_name,
-                target_dealer_contact: transferForm.target_dealer_contact || null,
-                notes: transferForm.notes || null,
-                transfer_batch_id: batchId
-            }))
-
-            const { error } = await supabase.from('bet_transfers').insert(inserts)
-            if (error) throw error
-
-            // Refresh all data including transfers
-            await fetchInlineSubmissions(true)
-
-            setShowTransferModal(false)
-            setSelectedExcessItems({})
-            setTransferForm({ target_dealer_name: '', target_dealer_contact: '', notes: '' })
-            alert(`ตีออกสำเร็จ ${selectedItems.length} รายการ!`)
-        } catch (error) {
-            console.error('Error saving transfer:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
-        } finally {
-            setSavingTransfer(false)
-        }
-    }
-
-    // Toggle selection of transfer batch
-    const toggleTransferBatch = (batchId) => {
-        setSelectedTransferBatches(prev => ({
-            ...prev,
-            [batchId]: !prev[batchId]
-        }))
-    }
-
-    // Select/Deselect all transfer batches
-    const toggleSelectAllBatches = (batchIds) => {
-        const allSelected = batchIds.every(id => selectedTransferBatches[id])
-        if (allSelected) {
-            setSelectedTransferBatches({})
-        } else {
-            const newSelected = {}
-            batchIds.forEach(id => {
-                newSelected[id] = true
-            })
-            setSelectedTransferBatches(newSelected)
-        }
-    }
-
-    // Get selected batch count
-    const getSelectedBatchCount = (batchIds) => {
-        return batchIds.filter(id => selectedTransferBatches[id]).length
-    }
-
-    // Handle revert selected transfers
-    const handleRevertTransfers = async (batchIds) => {
-        const selectedBatchIds = batchIds.filter(id => selectedTransferBatches[id])
-        if (selectedBatchIds.length === 0) {
-            alert('กรุณาเลือกรายการที่ต้องการเอาคืน')
-            return
-        }
-
-        if (!confirm(`ต้องการเอาคืน ${selectedBatchIds.length} รายการหรือไม่?`)) {
-            return
-        }
-
-        setRevertingTransfer(true)
-        try {
-            // Get all transfer IDs from selected batches
-            const transferIdsToDelete = inlineTransfers
-                .filter(t => selectedBatchIds.includes(t.transfer_batch_id || t.id))
-                .map(t => t.id)
-
-            const { error } = await supabase
-                .from('bet_transfers')
-                .delete()
-                .in('id', transferIdsToDelete)
-
-            if (error) throw error
-
-            // Refresh all data
-            await fetchInlineSubmissions(true)
-            setSelectedTransferBatches({})
-            alert(`เอาคืนสำเร็จ ${selectedBatchIds.length} รายการ!`)
-        } catch (error) {
-            console.error('Error reverting transfers:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
-        } finally {
-            setRevertingTransfer(false)
-        }
-    }
-
-    // Generate copy text for a batch or multiple batches
-    const generateTransferCopyText = (batchesToCopy) => {
-        const lotteryName = round.lottery_name || LOTTERY_TYPES[round.lottery_type] || 'หวย'
-
-        // Count total items
-        const totalItems = batchesToCopy.reduce((sum, b) => sum + b.items.length, 0)
-        const grandTotal = batchesToCopy.reduce((sum, b) => sum + b.totalAmount, 0)
-
-        // Get target dealer name (use first batch's name for header)
-        const targetDealer = batchesToCopy[0]?.target_dealer_name || ''
-
-        let text = `📤 ยอดตีออก - ${lotteryName}\n`
-        text += `📅 ทั้งหมด (${totalItems} รายการ)\n`
-        text += `👤 ตีออกให้: ${targetDealer}\n`
-        text += `💰 ยอดรวม: ${round.currency_symbol}${grandTotal.toLocaleString()}\n`
-        text += `━━━━━━━━━━━━━━━━\n`
-
-        // Group by bet type
-        const byType = {}
-        batchesToCopy.forEach(batch => {
-            batch.items.forEach(item => {
-                const typeName = BET_TYPES[item.bet_type] || item.bet_type
-                if (!byType[typeName]) byType[typeName] = []
-                byType[typeName].push(item)
-            })
-        })
-
-        // Output each type
-        Object.entries(byType).forEach(([typeName, items]) => {
-            text += `${typeName}\n`
-            items.forEach(item => {
-                text += `${item.numbers}=${item.amount?.toLocaleString()}\n`
-            })
-        })
-
-        text += `━━━━━━━━━━━━━━━━\n`
-        text += `รวม: ${round.currency_symbol}${grandTotal.toLocaleString()}`
-
-        return text
-    }
-
-    // Copy selected batches
-    const handleCopySelectedBatches = async (allBatches) => {
-        const selectedBatchIds = Object.keys(selectedTransferBatches).filter(id => selectedTransferBatches[id])
-        const batchesToCopy = allBatches.filter(b => selectedBatchIds.includes(b.id))
-
-        if (batchesToCopy.length === 0) {
-            alert('กรุณาเลือกรายการที่ต้องการคัดลอก')
-            return
-        }
-
-        const text = generateTransferCopyText(batchesToCopy)
-        console.log('[Copy] Text to copy:', text)
-
-        try {
-            await navigator.clipboard.writeText(text)
-            alert(`คัดลอก ${batchesToCopy.length} รายการแล้ว!`)
-        } catch (err) {
-            console.error('Clipboard error:', err)
-            // Fallback method
-            const textArea = document.createElement('textarea')
-            textArea.value = text
-            textArea.style.position = 'fixed'
-            textArea.style.left = '-9999px'
-            document.body.appendChild(textArea)
-            textArea.select()
-            document.execCommand('copy')
-            document.body.removeChild(textArea)
-            alert(`คัดลอก ${batchesToCopy.length} รายการแล้ว!`)
-        }
-    }
-
-    // Copy single batch
-    const handleCopySingleBatch = async (batch) => {
-        const text = generateTransferCopyText([batch])
-        console.log('[Copy Single] Text to copy:', text)
-
-        try {
-            await navigator.clipboard.writeText(text)
-            alert('คัดลอกแล้ว!')
-        } catch (err) {
-            console.error('Clipboard error:', err)
-            // Fallback method
-            const textArea = document.createElement('textarea')
-            textArea.value = text
-            textArea.style.position = 'fixed'
-            textArea.style.left = '-9999px'
-            document.body.appendChild(textArea)
-            textArea.select()
-            document.execCommand('copy')
-            document.body.removeChild(textArea)
-            alert('คัดลอกแล้ว!')
-        }
-    }
-
-    // Calculate summary values
-    const getLotteryTypeKey = () => {
-        if (round.lottery_type === 'thai') return 'thai'
-        if (round.lottery_type === 'lao' || round.lottery_type === 'hanoi') return 'lao'
-        return 'stock'
-    }
-
-    const DEFAULT_COMMISSIONS = {
-        'run_top': 15, 'run_bottom': 15, 'pak_top': 15, 'pak_bottom': 15,
-        '2_top': 15, '2_front': 15, '2_center': 15, '2_spread': 15, '2_run': 15, '2_bottom': 15,
-        '3_top': 15, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
-        '4_run': 15, '4_tod': 15, '4_set': 15, '4_float': 15, '5_run': 15, '5_float': 15, '6_top': 15
-    }
-
-    const DEFAULT_PAYOUTS = {
-        'run_top': 3, 'run_bottom': 4, 'pak_top': 8, 'pak_bottom': 6,
-        '2_top': 65, '2_front': 65, '2_center': 65, '2_run': 10, '2_bottom': 65,
-        '3_top': 550, '3_tod': 100, '3_bottom': 135, '3_front': 100, '3_back': 135,
-        '4_run': 20, '4_tod': 100, '5_run': 10, '6_top': 1000000
-    }
-
-    const getCommission = (sub) => {
-        // Priority 1: Calculate from user_settings (authoritative source)
-        const lotteryKey = getLotteryTypeKey()
-        const settings = summaryData.userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[sub.bet_type]
-        if (settings?.commission !== undefined) {
-            return settings.isFixed ? settings.commission : sub.amount * (settings.commission / 100)
-        }
-        // Priority 2: Use stored commission_amount from submission if available
-        if (sub.commission_amount !== undefined && sub.commission_amount !== null) {
-            return sub.commission_amount
-        }
-        // Priority 3: Use default rates
-        return sub.amount * ((DEFAULT_COMMISSIONS[sub.bet_type] || 15) / 100)
-    }
-
-    const getExpectedPayout = (sub) => {
-        if (!sub.is_winner) return 0
-        const lotteryKey = getLotteryTypeKey()
-        const settings = summaryData.userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[sub.bet_type]
-        if (settings?.payout !== undefined) return sub.amount * settings.payout
-        return sub.amount * (DEFAULT_PAYOUTS[sub.bet_type] || 1)
-    }
-
-    // Calculate user summaries (for announced AND open rounds to show in header)
-    const userSummaries = (isAnnounced || isOpen) && !summaryData.loading ? Object.values(
-        summaryData.submissions.reduce((acc, sub) => {
-            const userId = sub.user_id
-            if (!acc[userId]) {
-                acc[userId] = {
-                    userId, userName: sub.profiles?.full_name || sub.profiles?.email || 'ไม่ระบุชื่อ',
-                    email: sub.profiles?.email || '', totalBet: 0, totalWin: 0, totalCommission: 0, winCount: 0, ticketCount: 0
-                }
-            }
-            acc[userId].totalBet += sub.amount || 0
-            acc[userId].totalWin += getExpectedPayout(sub)
-            acc[userId].totalCommission += getCommission(sub)
-            acc[userId].ticketCount++
-            if (sub.is_winner) acc[userId].winCount++
-            return acc
-        }, {})
-    ).sort((a, b) => (b.totalWin + b.totalCommission - b.totalBet) - (a.totalWin + a.totalCommission - a.totalBet)) : []
-
-    const grandTotalBet = userSummaries.reduce((sum, u) => sum + u.totalBet, 0)
-    const grandTotalWin = userSummaries.reduce((sum, u) => sum + u.totalWin, 0)
-    const grandTotalCommission = userSummaries.reduce((sum, u) => sum + u.totalCommission, 0)
-    const dealerProfit = grandTotalBet - grandTotalWin - grandTotalCommission
-
-    return (
-        <div className={`round-accordion-item ${round.lottery_type} ${isExpanded ? 'expanded' : ''}`}>
-            <div className="round-accordion-header card" onClick={() => setIsExpanded(!isExpanded)}>
-                <div className="round-header-left">
-                    <span className={`lottery-badge ${round.lottery_type}`}>{LOTTERY_TYPES[round.lottery_type]}</span>
-                    {getStatusBadge(round)}
-                </div>
-                <div className="round-header-center">
-                    <h3>{round.lottery_name || LOTTERY_TYPES[round.lottery_type]}</h3>
-                    <div className="round-meta">
-                        <span><FiCalendar /> {formatDate(round.round_date)}</span>
-                        <span><FiClock /> {formatTime(round.open_time)} - {formatTime(round.close_time)}</span>
-                        <span>{round.submissions?.length || 0} รายการ</span>
-                    </div>
-                    {/* Show summary inline in header for announced rounds */}
-                    {isAnnounced && !summaryData.loading && (
-                        <div className="header-summary">
-                            <span className="summary-item"><span className="label">แทง</span> {round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
-                            <span className="summary-item"><span className="label">จ่าย</span> <span className="text-danger">{round.currency_symbol}{grandTotalWin.toLocaleString()}</span></span>
-                            <span className="summary-item"><span className="label">คอม</span> <span style={{ color: 'var(--color-warning)' }}>{round.currency_symbol}{grandTotalCommission.toLocaleString()}</span></span>
-                            <span className={`summary-item profit ${dealerProfit >= 0 ? 'positive' : 'negative'}`}>
-                                <span className="label">กำไร</span> {dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}
-                            </span>
-                        </div>
-                    )}
-                    {/* Show summary inline in header for open rounds (total bet and commission only) */}
-                    {isOpen && !summaryData.loading && grandTotalBet > 0 && (
-                        <div className="header-summary">
-                            <span className="summary-item"><span className="label">ยอดรวม</span> {round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
-                            <span className="summary-item"><span className="label">คอม</span> <span style={{ color: 'var(--color-warning)' }}>{round.currency_symbol}{grandTotalCommission.toLocaleString()}</span></span>
-                        </div>
-                    )}
-                </div>
-                <div className="round-header-right">
-                    <div className="round-actions">
-                        <button className={`icon-btn ${viewMode === 'submissions' ? 'active' : ''}`} onClick={handleEyeClick} title="ดูเลขที่ส่ง"><FiEye /></button>
-                        <button className="icon-btn" onClick={(e) => { e.stopPropagation(); onEditRound(); }} title="แก้ไขงวด"><FiEdit2 /></button>
-                        {round.status === 'open' && <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onCloseRound(); }} title="ปิดงวด"><FiLock /></button>}
-                        <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onShowNumberLimits(); }} title="ตั้งค่าเลขอั้น"><FiAlertTriangle /></button>
-                        <button className="icon-btn danger" onClick={(e) => { e.stopPropagation(); onDeleteRound(); }} title="ลบ"><FiTrash2 /></button>
-                    </div>
-                    <svg className={`chevron ${isExpanded ? 'rotated' : ''}`} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="6 9 12 15 18 9"></polyline>
-                    </svg>
-                </div>
-            </div>
-
-            {isExpanded && (
-                <div className="round-accordion-content">
-                    {/* Only show accordion-actions when there are buttons */}
-                    {((round.status === 'closed' || new Date() > new Date(round.close_time)) && !isAnnounced) || isAnnounced ? (
-                        <div className="accordion-actions">
-                            {(round.status === 'closed' || new Date() > new Date(round.close_time)) && !isAnnounced && (
-                                <button className="btn btn-accent" onClick={onShowResults}><FiCheck /> ใส่ผลรางวัล</button>
-                            )}
-                            {isAnnounced && (
-                                <button className="btn btn-outline" onClick={onShowResults}><FiEdit2 /> แก้ไขผลรางวัล</button>
-                            )}
-                        </div>
-                    ) : null}
-
-                    {isAnnounced && viewMode === 'summary' && (
-                        summaryData.loading ? (
-                            <div className="loading-state"><div className="spinner"></div></div>
-                        ) : (
-                            <>
-                                {userSummaries.length > 0 && (
-                                    <div className="user-summary-list" style={{ marginTop: '1rem' }}>
-                                        <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-text-muted)' }}>รายละเอียดแต่ละคน</h4>
-                                        {userSummaries.map(usr => {
-                                            // User's net = totalWin + totalCommission - totalBet
-                                            // Dealer's perspective = inverted (dealer loses when user gains)
-                                            const userNet = usr.totalWin + usr.totalCommission - usr.totalBet
-                                            const dealerNet = -userNet // Invert for dealer's perspective
-                                            return (
-                                                // dealerNet < 0 = dealer loses = loser card (red border)
-                                                // dealerNet > 0 = dealer gains = winner card (green border)
-                                                <div key={usr.userId} className={`user-summary-card ${dealerNet < 0 ? 'loser' : dealerNet > 0 ? 'winner' : ''}`}>
-                                                    <div className="user-summary-header">
-                                                        <div className="user-info">
-                                                            <span className="user-name">{usr.userName}</span>
-                                                            <span className="user-email">{usr.email}</span>
-                                                        </div>
-                                                        {/* Show dealer's perspective: negative = red (owe user), positive = green (gain) */}
-                                                        <div className={`net-amount ${dealerNet < 0 ? 'negative' : dealerNet > 0 ? 'positive' : ''}`}>
-                                                            {dealerNet > 0 ? '+' : ''}{round.currency_symbol}{dealerNet.toLocaleString()}
-                                                        </div>
-                                                    </div>
-                                                    <div className="user-summary-details">
-                                                        <div className="detail-item"><span className="detail-label">แทง</span><span className="detail-value">{usr.ticketCount} รายการ</span></div>
-                                                        <div className="detail-item"><span className="detail-label">ยอดแทง</span><span className="detail-value">{round.currency_symbol}{usr.totalBet.toLocaleString()}</span></div>
-                                                        <div className="detail-item"><span className="detail-label">ค่าคอม</span><span className="detail-value" style={{ color: 'var(--color-warning)' }}>{round.currency_symbol}{usr.totalCommission.toLocaleString()}</span></div>
-                                                        <div className="detail-item"><span className="detail-label">ถูก/ยอดได้</span><span className={`detail-value ${usr.totalWin > 0 ? 'text-success' : ''}`}>{usr.winCount > 0 ? `${usr.winCount}/${round.currency_symbol}${usr.totalWin.toLocaleString()}` : '-'}</span></div>
-                                                    </div>
-                                                    <div className="user-summary-footer">
-                                                        {/* Dealer's perspective: dealerNet < 0 = must pay (red), dealerNet > 0 = collect (green) */}
-                                                        {dealerNet < 0 ? <span className="status-badge lost">ต้องจ่าย {round.currency_symbol}{Math.abs(dealerNet).toLocaleString()}</span>
-                                                            : dealerNet > 0 ? <span className="status-badge won">ต้องเก็บ {round.currency_symbol}{dealerNet.toLocaleString()}</span>
-                                                                : <span className="status-badge pending">เสมอ</span>}
-                                                    </div>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                )}
-                            </>
-                        )
-                    )}
-
-                    {/* Inline Submissions View - shown when eye button is clicked */}
-                    {viewMode === 'submissions' && (
-                        <div className="inline-submissions-view">
-                            {/* Global Search and Filter above tabs */}
-                            <div className="inline-global-filters">
-                                <div className="search-input-wrapper">
-                                    <FiSearch className="search-icon" />
-                                    <input
-                                        type="text"
-                                        value={inlineSearch}
-                                        onChange={(e) => setInlineSearch(e.target.value)}
-                                        placeholder="ค้นหาเลข..."
-                                        className="form-input search-input"
-                                    />
-                                    {inlineSearch && (
-                                        <button className="search-clear-btn" onClick={() => setInlineSearch('')}>
-                                            <FiX />
-                                        </button>
-                                    )}
-                                </div>
-                                <select
-                                    value={inlineBetTypeFilter}
-                                    onChange={(e) => setInlineBetTypeFilter(e.target.value)}
-                                    className="form-input filter-select"
-                                >
-                                    <option value="all">ทุกประเภท</option>
-                                    {Object.entries(BET_TYPES_BY_LOTTERY[round.lottery_type] || {}).map(([type, config]) => (
-                                        <option key={type} value={type}>{config.label || BET_TYPES[type] || type}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Tabs */}
-                            <div className="inline-tabs">
-                                <button
-                                    className={`inline-tab ${inlineTab === 'total' ? 'active' : ''}`}
-                                    onClick={() => { setInlineTab('total'); fetchInlineSubmissions(true); }}
-                                >
-                                    ยอดรวม <span className="tab-count">{inlineSubmissions.length}</span>
-                                </button>
-                                <button
-                                    className={`inline-tab ${inlineTab === 'excess' ? 'active' : ''}`}
-                                    onClick={() => { setInlineTab('excess'); fetchInlineSubmissions(true); }}
-                                >
-                                    ยอดเกิน <span className="tab-count">{excessItems.length}</span>
-                                </button>
-                                <button
-                                    className={`inline-tab ${inlineTab === 'transferred' ? 'active' : ''}`}
-                                    onClick={() => { setInlineTab('transferred'); fetchInlineSubmissions(true); }}
-                                >
-                                    ยอดตีออก <span className="tab-count">{inlineTransfers.length}</span>
-                                </button>
-                            </div>
-
-                            {inlineLoading ? (
-                                <div className="loading-state"><div className="spinner"></div></div>
-                            ) : (
-                                <>
-                                    {/* Tab: ยอดรวม */}
-                                    {inlineTab === 'total' && (
-                                        <div className="inline-tab-content">
-                                            {/* User Filter */}
-                                            <div className="inline-filters">
-                                                <select
-                                                    value={inlineUserFilter}
-                                                    onChange={(e) => setInlineUserFilter(e.target.value)}
-                                                    className="form-input"
-                                                >
-                                                    <option value="all">ทุกคน</option>
-                                                    {[...new Set(inlineSubmissions.map(s => s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'))].map(name => (
-                                                        <option key={name} value={name}>{name}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-
-                                            {/* Summary */}
-                                            <div className="inline-summary">
-                                                <div className="summary-item">
-                                                    <span className="label">จำนวน</span>
-                                                    <span className="value">{(() => {
-                                                        let filtered = inlineSubmissions.filter(s => {
-                                                            const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
-                                                            if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
-                                                            if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
-                                                            if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
-                                                            return true
-                                                        })
-                                                        if (isGrouped) {
-                                                            const grouped = {}
-                                                            filtered.forEach(s => {
-                                                                const normalizedNumbers = normalizeNumber(s.numbers, s.bet_type)
-                                                                const key = `${normalizedNumbers}|${s.bet_type}`
-                                                                if (!grouped[key]) grouped[key] = true
-                                                            })
-                                                            return Object.keys(grouped).length
-                                                        }
-                                                        return filtered.length
-                                                    })()} รายการ</span>
-                                                </div>
-                                                <div className="summary-item">
-                                                    <span className="label">ยอดรวม</span>
-                                                    <span className="value">{round.currency_symbol}{inlineSubmissions.filter(s => {
-                                                        const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
-                                                        if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
-                                                        if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
-                                                        if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
-                                                        return true
-                                                    }).reduce((sum, s) => sum + s.amount, 0).toLocaleString()}</span>
-                                                </div>
-                                            </div>
-
-                                            {/* Table */}
-                                            <div className="inline-table-wrap">
-                                                <table className="inline-table">
-                                                    <thead>
-                                                        <tr>
-                                                            <th>เลข</th>
-                                                            <th>จำนวน</th>
-                                                            {!isGrouped && <th>เวลา</th>}
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {(() => {
-                                                            // Filter submissions
-                                                            let filteredData = inlineSubmissions.filter(s => {
-                                                                const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
-                                                                if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
-                                                                if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
-                                                                if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
-                                                                return true
-                                                            })
-
-                                                            if (isGrouped) {
-                                                                // Group by normalized number + bet_type (for permutation bet types)
-                                                                const grouped = {}
-                                                                filteredData.forEach(s => {
-                                                                    const normalizedNumbers = normalizeNumber(s.numbers, s.bet_type)
-                                                                    const key = `${normalizedNumbers}|${s.bet_type}`
-                                                                    if (!grouped[key]) {
-                                                                        grouped[key] = {
-                                                                            numbers: normalizedNumbers, // Use normalized for display
-                                                                            originalNumbers: [s.numbers],
-                                                                            bet_type: s.bet_type,
-                                                                            amount: 0,
-                                                                            count: 0,
-                                                                            id: key
-                                                                        }
-                                                                    } else {
-                                                                        if (!grouped[key].originalNumbers.includes(s.numbers)) {
-                                                                            grouped[key].originalNumbers.push(s.numbers)
-                                                                        }
-                                                                    }
-                                                                    grouped[key].amount += s.amount
-                                                                    grouped[key].count += 1
-                                                                })
-                                                                filteredData = Object.values(grouped).sort((a, b) => b.amount - a.amount)
-                                                            }
-
-                                                            return filteredData.map(sub => (
-                                                                <tr key={isGrouped ? sub.id : sub.id}>
-                                                                    <td className="number-cell">
-                                                                        <div className="number-value">{sub.numbers}</div>
-                                                                        <div className="type-sub-label">{BET_TYPES[sub.bet_type] || sub.bet_type}</div>
-                                                                        {isGrouped && sub.count > 1 && (
-                                                                            <div className="count-sub-label">({sub.count} รายการ)</div>
-                                                                        )}
-                                                                    </td>
-                                                                    <td>{round.currency_symbol}{sub.amount.toLocaleString()}</td>
-                                                                    {!isGrouped && (
-                                                                        <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>
-                                                                    )}
-                                                                </tr>
-                                                            ))
-                                                        })()}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Tab: ยอดเกิน */}
-                                    {inlineTab === 'excess' && (() => {
-                                        // Filter excessItems based on search and bet type filter
-                                        const filteredExcessItems = excessItems.filter(item => {
-                                            if (inlineBetTypeFilter !== 'all' && item.bet_type !== inlineBetTypeFilter) return false
-                                            if (inlineSearch && !item.numbers.includes(inlineSearch)) return false
-                                            return true
-                                        })
-
-                                        // Calculate filtered stats
-                                        const filteredSelectedCount = filteredExcessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`]).length
-                                        const filteredSelectedTotalExcess = filteredExcessItems
-                                            .filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
-                                            .reduce((sum, item) => sum + (item.isSetBased ? item.excess : item.excess), 0)
-
-                                        return (
-                                            <div className="inline-tab-content">
-                                                {filteredExcessItems.length === 0 ? (
-                                                    <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
-                                                        <FiCheck style={{ fontSize: '2rem', color: 'var(--color-success)', marginBottom: '0.5rem' }} />
-                                                        <p style={{ color: 'var(--color-text-muted)' }}>{excessItems.length === 0 ? 'ไม่มียอดเกิน' : 'ไม่พบรายการที่ค้นหา'}</p>
-                                                    </div>
-                                                ) : (
-                                                    <>
-                                                        {/* Summary */}
-                                                        <div className="inline-summary" style={{ marginBottom: '1rem' }}>
-                                                            <div className="summary-item">
-                                                                <span className="label">ยอดเกินรวม</span>
-                                                                <span className="value text-warning">
-                                                                    {filteredExcessItems.some(i => i.isSetBased)
-                                                                        ? `${filteredExcessItems.reduce((sum, i) => sum + (i.isSetBased ? i.excess : 0), 0)} ชุด`
-                                                                        : `${round.currency_symbol}${filteredExcessItems.reduce((sum, i) => sum + i.excess, 0).toLocaleString()}`}
-                                                                </span>
-                                                            </div>
-                                                            {filteredSelectedCount > 0 && (
-                                                                <div className="summary-item">
-                                                                    <span className="label">เลือกแล้ว ({filteredSelectedCount})</span>
-                                                                    <span className="value">{filteredSelectedTotalExcess} {filteredExcessItems.some(i => i.isSetBased) ? 'ชุด' : round.currency_symbol}</span>
-                                                                </div>
-                                                            )}
-                                                        </div>
-
-                                                        {/* Select All and Transfer Button */}
-                                                        <div className="bulk-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-surface)', borderRadius: '8px' }}>
-                                                            <label className="checkbox-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={filteredExcessItems.length > 0 && filteredExcessItems.every(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])}
-                                                                    onChange={() => {
-                                                                        const allSelected = filteredExcessItems.every(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
-                                                                        if (allSelected) {
-                                                                            // Deselect only filtered items
-                                                                            const newSelected = { ...selectedExcessItems }
-                                                                            filteredExcessItems.forEach(item => {
-                                                                                delete newSelected[`${item.bet_type}|${item.numbers}`]
-                                                                            })
-                                                                            setSelectedExcessItems(newSelected)
-                                                                        } else {
-                                                                            // Select all filtered items
-                                                                            const newSelected = { ...selectedExcessItems }
-                                                                            filteredExcessItems.forEach(item => {
-                                                                                newSelected[`${item.bet_type}|${item.numbers}`] = true
-                                                                            })
-                                                                            setSelectedExcessItems(newSelected)
-                                                                        }
-                                                                    }}
-                                                                    style={{ width: '18px', height: '18px', accentColor: 'var(--color-primary)' }}
-                                                                />
-                                                                <span>เลือกทั้งหมด ({filteredExcessItems.length})</span>
-                                                            </label>
-                                                            <button
-                                                                className="btn btn-warning"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation()
-                                                                    if (filteredSelectedCount === 0) {
-                                                                        alert('กรุณาเลือกรายการที่ต้องการตีออก')
-                                                                        return
-                                                                    }
-                                                                    setShowTransferModal(true)
-                                                                }}
-                                                                disabled={filteredSelectedCount === 0}
-                                                            >
-                                                                <FiSend /> ตีออก ({filteredSelectedCount})
-                                                            </button>
-                                                        </div>
-
-                                                        {/* Excess Items List */}
-                                                        <div className="excess-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                                            {filteredExcessItems.map((item, idx) => {
-                                                                const isSelected = selectedExcessItems[`${item.bet_type}|${item.numbers}`]
-                                                                return (
-                                                                    <div
-                                                                        key={idx}
-                                                                        className={`excess-card ${isSelected ? 'selected' : ''}`}
-                                                                        onClick={() => toggleExcessItem(item)}
-                                                                        style={{
-                                                                            display: 'flex',
-                                                                            alignItems: 'center',
-                                                                            gap: '1rem',
-                                                                            padding: '0.75rem 1rem',
-                                                                            background: isSelected ? 'rgba(255, 193, 7, 0.15)' : 'var(--color-surface)',
-                                                                            border: isSelected ? '2px solid var(--color-warning)' : '1px solid var(--color-border)',
-                                                                            borderRadius: '8px',
-                                                                            cursor: 'pointer',
-                                                                            transition: 'all 0.2s ease'
-                                                                        }}
-                                                                    >
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={isSelected || false}
-                                                                            onChange={() => { }}
-                                                                            style={{ width: '18px', height: '18px', accentColor: 'var(--color-warning)' }}
-                                                                        />
-                                                                        <div style={{ flex: 1 }}>
-                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                                                                                <span className="type-badge">{BET_TYPES[item.bet_type] || item.bet_type}</span>
-                                                                                <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '1.1rem' }}>{item.numbers}</span>
-                                                                            </div>
-                                                                            <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-                                                                                <span>ยอด: {item.isSetBased ? `${item.setCount} ชุด` : `${round.currency_symbol}${item.total.toLocaleString()}`}</span>
-                                                                                <span>อั้น: {item.isSetBased ? `${item.limit} ชุด` : `${round.currency_symbol}${item.limit.toLocaleString()}`}</span>
-                                                                            </div>
-                                                                        </div>
-                                                                        <div style={{ textAlign: 'right' }}>
-                                                                            <div style={{ color: 'var(--color-warning)', fontWeight: 600, fontSize: '1.1rem' }}>
-                                                                                {item.isSetBased ? `${item.excess} ชุด` : `${round.currency_symbol}${item.excess.toLocaleString()}`}
-                                                                            </div>
-                                                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>เกิน</div>
-                                                                        </div>
-                                                                    </div>
-                                                                )
-                                                            })}
-                                                        </div>
-                                                    </>
-                                                )}
-                                            </div>
-                                        )
-                                    })()}
-
-                                    {/* Transfer Modal */}
-                                    {showTransferModal && (
-                                        <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); setShowTransferModal(false) }}>
-                                            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
-                                                <div className="modal-header">
-                                                    <h3><FiSend /> ตีออกยอดเกิน</h3>
-                                                    <button className="modal-close" onClick={() => setShowTransferModal(false)}><FiX /></button>
-                                                </div>
-                                                <div className="modal-body">
-                                                    <p style={{ marginBottom: '1rem', color: 'var(--color-text-muted)' }}>
-                                                        กำลังตีออก {selectedCount} รายการ
-                                                    </p>
-                                                    <div className="form-group">
-                                                        <label className="form-label">ชื่อเจ้ามือ *</label>
-                                                        <input
-                                                            type="text"
-                                                            className="form-input"
-                                                            value={transferForm.target_dealer_name}
-                                                            onChange={e => setTransferForm({ ...transferForm, target_dealer_name: e.target.value })}
-                                                            placeholder="ชื่อเจ้ามือที่ต้องการตีออก"
-                                                        />
-                                                    </div>
-                                                    <div className="form-group">
-                                                        <label className="form-label">เบอร์ติดต่อ</label>
-                                                        <input
-                                                            type="text"
-                                                            className="form-input"
-                                                            value={transferForm.target_dealer_contact}
-                                                            onChange={e => setTransferForm({ ...transferForm, target_dealer_contact: e.target.value })}
-                                                            placeholder="เบอร์โทรหรือ Line ID"
-                                                        />
-                                                    </div>
-                                                    <div className="form-group">
-                                                        <label className="form-label">หมายเหตุ</label>
-                                                        <textarea
-                                                            className="form-input"
-                                                            rows="2"
-                                                            value={transferForm.notes}
-                                                            onChange={e => setTransferForm({ ...transferForm, notes: e.target.value })}
-                                                            placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)"
-                                                        ></textarea>
-                                                    </div>
-                                                </div>
-                                                <div className="modal-footer">
-                                                    <button className="btn btn-outline" onClick={() => setShowTransferModal(false)}>ยกเลิก</button>
-                                                    <button className="btn btn-warning" onClick={handleSaveTransfer} disabled={savingTransfer}>
-                                                        {savingTransfer ? 'กำลังบันทึก...' : 'ยืนยันตีออก'}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Tab: ยอดตีออก */}
-                                    {inlineTab === 'transferred' && (() => {
-                                        // Filter transfers based on search and bet type filter
-                                        const filteredTransfers = inlineTransfers.filter(t => {
-                                            if (inlineBetTypeFilter !== 'all' && t.bet_type !== inlineBetTypeFilter) return false
-                                            if (inlineSearch && !t.numbers.includes(inlineSearch)) return false
-                                            return true
-                                        })
-
-                                        return (
-                                            <div className="inline-tab-content">
-                                                {filteredTransfers.length === 0 ? (
-                                                    <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
-                                                        <p style={{ color: 'var(--color-text-muted)' }}>{inlineTransfers.length === 0 ? 'ยังไม่มียอดตีออก' : 'ไม่พบรายการที่ค้นหา'}</p>
-                                                    </div>
-                                                ) : (() => {
-                                                    // Group filtered transfers by batch
-                                                    const batches = {}
-                                                    filteredTransfers.forEach(t => {
-                                                        const batchId = t.transfer_batch_id || t.id
-                                                        if (!batches[batchId]) {
-                                                            batches[batchId] = {
-                                                                id: batchId,
-                                                                target_dealer_name: t.target_dealer_name,
-                                                                created_at: t.created_at,
-                                                                items: [],
-                                                                totalAmount: 0
-                                                            }
-                                                        }
-                                                        batches[batchId].items.push(t)
-                                                        batches[batchId].totalAmount += t.amount || 0
-                                                    })
-                                                    const batchList = Object.values(batches).sort((a, b) =>
-                                                        new Date(b.created_at) - new Date(a.created_at)
-                                                    )
-                                                    const grandTotal = filteredTransfers.reduce((sum, t) => sum + (t.amount || 0), 0)
-
-                                                    return (
-                                                        <>
-                                                            {/* Summary */}
-                                                            <div className="inline-summary" style={{ marginBottom: '1rem' }}>
-                                                                <div className="summary-item">
-                                                                    <span className="label">จำนวนครั้ง</span>
-                                                                    <span className="value">{batchList.length} ครั้ง</span>
-                                                                </div>
-                                                                <div className="summary-item">
-                                                                    <span className="label">รวมทั้งหมด</span>
-                                                                    <span className="value">{round.currency_symbol}{grandTotal.toLocaleString()}</span>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Select All and Action Buttons */}
-                                                            <div className="bulk-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-surface)', borderRadius: '8px', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                                                <label className="checkbox-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={batchList.length > 0 && batchList.every(b => selectedTransferBatches[b.id])}
-                                                                        onChange={() => toggleSelectAllBatches(batchList.map(b => b.id))}
-                                                                        style={{ width: '18px', height: '18px', accentColor: 'var(--color-danger)' }}
-                                                                    />
-                                                                    <span>เลือกทั้งหมด ({batchList.length})</span>
-                                                                </label>
-                                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                                    <button
-                                                                        className="btn btn-outline"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation()
-                                                                            handleCopySelectedBatches(batchList)
-                                                                        }}
-                                                                        disabled={getSelectedBatchCount(batchList.map(b => b.id)) === 0}
-                                                                        title="คัดลอกรายการที่เลือก"
-                                                                    >
-                                                                        <FiCopy /> คัดลอก ({getSelectedBatchCount(batchList.map(b => b.id))})
-                                                                    </button>
-                                                                    <button
-                                                                        className="btn btn-danger"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation()
-                                                                            handleRevertTransfers(batchList.map(b => b.id))
-                                                                        }}
-                                                                        disabled={getSelectedBatchCount(batchList.map(b => b.id)) === 0 || revertingTransfer}
-                                                                    >
-                                                                        <FiRotateCcw /> {revertingTransfer ? 'กำลังเอาคืน...' : `เอาคืน (${getSelectedBatchCount(batchList.map(b => b.id))})`}
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Batch List */}
-                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                                                {batchList.map(batch => {
-                                                                    const isSelected = selectedTransferBatches[batch.id]
-                                                                    return (
-                                                                        <div
-                                                                            key={batch.id}
-                                                                            onClick={() => toggleTransferBatch(batch.id)}
-                                                                            style={{
-                                                                                background: isSelected ? 'rgba(239, 68, 68, 0.1)' : 'var(--color-surface)',
-                                                                                border: isSelected ? '2px solid var(--color-danger)' : '1px solid var(--color-border)',
-                                                                                borderRadius: '8px',
-                                                                                overflow: 'hidden',
-                                                                                cursor: 'pointer',
-                                                                                transition: 'all 0.2s ease'
-                                                                            }}
-                                                                        >
-                                                                            {/* Batch Header */}
-                                                                            <div style={{
-                                                                                display: 'flex',
-                                                                                justifyContent: 'space-between',
-                                                                                alignItems: 'center',
-                                                                                padding: '0.75rem 1rem',
-                                                                                background: isSelected ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 193, 7, 0.1)',
-                                                                                borderBottom: '1px solid var(--color-border)'
-                                                                            }}>
-                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                                                    <input
-                                                                                        type="checkbox"
-                                                                                        checked={isSelected || false}
-                                                                                        onChange={() => { }}
-                                                                                        style={{ width: '18px', height: '18px', accentColor: 'var(--color-danger)' }}
-                                                                                    />
-                                                                                    <div>
-                                                                                        <div style={{ fontWeight: 600 }}>{batch.target_dealer_name}</div>
-                                                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                            {new Date(batch.created_at).toLocaleString('th-TH', {
-                                                                                                day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
-                                                                                            })}
-                                                                                        </div>
-                                                                                    </div>
-                                                                                </div>
-                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                                                    <div style={{ textAlign: 'right' }}>
-                                                                                        <div style={{ fontWeight: 600, color: 'var(--color-warning)' }}>
-                                                                                            {round.currency_symbol}{batch.totalAmount.toLocaleString()}
-                                                                                        </div>
-                                                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                            {batch.items.length} รายการ
-                                                                                        </div>
-                                                                                    </div>
-                                                                                    <button
-                                                                                        className="btn btn-sm btn-outline"
-                                                                                        onClick={(e) => {
-                                                                                            e.stopPropagation()
-                                                                                            handleCopySingleBatch(batch)
-                                                                                        }}
-                                                                                        title="คัดลอกรายการนี้"
-                                                                                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
-                                                                                    >
-                                                                                        <FiCopy />
-                                                                                    </button>
-                                                                                </div>
-                                                                            </div>
-                                                                            {/* Batch Items */}
-                                                                            <div style={{ padding: '0.5rem' }}>
-                                                                                {batch.items.map(item => (
-                                                                                    <div
-                                                                                        key={item.id}
-                                                                                        style={{
-                                                                                            display: 'flex',
-                                                                                            justifyContent: 'space-between',
-                                                                                            alignItems: 'center',
-                                                                                            padding: '0.5rem',
-                                                                                            borderBottom: '1px solid var(--color-border)'
-                                                                                        }}
-                                                                                    >
-                                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                                            <span className="type-badge" style={{ fontSize: '0.7rem' }}>
-                                                                                                {BET_TYPES[item.bet_type] || item.bet_type}
-                                                                                            </span>
-                                                                                            <span style={{ fontWeight: 500, color: 'var(--color-primary)' }}>
-                                                                                                {item.numbers}
-                                                                                            </span>
-                                                                                        </div>
-                                                                                        <span>{round.currency_symbol}{item.amount?.toLocaleString()}</span>
-                                                                                    </div>
-                                                                                ))}
-                                                                            </div>
-                                                                        </div>
-                                                                    )
-                                                                })}
-                                                            </div>
-                                                        </>
-                                                    )
-                                                })()}
-                                            </div>
-                                        )
-                                    })()}
-                                </>
-                            )}
-                        </div>
-                    )}
-
-                    {!isAnnounced && viewMode === 'summary' && (
-                        <div className="empty-state" style={{ padding: '1.5rem', textAlign: 'center' }}>
-                            <p style={{ color: 'var(--color-text-muted)' }}>ยังไม่ได้ประกาศผลรางวัล</p>
-                        </div>
-                    )}
-                </div>
-            )}
-        </div>
-    )
-}
+// Import constants from centralized file
+import {
+    LOTTERY_TYPES,
+    BET_TYPES,
+    BET_TYPES_BY_LOTTERY,
+    DEFAULT_COMMISSIONS,
+    DEFAULT_PAYOUTS,
+    normalizeNumber,
+    generateBatchId,
+    getDefaultLimitsForType,
+    getDefaultSetPricesForType,
+    getLotteryTypeKey
+} from '../constants/lotteryTypes'
+
+// Import separated modal components
+import ResultsModal from '../components/dealer/ResultsModal'
+import NumberLimitsModal from '../components/dealer/NumberLimitsModal'
+import SummaryModal from '../components/dealer/SummaryModal'
+import RoundAccordionItem from '../components/dealer/RoundAccordionItem'
+
+// RoundAccordionItem is now imported from separate file
 
 export default function Dealer() {
     const { user, profile, isDealer, isSuperAdmin } = useAuth()
@@ -1460,6 +85,18 @@ export default function Dealer() {
     const [subscription, setSubscription] = useState(null)
     const [dealerBankAccounts, setDealerBankAccounts] = useState([])
     const [roundsTab, setRoundsTab] = useState('open') // 'open' | 'closed'
+    const [upstreamDealers, setUpstreamDealers] = useState([])
+    const [loadingUpstream, setLoadingUpstream] = useState(false)
+
+    // Read tab from URL params
+    useEffect(() => {
+        const tabParam = searchParams.get('tab')
+        if (tabParam === 'profile') {
+            setActiveTab('profile')
+        } else if (tabParam === 'upstreamDealers') {
+            setActiveTab('upstreamDealers')
+        }
+    }, [searchParams])
 
     // Helper to check if a round is still open
     const isRoundOpen = (round) => {
@@ -2001,6 +638,12 @@ export default function Dealer() {
                         <FiUsers /> สมาชิก ({members.length})
                     </button>
                     <button
+                        className={`tab-btn ${activeTab === 'upstreamDealers' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('upstreamDealers')}
+                    >
+                        <FiSend /> เจ้ามือตีออก
+                    </button>
+                    <button
                         className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
                         onClick={() => setActiveTab('profile')}
                     >
@@ -2234,6 +877,16 @@ export default function Dealer() {
                                 </div>
                             )}
                         </div>
+                    )}
+
+                    {activeTab === 'upstreamDealers' && (
+                        <UpstreamDealersTab
+                            user={user}
+                            upstreamDealers={upstreamDealers}
+                            setUpstreamDealers={setUpstreamDealers}
+                            loadingUpstream={loadingUpstream}
+                            setLoadingUpstream={setLoadingUpstream}
+                        />
                     )}
 
                     {activeTab === 'profile' && (
@@ -3767,611 +2420,6 @@ function SubmissionsModal({ round, onClose }) {
     )
 }
 
-// Results Modal Component
-function ResultsModal({ round, onClose }) {
-    const lotteryType = round.lottery_type
-    const isEditing = round.is_result_announced // Check if we're editing existing results
-
-    // State for different lottery types
-    const [thaiForm, setThaiForm] = useState({
-        '6_top': '',
-        '2_bottom': '',
-        '3_bottom_1': '',
-        '3_bottom_2': '',
-        '3_bottom_3': '',
-        '3_bottom_4': ''
-    })
-
-    const [laoForm, setLaoForm] = useState({
-        '4_set': ''
-    })
-
-    const [hanoiForm, setHanoiForm] = useState({
-        '4_set': '',
-        '2_bottom': ''
-    })
-
-    const [stockForm, setStockForm] = useState({
-        '2_top': '',
-        '2_bottom': ''
-    })
-
-    const [loading, setLoading] = useState(false)
-
-    // Load existing winning numbers if editing
-    useEffect(() => {
-        if (isEditing && round.winning_numbers) {
-            const wn = round.winning_numbers
-            console.log('Loading existing winning numbers:', wn)
-
-            if (lotteryType === 'thai') {
-                setThaiForm({
-                    '6_top': wn['6_top'] || '',
-                    '2_bottom': wn['2_bottom'] || '',
-                    '3_bottom_1': wn['3_bottom']?.[0] || '',
-                    '3_bottom_2': wn['3_bottom']?.[1] || '',
-                    '3_bottom_3': wn['3_bottom']?.[2] || '',
-                    '3_bottom_4': wn['3_bottom']?.[3] || ''
-                })
-            } else if (lotteryType === 'lao') {
-                setLaoForm({
-                    '4_set': wn['4_set'] || ''
-                })
-            } else if (lotteryType === 'hanoi') {
-                setHanoiForm({
-                    '4_set': wn['4_set'] || '',
-                    '2_bottom': wn['2_bottom'] || ''
-                })
-            } else if (lotteryType === 'stock') {
-                setStockForm({
-                    '2_top': wn['2_top'] || '',
-                    '2_bottom': wn['2_bottom'] || ''
-                })
-            }
-        }
-    }, [round, isEditing, lotteryType])
-
-    // Auto-derive numbers for display
-    const getDerivedNumbers = () => {
-        if (lotteryType === 'lao') {
-            const set4 = laoForm['4_set']
-            return {
-                '2_top': set4.length >= 2 ? set4.slice(-2) : '',
-                '2_bottom': set4.length >= 2 ? set4.slice(0, 2) : '',
-                '3_top': set4.length >= 3 ? set4.slice(-3) : ''
-            }
-        }
-        if (lotteryType === 'hanoi') {
-            const set4 = hanoiForm['4_set']
-            return {
-                '2_top': set4.length >= 2 ? set4.slice(-2) : '',
-                '3_top': set4.length >= 3 ? set4.slice(-3) : ''
-            }
-        }
-        if (lotteryType === 'thai') {
-            const six = thaiForm['6_top']
-            return {
-                '2_top': six.length >= 2 ? six.slice(-2) : '',
-                '3_top': six.length >= 3 ? six.slice(-3) : ''
-            }
-        }
-        return {}
-    }
-
-    const derived = getDerivedNumbers()
-
-    // Build final winning numbers object for database
-    const buildWinningNumbers = () => {
-        if (lotteryType === 'thai') {
-            const result = {
-                '6_top': thaiForm['6_top'],
-                '2_top': derived['2_top'],
-                '3_top': derived['3_top'],
-                '2_bottom': thaiForm['2_bottom'],
-                '3_bottom': [
-                    thaiForm['3_bottom_1'],
-                    thaiForm['3_bottom_2'],
-                    thaiForm['3_bottom_3'],
-                    thaiForm['3_bottom_4']
-                ].filter(n => n.length === 3)
-            }
-            return result
-        }
-        if (lotteryType === 'lao') {
-            return {
-                '4_set': laoForm['4_set'],
-                '2_top': derived['2_top'],
-                '2_bottom': derived['2_bottom'],
-                '3_top': derived['3_top']
-            }
-        }
-        if (lotteryType === 'hanoi') {
-            return {
-                '4_set': hanoiForm['4_set'],
-                '2_top': derived['2_top'],
-                '2_bottom': hanoiForm['2_bottom'],
-                '3_top': derived['3_top']
-            }
-        }
-        if (lotteryType === 'stock') {
-            return {
-                '2_top': stockForm['2_top'],
-                '2_bottom': stockForm['2_bottom']
-            }
-        }
-        return {}
-    }
-
-    async function handleAnnounce() {
-        console.log('handleAnnounce called - proceeding directly')
-        setLoading(true)
-
-        try {
-            const winningNumbers = buildWinningNumbers()
-            console.log('Winning numbers:', winningNumbers)
-
-            // Update round with winning numbers
-            const { data: updateData, error: roundError } = await supabase
-                .from('lottery_rounds')
-                .update({
-                    winning_numbers: winningNumbers,
-                    is_result_announced: true,
-                    status: 'announced'
-                })
-                .eq('id', round.id)
-                .select()
-
-            console.log('Update result:', updateData, roundError)
-
-            if (roundError) {
-                console.error('Round update error:', roundError)
-                throw roundError
-            }
-
-            // If editing, reset all winner statuses first
-            if (isEditing) {
-                console.log('Resetting previous winner statuses...')
-                const { error: resetError } = await supabase
-                    .from('submissions')
-                    .update({ is_winner: false, prize_amount: 0 })
-                    .eq('round_id', round.id)
-                    .eq('is_deleted', false)
-
-                if (resetError) {
-                    console.warn('Error resetting winners:', resetError)
-                }
-            }
-
-            // Try to calculate winners (RPC function might not exist)
-            let winCount = 0
-            try {
-                const { data, error: calcError } = await supabase
-                    .rpc('calculate_round_winners', { p_round_id: round.id })
-
-                console.log('RPC result:', data, calcError)
-
-                if (calcError) {
-                    console.warn('RPC error (ignored):', calcError)
-                    // Don't throw - just continue without calculating winners
-                } else {
-                    winCount = data || 0
-                }
-            } catch (rpcError) {
-                console.warn('RPC function not available:', rpcError)
-                // Continue anyway - the round was updated successfully
-            }
-
-            const message = isEditing
-                ? `อัปเดตผลรางวัลสำเร็จ! มีผู้ถูกรางวัล ${winCount} รายการ`
-                : `ประกาศผลสำเร็จ! มีผู้ถูกรางวัล ${winCount} รายการ`
-            alert(message)
-            onClose()
-
-        } catch (error) {
-            console.error('Error announcing:', error)
-            alert('เกิดข้อผิดพลาด: ' + (error.message || 'Unknown error'))
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    // Render input helper
-    const renderNumberInput = (label, value, onChange, maxLength, placeholder, isLarge = false) => (
-        <div className={`form-group ${isLarge ? 'full-width' : ''}`}>
-            <label className="form-label">{label}</label>
-            <input
-                type="text"
-                inputMode="numeric"
-                className={`form-input result-input ${isLarge ? 'result-input-large' : ''}`}
-                maxLength={maxLength}
-                placeholder={placeholder}
-                value={value}
-                onChange={e => onChange(e.target.value.replace(/\D/g, ''))}
-            />
-        </div>
-    )
-
-    // Render derived preview
-    const renderDerivedPreview = (numbers) => (
-        <div className="derived-preview">
-            <span className="derived-label">เลขที่จะบันทึก:</span>
-            <div className="derived-numbers">
-                {Object.entries(numbers).filter(([k, v]) => v).map(([key, val]) => (
-                    <span key={key} className="derived-item">
-                        <span className="derived-key">{key.replace('_', ' ')}</span>
-                        <span className="derived-value">{val}</span>
-                    </span>
-                ))}
-            </div>
-        </div>
-    )
-
-    return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
-                <div className="modal-header">
-                    <h3><FiCheck /> ใส่ผลรางวัล - {LOTTERY_TYPES[lotteryType]}</h3>
-                    <button className="modal-close" onClick={onClose}>
-                        <FiX />
-                    </button>
-                </div>
-
-                <div className="modal-body">
-                    <p className="text-muted" style={{ marginBottom: '1.5rem' }}>
-                        กรอกเลขที่ออกรางวัลสำหรับ <strong>{round.lottery_name}</strong>
-                    </p>
-
-                    {/* Thai Lottery Form */}
-                    {lotteryType === 'thai' && (
-                        <div className="results-form results-form-thai">
-                            {renderNumberInput(
-                                '🏆 รางวัลที่ 1 (6 ตัว)',
-                                thaiForm['6_top'],
-                                val => setThaiForm({ ...thaiForm, '6_top': val }),
-                                6,
-                                '000000',
-                                true
-                            )}
-
-                            {derived['2_top'] && (
-                                <div className="auto-derived-info">
-                                    <span>→ 2 ตัวบน: <strong>{derived['2_top']}</strong></span>
-                                    <span>→ 3 ตัวบน: <strong>{derived['3_top']}</strong></span>
-                                </div>
-                            )}
-
-                            <div className="form-divider"></div>
-
-                            {renderNumberInput(
-                                '2 ตัวล่าง',
-                                thaiForm['2_bottom'],
-                                val => setThaiForm({ ...thaiForm, '2_bottom': val }),
-                                2,
-                                '00'
-                            )}
-
-                            <div className="form-divider"></div>
-
-                            <div className="form-section-label">3 ตัวล่าง (4 รางวัล)</div>
-                            <div className="three-bottom-grid">
-                                {renderNumberInput(
-                                    'ชุดที่ 1',
-                                    thaiForm['3_bottom_1'],
-                                    val => setThaiForm({ ...thaiForm, '3_bottom_1': val }),
-                                    3,
-                                    '000'
-                                )}
-                                {renderNumberInput(
-                                    'ชุดที่ 2',
-                                    thaiForm['3_bottom_2'],
-                                    val => setThaiForm({ ...thaiForm, '3_bottom_2': val }),
-                                    3,
-                                    '000'
-                                )}
-                                {renderNumberInput(
-                                    'ชุดที่ 3',
-                                    thaiForm['3_bottom_3'],
-                                    val => setThaiForm({ ...thaiForm, '3_bottom_3': val }),
-                                    3,
-                                    '000'
-                                )}
-                                {renderNumberInput(
-                                    'ชุดที่ 4',
-                                    thaiForm['3_bottom_4'],
-                                    val => setThaiForm({ ...thaiForm, '3_bottom_4': val }),
-                                    3,
-                                    '000'
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Lao Lottery Form */}
-                    {lotteryType === 'lao' && (
-                        <div className="results-form results-form-lao">
-                            {renderNumberInput(
-                                '🎯 เลขชุด 4 ตัว',
-                                laoForm['4_set'],
-                                val => setLaoForm({ ...laoForm, '4_set': val }),
-                                4,
-                                '0000',
-                                true
-                            )}
-
-                            {laoForm['4_set'].length >= 2 && renderDerivedPreview({
-                                '2 ตัวบน': derived['2_top'],
-                                '2 ตัวล่าง': derived['2_bottom'],
-                                '3 ตัวบน': derived['3_top']
-                            })}
-                        </div>
-                    )}
-
-                    {/* Hanoi Lottery Form */}
-                    {lotteryType === 'hanoi' && (
-                        <div className="results-form results-form-hanoi">
-                            {renderNumberInput(
-                                '🎯 เลขชุด 4 ตัว',
-                                hanoiForm['4_set'],
-                                val => setHanoiForm({ ...hanoiForm, '4_set': val }),
-                                4,
-                                '0000',
-                                true
-                            )}
-
-                            {hanoiForm['4_set'].length >= 2 && (
-                                <div className="auto-derived-info">
-                                    <span>→ 2 ตัวบน: <strong>{derived['2_top']}</strong></span>
-                                    <span>→ 3 ตัวบน: <strong>{derived['3_top']}</strong></span>
-                                </div>
-                            )}
-
-                            <div className="form-divider"></div>
-
-                            {renderNumberInput(
-                                '2 ตัวล่าง (กรอกเอง)',
-                                hanoiForm['2_bottom'],
-                                val => setHanoiForm({ ...hanoiForm, '2_bottom': val }),
-                                2,
-                                '00'
-                            )}
-                        </div>
-                    )}
-
-                    {/* Stock Lottery Form */}
-                    {lotteryType === 'stock' && (
-                        <div className="results-form results-form-stock">
-                            <p className="form-note">หวยหุ้น - แทงเลข 2 ตัว บนและล่าง</p>
-
-                            <div className="stock-inputs-row">
-                                {renderNumberInput(
-                                    '2 ตัวบน',
-                                    stockForm['2_top'],
-                                    val => setStockForm({ ...stockForm, '2_top': val }),
-                                    2,
-                                    '00'
-                                )}
-                                {renderNumberInput(
-                                    '2 ตัวล่าง',
-                                    stockForm['2_bottom'],
-                                    val => setStockForm({ ...stockForm, '2_bottom': val }),
-                                    2,
-                                    '00'
-                                )}
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                <div className="modal-footer">
-                    <button className="btn btn-secondary" onClick={onClose}>
-                        ยกเลิก
-                    </button>
-                    <button
-                        className="btn btn-primary"
-                        onClick={handleAnnounce}
-                        disabled={loading}
-                    >
-                        {loading ? (isEditing ? 'กำลังอัปเดต...' : 'กำลังประกาศ...') : (
-                            <>{isEditing ? <><FiEdit2 /> อัปเดตผล</> : <><FiCheck /> ประกาศผล</>}</>
-                        )}
-                    </button>
-                </div>
-            </div>
-        </div>
-    )
-}
-
-// Number Limits Modal Component
-function NumberLimitsModal({ round, onClose }) {
-    const [limits, setLimits] = useState([])
-    const [loading, setLoading] = useState(true)
-    const [saving, setSaving] = useState(false)
-    const [newLimit, setNewLimit] = useState({
-        bet_type: Object.keys(BET_TYPES_BY_LOTTERY[round.lottery_type] || {})[0] || '2_top',
-        numbers: '',
-        max_amount: ''
-    })
-
-    useEffect(() => {
-        fetchLimits()
-    }, [round.id])
-
-    async function fetchLimits() {
-        setLoading(true)
-        try {
-            const { data, error } = await supabase
-                .from('number_limits')
-                .select('*')
-                .eq('round_id', round.id)
-                .order('created_at', { ascending: false })
-
-            if (!error) setLimits(data || [])
-        } catch (error) {
-            console.error('Error fetching limits:', error)
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    async function handleAddLimit() {
-        if (!newLimit.numbers || !newLimit.max_amount) {
-            alert('กรุณากรอกข้อมูลให้ครบ')
-            return
-        }
-
-        setSaving(true)
-        try {
-            const { error } = await supabase
-                .from('number_limits')
-                .insert({
-                    round_id: round.id,
-                    bet_type: newLimit.bet_type,
-                    numbers: newLimit.numbers,
-                    max_amount: parseFloat(newLimit.max_amount)
-                })
-
-            if (error) throw error
-
-            setNewLimit({ ...newLimit, numbers: '', max_amount: '' })
-            fetchLimits()
-        } catch (error) {
-            console.error('Error adding limit:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
-        } finally {
-            setSaving(false)
-        }
-    }
-
-    async function handleDeleteLimit(id) {
-        if (!confirm('ต้องการลบเลขอั้นนี้?')) return
-
-        try {
-            const { error } = await supabase
-                .from('number_limits')
-                .delete()
-                .eq('id', id)
-
-            if (!error) fetchLimits()
-        } catch (error) {
-            console.error('Error deleting limit:', error)
-        }
-    }
-
-    return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
-                <div className="modal-header">
-                    <h3><FiAlertTriangle /> ตั้งค่าเลขอั้น - {round.lottery_name}</h3>
-                    <button className="modal-close" onClick={onClose}>
-                        <FiX />
-                    </button>
-                </div>
-
-                <div className="modal-body">
-                    {/* Add Form */}
-                    <div className="add-limit-form card">
-                        <h4>เพิ่มเลขอั้นใหม่</h4>
-                        <div className="form-row">
-                            <div className="form-group">
-                                <label className="form-label">ประเภท</label>
-                                <select
-                                    className="form-input"
-                                    value={newLimit.bet_type}
-                                    onChange={e => setNewLimit({ ...newLimit, bet_type: e.target.value })}
-                                >
-                                    {Object.entries(BET_TYPES_BY_LOTTERY[round.lottery_type] || {}).map(([key, config]) => (
-                                        <option key={key} value={key}>{config.label}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">เลข</label>
-                                <input
-                                    type="text"
-                                    className="form-input"
-                                    placeholder="เช่น 47"
-                                    value={newLimit.numbers}
-                                    onChange={e => setNewLimit({ ...newLimit, numbers: e.target.value.replace(/\D/g, '') })}
-                                />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">รับสูงสุด ({round.currency_name})</label>
-                                <input
-                                    type="number"
-                                    className="form-input"
-                                    placeholder="0"
-                                    value={newLimit.max_amount}
-                                    onChange={e => setNewLimit({ ...newLimit, max_amount: e.target.value })}
-                                />
-                            </div>
-                            <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
-                                <button
-                                    className="btn btn-primary full-width"
-                                    onClick={(e) => {
-                                        e.target.blur()
-                                        handleAddLimit()
-                                    }}
-                                    disabled={saving}
-                                >
-                                    <FiPlus /> เพิ่ม
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Limits List */}
-                    <div className="limits-list-section">
-                        <h4>รายการเลขอั้นปัจจุบัน</h4>
-                        {loading ? (
-                            <div className="loading-state">
-                                <div className="spinner"></div>
-                            </div>
-                        ) : limits.length === 0 ? (
-                            <p className="text-muted">ยังไม่มีการตั้งค่าเลขอั้นเฉพาะเลข</p>
-                        ) : (
-                            <div className="table-wrap">
-                                <table className="data-table">
-                                    <thead>
-                                        <tr>
-                                            <th>ประเภท</th>
-                                            <th>เลข</th>
-                                            <th>รับสูงสุด</th>
-                                            <th>จัดการ</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {limits.map(limit => (
-                                            <tr key={limit.id}>
-                                                <td>{BET_TYPES[limit.bet_type]}</td>
-                                                <td className="number-cell">{limit.numbers}</td>
-                                                <td>{round.currency_symbol}{limit.max_amount?.toLocaleString()}</td>
-                                                <td>
-                                                    <button
-                                                        className="icon-btn danger"
-                                                        onClick={() => handleDeleteLimit(limit.id)}
-                                                    >
-                                                        <FiTrash2 />
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                <div className="modal-footer">
-                    <button className="btn btn-secondary" onClick={onClose}>
-                        ปิด
-                    </button>
-                </div>
-            </div>
-        </div>
-    )
-}
-
 // Dealer Profile Tab Component
 function DealerProfileTab({ user, profile, subscription, formatDate }) {
     const [isEditing, setIsEditing] = useState(false)
@@ -5106,6 +3154,275 @@ function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock
     )
 }
 
+// Upstream Dealers Tab - For managing dealers to transfer bets to
+function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loadingUpstream, setLoadingUpstream }) {
+    const [showAddModal, setShowAddModal] = useState(false)
+    const [saving, setSaving] = useState(false)
+    const [editingDealer, setEditingDealer] = useState(null)
+    const [formData, setFormData] = useState({
+        upstream_name: '',
+        upstream_contact: '',
+        notes: ''
+    })
+
+    // Fetch upstream dealers on mount
+    useEffect(() => {
+        fetchUpstreamDealers()
+    }, [user?.id])
+
+    async function fetchUpstreamDealers() {
+        if (!user?.id) return
+        setLoadingUpstream(true)
+        try {
+            const { data, error } = await supabase
+                .from('dealer_upstream_connections')
+                .select(`
+                    *,
+                    upstream_profile:upstream_dealer_id (
+                        id, full_name, email, phone
+                    )
+                `)
+                .eq('dealer_id', user.id)
+                .order('created_at', { ascending: false })
+
+            if (!error) {
+                setUpstreamDealers(data || [])
+            }
+        } catch (error) {
+            console.error('Error fetching upstream dealers:', error)
+        } finally {
+            setLoadingUpstream(false)
+        }
+    }
+
+    // Open modal for adding new manual dealer
+    function handleOpenAddModal() {
+        setEditingDealer(null)
+        setFormData({ upstream_name: '', upstream_contact: '', notes: '' })
+        setShowAddModal(true)
+    }
+
+    // Open modal for editing
+    function handleEditDealer(dealer) {
+        setEditingDealer(dealer)
+        setFormData({
+            upstream_name: dealer.upstream_name || '',
+            upstream_contact: dealer.upstream_contact || '',
+            notes: dealer.notes || ''
+        })
+        setShowAddModal(true)
+    }
+
+    // Save (add or update)
+    async function handleSave() {
+        if (!formData.upstream_name.trim()) {
+            alert('กรุณากรอกชื่อเจ้ามือ')
+            return
+        }
+
+        setSaving(true)
+        try {
+            if (editingDealer) {
+                // Update
+                const { error } = await supabase
+                    .from('dealer_upstream_connections')
+                    .update({
+                        upstream_name: formData.upstream_name,
+                        upstream_contact: formData.upstream_contact,
+                        notes: formData.notes,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', editingDealer.id)
+
+                if (error) throw error
+                alert('แก้ไขข้อมูลสำเร็จ!')
+            } else {
+                // Insert new manual dealer
+                const { error } = await supabase
+                    .from('dealer_upstream_connections')
+                    .insert({
+                        dealer_id: user.id,
+                        upstream_name: formData.upstream_name,
+                        upstream_contact: formData.upstream_contact,
+                        notes: formData.notes,
+                        is_linked: false
+                    })
+
+                if (error) throw error
+                alert('เพิ่มเจ้ามือสำเร็จ!')
+            }
+
+            setShowAddModal(false)
+            fetchUpstreamDealers()
+        } catch (error) {
+            console.error('Error saving upstream dealer:', error)
+            alert('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    // Delete
+    async function handleDelete(dealer) {
+        if (!confirm(`ต้องการลบ "${dealer.upstream_name}" หรือไม่?`)) return
+
+        try {
+            const { error } = await supabase
+                .from('dealer_upstream_connections')
+                .delete()
+                .eq('id', dealer.id)
+
+            if (error) throw error
+            alert('ลบสำเร็จ!')
+            fetchUpstreamDealers()
+        } catch (error) {
+            console.error('Error deleting upstream dealer:', error)
+            alert('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+
+    return (
+        <div className="upstream-dealers-section">
+            {/* Header */}
+            <div className="section-header">
+                <h2><FiSend /> เจ้ามือตีออก</h2>
+                <button className="btn btn-primary" onClick={handleOpenAddModal}>
+                    <FiPlus /> เพิ่มเจ้ามือ
+                </button>
+            </div>
+
+            <p className="section-description" style={{ marginBottom: '1.5rem', color: 'var(--color-text-muted)' }}>
+                จัดการรายชื่อเจ้ามือที่คุณสามารถตีเลขออกไปได้ สามารถเพิ่มเจ้ามือด้วยตนเอง หรือเชื่อมต่อกับเจ้ามือในระบบผ่าน QR Code
+            </p>
+
+            {loadingUpstream ? (
+                <div className="loading-state">
+                    <div className="spinner"></div>
+                    <p>กำลังโหลด...</p>
+                </div>
+            ) : upstreamDealers.length === 0 ? (
+                <div className="empty-state card" style={{ padding: '3rem', textAlign: 'center' }}>
+                    <FiSend style={{ fontSize: '3rem', color: 'var(--color-text-muted)', marginBottom: '1rem' }} />
+                    <h3>ยังไม่มีเจ้ามือตีออก</h3>
+                    <p style={{ color: 'var(--color-text-muted)', marginBottom: '1.5rem' }}>
+                        เพิ่มเจ้ามือที่คุณต้องการตีเลขออกไป
+                    </p>
+                    <button className="btn btn-primary" onClick={handleOpenAddModal}>
+                        <FiPlus /> เพิ่มเจ้ามือคนแรก
+                    </button>
+                </div>
+            ) : (
+                <div className="upstream-dealers-grid">
+                    {upstreamDealers.map(dealer => (
+                        <div key={dealer.id} className="upstream-dealer-card card">
+                            <div className="dealer-card-header">
+                                <div className="dealer-info">
+                                    <h3 className="dealer-name">
+                                        {dealer.upstream_name}
+                                        {dealer.is_linked && (
+                                            <span className="linked-badge" title="เชื่อมต่อกับระบบ">
+                                                <FiCheck />
+                                            </span>
+                                        )}
+                                    </h3>
+                                    {dealer.upstream_contact && (
+                                        <p className="dealer-contact">
+                                            <FiUser style={{ marginRight: '0.25rem' }} />
+                                            {dealer.upstream_contact}
+                                        </p>
+                                    )}
+                                    {dealer.notes && (
+                                        <p className="dealer-notes">{dealer.notes}</p>
+                                    )}
+                                </div>
+                                <div className="dealer-actions">
+                                    <button
+                                        className="icon-btn"
+                                        onClick={() => handleEditDealer(dealer)}
+                                        title="แก้ไข"
+                                    >
+                                        <FiEdit2 />
+                                    </button>
+                                    <button
+                                        className="icon-btn danger"
+                                        onClick={() => handleDelete(dealer)}
+                                        title="ลบ"
+                                    >
+                                        <FiTrash2 />
+                                    </button>
+                                </div>
+                            </div>
+                            {dealer.is_linked && dealer.upstream_profile && (
+                                <div className="linked-profile-info">
+                                    <span>เชื่อมต่อกับ: {dealer.upstream_profile.full_name || dealer.upstream_profile.email}</span>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Add/Edit Modal */}
+            {showAddModal && (
+                <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3>{editingDealer ? <><FiEdit2 /> แก้ไขเจ้ามือ</> : <><FiPlus /> เพิ่มเจ้ามือใหม่</>}</h3>
+                            <button className="modal-close" onClick={() => setShowAddModal(false)}>
+                                <FiX />
+                            </button>
+                        </div>
+
+                        <div className="modal-body">
+                            <div className="form-group">
+                                <label className="form-label">ชื่อเจ้ามือ *</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    placeholder="เช่น พี่หนึ่ง, เจ้ใหญ่"
+                                    value={formData.upstream_name}
+                                    onChange={e => setFormData({ ...formData, upstream_name: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">เบอร์ติดต่อ / Line ID</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    placeholder="เช่น 08x-xxx-xxxx หรือ line_id"
+                                    value={formData.upstream_contact}
+                                    onChange={e => setFormData({ ...formData, upstream_contact: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">หมายเหตุ</label>
+                                <textarea
+                                    className="form-input"
+                                    rows="2"
+                                    placeholder="เช่น รับได้แค่ 2 ตัว, หลัง 5 โมง"
+                                    value={formData.notes}
+                                    onChange={e => setFormData({ ...formData, notes: e.target.value })}
+                                ></textarea>
+                            </div>
+                        </div>
+
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowAddModal(false)}>
+                                ยกเลิก
+                            </button>
+                            <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                                {saving ? 'กำลังบันทึก...' : <><FiCheck /> บันทึก</>}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
 // Member Settings Component - With Lottery Type Tabs
 // Refactored from UserSettingsModal to support inline rendering
 function MemberSettings({ member, onClose, isInline = false }) {
@@ -5394,265 +3711,6 @@ function MemberSettings({ member, onClose, isInline = false }) {
     return (
         <div className="modal-overlay" onClick={onClose}>
             {content}
-        </div>
-    )
-}
-
-// Summary Modal Component - Shows user profit/loss summary
-function SummaryModal({ round, onClose }) {
-    const [submissions, setSubmissions] = useState([])
-    const [userSettings, setUserSettings] = useState({})
-    const [loading, setLoading] = useState(true)
-
-    useEffect(() => {
-        fetchData()
-    }, [round.id])
-
-    async function fetchData() {
-        setLoading(true)
-        try {
-            // Fetch submissions
-            const { data: submissionsData, error: subError } = await supabase
-                .from('submissions')
-                .select(`
-                    *,
-                    profiles (id, full_name, email)
-                `)
-                .eq('round_id', round.id)
-                .eq('is_deleted', false)
-                .order('created_at', { ascending: false })
-
-            if (!subError) setSubmissions(submissionsData || [])
-
-            // Fetch user_settings for all users in this round
-            const { data: settingsData, error: setError } = await supabase
-                .from('user_settings')
-                .select('*')
-                .eq('dealer_id', round.dealer_id)
-
-            if (!setError && settingsData) {
-                const settingsMap = {}
-                settingsData.forEach(s => {
-                    settingsMap[s.user_id] = s
-                })
-                setUserSettings(settingsMap)
-            }
-        } catch (error) {
-            console.error('Error fetching data:', error)
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    // Get lottery type category
-    const getLotteryTypeKey = () => {
-        if (round.lottery_type === 'thai') return 'thai'
-        if (round.lottery_type === 'lao' || round.lottery_type === 'hanoi') return 'lao'
-        if (round.lottery_type === 'stock') return 'stock'
-        return 'thai'
-    }
-
-    // Default commission rates per bet type (percentage) - same as UserDashboard
-    const DEFAULT_COMMISSIONS = {
-        'run_top': 15, 'run_bottom': 15,
-        'pak_top': 15, 'pak_bottom': 15,
-        '2_top': 15, '2_front': 15, '2_center': 15, '2_spread': 15, '2_run': 15, '2_bottom': 15,
-        '3_top': 15, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
-        '4_run': 15, '4_tod': 15, '4_set': 15, '4_float': 15, '5_run': 15, '5_float': 15, '6_top': 15
-    }
-
-    // Calculate commission for a submission
-    const getCommission = (sub) => {
-        const lotteryKey = getLotteryTypeKey()
-        const settings = userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[sub.bet_type]
-
-        if (settings && settings.commission !== undefined) {
-            if (settings.isFixed) {
-                return settings.commission // Fixed amount per bet
-            }
-            return sub.amount * (settings.commission / 100) // Percentage
-        }
-
-        // Use default commission rate for this bet type
-        const defaultRate = DEFAULT_COMMISSIONS[sub.bet_type] || 15
-        return sub.amount * (defaultRate / 100)
-    }
-
-    // Default payout rates per bet type
-    const DEFAULT_PAYOUTS = {
-        'run_top': 3, 'run_bottom': 4,
-        'pak_top': 8, 'pak_bottom': 6,
-        '2_top': 65, '2_front': 65, '2_center': 65, '2_run': 10, '2_bottom': 65,
-        '3_top': 550, '3_tod': 100, '3_bottom': 135, '3_front': 100, '3_back': 135,
-        '4_run': 20, '4_tod': 100, '5_run': 10, '6_top': 1000000
-    }
-
-    // Calculate expected payout for a winning submission
-    const getExpectedPayout = (sub) => {
-        if (!sub.is_winner) return 0
-
-        const lotteryKey = getLotteryTypeKey()
-        const settings = userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[sub.bet_type]
-
-        if (settings && settings.payout !== undefined) {
-            return sub.amount * settings.payout
-        }
-
-        // Use default payout rate for this bet type
-        const defaultRate = DEFAULT_PAYOUTS[sub.bet_type] || 1
-        return sub.amount * defaultRate
-    }
-
-    // Group submissions by user
-    const userSummaries = submissions.reduce((acc, sub) => {
-        const userId = sub.user_id
-        if (!acc[userId]) {
-            acc[userId] = {
-                userId,
-                userName: sub.profiles?.full_name || sub.profiles?.email || 'ไม่ระบุชื่อ',
-                email: sub.profiles?.email || '',
-                totalBet: 0,
-                totalWin: 0,
-                totalCommission: 0,
-                winCount: 0,
-                ticketCount: 0
-            }
-        }
-        acc[userId].totalBet += sub.amount || 0
-        // Calculate win amount from user settings (more accurate than database value)
-        acc[userId].totalWin += getExpectedPayout(sub)
-        acc[userId].totalCommission += getCommission(sub)
-        acc[userId].ticketCount++
-        if (sub.is_winner) acc[userId].winCount++
-        return acc
-    }, {})
-
-    const userList = Object.values(userSummaries).sort((a, b) => {
-        // Sort by net profit (descending - winners first)
-        // Net = Win + Commission - Bet (from user perspective, positive means dealer pays them)
-        const aNet = a.totalWin + a.totalCommission - a.totalBet
-        const bNet = b.totalWin + b.totalCommission - b.totalBet
-        return bNet - aNet
-    })
-
-    // Calculate totals
-    const grandTotalBet = userList.reduce((sum, u) => sum + u.totalBet, 0)
-    const grandTotalWin = userList.reduce((sum, u) => sum + u.totalWin, 0)
-    const grandTotalCommission = userList.reduce((sum, u) => sum + u.totalCommission, 0)
-    // Dealer profit = Bets received - Prizes paid - Commission paid
-    const dealerProfit = grandTotalBet - grandTotalWin - grandTotalCommission
-
-    return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal modal-xl" onClick={e => e.stopPropagation()}>
-                <div className="modal-header">
-                    <h3><FiDollarSign /> สรุปยอดได้-เสีย - {round.lottery_name}</h3>
-                    <button className="modal-close" onClick={onClose}>
-                        <FiX />
-                    </button>
-                </div>
-
-                <div className="modal-body">
-                    {/* Grand Summary Card - Moved from bottom */}
-                    <div className="user-summary-card total-card" style={{ marginBottom: '1.5rem' }}>
-                        <div className="user-summary-header">
-                            <div className="user-info">
-                                <span className="user-name">สรุปยอดรวม</span>
-                                <span className="user-email">{userList.length} คน, {submissions.length} รายการ</span>
-                            </div>
-                            <div className={`net-amount ${dealerProfit >= 0 ? 'positive' : 'negative'}`}>
-                                {dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}
-                            </div>
-                        </div>
-                        <div className="user-summary-details">
-                            <div className="detail-item">
-                                <span className="detail-label">ยอดแทงรวม</span>
-                                <span className="detail-value">{round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
-                            </div>
-                            <div className="detail-item">
-                                <span className="detail-label">ยอดจ่ายรางวัล</span>
-                                <span className="detail-value text-danger">{round.currency_symbol}{grandTotalWin.toLocaleString()}</span>
-                            </div>
-                            <div className="detail-item">
-                                <span className="detail-label">ถูกรางวัล</span>
-                                <span className="detail-value">{submissions.filter(s => s.is_winner).length} รายการ</span>
-                            </div>
-                            <div className="detail-item">
-                                <span className="detail-label">กำไร/ขาดทุน</span>
-                                <span className={`detail-value ${dealerProfit >= 0 ? 'text-success' : 'text-danger'}`}>
-                                    {dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* User Summary Table */}
-                    <h4 style={{ marginTop: '1.5rem', marginBottom: '1rem' }}>รายละเอียดแต่ละคน</h4>
-
-                    {loading ? (
-                        <div className="loading-state">
-                            <div className="spinner"></div>
-                        </div>
-                    ) : userList.length === 0 ? (
-                        <p className="text-muted">ไม่มีรายการส่งเลขในงวดนี้</p>
-                    ) : (
-                        <div className="user-summary-list">
-                            {userList.map(user => {
-                                // Net = Prize + Commission - Bet (what dealer owes user)
-                                const net = user.totalWin + user.totalCommission - user.totalBet
-                                return (
-                                    <div key={user.userId} className={`user-summary-card ${net > 0 ? 'winner' : net < 0 ? 'loser' : ''}`}>
-                                        <div className="user-summary-header">
-                                            <div className="user-info">
-                                                <span className="user-name">{user.userName}</span>
-                                                <span className="user-email">{user.email}</span>
-                                            </div>
-                                            <div className={`net-amount ${net > 0 ? 'positive' : net < 0 ? 'negative' : ''}`}>
-                                                {net > 0 ? '+' : ''}{round.currency_symbol}{net.toLocaleString()}
-                                            </div>
-                                        </div>
-                                        <div className="user-summary-details">
-                                            <div className="detail-item">
-                                                <span className="detail-label">แทง</span>
-                                                <span className="detail-value">{user.ticketCount} รายการ</span>
-                                            </div>
-                                            <div className="detail-item">
-                                                <span className="detail-label">ยอดแทง</span>
-                                                <span className="detail-value">{round.currency_symbol}{user.totalBet.toLocaleString()}</span>
-                                            </div>
-                                            <div className="detail-item">
-                                                <span className="detail-label">ค่าคอม</span>
-                                                <span className="detail-value" style={{ color: 'var(--color-warning)' }}>{round.currency_symbol}{user.totalCommission.toLocaleString()}</span>
-                                            </div>
-                                            <div className="detail-item">
-                                                <span className="detail-label">ถูก/ยอดได้</span>
-                                                <span className={`detail-value ${user.totalWin > 0 ? 'text-success' : ''}`}>
-                                                    {user.winCount > 0 ? `${user.winCount}/${round.currency_symbol}${user.totalWin.toLocaleString()}` : '-'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div className="user-summary-footer">
-                                            {net > 0 ? (
-                                                <span className="status-badge won">ต้องจ่าย {round.currency_symbol}{net.toLocaleString()}</span>
-                                            ) : net < 0 ? (
-                                                <span className="status-badge lost">ต้องเก็บ {round.currency_symbol}{Math.abs(net).toLocaleString()}</span>
-                                            ) : (
-                                                <span className="status-badge pending">เสมอ</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                )
-                            })}
-                        </div>
-                    )}
-                </div>
-
-                <div className="modal-footer">
-                    <button className="btn btn-secondary" onClick={onClose}>
-                        ปิด
-                    </button>
-                </div>
-            </div>
         </div>
     )
 }

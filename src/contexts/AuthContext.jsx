@@ -55,18 +55,11 @@ export function AuthProvider({ children }) {
         console.log('Fetching profile for:', userId)
 
         try {
-            // Add a timeout to the profile fetch to prevent hanging
-            const fetchPromise = supabase
+            const { data, error } = await supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', userId)
                 .single()
-
-            const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
-            )
-
-            const { data, error } = await Promise.race([fetchPromise, timeoutPromise])
 
             if (error) {
                 console.error('Error fetching profile:', error)
@@ -92,10 +85,13 @@ export function AuthProvider({ children }) {
                     } else {
                         console.log('Profile auto-created successfully')
                         setProfile(newProfile)
-                        return
                     }
                 }
-            } else if (data) {
+                // Always return after error handling
+                return
+            }
+            
+            if (data) {
                 console.log('Profile loaded:', data.role)
                 setProfile(data)
             }
