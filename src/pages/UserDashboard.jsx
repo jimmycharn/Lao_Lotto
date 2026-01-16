@@ -2030,11 +2030,6 @@ export default function UserDashboard() {
                                                                                                 onClick={() => toggleBill(billId)}
                                                                                             >
                                                                                                 <div className="bill-header-left">
-                                                                                                    <input
-                                                                                                        type="checkbox"
-                                                                                                        className="bill-checkbox"
-                                                                                                        onClick={(e) => e.stopPropagation()}
-                                                                                                    />
                                                                                                     <div className="bill-header-info">
                                                                                                         <span className="bill-name">
                                                                                                             {billItems[0]?.bill_note || (billId === 'no-bill' ? '-' : billId)}
