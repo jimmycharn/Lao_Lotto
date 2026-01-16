@@ -2427,6 +2427,10 @@ export default function UserDashboard() {
             {/* Submit Modal */}
             {showSubmitModal && selectedRound && (
                 <div className="modal-overlay" onClick={() => {
+                    setDrafts([])
+                    setCurrentBillId(null)
+                    setIsEditingBill(false)
+                    setBillNote('')
                     setShowSubmitModal(false)
                 }}>
                     <div className="modal submission-modal" onClick={e => e.stopPropagation()}>
@@ -2437,6 +2441,10 @@ export default function UserDashboard() {
                             </div>
                             <button className="modal-close" onClick={(e) => {
                                 e.stopPropagation()
+                                setDrafts([])
+                                setCurrentBillId(null)
+                                setIsEditingBill(false)
+                                setBillNote('')
                                 setShowSubmitModal(false)
                             }}>
                                 <FiX />
