@@ -20,7 +20,8 @@ import {
     FiAward,
     FiEdit2,
     FiSave,
-    FiSearch
+    FiSearch,
+    FiCopy
 } from 'react-icons/fi'
 import './UserDashboard.css'
 import './ViewToggle.css'
@@ -1983,111 +1984,131 @@ export default function UserDashboard() {
                                                                                         hour: '2-digit',
                                                                                         minute: '2-digit'
                                                                                     })
+                                                                                    const billDate = new Date(billItems[0].created_at).toLocaleDateString('th-TH', {
+                                                                                        day: 'numeric',
+                                                                                        month: 'short'
+                                                                                    })
                                                                                     const isExpandedBill = expandedBills.includes(billId)
                                                                                     const processedBillItems = processItems(billItems)
 
+                                                                                    // Copy bill function
+                                                                                    const handleCopyBill = async (e) => {
+                                                                                        e.stopPropagation()
+                                                                                        const billName = billItems[0]?.bill_note || billId
+                                                                                        let text = `📋 ${billName}\n`
+                                                                                        text += `📅 ${billDate} ${billTime}\n`
+                                                                                        text += `━━━━━━━━━━━━━━━━\n`
+                                                                                        processedBillItems.forEach(sub => {
+                                                                                            const betType = displayMode === 'summary' ? (sub.display_bet_type || BET_TYPES[sub.bet_type]?.label) : BET_TYPES[sub.bet_type]?.label
+                                                                                            const nums = displayMode === 'summary' ? (sub.display_numbers || sub.numbers) : sub.numbers
+                                                                                            const amt = displayMode === 'summary' ? (sub.display_amount || sub.amount) : sub.amount
+                                                                                            text += `${betType}  ${nums}  ${round.currency_symbol}${amt?.toLocaleString()}\n`
+                                                                                        })
+                                                                                        text += `━━━━━━━━━━━━━━━━\n`
+                                                                                        text += `รวม: ${round.currency_symbol}${billTotal.toLocaleString()}`
+                                                                                        try {
+                                                                                            await navigator.clipboard.writeText(text)
+                                                                                            alert('คัดลอกแล้ว!')
+                                                                                        } catch (err) {
+                                                                                            const textArea = document.createElement('textarea')
+                                                                                            textArea.value = text
+                                                                                            textArea.style.position = 'fixed'
+                                                                                            textArea.style.left = '-9999px'
+                                                                                            document.body.appendChild(textArea)
+                                                                                            textArea.select()
+                                                                                            document.execCommand('copy')
+                                                                                            document.body.removeChild(textArea)
+                                                                                            alert('คัดลอกแล้ว!')
+                                                                                        }
+                                                                                    }
+
                                                                                     return (
-                                                                                        <div key={billId} className={`bill-group card ${isExpandedBill ? 'expanded' : ''}`}>
+                                                                                        <div key={billId} className={`bill-card-new ${isExpandedBill ? 'expanded' : ''}`}>
+                                                                                            {/* Bill Header */}
                                                                                             <div
-                                                                                                className="bill-group-header clickable"
+                                                                                                className="bill-card-header"
                                                                                                 onClick={() => toggleBill(billId)}
                                                                                             >
-                                                                                                <div className="bill-header-grid">
-                                                                                                    <div className="bill-header-labels">
-                                                                                                        <span>ใบโพย</span>
-                                                                                                        <span>รวม</span>
-                                                                                                        <span>คอม</span>
-                                                                                                        <span></span>
-                                                                                                    </div>
-                                                                                                    <div className="bill-header-values">
-                                                                                                        <span className="bill-id-value">{billId === 'no-bill' ? '-' : billId}</span>
-                                                                                                        <span className="bill-total">{round.currency_symbol}{billTotal.toLocaleString()}</span>
-                                                                                                        <span className="bill-commission">{round.currency_symbol}{billCommission.toLocaleString()}</span>
-                                                                                                        <span className="expand-icon">
-                                                                                                            {isExpandedBill ? <FiChevronUp /> : <FiChevronDown />}
+                                                                                                <div className="bill-header-left">
+                                                                                                    <input
+                                                                                                        type="checkbox"
+                                                                                                        className="bill-checkbox"
+                                                                                                        onClick={(e) => e.stopPropagation()}
+                                                                                                    />
+                                                                                                    <div className="bill-header-info">
+                                                                                                        <span className="bill-name">
+                                                                                                            {billItems[0]?.bill_note || (billId === 'no-bill' ? '-' : billId)}
+                                                                                                        </span>
+                                                                                                        <span className="bill-meta">
+                                                                                                            {billDate} {billTime}
                                                                                                         </span>
                                                                                                     </div>
-                                                                                                    <div className="bill-sub-row">
-                                                                                                        <div className="bill-info-left">
-                                                                                                            <span className="bill-time">🕐 {billTime}</span>
-                                                                                                            {billItems[0]?.bill_note && (
-                                                                                                                <span className="bill-note-display">📝 {billItems[0].bill_note}</span>
-                                                                                                            )}
-                                                                                                        </div>
-                                                                                                        {/* Bill Action Buttons */}
-                                                                                                        {canSubmit() && billId !== 'no-bill' && (
-                                                                                                            <div className="bill-action-buttons" onClick={e => e.stopPropagation()}>
-                                                                                                                <button
-                                                                                                                    className="bill-action-btn edit"
-                                                                                                                    onClick={() => handleEditBill(billId, billItems)}
-                                                                                                                    title="แก้ไขโพย"
-                                                                                                                >
-                                                                                                                    <FiEdit2 />
-                                                                                                                </button>
-                                                                                                                <button
-                                                                                                                    className="bill-action-btn delete"
-                                                                                                                    onClick={() => handleDeleteBill(billId)}
-                                                                                                                    title="ลบโพยทั้งหมด"
-                                                                                                                >
-                                                                                                                    <FiTrash2 />
-                                                                                                                </button>
-                                                                                                            </div>
-                                                                                                        )}
-                                                                                                    </div>
                                                                                                 </div>
-
+                                                                                                <div className="bill-header-right">
+                                                                                                    <div className="bill-header-total">
+                                                                                                        <span className="bill-total-amount">
+                                                                                                            {round.currency_symbol}{billTotal.toLocaleString()}
+                                                                                                        </span>
+                                                                                                        <span className="bill-count">
+                                                                                                            {processedBillItems.length} รายการ
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                    <button
+                                                                                                        className="bill-copy-btn"
+                                                                                                        onClick={handleCopyBill}
+                                                                                                        title="คัดลอก"
+                                                                                                    >
+                                                                                                        <FiCopy />
+                                                                                                    </button>
+                                                                                                </div>
                                                                                             </div>
 
+                                                                                            {/* Bill Items - Always visible */}
+                                                                                            <div className="bill-items-list">
+                                                                                                {processedBillItems.map(sub => (
+                                                                                                    <div
+                                                                                                        key={sub.id || sub.entry_id}
+                                                                                                        className={`bill-item-row ${canDelete(sub) ? 'editable' : ''}`}
+                                                                                                        onClick={() => handleEditSubmission(sub)}
+                                                                                                    >
+                                                                                                        <div className="bill-item-left">
+                                                                                                            <span className="bill-bet-type">
+                                                                                                                {displayMode === 'summary' ? (sub.display_bet_type || BET_TYPES[sub.bet_type]?.label) : BET_TYPES[sub.bet_type]?.label}
+                                                                                                            </span>
+                                                                                                            <span className="bill-number">
+                                                                                                                {displayMode === 'summary' ? (sub.display_numbers || sub.numbers) : sub.numbers}
+                                                                                                            </span>
+                                                                                                        </div>
+                                                                                                        <span className="bill-item-amount">
+                                                                                                            {round.currency_symbol}{(displayMode === 'summary' ? sub.display_amount : sub.amount)?.toLocaleString()}
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                ))}
+                                                                                            </div>
 
-
-                                                                                            {isExpandedBill && (
-                                                                                                <div className="bill-details-content">
-                                                                                                    <table className="submissions-table mini">
-                                                                                                        <thead>
-                                                                                                            <tr>
-                                                                                                                <th>เลข</th>
-                                                                                                                <th>จำนวน</th>
-                                                                                                                <th>ค่าคอม</th>
-                                                                                                                <th></th>
-                                                                                                            </tr>
-                                                                                                        </thead>
-                                                                                                        <tbody>
-                                                                                                            {processedBillItems.map(sub => (
-                                                                                                                <tr
-                                                                                                                    key={sub.id || sub.entry_id}
-                                                                                                                    className={`clickable-row ${canDelete(sub) ? 'editable' : ''}`}
-                                                                                                                    onClick={() => handleEditSubmission(sub)}
-                                                                                                                >
-                                                                                                                    <td className="number-cell">
-                                                                                                                        <div className="number-display">
-                                                                                                                            <span className="main-number">
-                                                                                                                                {displayMode === 'summary' ? (sub.display_numbers || sub.numbers) : sub.numbers}
-                                                                                                                            </span>
-                                                                                                                            <span className="sub-type">
-                                                                                                                                {displayMode === 'summary' ? (sub.display_bet_type || BET_TYPES[sub.bet_type]?.label) : BET_TYPES[sub.bet_type]?.label}
-                                                                                                                            </span>
-                                                                                                                        </div>
-                                                                                                                    </td>
-                                                                                                                    <td>{displayMode === 'summary' ? (sub.display_amount || sub.amount?.toLocaleString()) : sub.amount?.toLocaleString()}</td>
-                                                                                                                    <td>{sub.commission_amount?.toLocaleString()}</td>
-                                                                                                                    <td>
-                                                                                                                        {canDelete(sub) && (
-                                                                                                                            <button
-                                                                                                                                className="icon-btn danger"
-                                                                                                                                onClick={(e) => {
-                                                                                                                                    e.stopPropagation()
-                                                                                                                                    handleDelete(sub)
-                                                                                                                                }}
-                                                                                                                                title="ลบ"
-                                                                                                                            >
-                                                                                                                                <FiTrash2 />
-                                                                                                                            </button>
-                                                                                                                        )}
-                                                                                                                    </td>
-                                                                                                                </tr>
-                                                                                                            ))}
-                                                                                                        </tbody>
-                                                                                                    </table>
+                                                                                            {/* Bill Actions - For editing/deleting */}
+                                                                                            {canSubmit() && billId !== 'no-bill' && (
+                                                                                                <div className="bill-card-actions">
+                                                                                                    <button
+                                                                                                        className="bill-action-btn edit"
+                                                                                                        onClick={(e) => {
+                                                                                                            e.stopPropagation()
+                                                                                                            handleEditBill(billId, billItems)
+                                                                                                        }}
+                                                                                                        title="แก้ไขโพย"
+                                                                                                    >
+                                                                                                        <FiEdit2 /> แก้ไข
+                                                                                                    </button>
+                                                                                                    <button
+                                                                                                        className="bill-action-btn delete"
+                                                                                                        onClick={(e) => {
+                                                                                                            e.stopPropagation()
+                                                                                                            handleDeleteBill(billId)
+                                                                                                        }}
+                                                                                                        title="ลบโพยทั้งหมด"
+                                                                                                    >
+                                                                                                        <FiTrash2 /> ลบ
+                                                                                                    </button>
                                                                                                 </div>
                                                                                             )}
                                                                                         </div>
