@@ -3080,6 +3080,7 @@
         gap: 0.5rem;
     }
 }
+
 /* =============================================
    ROUNDS SUB-TABS
    ============================================= */
@@ -3111,4 +3112,63 @@
     border-color: var(--color-primary);
     color: #000;
     font-weight: 600;
+}
+
+/* Global Search and Filter for Inline Submissions */
+.inline-global-filters {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.inline-global-filters .search-input-wrapper {
+    flex: 2;
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.inline-global-filters .search-icon {
+    position: absolute;
+    left: 0.75rem;
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    pointer-events: none;
+}
+
+.inline-global-filters .search-input {
+    width: 100%;
+    padding: 0.6rem 2rem 0.6rem 2.25rem;
+    background: var(--color-surface);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md);
+    color: var(--color-text);
+    font-size: 0.9rem;
+}
+
+.inline-global-filters .search-clear-btn {
+    position: absolute;
+    right: 0.5rem;
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+    display: flex;
+    align-items: center;
+}
+
+.inline-global-filters .filter-select {
+    flex: 1;
+    padding: 0.6rem 0.75rem;
+    background: var(--color-surface);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md);
+    color: var(--color-text);
+    font-size: 0.9rem;
+    cursor: pointer;
+    min-width: 100px;
+    max-width: 150px;
 }

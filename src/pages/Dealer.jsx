@@ -221,7 +221,7 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
     const [inlineLoading, setInlineLoading] = useState(false)
     const [inlineUserFilter, setInlineUserFilter] = useState('all')
     const [inlineBetTypeFilter, setInlineBetTypeFilter] = useState('all')
-    const [isGrouped, setIsGrouped] = useState(false)
+    const [isGrouped, setIsGrouped] = useState(true)
     const [inlineSearch, setInlineSearch] = useState('')
 
     // Inline excess transfer states
@@ -800,14 +800,17 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
 
             {isExpanded && (
                 <div className="round-accordion-content">
-                    <div className="accordion-actions">
-                        {(round.status === 'closed' || new Date() > new Date(round.close_time)) && !isAnnounced && (
-                            <button className="btn btn-accent" onClick={onShowResults}><FiCheck /> ใส่ผลรางวัล</button>
-                        )}
-                        {isAnnounced && (
-                            <button className="btn btn-outline" onClick={onShowResults}><FiEdit2 /> แก้ไขผลรางวัล</button>
-                        )}
-                    </div>
+                    {/* Only show accordion-actions when there are buttons */}
+                    {((round.status === 'closed' || new Date() > new Date(round.close_time)) && !isAnnounced) || isAnnounced ? (
+                        <div className="accordion-actions">
+                            {(round.status === 'closed' || new Date() > new Date(round.close_time)) && !isAnnounced && (
+                                <button className="btn btn-accent" onClick={onShowResults}><FiCheck /> ใส่ผลรางวัล</button>
+                            )}
+                            {isAnnounced && (
+                                <button className="btn btn-outline" onClick={onShowResults}><FiEdit2 /> แก้ไขผลรางวัล</button>
+                            )}
+                        </div>
+                    ) : null}
 
                     {isAnnounced && viewMode === 'summary' && (
                         summaryData.loading ? (
@@ -860,6 +863,35 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                     {/* Inline Submissions View - shown when eye button is clicked */}
                     {viewMode === 'submissions' && (
                         <div className="inline-submissions-view">
+                            {/* Global Search and Filter above tabs */}
+                            <div className="inline-global-filters">
+                                <div className="search-input-wrapper">
+                                    <FiSearch className="search-icon" />
+                                    <input
+                                        type="text"
+                                        value={inlineSearch}
+                                        onChange={(e) => setInlineSearch(e.target.value)}
+                                        placeholder="ค้นหาเลข..."
+                                        className="form-input search-input"
+                                    />
+                                    {inlineSearch && (
+                                        <button className="search-clear-btn" onClick={() => setInlineSearch('')}>
+                                            <FiX />
+                                        </button>
+                                    )}
+                                </div>
+                                <select
+                                    value={inlineBetTypeFilter}
+                                    onChange={(e) => setInlineBetTypeFilter(e.target.value)}
+                                    className="form-input filter-select"
+                                >
+                                    <option value="all">ทุกประเภท</option>
+                                    {Object.entries(BET_TYPES_BY_LOTTERY[round.lottery_type] || {}).map(([type, config]) => (
+                                        <option key={type} value={type}>{config.label || BET_TYPES[type] || type}</option>
+                                    ))}
+                                </select>
+                            </div>
+
                             {/* Tabs */}
                             <div className="inline-tabs">
                                 <button
@@ -889,7 +921,7 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                     {/* Tab: ยอดรวม */}
                                     {inlineTab === 'total' && (
                                         <div className="inline-tab-content">
-                                            {/* Filters with Toggle Switch */}
+                                            {/* User Filter */}
                                             <div className="inline-filters">
                                                 <select
                                                     value={inlineUserFilter}
@@ -901,21 +933,6 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                                         <option key={name} value={name}>{name}</option>
                                                     ))}
                                                 </select>
-                                                <select
-                                                    value={inlineBetTypeFilter}
-                                                    onChange={(e) => setInlineBetTypeFilter(e.target.value)}
-                                                    className="form-input"
-                                                >
-                                                    <option value="all">ทุกประเภท</option>
-                                                    {Object.entries(BET_TYPES_BY_LOTTERY[round.lottery_type] || {}).map(([type, config]) => (
-                                                        <option key={type} value={type}>{config.label || BET_TYPES[type] || type}</option>
-                                                    ))}
-                                                </select>
-                                                <label className="toggle-switch">
-                                                    <input type="checkbox" checked={isGrouped} onChange={(e) => setIsGrouped(e.target.checked)} />
-                                                    <span className="toggle-slider"></span>
-                                                    <span className="toggle-label">รวมเลข</span>
-                                                </label>
                                             </div>
 
                                             {/* Summary */}
@@ -927,6 +944,7 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                                             const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
                                                             if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
                                                             if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
+                                                            if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
                                                             return true
                                                         })
                                                         if (isGrouped) {
@@ -947,26 +965,10 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                                         const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
                                                         if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
                                                         if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
+                                                        if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
                                                         return true
                                                     }).reduce((sum, s) => sum + s.amount, 0).toLocaleString()}</span>
                                                 </div>
-                                            </div>
-
-                                            {/* Search */}
-                                            <div className="inline-search">
-                                                <FiSearch className="search-icon" />
-                                                <input
-                                                    type="text"
-                                                    value={inlineSearch}
-                                                    onChange={(e) => setInlineSearch(e.target.value)}
-                                                    placeholder="ค้นหาเลข..."
-                                                    className="form-input"
-                                                />
-                                                {inlineSearch && (
-                                                    <button className="search-clear" onClick={() => setInlineSearch('')}>
-                                                        <FiX />
-                                                    </button>
-                                                )}
                                             </div>
 
                                             {/* Table */}
