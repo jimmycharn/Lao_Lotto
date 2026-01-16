@@ -2427,15 +2427,7 @@ export default function UserDashboard() {
             {/* Submit Modal */}
             {showSubmitModal && selectedRound && (
                 <div className="modal-overlay" onClick={() => {
-                    if (drafts.length > 0) {
-                        if (confirm('ต้องการยกเลิกการส่งเลขทั้งหมดในรายการร่าง?')) {
-                            setDrafts([])
-                            setCurrentBillId(null)
-                            setShowSubmitModal(false)
-                        }
-                    } else {
-                        setShowSubmitModal(false)
-                    }
+                    setShowSubmitModal(false)
                 }}>
                     <div className="modal submission-modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
@@ -2443,16 +2435,9 @@ export default function UserDashboard() {
                                 <h3><FiPlus /> ส่งเลข</h3>
                                 <span className="bill-id-badge">{currentBillId}</span>
                             </div>
-                            <button className="modal-close" onClick={() => {
-                                if (drafts.length > 0) {
-                                    if (confirm('ต้องการยกเลิกการส่งเลขทั้งหมดในรายการร่าง?')) {
-                                        setDrafts([])
-                                        setCurrentBillId(null)
-                                        setShowSubmitModal(false)
-                                    }
-                                } else {
-                                    setShowSubmitModal(false)
-                                }
+                            <button className="modal-close" onClick={(e) => {
+                                e.stopPropagation()
+                                setShowSubmitModal(false)
                             }}>
                                 <FiX />
                             </button>
