@@ -1041,111 +1041,143 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                     )}
 
                                     {/* Tab: ยอดเกิน */}
-                                    {inlineTab === 'excess' && (
-                                        <div className="inline-tab-content">
-                                            {excessItems.length === 0 ? (
-                                                <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
-                                                    <FiCheck style={{ fontSize: '2rem', color: 'var(--color-success)', marginBottom: '0.5rem' }} />
-                                                    <p style={{ color: 'var(--color-text-muted)' }}>ไม่มียอดเกิน</p>
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    {/* Summary */}
-                                                    <div className="inline-summary" style={{ marginBottom: '1rem' }}>
-                                                        <div className="summary-item">
-                                                            <span className="label">ยอดเกินรวม</span>
-                                                            <span className="value text-warning">
-                                                                {excessItems.some(i => i.isSetBased)
-                                                                    ? `${excessItems.reduce((sum, i) => sum + (i.isSetBased ? i.excess : 0), 0)} ชุด`
-                                                                    : `${round.currency_symbol}${excessItems.reduce((sum, i) => sum + i.excess, 0).toLocaleString()}`}
-                                                            </span>
-                                                        </div>
-                                                        {selectedCount > 0 && (
+                                    {inlineTab === 'excess' && (() => {
+                                        // Filter excessItems based on search and bet type filter
+                                        const filteredExcessItems = excessItems.filter(item => {
+                                            if (inlineBetTypeFilter !== 'all' && item.bet_type !== inlineBetTypeFilter) return false
+                                            if (inlineSearch && !item.numbers.includes(inlineSearch)) return false
+                                            return true
+                                        })
+
+                                        // Calculate filtered stats
+                                        const filteredSelectedCount = filteredExcessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`]).length
+                                        const filteredSelectedTotalExcess = filteredExcessItems
+                                            .filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+                                            .reduce((sum, item) => sum + (item.isSetBased ? item.excess : item.excess), 0)
+
+                                        return (
+                                            <div className="inline-tab-content">
+                                                {filteredExcessItems.length === 0 ? (
+                                                    <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
+                                                        <FiCheck style={{ fontSize: '2rem', color: 'var(--color-success)', marginBottom: '0.5rem' }} />
+                                                        <p style={{ color: 'var(--color-text-muted)' }}>{excessItems.length === 0 ? 'ไม่มียอดเกิน' : 'ไม่พบรายการที่ค้นหา'}</p>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        {/* Summary */}
+                                                        <div className="inline-summary" style={{ marginBottom: '1rem' }}>
                                                             <div className="summary-item">
-                                                                <span className="label">เลือกแล้ว ({selectedCount})</span>
-                                                                <span className="value">{selectedTotalExcess} {excessItems.some(i => i.isSetBased) ? 'ชุด' : round.currency_symbol}</span>
+                                                                <span className="label">ยอดเกินรวม</span>
+                                                                <span className="value text-warning">
+                                                                    {filteredExcessItems.some(i => i.isSetBased)
+                                                                        ? `${filteredExcessItems.reduce((sum, i) => sum + (i.isSetBased ? i.excess : 0), 0)} ชุด`
+                                                                        : `${round.currency_symbol}${filteredExcessItems.reduce((sum, i) => sum + i.excess, 0).toLocaleString()}`}
+                                                                </span>
                                                             </div>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Select All and Transfer Button */}
-                                                    <div className="bulk-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-surface)', borderRadius: '8px' }}>
-                                                        <label className="checkbox-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={excessItems.length > 0 && excessItems.every(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])}
-                                                                onChange={toggleSelectAll}
-                                                                style={{ width: '18px', height: '18px', accentColor: 'var(--color-primary)' }}
-                                                            />
-                                                            <span>เลือกทั้งหมด ({excessItems.length})</span>
-                                                        </label>
-                                                        <button
-                                                            className="btn btn-warning"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation()
-                                                                if (selectedCount === 0) {
-                                                                    alert('กรุณาเลือกรายการที่ต้องการตีออก')
-                                                                    return
-                                                                }
-                                                                setShowTransferModal(true)
-                                                            }}
-                                                            disabled={selectedCount === 0}
-                                                        >
-                                                            <FiSend /> ตีออก ({selectedCount})
-                                                        </button>
-                                                    </div>
-
-                                                    {/* Excess Items List */}
-                                                    <div className="excess-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                                        {excessItems.map((item, idx) => {
-                                                            const isSelected = selectedExcessItems[`${item.bet_type}|${item.numbers}`]
-                                                            return (
-                                                                <div
-                                                                    key={idx}
-                                                                    className={`excess-card ${isSelected ? 'selected' : ''}`}
-                                                                    onClick={() => toggleExcessItem(item)}
-                                                                    style={{
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        gap: '1rem',
-                                                                        padding: '0.75rem 1rem',
-                                                                        background: isSelected ? 'rgba(255, 193, 7, 0.15)' : 'var(--color-surface)',
-                                                                        border: isSelected ? '2px solid var(--color-warning)' : '1px solid var(--color-border)',
-                                                                        borderRadius: '8px',
-                                                                        cursor: 'pointer',
-                                                                        transition: 'all 0.2s ease'
-                                                                    }}
-                                                                >
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={isSelected || false}
-                                                                        onChange={() => { }}
-                                                                        style={{ width: '18px', height: '18px', accentColor: 'var(--color-warning)' }}
-                                                                    />
-                                                                    <div style={{ flex: 1 }}>
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                                                                            <span className="type-badge">{BET_TYPES[item.bet_type] || item.bet_type}</span>
-                                                                            <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '1.1rem' }}>{item.numbers}</span>
-                                                                        </div>
-                                                                        <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-                                                                            <span>ยอด: {item.isSetBased ? `${item.setCount} ชุด` : `${round.currency_symbol}${item.total.toLocaleString()}`}</span>
-                                                                            <span>อั้น: {item.isSetBased ? `${item.limit} ชุด` : `${round.currency_symbol}${item.limit.toLocaleString()}`}</span>
-                                                                        </div>
-                                                                    </div>
-                                                                    <div style={{ textAlign: 'right' }}>
-                                                                        <div style={{ color: 'var(--color-warning)', fontWeight: 600, fontSize: '1.1rem' }}>
-                                                                            {item.isSetBased ? `${item.excess} ชุด` : `${round.currency_symbol}${item.excess.toLocaleString()}`}
-                                                                        </div>
-                                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>เกิน</div>
-                                                                    </div>
+                                                            {filteredSelectedCount > 0 && (
+                                                                <div className="summary-item">
+                                                                    <span className="label">เลือกแล้ว ({filteredSelectedCount})</span>
+                                                                    <span className="value">{filteredSelectedTotalExcess} {filteredExcessItems.some(i => i.isSetBased) ? 'ชุด' : round.currency_symbol}</span>
                                                                 </div>
-                                                            )
-                                                        })}
-                                                    </div>
-                                                </>
-                                            )}
-                                        </div>
-                                    )}
+                                                            )}
+                                                        </div>
+
+                                                        {/* Select All and Transfer Button */}
+                                                        <div className="bulk-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-surface)', borderRadius: '8px' }}>
+                                                            <label className="checkbox-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={filteredExcessItems.length > 0 && filteredExcessItems.every(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])}
+                                                                    onChange={() => {
+                                                                        const allSelected = filteredExcessItems.every(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+                                                                        if (allSelected) {
+                                                                            // Deselect only filtered items
+                                                                            const newSelected = { ...selectedExcessItems }
+                                                                            filteredExcessItems.forEach(item => {
+                                                                                delete newSelected[`${item.bet_type}|${item.numbers}`]
+                                                                            })
+                                                                            setSelectedExcessItems(newSelected)
+                                                                        } else {
+                                                                            // Select all filtered items
+                                                                            const newSelected = { ...selectedExcessItems }
+                                                                            filteredExcessItems.forEach(item => {
+                                                                                newSelected[`${item.bet_type}|${item.numbers}`] = true
+                                                                            })
+                                                                            setSelectedExcessItems(newSelected)
+                                                                        }
+                                                                    }}
+                                                                    style={{ width: '18px', height: '18px', accentColor: 'var(--color-primary)' }}
+                                                                />
+                                                                <span>เลือกทั้งหมด ({filteredExcessItems.length})</span>
+                                                            </label>
+                                                            <button
+                                                                className="btn btn-warning"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation()
+                                                                    if (filteredSelectedCount === 0) {
+                                                                        alert('กรุณาเลือกรายการที่ต้องการตีออก')
+                                                                        return
+                                                                    }
+                                                                    setShowTransferModal(true)
+                                                                }}
+                                                                disabled={filteredSelectedCount === 0}
+                                                            >
+                                                                <FiSend /> ตีออก ({filteredSelectedCount})
+                                                            </button>
+                                                        </div>
+
+                                                        {/* Excess Items List */}
+                                                        <div className="excess-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                                            {filteredExcessItems.map((item, idx) => {
+                                                                const isSelected = selectedExcessItems[`${item.bet_type}|${item.numbers}`]
+                                                                return (
+                                                                    <div
+                                                                        key={idx}
+                                                                        className={`excess-card ${isSelected ? 'selected' : ''}`}
+                                                                        onClick={() => toggleExcessItem(item)}
+                                                                        style={{
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            gap: '1rem',
+                                                                            padding: '0.75rem 1rem',
+                                                                            background: isSelected ? 'rgba(255, 193, 7, 0.15)' : 'var(--color-surface)',
+                                                                            border: isSelected ? '2px solid var(--color-warning)' : '1px solid var(--color-border)',
+                                                                            borderRadius: '8px',
+                                                                            cursor: 'pointer',
+                                                                            transition: 'all 0.2s ease'
+                                                                        }}
+                                                                    >
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={isSelected || false}
+                                                                            onChange={() => { }}
+                                                                            style={{ width: '18px', height: '18px', accentColor: 'var(--color-warning)' }}
+                                                                        />
+                                                                        <div style={{ flex: 1 }}>
+                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                                                                                <span className="type-badge">{BET_TYPES[item.bet_type] || item.bet_type}</span>
+                                                                                <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '1.1rem' }}>{item.numbers}</span>
+                                                                            </div>
+                                                                            <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                                                                                <span>ยอด: {item.isSetBased ? `${item.setCount} ชุด` : `${round.currency_symbol}${item.total.toLocaleString()}`}</span>
+                                                                                <span>อั้น: {item.isSetBased ? `${item.limit} ชุด` : `${round.currency_symbol}${item.limit.toLocaleString()}`}</span>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div style={{ textAlign: 'right' }}>
+                                                                            <div style={{ color: 'var(--color-warning)', fontWeight: 600, fontSize: '1.1rem' }}>
+                                                                                {item.isSetBased ? `${item.excess} ชุด` : `${round.currency_symbol}${item.excess.toLocaleString()}`}
+                                                                            </div>
+                                                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>เกิน</div>
+                                                                        </div>
+                                                                    </div>
+                                                                )
+                                                            })}
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                        )
+                                    })()}
 
                                     {/* Transfer Modal */}
                                     {showTransferModal && (
@@ -1201,182 +1233,191 @@ function RoundAccordionItem({ round, isSelected, onSelect, onShowSubmissions, on
                                     )}
 
                                     {/* Tab: ยอดตีออก */}
-                                    {inlineTab === 'transferred' && (
-                                        <div className="inline-tab-content">
-                                            {inlineTransfers.length === 0 ? (
-                                                <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
-                                                    <p style={{ color: 'var(--color-text-muted)' }}>ยังไม่มียอดตีออก</p>
-                                                </div>
-                                            ) : (() => {
-                                                // Group transfers by batch
-                                                const batches = {}
-                                                inlineTransfers.forEach(t => {
-                                                    const batchId = t.transfer_batch_id || t.id
-                                                    if (!batches[batchId]) {
-                                                        batches[batchId] = {
-                                                            id: batchId,
-                                                            target_dealer_name: t.target_dealer_name,
-                                                            created_at: t.created_at,
-                                                            items: [],
-                                                            totalAmount: 0
+                                    {inlineTab === 'transferred' && (() => {
+                                        // Filter transfers based on search and bet type filter
+                                        const filteredTransfers = inlineTransfers.filter(t => {
+                                            if (inlineBetTypeFilter !== 'all' && t.bet_type !== inlineBetTypeFilter) return false
+                                            if (inlineSearch && !t.numbers.includes(inlineSearch)) return false
+                                            return true
+                                        })
+
+                                        return (
+                                            <div className="inline-tab-content">
+                                                {filteredTransfers.length === 0 ? (
+                                                    <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
+                                                        <p style={{ color: 'var(--color-text-muted)' }}>{inlineTransfers.length === 0 ? 'ยังไม่มียอดตีออก' : 'ไม่พบรายการที่ค้นหา'}</p>
+                                                    </div>
+                                                ) : (() => {
+                                                    // Group filtered transfers by batch
+                                                    const batches = {}
+                                                    filteredTransfers.forEach(t => {
+                                                        const batchId = t.transfer_batch_id || t.id
+                                                        if (!batches[batchId]) {
+                                                            batches[batchId] = {
+                                                                id: batchId,
+                                                                target_dealer_name: t.target_dealer_name,
+                                                                created_at: t.created_at,
+                                                                items: [],
+                                                                totalAmount: 0
+                                                            }
                                                         }
-                                                    }
-                                                    batches[batchId].items.push(t)
-                                                    batches[batchId].totalAmount += t.amount || 0
-                                                })
-                                                const batchList = Object.values(batches).sort((a, b) =>
-                                                    new Date(b.created_at) - new Date(a.created_at)
-                                                )
-                                                const grandTotal = inlineTransfers.reduce((sum, t) => sum + (t.amount || 0), 0)
+                                                        batches[batchId].items.push(t)
+                                                        batches[batchId].totalAmount += t.amount || 0
+                                                    })
+                                                    const batchList = Object.values(batches).sort((a, b) =>
+                                                        new Date(b.created_at) - new Date(a.created_at)
+                                                    )
+                                                    const grandTotal = filteredTransfers.reduce((sum, t) => sum + (t.amount || 0), 0)
 
-                                                return (
-                                                    <>
-                                                        {/* Summary */}
-                                                        <div className="inline-summary" style={{ marginBottom: '1rem' }}>
-                                                            <div className="summary-item">
-                                                                <span className="label">จำนวนครั้ง</span>
-                                                                <span className="value">{batchList.length} ครั้ง</span>
+                                                    return (
+                                                        <>
+                                                            {/* Summary */}
+                                                            <div className="inline-summary" style={{ marginBottom: '1rem' }}>
+                                                                <div className="summary-item">
+                                                                    <span className="label">จำนวนครั้ง</span>
+                                                                    <span className="value">{batchList.length} ครั้ง</span>
+                                                                </div>
+                                                                <div className="summary-item">
+                                                                    <span className="label">รวมทั้งหมด</span>
+                                                                    <span className="value">{round.currency_symbol}{grandTotal.toLocaleString()}</span>
+                                                                </div>
                                                             </div>
-                                                            <div className="summary-item">
-                                                                <span className="label">รวมทั้งหมด</span>
-                                                                <span className="value">{round.currency_symbol}{grandTotal.toLocaleString()}</span>
-                                                            </div>
-                                                        </div>
 
-                                                        {/* Select All and Action Buttons */}
-                                                        <div className="bulk-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-surface)', borderRadius: '8px', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                                            <label className="checkbox-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={batchList.length > 0 && batchList.every(b => selectedTransferBatches[b.id])}
-                                                                    onChange={() => toggleSelectAllBatches(batchList.map(b => b.id))}
-                                                                    style={{ width: '18px', height: '18px', accentColor: 'var(--color-danger)' }}
-                                                                />
-                                                                <span>เลือกทั้งหมด ({batchList.length})</span>
-                                                            </label>
-                                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                                <button
-                                                                    className="btn btn-outline"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation()
-                                                                        handleCopySelectedBatches(batchList)
-                                                                    }}
-                                                                    disabled={getSelectedBatchCount(batchList.map(b => b.id)) === 0}
-                                                                    title="คัดลอกรายการที่เลือก"
-                                                                >
-                                                                    <FiCopy /> คัดลอก ({getSelectedBatchCount(batchList.map(b => b.id))})
-                                                                </button>
-                                                                <button
-                                                                    className="btn btn-danger"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation()
-                                                                        handleRevertTransfers(batchList.map(b => b.id))
-                                                                    }}
-                                                                    disabled={getSelectedBatchCount(batchList.map(b => b.id)) === 0 || revertingTransfer}
-                                                                >
-                                                                    <FiRotateCcw /> {revertingTransfer ? 'กำลังเอาคืน...' : `เอาคืน (${getSelectedBatchCount(batchList.map(b => b.id))})`}
-                                                                </button>
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Batch List */}
-                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                                            {batchList.map(batch => {
-                                                                const isSelected = selectedTransferBatches[batch.id]
-                                                                return (
-                                                                    <div
-                                                                        key={batch.id}
-                                                                        onClick={() => toggleTransferBatch(batch.id)}
-                                                                        style={{
-                                                                            background: isSelected ? 'rgba(239, 68, 68, 0.1)' : 'var(--color-surface)',
-                                                                            border: isSelected ? '2px solid var(--color-danger)' : '1px solid var(--color-border)',
-                                                                            borderRadius: '8px',
-                                                                            overflow: 'hidden',
-                                                                            cursor: 'pointer',
-                                                                            transition: 'all 0.2s ease'
+                                                            {/* Select All and Action Buttons */}
+                                                            <div className="bulk-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-surface)', borderRadius: '8px', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                                <label className="checkbox-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={batchList.length > 0 && batchList.every(b => selectedTransferBatches[b.id])}
+                                                                        onChange={() => toggleSelectAllBatches(batchList.map(b => b.id))}
+                                                                        style={{ width: '18px', height: '18px', accentColor: 'var(--color-danger)' }}
+                                                                    />
+                                                                    <span>เลือกทั้งหมด ({batchList.length})</span>
+                                                                </label>
+                                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                                    <button
+                                                                        className="btn btn-outline"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation()
+                                                                            handleCopySelectedBatches(batchList)
                                                                         }}
+                                                                        disabled={getSelectedBatchCount(batchList.map(b => b.id)) === 0}
+                                                                        title="คัดลอกรายการที่เลือก"
                                                                     >
-                                                                        {/* Batch Header */}
-                                                                        <div style={{
-                                                                            display: 'flex',
-                                                                            justifyContent: 'space-between',
-                                                                            alignItems: 'center',
-                                                                            padding: '0.75rem 1rem',
-                                                                            background: isSelected ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 193, 7, 0.1)',
-                                                                            borderBottom: '1px solid var(--color-border)'
-                                                                        }}>
-                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                                                <input
-                                                                                    type="checkbox"
-                                                                                    checked={isSelected || false}
-                                                                                    onChange={() => { }}
-                                                                                    style={{ width: '18px', height: '18px', accentColor: 'var(--color-danger)' }}
-                                                                                />
-                                                                                <div>
-                                                                                    <div style={{ fontWeight: 600 }}>{batch.target_dealer_name}</div>
-                                                                                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                        {new Date(batch.created_at).toLocaleString('th-TH', {
-                                                                                            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
-                                                                                        })}
+                                                                        <FiCopy /> คัดลอก ({getSelectedBatchCount(batchList.map(b => b.id))})
+                                                                    </button>
+                                                                    <button
+                                                                        className="btn btn-danger"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation()
+                                                                            handleRevertTransfers(batchList.map(b => b.id))
+                                                                        }}
+                                                                        disabled={getSelectedBatchCount(batchList.map(b => b.id)) === 0 || revertingTransfer}
+                                                                    >
+                                                                        <FiRotateCcw /> {revertingTransfer ? 'กำลังเอาคืน...' : `เอาคืน (${getSelectedBatchCount(batchList.map(b => b.id))})`}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Batch List */}
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                                                {batchList.map(batch => {
+                                                                    const isSelected = selectedTransferBatches[batch.id]
+                                                                    return (
+                                                                        <div
+                                                                            key={batch.id}
+                                                                            onClick={() => toggleTransferBatch(batch.id)}
+                                                                            style={{
+                                                                                background: isSelected ? 'rgba(239, 68, 68, 0.1)' : 'var(--color-surface)',
+                                                                                border: isSelected ? '2px solid var(--color-danger)' : '1px solid var(--color-border)',
+                                                                                borderRadius: '8px',
+                                                                                overflow: 'hidden',
+                                                                                cursor: 'pointer',
+                                                                                transition: 'all 0.2s ease'
+                                                                            }}
+                                                                        >
+                                                                            {/* Batch Header */}
+                                                                            <div style={{
+                                                                                display: 'flex',
+                                                                                justifyContent: 'space-between',
+                                                                                alignItems: 'center',
+                                                                                padding: '0.75rem 1rem',
+                                                                                background: isSelected ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 193, 7, 0.1)',
+                                                                                borderBottom: '1px solid var(--color-border)'
+                                                                            }}>
+                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                                                    <input
+                                                                                        type="checkbox"
+                                                                                        checked={isSelected || false}
+                                                                                        onChange={() => { }}
+                                                                                        style={{ width: '18px', height: '18px', accentColor: 'var(--color-danger)' }}
+                                                                                    />
+                                                                                    <div>
+                                                                                        <div style={{ fontWeight: 600 }}>{batch.target_dealer_name}</div>
+                                                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                            {new Date(batch.created_at).toLocaleString('th-TH', {
+                                                                                                day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+                                                                                            })}
+                                                                                        </div>
                                                                                     </div>
+                                                                                </div>
+                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                                                    <div style={{ textAlign: 'right' }}>
+                                                                                        <div style={{ fontWeight: 600, color: 'var(--color-warning)' }}>
+                                                                                            {round.currency_symbol}{batch.totalAmount.toLocaleString()}
+                                                                                        </div>
+                                                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                            {batch.items.length} รายการ
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <button
+                                                                                        className="btn btn-sm btn-outline"
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation()
+                                                                                            handleCopySingleBatch(batch)
+                                                                                        }}
+                                                                                        title="คัดลอกรายการนี้"
+                                                                                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                                                                                    >
+                                                                                        <FiCopy />
+                                                                                    </button>
                                                                                 </div>
                                                                             </div>
-                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                                                <div style={{ textAlign: 'right' }}>
-                                                                                    <div style={{ fontWeight: 600, color: 'var(--color-warning)' }}>
-                                                                                        {round.currency_symbol}{batch.totalAmount.toLocaleString()}
+                                                                            {/* Batch Items */}
+                                                                            <div style={{ padding: '0.5rem' }}>
+                                                                                {batch.items.map(item => (
+                                                                                    <div
+                                                                                        key={item.id}
+                                                                                        style={{
+                                                                                            display: 'flex',
+                                                                                            justifyContent: 'space-between',
+                                                                                            alignItems: 'center',
+                                                                                            padding: '0.5rem',
+                                                                                            borderBottom: '1px solid var(--color-border)'
+                                                                                        }}
+                                                                                    >
+                                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                                            <span className="type-badge" style={{ fontSize: '0.7rem' }}>
+                                                                                                {BET_TYPES[item.bet_type] || item.bet_type}
+                                                                                            </span>
+                                                                                            <span style={{ fontWeight: 500, color: 'var(--color-primary)' }}>
+                                                                                                {item.numbers}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        <span>{round.currency_symbol}{item.amount?.toLocaleString()}</span>
                                                                                     </div>
-                                                                                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                        {batch.items.length} รายการ
-                                                                                    </div>
-                                                                                </div>
-                                                                                <button
-                                                                                    className="btn btn-sm btn-outline"
-                                                                                    onClick={(e) => {
-                                                                                        e.stopPropagation()
-                                                                                        handleCopySingleBatch(batch)
-                                                                                    }}
-                                                                                    title="คัดลอกรายการนี้"
-                                                                                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
-                                                                                >
-                                                                                    <FiCopy />
-                                                                                </button>
+                                                                                ))}
                                                                             </div>
                                                                         </div>
-                                                                        {/* Batch Items */}
-                                                                        <div style={{ padding: '0.5rem' }}>
-                                                                            {batch.items.map(item => (
-                                                                                <div
-                                                                                    key={item.id}
-                                                                                    style={{
-                                                                                        display: 'flex',
-                                                                                        justifyContent: 'space-between',
-                                                                                        alignItems: 'center',
-                                                                                        padding: '0.5rem',
-                                                                                        borderBottom: '1px solid var(--color-border)'
-                                                                                    }}
-                                                                                >
-                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                                        <span className="type-badge" style={{ fontSize: '0.7rem' }}>
-                                                                                            {BET_TYPES[item.bet_type] || item.bet_type}
-                                                                                        </span>
-                                                                                        <span style={{ fontWeight: 500, color: 'var(--color-primary)' }}>
-                                                                                            {item.numbers}
-                                                                                        </span>
-                                                                                    </div>
-                                                                                    <span>{round.currency_symbol}{item.amount?.toLocaleString()}</span>
-                                                                                </div>
-                                                                            ))}
-                                                                        </div>
-                                                                    </div>
-                                                                )
-                                                            })}
-                                                        </div>
-                                                    </>
-                                                )
-                                            })()}
-                                        </div>
-                                    )}
+                                                                    )
+                                                                })}
+                                                            </div>
+                                                        </>
+                                                    )
+                                                })()}
+                                            </div>
+                                        )
+                                    })()}
                                 </>
                             )}
                         </div>
