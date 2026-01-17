@@ -36,16 +36,17 @@ export default function Login() {
         setLoading(true)
 
         try {
-            const { error: signInError } = await signIn(email, password)
+            const { data, error: signInError } = await signIn(email, password)
             if (signInError) {
                 let msg = signInError.message
                 if (msg === 'Invalid login credentials') msg = 'อีเมลหรือรหัสผ่านไม่ถูกต้อง'
                 else if (msg.includes('Email not confirmed')) msg = 'กรุณายืนยันอีเมลในกล่องข้อความของคุณก่อนเข้าสู่ระบบ'
                 setError(msg)
                 setLoading(false)
+                return
             }
-            // On success, authLoading will become true while fetching profile,
-            // and the useEffect above will reset loading when it's done.
+            // Login successful - onAuthStateChange will handle profile fetching
+            // Keep loading=true until authLoading becomes false (handled by useEffect)
         } catch (err) {
             setError('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง')
             setLoading(false)

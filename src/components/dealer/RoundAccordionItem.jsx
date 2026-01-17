@@ -382,7 +382,7 @@ export default function RoundAccordionItem({
                         numbers: item.numbers,
                         amount: item.isSetBased ? item.excess * (round?.set_prices?.['4_top'] || 120) : item.excess,
                         source: 'transfer',
-                        notes: `ตีออกจาก ${user.email || 'dealer'}`
+                        bill_note: `ตีออกจาก ${user.email || 'dealer'}`
                     }))
 
                     const { data: newSubmissions, error: subError } = await supabase
@@ -735,6 +735,9 @@ export default function RoundAccordionItem({
                                 <button className={`inline-tab ${inlineTab === 'total' ? 'active' : ''}`} onClick={() => setInlineTab('total')}>
                                     ยอดรวม <span className="tab-count">{inlineSubmissions.length}</span>
                                 </button>
+                                <button className={`inline-tab ${inlineTab === 'incoming' ? 'active' : ''}`} onClick={() => setInlineTab('incoming')}>
+                                    ยอดรับเข้า <span className="tab-count">{inlineSubmissions.filter(s => s.source === 'transfer').length}</span>
+                                </button>
                                 <button className={`inline-tab ${inlineTab === 'excess' ? 'active' : ''}`} onClick={() => setInlineTab('excess')}>
                                     ยอดเกิน <span className="tab-count">{excessItems.length}</span>
                                 </button>
@@ -851,6 +854,73 @@ export default function RoundAccordionItem({
                                                     </tbody>
                                                 </table>
                                             </div>
+                                        </div>
+                                    )}
+
+                                    {inlineTab === 'incoming' && (
+                                        <div className="inline-tab-content">
+                                            {(() => {
+                                                const incomingTransfers = inlineSubmissions.filter(s => s.source === 'transfer')
+                                                if (incomingTransfers.length === 0) {
+                                                    return (
+                                                        <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
+                                                            <FiSend style={{ fontSize: '2rem', color: 'var(--color-text-muted)', marginBottom: '0.5rem', transform: 'rotate(180deg)' }} />
+                                                            <p style={{ color: 'var(--color-text-muted)' }}>ยังไม่มียอดรับเข้าจากเจ้ามืออื่น</p>
+                                                        </div>
+                                                    )
+                                                }
+
+                                                const filteredIncoming = incomingTransfers.filter(s => {
+                                                    if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
+                                                    if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
+                                                    return true
+                                                })
+
+                                                return (
+                                                    <>
+                                                        <div className="inline-summary" style={{ marginBottom: '1rem' }}>
+                                                            <div className="summary-item">
+                                                                <span className="label">จำนวน</span>
+                                                                <span className="value">{filteredIncoming.length} รายการ</span>
+                                                            </div>
+                                                            <div className="summary-item">
+                                                                <span className="label">ยอดรวม</span>
+                                                                <span className="value" style={{ color: 'var(--color-success)' }}>
+                                                                    {round.currency_symbol}{filteredIncoming.reduce((sum, s) => sum + s.amount, 0).toLocaleString()}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="inline-table-wrap">
+                                                            <table className="inline-table">
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th>เลข</th>
+                                                                        <th>จำนวน</th>
+                                                                        <th>จาก</th>
+                                                                        <th>เวลา</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {filteredIncoming.map(sub => (
+                                                                        <tr key={sub.id}>
+                                                                            <td className="number-cell">
+                                                                                <div className="number-value">{sub.numbers}</div>
+                                                                                <div className="type-sub-label">{BET_TYPES[sub.bet_type] || sub.bet_type}</div>
+                                                                            </td>
+                                                                            <td>{round.currency_symbol}{sub.amount.toLocaleString()}</td>
+                                                                            <td className="source-cell" style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                                                {sub.bill_note || 'ไม่ระบุ'}
+                                                                            </td>
+                                                                            <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </>
+                                                )
+                                            })()}
                                         </div>
                                     )}
 

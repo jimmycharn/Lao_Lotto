@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { supabase, ROLES } from '../lib/supabase'
 
 const AuthContext = createContext({})
@@ -9,6 +9,7 @@ export function AuthProvider({ children }) {
     const [user, setUser] = useState(null)
     const [profile, setProfile] = useState(null)
     const [loading, setLoading] = useState(true)
+    const fetchingRef = useRef(false)
 
     useEffect(() => {
         if (!supabase) {
@@ -16,11 +17,17 @@ export function AuthProvider({ children }) {
             return
         }
 
-        // Check active session
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setUser(session?.user ?? null)
+        let isMounted = true
+        let profileFetched = false
+
+        // Get initial session
+        supabase.auth.getSession().then(async ({ data: { session } }) => {
+            if (!isMounted) return
+            
             if (session?.user) {
-                fetchProfile(session.user)
+                setUser(session.user)
+                profileFetched = true
+                await fetchProfile(session.user)
             } else {
                 setLoading(false)
             }
@@ -29,17 +36,32 @@ export function AuthProvider({ children }) {
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (event, session) => {
-                setUser(session?.user ?? null)
-                if (session?.user) {
+                if (!isMounted) return
+                console.log('Auth event:', event)
+                
+                // Skip initial session - already handled above
+                if (event === 'INITIAL_SESSION') return
+                
+                if (event === 'SIGNED_IN' && !profileFetched) {
+                    setUser(session?.user ?? null)
+                    setLoading(true)
                     await fetchProfile(session.user)
-                } else {
+                    profileFetched = true
+                } else if (event === 'SIGNED_OUT') {
+                    setUser(null)
                     setProfile(null)
                     setLoading(false)
+                    profileFetched = false
+                } else if (event === 'TOKEN_REFRESHED') {
+                    setUser(session?.user ?? null)
                 }
             }
         )
 
-        return () => subscription.unsubscribe()
+        return () => {
+            isMounted = false
+            subscription.unsubscribe()
+        }
     }, [])
 
     async function fetchProfile(userOrId) {
@@ -47,6 +69,13 @@ export function AuthProvider({ children }) {
             setLoading(false)
             return
         }
+        
+        // Prevent duplicate fetches
+        if (fetchingRef.current) {
+            console.log('Profile fetch already in progress, skipping')
+            return
+        }
+        fetchingRef.current = true
 
         // Handle both user object and userId string
         const userId = userOrId?.id || userOrId
@@ -87,7 +116,7 @@ export function AuthProvider({ children }) {
                         setProfile(newProfile)
                     }
                 }
-                // Always return after error handling
+                // setLoading(false) is handled in finally block
                 return
             }
             
@@ -98,6 +127,7 @@ export function AuthProvider({ children }) {
         } catch (error) {
             console.error('Error in fetchProfile:', error)
         } finally {
+            fetchingRef.current = false
             setLoading(false)
         }
     }
