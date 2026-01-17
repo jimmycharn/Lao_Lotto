@@ -202,6 +202,7 @@ export default function Dealer() {
                 .eq('dealer_id', user.id)
                 .order('round_date', { ascending: false })
                 .limit(20)
+            
 
             // Merge the submission counts - this ensures rounds with 0 submissions are included
             const mergedRounds = (allRoundsData || []).map(round => {

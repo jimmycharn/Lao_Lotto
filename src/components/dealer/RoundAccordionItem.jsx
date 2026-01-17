@@ -8,6 +8,7 @@ import {
     FiCheck,
     FiX,
     FiAlertTriangle,
+    FiAlertCircle,
     FiEye,
     FiLock,
     FiSend,
@@ -63,6 +64,11 @@ export default function RoundAccordionItem({
     const [showTransferModal, setShowTransferModal] = useState(false)
     const [transferForm, setTransferForm] = useState({ target_dealer_name: '', target_dealer_contact: '', notes: '' })
     const [savingTransfer, setSavingTransfer] = useState(false)
+    
+    // Upstream dealers for transfer selection
+    const [upstreamDealers, setUpstreamDealers] = useState([])
+    const [selectedUpstreamDealer, setSelectedUpstreamDealer] = useState(null) // null = manual, object = linked
+    const [upstreamRoundStatus, setUpstreamRoundStatus] = useState(null) // null = not checked, 'checking', 'available', 'unavailable'
 
     // Inline revert transfer states
     const [selectedTransferBatches, setSelectedTransferBatches] = useState({})
@@ -82,6 +88,80 @@ export default function RoundAccordionItem({
             fetchSummaryData()
         }
     }, [isAnnounced, isOpen])
+
+    // Fetch upstream dealers on mount
+    useEffect(() => {
+        if (user?.id) {
+            fetchUpstreamDealers()
+        }
+    }, [user?.id])
+
+    async function fetchUpstreamDealers() {
+        try {
+            const { data, error } = await supabase
+                .from('dealer_upstream_connections')
+                .select(`
+                    *,
+                    upstream_profile:upstream_dealer_id (id, full_name, email, phone)
+                `)
+                .eq('dealer_id', user.id)
+                .order('is_linked', { ascending: false })
+                .order('upstream_name', { ascending: true })
+
+            if (!error) {
+                setUpstreamDealers(data || [])
+            }
+        } catch (error) {
+            console.error('Error fetching upstream dealers:', error)
+        }
+    }
+
+    // Handle selecting upstream dealer
+    async function handleSelectUpstreamDealer(dealer) {
+        setSelectedUpstreamDealer(dealer)
+        setUpstreamRoundStatus(null)
+        
+        if (dealer) {
+            setTransferForm(prev => ({
+                ...prev,
+                target_dealer_name: dealer.upstream_name,
+                target_dealer_contact: dealer.upstream_contact || ''
+            }))
+            
+            // Check if linked dealer has an active round for same lottery type
+            if (dealer.is_linked && dealer.upstream_dealer_id) {
+                setUpstreamRoundStatus('checking')
+                try {
+                    const { data: upstreamRounds, error } = await supabase
+                        .from('lottery_rounds')
+                        .select('id, round_date, close_time, status, lottery_type')
+                        .eq('dealer_id', dealer.upstream_dealer_id)
+                        .eq('lottery_type', round.lottery_type)
+                        .in('status', ['open', 'active'])
+                    
+                    // Filter for rounds that haven't closed yet
+                    const openRounds = upstreamRounds?.filter(r => 
+                        new Date(r.close_time) >= new Date()
+                    )
+                    
+                    if (!error && openRounds && openRounds.length > 0) {
+                        setUpstreamRoundStatus('available')
+                    } else {
+                        setUpstreamRoundStatus('unavailable')
+                    }
+                } catch (err) {
+                    console.error('Error checking upstream round:', err)
+                    setUpstreamRoundStatus('unavailable')
+                }
+            }
+        } else {
+            setTransferForm(prev => ({
+                ...prev,
+                target_dealer_name: '',
+                target_dealer_contact: ''
+            }))
+        }
+    }
 
     async function fetchSummaryData() {
         setSummaryData(prev => ({ ...prev, loading: true }))
@@ -261,12 +341,66 @@ export default function RoundAccordionItem({
             alert('กรุณากรอกชื่อเจ้ามือที่ต้องการตีออก')
             return
         }
+        
+        // Check if still checking upstream round status
+        if (upstreamRoundStatus === 'checking') {
+            alert('กรุณารอการตรวจสอบงวดหวยของเจ้ามือปลายทาง')
+            return
+        }
+        
         setSavingTransfer(true)
         try {
             const selectedItems = excessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
             const batchId = generateBatchId()
+            const isLinked = !!(selectedUpstreamDealer?.is_linked && selectedUpstreamDealer?.upstream_dealer_id)
+            const canSendToUpstream = isLinked && upstreamRoundStatus === 'available'
 
-            const inserts = selectedItems.map(item => ({
+            // If linked dealer with available round, find their active round and create submission
+            let targetRoundId = null
+            let targetSubmissionIds = []
+
+            if (canSendToUpstream) {
+                // Find upstream dealer's active round for same lottery type
+                const { data: upstreamRounds } = await supabase
+                    .from('lottery_rounds')
+                    .select('id')
+                    .eq('dealer_id', selectedUpstreamDealer.upstream_dealer_id)
+                    .eq('lottery_type', round.lottery_type)
+                    .in('status', ['open', 'active'])
+                    .gte('close_time', new Date().toISOString())
+                    .order('round_date', { ascending: false })
+                    .limit(1)
+
+                if (upstreamRounds && upstreamRounds.length > 0) {
+                    targetRoundId = upstreamRounds[0].id
+
+                    // Create submissions in upstream dealer's round
+                    const submissionInserts = selectedItems.map(item => ({
+                        round_id: targetRoundId,
+                        user_id: user.id,
+                        bet_type: item.bet_type,
+                        numbers: item.numbers,
+                        amount: item.isSetBased ? item.excess * (round?.set_prices?.['4_top'] || 120) : item.excess,
+                        source: 'transfer',
+                        notes: `ตีออกจาก ${user.email || 'dealer'}`
+                    }))
+
+                    const { data: newSubmissions, error: subError } = await supabase
+                        .from('submissions')
+                        .insert(submissionInserts)
+                        .select('id')
+
+                    if (subError) {
+                        console.error('Error creating submissions in upstream round:', subError)
+                        // Continue anyway - just record the transfer
+                    } else {
+                        targetSubmissionIds = newSubmissions?.map(s => s.id) || []
+                    }
+                }
+            }
+
+            // Record the transfers
+            const inserts = selectedItems.map((item, index) => ({
                 round_id: round.id,
                 bet_type: item.bet_type,
                 numbers: item.numbers,
@@ -274,7 +408,11 @@ export default function RoundAccordionItem({
                 target_dealer_name: transferForm.target_dealer_name,
                 target_dealer_contact: transferForm.target_dealer_contact || null,
                 notes: transferForm.notes || null,
-                transfer_batch_id: batchId
+                transfer_batch_id: batchId,
+                upstream_dealer_id: selectedUpstreamDealer?.upstream_dealer_id || null,
+                is_linked: isLinked || false,
+                target_round_id: targetRoundId,
+                target_submission_id: targetSubmissionIds[index] || null
             }))
 
             const { error } = await supabase.from('bet_transfers').insert(inserts)
@@ -283,8 +421,18 @@ export default function RoundAccordionItem({
             await fetchInlineSubmissions(true)
             setShowTransferModal(false)
             setSelectedExcessItems({})
+            setSelectedUpstreamDealer(null)
             setTransferForm({ target_dealer_name: '', target_dealer_contact: '', notes: '' })
-            alert(`ตีออกสำเร็จ ${selectedItems.length} รายการ!`)
+            
+            setUpstreamRoundStatus(null)
+            
+            if (canSendToUpstream && targetRoundId) {
+                alert(`ตีออกสำเร็จ ${selectedItems.length} รายการ!\nเลขถูกส่งไปยังงวดของ ${selectedUpstreamDealer.upstream_name} แล้ว`)
+            } else if (isLinked && !canSendToUpstream) {
+                alert(`บันทึกยอดตีออก ${selectedItems.length} รายการสำเร็จ!\n(เจ้ามือไม่มีงวดเปิดรับ - ไม่ได้ส่งเลขไป)`)
+            } else {
+                alert(`ตีออกสำเร็จ ${selectedItems.length} รายการ!`)
+            }
         } catch (error) {
             console.error('Error saving transfer:', error)
             alert('เกิดข้อผิดพลาด: ' + error.message)
@@ -808,20 +956,81 @@ export default function RoundAccordionItem({
 
                                     {showTransferModal && (
                                         <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); setShowTransferModal(false) }}>
-                                            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+                                            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '450px' }}>
                                                 <div className="modal-header">
                                                     <h3><FiSend /> ตีออกยอดเกิน</h3>
                                                     <button className="modal-close" onClick={() => setShowTransferModal(false)}><FiX /></button>
                                                 </div>
                                                 <div className="modal-body">
                                                     <p style={{ marginBottom: '1rem', color: 'var(--color-text-muted)' }}>กำลังตีออก {selectedCount} รายการ</p>
+                                                    
+                                                    {/* Upstream Dealer Selection */}
+                                                    {upstreamDealers.length > 0 && (
+                                                        <div className="form-group">
+                                                            <label className="form-label">เลือกเจ้ามือตีออก</label>
+                                                            <div className="upstream-dealer-select">
+                                                                <button
+                                                                    type="button"
+                                                                    className={`dealer-select-btn ${!selectedUpstreamDealer ? 'active' : ''}`}
+                                                                    onClick={() => handleSelectUpstreamDealer(null)}
+                                                                >
+                                                                    <FiEdit2 /> กรอกเอง
+                                                                </button>
+                                                                {upstreamDealers.map(dealer => (
+                                                                    <button
+                                                                        key={dealer.id}
+                                                                        type="button"
+                                                                        className={`dealer-select-btn ${selectedUpstreamDealer?.id === dealer.id ? 'active' : ''} ${dealer.is_linked ? 'linked' : ''}`}
+                                                                        onClick={() => handleSelectUpstreamDealer(dealer)}
+                                                                    >
+                                                                        {dealer.is_linked && <FiCheck style={{ color: 'var(--color-success)' }} />}
+                                                                        {dealer.upstream_name}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                            {selectedUpstreamDealer?.is_linked && (
+                                                                <>
+                                                                    {upstreamRoundStatus === 'checking' && (
+                                                                        <p className="form-hint" style={{ color: 'var(--color-text-muted)' }}>
+                                                                            <span className="spinner-small"></span> กำลังตรวจสอบงวดหวย...
+                                                                        </p>
+                                                                    )}
+                                                                    {upstreamRoundStatus === 'available' && (
+                                                                        <p className="form-hint success">
+                                                                            <FiCheck /> เจ้ามือมีงวดหวยเปิดรับอยู่ - เลขจะถูกส่งไปโดยอัตโนมัติ
+                                                                        </p>
+                                                                    )}
+                                                                    {upstreamRoundStatus === 'unavailable' && (
+                                                                        <p className="form-hint" style={{ color: 'var(--color-danger)' }}>
+                                                                            <FiAlertCircle /> เจ้ามือไม่มีงวดหวยประเภทนี้เปิดรับอยู่ - จะบันทึกเป็นยอดตีออกเท่านั้น
+                                                                        </p>
+                                                                    )}
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    
                                                     <div className="form-group">
                                                         <label className="form-label">ชื่อเจ้ามือ *</label>
-                                                        <input type="text" className="form-input" value={transferForm.target_dealer_name} onChange={e => setTransferForm({ ...transferForm, target_dealer_name: e.target.value })} placeholder="ชื่อเจ้ามือที่ต้องการตีออก" />
+                                                        <input 
+                                                            type="text" 
+                                                            className="form-input" 
+                                                            value={transferForm.target_dealer_name} 
+                                                            onChange={e => setTransferForm({ ...transferForm, target_dealer_name: e.target.value })} 
+                                                            placeholder="ชื่อเจ้ามือที่ต้องการตีออก"
+                                                            disabled={selectedUpstreamDealer !== null}
+                                                        />
                                                     </div>
                                                     <div className="form-group">
                                                         <label className="form-label">เบอร์ติดต่อ</label>
-                                                        <input type="text" className="form-input" value={transferForm.target_dealer_contact} onChange={e => setTransferForm({ ...transferForm, target_dealer_contact: e.target.value })} placeholder="เบอร์โทรหรือ Line ID" />
+                                                        <input 
+                                                            type="text" 
+                                                            className="form-input" 
+                                                            value={transferForm.target_dealer_contact} 
+                                                            onChange={e => setTransferForm({ ...transferForm, target_dealer_contact: e.target.value })} 
+                                                            placeholder="เบอร์โทรหรือ Line ID"
+                                                            disabled={selectedUpstreamDealer !== null}
+                                                        />
                                                     </div>
                                                     <div className="form-group">
                                                         <label className="form-label">หมายเหตุ</label>
