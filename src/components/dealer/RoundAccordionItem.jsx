@@ -116,40 +116,52 @@ export default function RoundAccordionItem({
     }
 
     async function fetchInlineSubmissions(forceRefresh = false) {
-        if (!forceRefresh && inlineSubmissions.length > 0) return
+        // Skip if already have data and not forcing refresh
+        if (!forceRefresh && inlineSubmissions.length > 0 && !inlineLoading) return
         setInlineLoading(true)
+        
+        // Timeout to prevent infinite loading
+        const timeoutId = setTimeout(() => {
+            console.warn('fetchInlineSubmissions timeout')
+            setInlineLoading(false)
+        }, 10000)
+        
         try {
-            const { data: subsData } = await supabase
-                .from('submissions')
-                .select(`*, profiles (full_name, email)`)
-                .eq('round_id', round.id)
-                .eq('is_deleted', false)
-                .order('created_at', { ascending: false })
-            setInlineSubmissions(subsData || [])
-
-            const { data: typeLimitsData } = await supabase
-                .from('type_limits')
-                .select('*')
-                .eq('round_id', round.id)
+            const [subsResult, typeLimitsResult, numLimitsResult, transfersResult] = await Promise.all([
+                supabase
+                    .from('submissions')
+                    .select(`*, profiles (full_name, email)`)
+                    .eq('round_id', round.id)
+                    .eq('is_deleted', false)
+                    .order('created_at', { ascending: false }),
+                supabase
+                    .from('type_limits')
+                    .select('*')
+                    .eq('round_id', round.id),
+                supabase
+                    .from('number_limits')
+                    .select('*')
+                    .eq('round_id', round.id),
+                supabase
+                    .from('bet_transfers')
+                    .select('*')
+                    .eq('round_id', round.id)
+                    .order('created_at', { ascending: false })
+            ])
+            
+            clearTimeout(timeoutId)
+            
+            setInlineSubmissions(subsResult.data || [])
 
             const defaultLimits = getDefaultLimitsForType(round.lottery_type)
             const limitsObj = { ...defaultLimits }
-            typeLimitsData?.forEach(l => { limitsObj[l.bet_type] = l.max_per_number })
+            typeLimitsResult.data?.forEach(l => { limitsObj[l.bet_type] = l.max_per_number })
             setInlineTypeLimits(limitsObj)
 
-            const { data: numLimitsData } = await supabase
-                .from('number_limits')
-                .select('*')
-                .eq('round_id', round.id)
-            setInlineNumberLimits(numLimitsData || [])
-
-            const { data: transfersData } = await supabase
-                .from('bet_transfers')
-                .select('*')
-                .eq('round_id', round.id)
-                .order('created_at', { ascending: false })
-            setInlineTransfers(transfersData || [])
+            setInlineNumberLimits(numLimitsResult.data || [])
+            setInlineTransfers(transfersResult.data || [])
         } catch (error) {
+            clearTimeout(timeoutId)
             console.error('Error fetching inline submissions:', error)
         } finally {
             setInlineLoading(false)
@@ -572,14 +584,22 @@ export default function RoundAccordionItem({
                             </div>
 
                             <div className="inline-tabs">
-                                <button className={`inline-tab ${inlineTab === 'total' ? 'active' : ''}`} onClick={() => { setInlineTab('total'); fetchInlineSubmissions(true); }}>
+                                <button className={`inline-tab ${inlineTab === 'total' ? 'active' : ''}`} onClick={() => setInlineTab('total')}>
                                     ยอดรวม <span className="tab-count">{inlineSubmissions.length}</span>
                                 </button>
-                                <button className={`inline-tab ${inlineTab === 'excess' ? 'active' : ''}`} onClick={() => { setInlineTab('excess'); fetchInlineSubmissions(true); }}>
+                                <button className={`inline-tab ${inlineTab === 'excess' ? 'active' : ''}`} onClick={() => setInlineTab('excess')}>
                                     ยอดเกิน <span className="tab-count">{excessItems.length}</span>
                                 </button>
-                                <button className={`inline-tab ${inlineTab === 'transferred' ? 'active' : ''}`} onClick={() => { setInlineTab('transferred'); fetchInlineSubmissions(true); }}>
+                                <button className={`inline-tab ${inlineTab === 'transferred' ? 'active' : ''}`} onClick={() => setInlineTab('transferred')}>
                                     ยอดตีออก <span className="tab-count">{inlineTransfers.length}</span>
+                                </button>
+                                <button 
+                                    className="inline-tab refresh-btn" 
+                                    onClick={() => fetchInlineSubmissions(true)}
+                                    disabled={inlineLoading}
+                                    title="รีเฟรชข้อมูล"
+                                >
+                                    <FiRotateCcw className={inlineLoading ? 'spinning' : ''} />
                                 </button>
                             </div>
 

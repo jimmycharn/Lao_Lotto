@@ -155,15 +155,29 @@ export default function Dealer() {
         }
     }
 
-    // Fetch data on tab change
+    // Fetch data on mount only (not on every profile change)
     useEffect(() => {
-        if (user && (isDealer || isSuperAdmin)) {
+        // Wait for profile to be loaded before deciding
+        if (!profile?.id) return
+        
+        if (user?.id && (isDealer || isSuperAdmin)) {
             fetchData()
+        } else {
+            // User is logged in but not a dealer - stop loading
+            setLoading(false)
         }
-    }, [activeTab, user, isDealer, isSuperAdmin])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user?.id, profile?.id, isDealer, isSuperAdmin])
 
     async function fetchData() {
         setLoading(true)
+        
+        // Set a timeout to prevent infinite loading
+        const timeoutId = setTimeout(() => {
+            console.warn('Fetch data timeout - forcing loading to false')
+            setLoading(false)
+        }, 15000)
+        
         try {
             // Fetch rounds
             const { data: roundsData, error: roundsError } = await supabase
@@ -238,7 +252,7 @@ export default function Dealer() {
 
             // Fetch subscription (if table exists)
             try {
-                const { data: subData } = await supabase
+                const { data: subData, error: subError } = await supabase
                     .from('dealer_subscriptions')
                     .select(`
                         *,
@@ -256,9 +270,11 @@ export default function Dealer() {
                     .eq('dealer_id', user.id)
                     .order('created_at', { ascending: false })
                     .limit(1)
-                    .single()
+                    .maybeSingle()
 
-                setSubscription(subData)
+                if (!subError) {
+                    setSubscription(subData)
+                }
             } catch (subError) {
                 // Table might not exist yet
                 console.log('Subscription table not available')
@@ -277,6 +293,7 @@ export default function Dealer() {
         } catch (error) {
             console.error('Error:', error)
         } finally {
+            clearTimeout(timeoutId)
             setLoading(false)
         }
     }
@@ -1325,6 +1342,7 @@ export default function Dealer() {
 
 // Submissions Modal Component - With 3 Tabs
 function SubmissionsModal({ round, onClose }) {
+    const { user } = useAuth()
     const [activeTab, setActiveTab] = useState('total') // 'total' | 'excess' | 'transferred'
     const [submissions, setSubmissions] = useState([])
     const [typeLimits, setTypeLimits] = useState({})
@@ -1334,6 +1352,10 @@ function SubmissionsModal({ round, onClose }) {
     const [selectedUser, setSelectedUser] = useState('all')
     const [betTypeFilter, setBetTypeFilter] = useState('all')
     const [selectedBatch, setSelectedBatch] = useState('all')
+
+    // Upstream dealers for transfer selection
+    const [upstreamDealers, setUpstreamDealers] = useState([])
+    const [selectedUpstreamDealer, setSelectedUpstreamDealer] = useState(null) // null = manual, object = linked
 
     // Transfer modal state
     const [showTransferModal, setShowTransferModal] = useState(false)
@@ -1357,7 +1379,30 @@ function SubmissionsModal({ round, onClose }) {
 
     useEffect(() => {
         fetchAllData()
+        fetchUpstreamDealers()
     }, [])
+
+    // Fetch upstream dealers for transfer selection
+    async function fetchUpstreamDealers() {
+        if (!user?.id) return
+        try {
+            const { data, error } = await supabase
+                .from('dealer_upstream_connections')
+                .select(`
+                    *,
+                    upstream_profile:upstream_dealer_id (id, full_name, email, phone)
+                `)
+                .eq('dealer_id', user.id)
+                .order('is_linked', { ascending: false })
+                .order('upstream_name', { ascending: true })
+
+            if (!error) {
+                setUpstreamDealers(data || [])
+            }
+        } catch (error) {
+            console.error('Error fetching upstream dealers:', error)
+        }
+    }
 
     async function fetchAllData() {
         setLoading(true)
@@ -1515,6 +1560,7 @@ function SubmissionsModal({ round, onClose }) {
     // Handle transfer creation
     const handleOpenTransfer = (item) => {
         setTransferTarget(item)
+        setSelectedUpstreamDealer(null)
         setTransferForm({
             amount: item.excess,
             target_dealer_name: '',
@@ -1522,6 +1568,52 @@ function SubmissionsModal({ round, onClose }) {
             notes: ''
         })
         setShowTransferModal(true)
+    }
+
+    // Handle upstream dealer selection
+    const handleSelectUpstreamDealer = (dealer) => {
+        setSelectedUpstreamDealer(dealer)
+        if (dealer) {
+            setTransferForm({
+                ...transferForm,
+                target_dealer_name: dealer.upstream_name,
+                target_dealer_contact: dealer.upstream_contact || ''
+            })
+        } else {
+            setTransferForm({
+                ...transferForm,
+                target_dealer_name: '',
+                target_dealer_contact: ''
+            })
+        }
+    }
+
+    // Find matching round from upstream dealer for linked transfers
+    const findUpstreamRound = async (upstreamDealerId) => {
+        if (!upstreamDealerId) return null
+
+        try {
+            // Find an open round from the upstream dealer with matching lottery_type and date
+            const { data: rounds, error } = await supabase
+                .from('lottery_rounds')
+                .select('id, lottery_name, lottery_type, round_date, status, close_time')
+                .eq('dealer_id', upstreamDealerId)
+                .eq('lottery_type', round.lottery_type)
+                .eq('round_date', round.round_date)
+                .in('status', ['open'])
+                .gte('close_time', new Date().toISOString())
+                .order('created_at', { ascending: false })
+                .limit(1)
+
+            if (error || !rounds || rounds.length === 0) {
+                return null
+            }
+
+            return rounds[0]
+        } catch (error) {
+            console.error('Error finding upstream round:', error)
+            return null
+        }
     }
 
     const handleSaveTransfer = async () => {
@@ -1532,6 +1624,40 @@ function SubmissionsModal({ round, onClose }) {
 
         setSavingTransfer(true)
         try {
+            const batchId = generateBatchId()
+            let targetRoundId = null
+            let targetSubmissionId = null
+
+            // If linked dealer, try to create submission in their round
+            if (selectedUpstreamDealer?.is_linked && selectedUpstreamDealer?.upstream_dealer_id) {
+                const upstreamRound = await findUpstreamRound(selectedUpstreamDealer.upstream_dealer_id)
+                
+                if (upstreamRound) {
+                    // Create submission in upstream dealer's round
+                    const { data: newSubmission, error: subError } = await supabase
+                        .from('submissions')
+                        .insert({
+                            round_id: upstreamRound.id,
+                            user_id: user.id, // The transferring dealer becomes the "user" in upstream round
+                            bet_type: transferTarget.bet_type,
+                            numbers: transferTarget.numbers,
+                            amount: transferForm.amount,
+                            commission_rate: 0,
+                            commission_amount: 0
+                        })
+                        .select('id')
+                        .single()
+
+                    if (!subError && newSubmission) {
+                        targetRoundId = upstreamRound.id
+                        targetSubmissionId = newSubmission.id
+                    } else {
+                        console.warn('Could not create submission in upstream round:', subError)
+                    }
+                }
+            }
+
+            // Create transfer record
             const { error } = await supabase
                 .from('bet_transfers')
                 .insert({
@@ -1542,15 +1668,25 @@ function SubmissionsModal({ round, onClose }) {
                     target_dealer_name: transferForm.target_dealer_name,
                     target_dealer_contact: transferForm.target_dealer_contact,
                     notes: transferForm.notes,
-                    transfer_batch_id: generateBatchId()
+                    transfer_batch_id: batchId,
+                    upstream_dealer_id: selectedUpstreamDealer?.upstream_dealer_id || null,
+                    is_linked: selectedUpstreamDealer?.is_linked || false,
+                    target_round_id: targetRoundId,
+                    target_submission_id: targetSubmissionId
                 })
 
             if (error) throw error
+
+            // Show success message
+            if (targetSubmissionId) {
+                alert(`ตีออกสำเร็จ! เลขถูกส่งไปยังงวดของ ${transferForm.target_dealer_name} แล้ว`)
+            }
 
             // Refresh data
             await fetchAllData()
             setShowTransferModal(false)
             setTransferTarget(null)
+            setSelectedUpstreamDealer(null)
         } catch (error) {
             console.error('Error saving transfer:', error)
             alert('เกิดข้อผิดพลาด: ' + error.message)
@@ -1790,6 +1926,7 @@ function SubmissionsModal({ round, onClose }) {
             alert('กรุณาเลือกรายการที่ต้องการตีออก')
             return
         }
+        setSelectedUpstreamDealer(null)
         setBulkTransferForm({
             target_dealer_name: '',
             target_dealer_contact: '',
@@ -1814,8 +1951,42 @@ function SubmissionsModal({ round, onClose }) {
             // Generate a batch ID for this transfer session
             const batchId = generateBatchId()
 
+            let targetRoundId = null
+            let createdSubmissionIds = []
+
+            // If linked dealer, try to create submissions in their round
+            if (selectedUpstreamDealer?.is_linked && selectedUpstreamDealer?.upstream_dealer_id) {
+                const upstreamRound = await findUpstreamRound(selectedUpstreamDealer.upstream_dealer_id)
+                
+                if (upstreamRound) {
+                    targetRoundId = upstreamRound.id
+                    
+                    // Create submissions in upstream dealer's round
+                    const submissionRecords = selectedItems.map(item => ({
+                        round_id: upstreamRound.id,
+                        user_id: user.id,
+                        bet_type: item.bet_type,
+                        numbers: item.numbers,
+                        amount: item.excess,
+                        commission_rate: 0,
+                        commission_amount: 0
+                    }))
+
+                    const { data: newSubmissions, error: subError } = await supabase
+                        .from('submissions')
+                        .insert(submissionRecords)
+                        .select('id')
+
+                    if (!subError && newSubmissions) {
+                        createdSubmissionIds = newSubmissions.map(s => s.id)
+                    } else {
+                        console.warn('Could not create submissions in upstream round:', subError)
+                    }
+                }
+            }
+
             // Create batch transfer records with same batch ID
-            const transferRecords = selectedItems.map(item => ({
+            const transferRecords = selectedItems.map((item, index) => ({
                 round_id: round.id,
                 bet_type: item.bet_type,
                 numbers: item.numbers,
@@ -1823,7 +1994,11 @@ function SubmissionsModal({ round, onClose }) {
                 target_dealer_name: bulkTransferForm.target_dealer_name,
                 target_dealer_contact: bulkTransferForm.target_dealer_contact,
                 notes: bulkTransferForm.notes,
-                transfer_batch_id: batchId
+                transfer_batch_id: batchId,
+                upstream_dealer_id: selectedUpstreamDealer?.upstream_dealer_id || null,
+                is_linked: selectedUpstreamDealer?.is_linked || false,
+                target_round_id: targetRoundId,
+                target_submission_id: createdSubmissionIds[index] || null
             }))
 
             const { error } = await supabase
@@ -1836,7 +2011,14 @@ function SubmissionsModal({ round, onClose }) {
             await fetchAllData()
             setSelectedExcessItems({})
             setShowBulkTransferModal(false)
-            alert(`ตีออกสำเร็จ ${selectedItems.length} รายการ!`)
+            setSelectedUpstreamDealer(null)
+
+            // Show success message
+            if (createdSubmissionIds.length > 0) {
+                alert(`ตีออกสำเร็จ ${selectedItems.length} รายการ!\nเลขถูกส่งไปยังงวดของ ${bulkTransferForm.target_dealer_name} แล้ว`)
+            } else {
+                alert(`ตีออกสำเร็จ ${selectedItems.length} รายการ!`)
+            }
         } catch (error) {
             console.error('Error saving bulk transfer:', error)
             alert('เกิดข้อผิดพลาด: ' + error.message)
@@ -2287,6 +2469,38 @@ function SubmissionsModal({ round, onClose }) {
                                 />
                             </div>
 
+                            {/* Upstream Dealer Selection */}
+                            {upstreamDealers.length > 0 && (
+                                <div className="form-group">
+                                    <label className="form-label">เลือกเจ้ามือตีออก</label>
+                                    <div className="upstream-dealer-select">
+                                        <button
+                                            type="button"
+                                            className={`dealer-select-btn ${!selectedUpstreamDealer ? 'active' : ''}`}
+                                            onClick={() => handleSelectUpstreamDealer(null)}
+                                        >
+                                            <FiEdit2 /> กรอกเอง
+                                        </button>
+                                        {upstreamDealers.map(dealer => (
+                                            <button
+                                                key={dealer.id}
+                                                type="button"
+                                                className={`dealer-select-btn ${selectedUpstreamDealer?.id === dealer.id ? 'active' : ''} ${dealer.is_linked ? 'linked' : ''}`}
+                                                onClick={() => handleSelectUpstreamDealer(dealer)}
+                                            >
+                                                {dealer.is_linked && <FiCheck style={{ color: 'var(--color-success)' }} />}
+                                                {dealer.upstream_name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {selectedUpstreamDealer?.is_linked && (
+                                        <p className="form-hint success">
+                                            <FiCheck /> เจ้ามือในระบบ - เลขจะถูกส่งไปยังงวดของเจ้ามือนี้โดยอัตโนมัติ
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
                             <div className="form-group">
                                 <label className="form-label">ตีออกไปให้ (ชื่อเจ้ามือ/ร้าน) *</label>
                                 <input
@@ -2295,6 +2509,7 @@ function SubmissionsModal({ round, onClose }) {
                                     placeholder="เช่น ร้านโชคดี"
                                     value={transferForm.target_dealer_name}
                                     onChange={e => setTransferForm({ ...transferForm, target_dealer_name: e.target.value })}
+                                    disabled={selectedUpstreamDealer !== null}
                                 />
                             </div>
 
@@ -2306,6 +2521,7 @@ function SubmissionsModal({ round, onClose }) {
                                     placeholder="เช่น 08x-xxx-xxxx"
                                     value={transferForm.target_dealer_contact}
                                     onChange={e => setTransferForm({ ...transferForm, target_dealer_contact: e.target.value })}
+                                    disabled={selectedUpstreamDealer !== null}
                                 />
                             </div>
 
@@ -2364,6 +2580,48 @@ function SubmissionsModal({ round, onClose }) {
                                 </div>
                             </div>
 
+                            {/* Upstream Dealer Selection */}
+                            {upstreamDealers.length > 0 && (
+                                <div className="form-group">
+                                    <label className="form-label">เลือกเจ้ามือตีออก</label>
+                                    <div className="upstream-dealer-select">
+                                        <button
+                                            type="button"
+                                            className={`dealer-select-btn ${!selectedUpstreamDealer ? 'active' : ''}`}
+                                            onClick={() => {
+                                                setSelectedUpstreamDealer(null)
+                                                setBulkTransferForm({ ...bulkTransferForm, target_dealer_name: '', target_dealer_contact: '' })
+                                            }}
+                                        >
+                                            <FiEdit2 /> กรอกเอง
+                                        </button>
+                                        {upstreamDealers.map(dealer => (
+                                            <button
+                                                key={dealer.id}
+                                                type="button"
+                                                className={`dealer-select-btn ${selectedUpstreamDealer?.id === dealer.id ? 'active' : ''} ${dealer.is_linked ? 'linked' : ''}`}
+                                                onClick={() => {
+                                                    setSelectedUpstreamDealer(dealer)
+                                                    setBulkTransferForm({
+                                                        ...bulkTransferForm,
+                                                        target_dealer_name: dealer.upstream_name,
+                                                        target_dealer_contact: dealer.upstream_contact || ''
+                                                    })
+                                                }}
+                                            >
+                                                {dealer.is_linked && <FiCheck style={{ color: 'var(--color-success)' }} />}
+                                                {dealer.upstream_name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {selectedUpstreamDealer?.is_linked && (
+                                        <p className="form-hint success">
+                                            <FiCheck /> เจ้ามือในระบบ - เลขจะถูกส่งไปยังงวดของเจ้ามือนี้โดยอัตโนมัติ
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
                             <div className="form-group">
                                 <label className="form-label">ชื่อเจ้ามือที่ตีออก *</label>
                                 <input
@@ -2372,6 +2630,7 @@ function SubmissionsModal({ round, onClose }) {
                                     placeholder="ชื่อเจ้ามือรับ"
                                     value={bulkTransferForm.target_dealer_name}
                                     onChange={e => setBulkTransferForm({ ...bulkTransferForm, target_dealer_name: e.target.value })}
+                                    disabled={selectedUpstreamDealer !== null}
                                 />
                             </div>
 
@@ -2383,6 +2642,7 @@ function SubmissionsModal({ round, onClose }) {
                                     placeholder="เบอร์โทร/Line ID (ไม่บังคับ)"
                                     value={bulkTransferForm.target_dealer_contact}
                                     onChange={e => setBulkTransferForm({ ...bulkTransferForm, target_dealer_contact: e.target.value })}
+                                    disabled={selectedUpstreamDealer !== null}
                                 />
                             </div>
 
@@ -3165,14 +3425,26 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
         notes: ''
     })
 
-    // Fetch upstream dealers on mount
+    // Fetch upstream dealers on mount - only if not already loaded
     useEffect(() => {
-        fetchUpstreamDealers()
+        if (upstreamDealers.length === 0 && !loadingUpstream) {
+            fetchUpstreamDealers()
+        }
     }, [user?.id])
 
     async function fetchUpstreamDealers() {
-        if (!user?.id) return
+        if (!user?.id) {
+            setLoadingUpstream(false)
+            return
+        }
         setLoadingUpstream(true)
+        
+        // Set a timeout to prevent infinite loading
+        const timeoutId = setTimeout(() => {
+            console.warn('Fetch upstream dealers timeout')
+            setLoadingUpstream(false)
+        }, 10000)
+        
         try {
             const { data, error } = await supabase
                 .from('dealer_upstream_connections')
@@ -3185,11 +3457,19 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
                 .eq('dealer_id', user.id)
                 .order('created_at', { ascending: false })
 
+            clearTimeout(timeoutId)
+            
             if (!error) {
                 setUpstreamDealers(data || [])
+            } else {
+                // Table might not exist yet
+                console.warn('Upstream dealers table may not exist:', error.message)
+                setUpstreamDealers([])
             }
         } catch (error) {
+            clearTimeout(timeoutId)
             console.error('Error fetching upstream dealers:', error)
+            setUpstreamDealers([])
         } finally {
             setLoadingUpstream(false)
         }

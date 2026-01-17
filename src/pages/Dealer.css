@@ -2842,6 +2842,27 @@
     background: rgba(0, 0, 0, 0.3);
 }
 
+.inline-tab.refresh-btn {
+    flex: 0;
+    padding: 0.5rem 0.75rem;
+    background: transparent;
+    border: 1px solid var(--color-border);
+}
+
+.inline-tab.refresh-btn:hover {
+    background: var(--color-surface-light);
+    border-color: var(--color-primary);
+}
+
+.inline-tab.refresh-btn .spinning {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .inline-tab-content {
     animation: fadeIn 0.2s ease;
 }
@@ -3273,6 +3294,61 @@
     color: var(--color-primary);
 }
 
+/* Upstream Dealer Selection in Transfer Modal */
+.upstream-dealer-select {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.dealer-select-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.dealer-select-btn:hover {
+    border-color: var(--color-primary);
+    background: var(--color-primary-light);
+}
+
+.dealer-select-btn.active {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+    color: white;
+}
+
+.dealer-select-btn.linked {
+    border-color: var(--color-success);
+}
+
+.dealer-select-btn.linked.active {
+    background: var(--color-success);
+    border-color: var(--color-success);
+}
+
+.form-hint {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    margin-top: 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.form-hint.success {
+    color: var(--color-success);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .upstream-dealers-grid {
@@ -3287,5 +3363,14 @@
     
     .upstream-dealers-section .section-header .btn {
         width: 100%;
+    }
+    
+    .upstream-dealer-select {
+        flex-direction: column;
+    }
+    
+    .dealer-select-btn {
+        width: 100%;
+        justify-content: center;
     }
 }
