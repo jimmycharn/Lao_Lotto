@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
 import { supabase } from '../lib/supabase'
 import {
     FiClock,
@@ -39,6 +40,7 @@ import {
 export default function UserDashboard() {
 
     const { user, profile } = useAuth()
+    const { toast } = useToast()
     const [rounds, setRounds] = useState([])
     const [selectedRound, setSelectedRound] = useState(null)
     const [submissions, setSubmissions] = useState([])
@@ -68,7 +70,6 @@ export default function UserDashboard() {
         amount: ''
     })
     const [submitting, setSubmitting] = useState(false)
-    const [toast, setToast] = useState(null)
     const [drafts, setDrafts] = useState([])
     const [displayMode, setDisplayMode] = useState('summary') // summary, detailed
     const [isGroupByBill, setIsGroupByBill] = useState(true)
@@ -86,15 +87,6 @@ export default function UserDashboard() {
     const [editingSubmission, setEditingSubmission] = useState(null)
     const [editForm, setEditForm] = useState({ numbers: '', amount: '', bet_type: '' })
     const [editSaving, setEditSaving] = useState(false)
-
-
-    // Auto-hide toast
-    useEffect(() => {
-        if (toast) {
-            const timer = setTimeout(() => setToast(null), 3000)
-            return () => clearTimeout(timer)
-        }
-    }, [toast])
 
     // Fetch active dealer memberships
     useEffect(() => {
@@ -494,7 +486,7 @@ export default function UserDashboard() {
         // For set-based bets, amount field represents number of sets (default: 1 set if empty)
         if (!cleanNumbers || (!submitForm.amount && !isSetBasedBet) || !betType) {
             console.log('Validation failed:', { cleanNumbers, amount: submitForm.amount, betType })
-            alert('กรุณากรอกเลขและจำนวนเงิน')
+            toast.warning('กรุณากรอกเลขและจำนวนเงิน')
             return
         }
 
@@ -518,7 +510,7 @@ export default function UserDashboard() {
         }
 
         if (totalAmount <= 0) {
-            alert('จำนวนเงินต้องมากกว่า 0')
+            toast.warning('จำนวนเงินต้องมากกว่า 0')
             return
         }
 
@@ -529,7 +521,7 @@ export default function UserDashboard() {
         const isSpecial3Digit = ['3_perm_from_4', '3_perm_from_5', '3_perm_from_3', '3_straight_tod', '3_straight_perm'].includes(betType)
         if (!isSpecial3Digit && digitsOnly.length !== betTypeInfo.digits) {
             if (!(betType === '3_top' && cleanNumbers.includes('*'))) {
-                alert(`${betTypeInfo.label} ต้องมี ${betTypeInfo.digits} หลัก`)
+                toast.warning(`${betTypeInfo.label} ต้องมี ${betTypeInfo.digits} หลัก`)
                 return
             }
         }
@@ -801,11 +793,11 @@ export default function UserDashboard() {
             setIsEditingBill(false) // Reset edit mode
             setShowSubmitModal(false)
             fetchSubmissions()
-            setToast({ message: isEditingBill ? 'แก้ไขโพยสำเร็จ!' : 'บันทึกโพยสำเร็จ!', type: 'success' })
+            toast.success(isEditingBill ? 'แก้ไขโพยสำเร็จ!' : 'บันทึกโพยสำเร็จ!')
 
         } catch (error) {
             console.error('Error saving bill:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         } finally {
             setSubmitting(false)
         }
@@ -841,10 +833,10 @@ export default function UserDashboard() {
             if (error) throw error
 
             fetchSubmissions()
-            setToast({ message: 'ลบรายการสำเร็จ', type: 'success' })
+            toast.success('ลบรายการสำเร็จ')
         } catch (error) {
             console.error('Error deleting:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         }
     }
 
@@ -862,10 +854,10 @@ export default function UserDashboard() {
             if (error) throw error
 
             fetchSubmissions()
-            setToast({ message: `ลบโพยใบ ${billId} สำเร็จ`, type: 'success' })
+            toast.success(`ลบโพยใบ ${billId} สำเร็จ`)
         } catch (error) {
             console.error('Error deleting bill:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         }
     }
 
@@ -919,14 +911,14 @@ export default function UserDashboard() {
         // Open the submit modal to show the form with drafts
         setShowSubmitModal(true)
 
-        setToast({ message: `กำลังแก้ไขโพยใบ ${billId} - เพิ่ม/ลบเลขได้เลย`, type: 'info' })
+        toast.info(`กำลังแก้ไขโพยใบ ${billId} - เพิ่ม/ลบเลขได้เลย`)
     }
 
     // Open edit modal for a submission
     function handleEditSubmission(submission) {
         // Only allow editing if within delete deadline
         if (!canDelete(submission)) {
-            alert('ไม่สามารถแก้ไขได้ เนื่องจากเลยเวลาที่กำหนด')
+            toast.warning('ไม่สามารถแก้ไขได้ เนื่องจากเลยเวลาที่กำหนด')
             return
         }
 
@@ -1015,11 +1007,11 @@ export default function UserDashboard() {
         }
 
         if (!newNumbers) {
-            alert('กรุณากรอกเลข')
+            toast.warning('กรุณากรอกเลข')
             return
         }
         if (!newAmount || newAmount <= 0) {
-            alert(isSetBasedBet ? 'กรุณากรอกจำนวนชุดที่ถูกต้อง' : 'กรุณากรอกจำนวนเงินที่ถูกต้อง')
+            toast.warning(isSetBasedBet ? 'กรุณากรอกจำนวนชุดที่ถูกต้อง' : 'กรุณากรอกจำนวนเงินที่ถูกต้อง')
             return
         }
 
@@ -1175,10 +1167,10 @@ export default function UserDashboard() {
             setEditingSubmission(null)
             setEditForm({ numbers: '', amount: '', bet_type: '' })
             fetchSubmissions()
-            setToast({ message: 'แก้ไขรายการสำเร็จ', type: 'success' })
+            toast.success('แก้ไขรายการสำเร็จ')
         } catch (error) {
             console.error('Error updating submission:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         } finally {
             setEditSaving(false)
         }
@@ -1192,7 +1184,7 @@ export default function UserDashboard() {
         const amount = editForm.amount.toString()
 
         if (!newNumbers) {
-            alert('กรุณากรอกเลข')
+            toast.warning('กรุณากรอกเลข')
             return
         }
 
@@ -1201,7 +1193,7 @@ export default function UserDashboard() {
         if (amtParts.length === 0) {
             // Allow empty amount only for 4_set
             if (betType !== '4_set') {
-                alert('กรุณากรอกจำนวนเงิน')
+                toast.warning('กรุณากรอกจำนวนเงิน')
                 return
             }
         }
@@ -1488,10 +1480,10 @@ export default function UserDashboard() {
             setEditingSubmission(null)
             setEditForm({ numbers: '', amount: '', bet_type: '' })
             fetchSubmissions()
-            setToast({ message: 'แก้ไขรายการสำเร็จ', type: 'success' })
+            toast.success('แก้ไขรายการสำเร็จ')
         } catch (error) {
             console.error('Error updating submission:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         } finally {
             setEditSaving(false)
         }
@@ -1914,7 +1906,7 @@ export default function UserDashboard() {
                                                                                         text += `รวม: ${round.currency_symbol}${billTotal.toLocaleString()}`
                                                                                         try {
                                                                                             await navigator.clipboard.writeText(text)
-                                                                                            alert('คัดลอกแล้ว!')
+                                                                                            toast.success('คัดลอกแล้ว!')
                                                                                         } catch (err) {
                                                                                             const textArea = document.createElement('textarea')
                                                                                             textArea.value = text
@@ -1924,7 +1916,7 @@ export default function UserDashboard() {
                                                                                             textArea.select()
                                                                                             document.execCommand('copy')
                                                                                             document.body.removeChild(textArea)
-                                                                                            alert('คัดลอกแล้ว!')
+                                                                                            toast.success('คัดลอกแล้ว!')
                                                                                         }
                                                                                     }
 
@@ -3116,9 +3108,9 @@ function HistoryTab({ user, profile }) {
 
 // Profile Tab Component
 function ProfileTab({ user, profile }) {
+    const { toast } = useToast()
     const [isEditing, setIsEditing] = useState(false)
     const [saving, setSaving] = useState(false)
-    const [toast, setToast] = useState(null)
     // Use local state for profile data that can be updated without page reload
     const [profileData, setProfileData] = useState({
         full_name: profile?.full_name || '',
@@ -3153,14 +3145,6 @@ function ProfileTab({ user, profile }) {
         }
     }, [profile])
 
-    // Auto-hide toast
-    useEffect(() => {
-        if (toast) {
-            const timer = setTimeout(() => setToast(null), 3000)
-            return () => clearTimeout(timer)
-        }
-    }, [toast])
-
     const handleSave = async () => {
         setSaving(true)
         try {
@@ -3186,10 +3170,10 @@ function ProfileTab({ user, profile }) {
             })
 
             setIsEditing(false)
-            setToast({ type: 'success', message: 'บันทึกข้อมูลสำเร็จ!' })
+            toast.success('บันทึกข้อมูลสำเร็จ!')
         } catch (error) {
             console.error('Error saving profile:', error)
-            setToast({ type: 'error', message: 'เกิดข้อผิดพลาด: ' + error.message })
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         } finally {
             setSaving(false)
         }

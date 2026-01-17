@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
 import { supabase } from '../lib/supabase'
 import {
     FiHome,
@@ -36,6 +37,7 @@ import './SuperAdmin.css'
 
 export default function SuperAdmin() {
     const { user, profile, isSuperAdmin, loading } = useAuth()
+    const { toast } = useToast()
     const [activeTab, setActiveTab] = useState('dashboard')
 
     // Dashboard Stats
@@ -357,7 +359,7 @@ export default function SuperAdmin() {
             fetchStats()
         } catch (error) {
             console.error('Error toggling dealer status:', error)
-            alert('เกิดข้อผิดพลาดในการเปลี่ยนสถานะ')
+            toast.error('เกิดข้อผิดพลาดในการเปลี่ยนสถานะ')
         }
     }
 
@@ -432,7 +434,7 @@ export default function SuperAdmin() {
             fetchPackages()
         } catch (error) {
             console.error('Error saving package:', error)
-            alert('เกิดข้อผิดพลาดในการบันทึกแพ็คเกจ')
+            toast.error('เกิดข้อผิดพลาดในการบันทึกแพ็คเกจ')
         }
     }
 
@@ -449,7 +451,7 @@ export default function SuperAdmin() {
             fetchPackages()
         } catch (error) {
             console.error('Error deleting package:', error)
-            alert('เกิดข้อผิดพลาดในการลบแพ็คเกจ')
+            toast.error('เกิดข้อผิดพลาดในการลบแพ็คเกจ')
         }
     }
 
@@ -527,14 +529,14 @@ export default function SuperAdmin() {
             fetchStats()
         } catch (error) {
             console.error('Error handling payment:', error)
-            alert('เกิดข้อผิดพลาดในการดำเนินการ')
+            toast.error('เกิดข้อผิดพลาดในการดำเนินการ')
         }
     }
 
     // === ASSIGN PACKAGE TO DEALER ===
     const handleAssignPackage = async () => {
         if (!selectedDealer || !assignPackageForm.package_id) {
-            alert('กรุณาเลือกแพ็คเกจ')
+            toast.warning('กรุณาเลือกแพ็คเกจ')
             return
         }
 
@@ -596,10 +598,10 @@ export default function SuperAdmin() {
             setAssignPackageForm({ package_id: '', billing_cycle: 'monthly', is_trial: false, trial_days: 30 })
             fetchDealers()
             fetchStats()
-            alert('กำหนดแพ็คเกจสำเร็จ!')
+            toast.success('กำหนดแพ็คเกจสำเร็จ!')
         } catch (error) {
             console.error('Error assigning package:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         }
     }
 
@@ -618,7 +620,7 @@ export default function SuperAdmin() {
             fetchSettings()
         } catch (error) {
             console.error('Error updating setting:', error)
-            alert('เกิดข้อผิดพลาดในการบันทึกการตั้งค่า')
+            toast.error('เกิดข้อผิดพลาดในการบันทึกการตั้งค่า')
         }
     }
 
@@ -843,13 +845,13 @@ export default function SuperAdmin() {
                                 textArea.select()
                                 try {
                                     document.execCommand('copy')
-                                    alert('คัดลอกลิงก์แล้ว!')
+                                    toast.success('คัดลอกลิงก์แล้ว!')
                                 } catch (err) {
                                     // Try modern API as backup
                                     navigator.clipboard?.writeText(link).then(() => {
-                                        alert('คัดลอกลิงก์แล้ว!')
+                                        toast.success('คัดลอกลิงก์แล้ว!')
                                     }).catch(() => {
-                                        alert('ไม่สามารถคัดลอกได้ กรุณาคัดลอกด้วยตัวเอง')
+                                        toast.error('ไม่สามารถคัดลอกได้ กรุณาคัดลอกด้วยตัวเอง')
                                     })
                                 }
                                 document.body.removeChild(textArea)

@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useToast } from '../../contexts/ToastContext'
 import { FiCheck, FiX, FiEdit2 } from 'react-icons/fi'
 import { LOTTERY_TYPES } from '../../constants/lotteryTypes'
 
 export default function ResultsModal({ round, onClose }) {
+    const { toast } = useToast()
     const lotteryType = round.lottery_type
     const isEditing = round.is_result_announced
 
@@ -147,11 +149,11 @@ export default function ResultsModal({ round, onClose }) {
             const message = isEditing
                 ? `อัปเดตผลรางวัลสำเร็จ! มีผู้ถูกรางวัล ${winCount} รายการ`
                 : `ประกาศผลสำเร็จ! มีผู้ถูกรางวัล ${winCount} รายการ`
-            alert(message)
+            toast.success(message)
             onClose()
         } catch (error) {
             console.error('Error announcing:', error)
-            alert('เกิดข้อผิดพลาด: ' + (error.message || 'Unknown error'))
+            toast.error('เกิดข้อผิดพลาด: ' + (error.message || 'Unknown error'))
         } finally {
             setLoading(false)
         }

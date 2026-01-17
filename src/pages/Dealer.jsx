@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
 import { supabase } from '../lib/supabase'
 import QRCode from 'react-qr-code'
 import { jsPDF } from 'jspdf'
@@ -61,6 +62,7 @@ import RoundAccordionItem from '../components/dealer/RoundAccordionItem'
 
 export default function Dealer() {
     const { user, profile, isDealer, isSuperAdmin } = useAuth()
+    const { toast } = useToast()
     const [searchParams] = useSearchParams()
     const [activeTab, setActiveTab] = useState('rounds')
     const [rounds, setRounds] = useState([])
@@ -311,7 +313,7 @@ export default function Dealer() {
             fetchData()
         } catch (error) {
             console.error('Error approving member:', error)
-            alert('เกิดข้อผิดพลาดในการอนุมัติสมาชิก')
+            toast.error('เกิดข้อผิดพลาดในการอนุมัติสมาชิก')
         }
     }
 
@@ -328,7 +330,7 @@ export default function Dealer() {
             fetchData()
         } catch (error) {
             console.error('Error rejecting member:', error)
-            alert('เกิดข้อผิดพลาดในการปฏิเสธสมาชิก')
+            toast.error('เกิดข้อผิดพลาดในการปฏิเสธสมาชิก')
         }
     }
 
@@ -345,7 +347,7 @@ export default function Dealer() {
             fetchData()
         } catch (error) {
             console.error('Error blocking member:', error)
-            alert('เกิดข้อผิดพลาดในการบล็อคสมาชิก')
+            toast.error('เกิดข้อผิดพลาดในการบล็อคสมาชิก')
         }
     }
 
@@ -360,7 +362,7 @@ export default function Dealer() {
             fetchData()
         } catch (error) {
             console.error('Error unblocking member:', error)
-            alert('เกิดข้อผิดพลาดในการปลดบล็อคสมาชิก')
+            toast.error('เกิดข้อผิดพลาดในการปลดบล็อคสมาชิก')
         }
     }
 
@@ -382,7 +384,7 @@ export default function Dealer() {
             ))
         } catch (error) {
             console.error('Error updating member bank:', error)
-            alert('เกิดข้อผิดพลาดในการอัปเดตบัญชีธนาคาร')
+            toast.error('เกิดข้อผิดพลาดในการอัปเดตบัญชีธนาคาร')
         }
     }
 
@@ -445,11 +447,11 @@ export default function Dealer() {
 
             setShowCreateModal(false)
             fetchData()
-            alert('สร้างงวดสำเร็จ!')
+            toast.success('สร้างงวดสำเร็จ!')
 
         } catch (error) {
             console.error('Error creating round:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         }
     }
 
@@ -593,11 +595,11 @@ export default function Dealer() {
             setShowEditModal(false)
             setEditingRound(null)
             fetchData()
-            alert('แก้ไขงวดสำเร็จ!')
+            toast.success('แก้ไขงวดสำเร็จ!')
 
         } catch (error) {
             console.error('Error updating round:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         } finally {
             setSaving(false)
         }
@@ -769,7 +771,7 @@ export default function Dealer() {
                                             className="btn btn-outline btn-sm"
                                             onClick={() => {
                                                 navigator.clipboard.writeText(`${window.location.origin}/register?ref=${user?.id}`)
-                                                alert('คัดลอกลิงก์แล้ว!')
+                                                toast.success('คัดลอกลิงก์แล้ว!')
                                             }}
                                         >
                                             <FiCopy /> คัดลอก
@@ -1619,7 +1621,7 @@ function SubmissionsModal({ round, onClose }) {
 
     const handleSaveTransfer = async () => {
         if (!transferTarget || !transferForm.amount || !transferForm.target_dealer_name) {
-            alert('กรุณากรอกข้อมูลให้ครบถ้วน')
+            toast.warning('กรุณากรอกข้อมูลให้ครบถ้วน')
             return
         }
 
@@ -1680,7 +1682,7 @@ function SubmissionsModal({ round, onClose }) {
 
             // Show success message
             if (targetSubmissionId) {
-                alert(`ตีออกสำเร็จ! เลขถูกส่งไปยังงวดของ ${transferForm.target_dealer_name} แล้ว`)
+                toast.success(`ตีออกสำเร็จ! เลขถูกส่งไปยังงวดของ ${transferForm.target_dealer_name} แล้ว`)
             }
 
             // Refresh data
@@ -1690,7 +1692,7 @@ function SubmissionsModal({ round, onClose }) {
             setSelectedUpstreamDealer(null)
         } catch (error) {
             console.error('Error saving transfer:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         } finally {
             setSavingTransfer(false)
         }
@@ -1725,7 +1727,7 @@ function SubmissionsModal({ round, onClose }) {
             await fetchAllData()
         } catch (error) {
             console.error('Error undoing transfer:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         }
     }
 
@@ -1776,7 +1778,7 @@ function SubmissionsModal({ round, onClose }) {
 
         try {
             await navigator.clipboard.writeText(text)
-            alert('คัดลอกสำเร็จ!')
+            toast.success('คัดลอกสำเร็จ!')
         } catch (error) {
             console.error('Error copying:', error)
             // Fallback for older browsers
@@ -1786,7 +1788,7 @@ function SubmissionsModal({ round, onClose }) {
             textArea.select()
             document.execCommand('copy')
             document.body.removeChild(textArea)
-            alert('คัดลอกสำเร็จ!')
+            toast.success('คัดลอกสำเร็จ!')
         }
     }
 
@@ -1924,7 +1926,7 @@ function SubmissionsModal({ round, onClose }) {
     // Handle bulk transfer
     const handleOpenBulkTransfer = () => {
         if (selectedCount === 0) {
-            alert('กรุณาเลือกรายการที่ต้องการตีออก')
+            toast.warning('กรุณาเลือกรายการที่ต้องการตีออก')
             return
         }
         setSelectedUpstreamDealer(null)
@@ -1938,7 +1940,7 @@ function SubmissionsModal({ round, onClose }) {
 
     const handleSaveBulkTransfer = async () => {
         if (!bulkTransferForm.target_dealer_name) {
-            alert('กรุณากรอกชื่อเจ้ามือที่ต้องการตีออก')
+            toast.warning('กรุณากรอกชื่อเจ้ามือที่ต้องการตีออก')
             return
         }
 
@@ -2016,13 +2018,13 @@ function SubmissionsModal({ round, onClose }) {
 
             // Show success message
             if (createdSubmissionIds.length > 0) {
-                alert(`ตีออกสำเร็จ ${selectedItems.length} รายการ!\nเลขถูกส่งไปยังงวดของ ${bulkTransferForm.target_dealer_name} แล้ว`)
+                toast.success(`ตีออกสำเร็จ ${selectedItems.length} รายการ! เลขถูกส่งไปยังงวดของ ${bulkTransferForm.target_dealer_name} แล้ว`)
             } else {
-                alert(`ตีออกสำเร็จ ${selectedItems.length} รายการ!`)
+                toast.success(`ตีออกสำเร็จ ${selectedItems.length} รายการ!`)
             }
         } catch (error) {
             console.error('Error saving bulk transfer:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         } finally {
             setSavingTransfer(false)
         }
@@ -3497,7 +3499,7 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
     // Save (add or update)
     async function handleSave() {
         if (!formData.upstream_name.trim()) {
-            alert('กรุณากรอกชื่อเจ้ามือ')
+            toast.warning('กรุณากรอกชื่อเจ้ามือ')
             return
         }
 
@@ -3516,7 +3518,7 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
                     .eq('id', editingDealer.id)
 
                 if (error) throw error
-                alert('แก้ไขข้อมูลสำเร็จ!')
+                toast.success('แก้ไขข้อมูลสำเร็จ!')
             } else {
                 // Insert new manual dealer
                 const { error } = await supabase
@@ -3530,14 +3532,14 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
                     })
 
                 if (error) throw error
-                alert('เพิ่มเจ้ามือสำเร็จ!')
+                toast.success('เพิ่มเจ้ามือสำเร็จ!')
             }
 
             setShowAddModal(false)
             fetchUpstreamDealers()
         } catch (error) {
             console.error('Error saving upstream dealer:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         } finally {
             setSaving(false)
         }
@@ -3554,11 +3556,11 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
                 .eq('id', dealer.id)
 
             if (error) throw error
-            alert('ลบสำเร็จ!')
+            toast.success('ลบสำเร็จ!')
             fetchUpstreamDealers()
         } catch (error) {
             console.error('Error deleting upstream dealer:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         }
     }
 
@@ -3600,7 +3602,7 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
                             className="btn btn-outline btn-sm"
                             onClick={() => {
                                 navigator.clipboard.writeText(`${window.location.origin}/dealer-connect?ref=${user?.id}`)
-                                alert('คัดลอกลิงก์แล้ว!')
+                                toast.success('คัดลอกลิงก์แล้ว!')
                             }}
                             style={{ marginTop: '0.5rem' }}
                         >
@@ -3922,11 +3924,11 @@ function MemberSettings({ member, onClose, isInline = false }) {
                 }, { onConflict: 'user_id, dealer_id' })
 
             if (error) throw error
-            alert('บันทึกการตั้งค่าสำเร็จ')
+            toast.success('บันทึกการตั้งค่าสำเร็จ')
             if (!isInline) onClose()
         } catch (error) {
             console.error('Error saving user settings:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         } finally {
             setSaving(false)
         }

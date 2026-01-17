@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useToast } from '../../contexts/ToastContext'
 import {
     FiCalendar,
     FiClock,
@@ -43,6 +44,7 @@ export default function RoundAccordionItem({
     formatTime, 
     user 
 }) {
+    const { toast } = useToast()
     const [isExpanded, setIsExpanded] = useState(false)
     const [summaryData, setSummaryData] = useState({ loading: false, submissions: [], userSettings: {} })
 
@@ -338,13 +340,13 @@ export default function RoundAccordionItem({
 
     const handleSaveTransfer = async () => {
         if (!transferForm.target_dealer_name) {
-            alert('กรุณากรอกชื่อเจ้ามือที่ต้องการตีออก')
+            toast.warning('กรุณากรอกชื่อเจ้ามือที่ต้องการตีออก')
             return
         }
         
         // Check if still checking upstream round status
         if (upstreamRoundStatus === 'checking') {
-            alert('กรุณารอการตรวจสอบงวดหวยของเจ้ามือปลายทาง')
+            toast.warning('กรุณารอการตรวจสอบงวดหวยของเจ้ามือปลายทาง')
             return
         }
         
@@ -427,15 +429,15 @@ export default function RoundAccordionItem({
             setUpstreamRoundStatus(null)
             
             if (canSendToUpstream && targetRoundId) {
-                alert(`ตีออกสำเร็จ ${selectedItems.length} รายการ!\nเลขถูกส่งไปยังงวดของ ${selectedUpstreamDealer.upstream_name} แล้ว`)
+                toast.success(`ตีออกสำเร็จ ${selectedItems.length} รายการ! เลขถูกส่งไปยังงวดของ ${selectedUpstreamDealer.upstream_name} แล้ว`)
             } else if (isLinked && !canSendToUpstream) {
-                alert(`บันทึกยอดตีออก ${selectedItems.length} รายการสำเร็จ!\n(เจ้ามือไม่มีงวดเปิดรับ - ไม่ได้ส่งเลขไป)`)
+                toast.success(`บันทึกยอดตีออก ${selectedItems.length} รายการสำเร็จ! (เจ้ามือไม่มีงวดเปิดรับ)`)
             } else {
-                alert(`ตีออกสำเร็จ ${selectedItems.length} รายการ!`)
+                toast.success(`ตีออกสำเร็จ ${selectedItems.length} รายการ!`)
             }
         } catch (error) {
             console.error('Error saving transfer:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         } finally {
             setSavingTransfer(false)
         }
@@ -461,7 +463,7 @@ export default function RoundAccordionItem({
     const handleRevertTransfers = async (batchIds) => {
         const selectedBatchIds = batchIds.filter(id => selectedTransferBatches[id])
         if (selectedBatchIds.length === 0) {
-            alert('กรุณาเลือกรายการที่ต้องการเอาคืน')
+            toast.warning('กรุณาเลือกรายการที่ต้องการเอาคืน')
             return
         }
         if (!confirm(`ต้องการเอาคืน ${selectedBatchIds.length} รายการหรือไม่?`)) return
@@ -477,10 +479,10 @@ export default function RoundAccordionItem({
 
             await fetchInlineSubmissions(true)
             setSelectedTransferBatches({})
-            alert(`เอาคืนสำเร็จ ${selectedBatchIds.length} รายการ!`)
+            toast.success(`เอาคืนสำเร็จ ${selectedBatchIds.length} รายการ!`)
         } catch (error) {
             console.error('Error reverting transfers:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         } finally {
             setRevertingTransfer(false)
         }
@@ -521,14 +523,14 @@ export default function RoundAccordionItem({
         const selectedBatchIds = Object.keys(selectedTransferBatches).filter(id => selectedTransferBatches[id])
         const batchesToCopy = allBatches.filter(b => selectedBatchIds.includes(b.id))
         if (batchesToCopy.length === 0) {
-            alert('กรุณาเลือกรายการที่ต้องการคัดลอก')
+            toast.warning('กรุณาเลือกรายการที่ต้องการคัดลอก')
             return
         }
 
         const text = generateTransferCopyText(batchesToCopy)
         try {
             await navigator.clipboard.writeText(text)
-            alert(`คัดลอก ${batchesToCopy.length} รายการแล้ว!`)
+            toast.success(`คัดลอก ${batchesToCopy.length} รายการแล้ว!`)
         } catch (err) {
             const textArea = document.createElement('textarea')
             textArea.value = text
@@ -538,7 +540,7 @@ export default function RoundAccordionItem({
             textArea.select()
             document.execCommand('copy')
             document.body.removeChild(textArea)
-            alert(`คัดลอก ${batchesToCopy.length} รายการแล้ว!`)
+            toast.success(`คัดลอก ${batchesToCopy.length} รายการแล้ว!`)
         }
     }
 
@@ -546,7 +548,7 @@ export default function RoundAccordionItem({
         const text = generateTransferCopyText([batch])
         try {
             await navigator.clipboard.writeText(text)
-            alert('คัดลอกแล้ว!')
+            toast.success('คัดลอกแล้ว!')
         } catch (err) {
             const textArea = document.createElement('textarea')
             textArea.value = text
@@ -556,7 +558,7 @@ export default function RoundAccordionItem({
             textArea.select()
             document.execCommand('copy')
             document.body.removeChild(textArea)
-            alert('คัดลอกแล้ว!')
+            toast.success('คัดลอกแล้ว!')
         }
     }
 
@@ -975,7 +977,7 @@ export default function RoundAccordionItem({
                                                             </label>
                                                             <button
                                                                 className="btn btn-warning"
-                                                                onClick={(e) => { e.stopPropagation(); if (filteredSelectedCount === 0) { alert('กรุณาเลือกรายการที่ต้องการตีออก'); return; } setShowTransferModal(true); }}
+                                                                onClick={(e) => { e.stopPropagation(); if (filteredSelectedCount === 0) { toast.warning('กรุณาเลือกรายการที่ต้องการตีออก'); return; } setShowTransferModal(true); }}
                                                                 disabled={filteredSelectedCount === 0}
                                                             >
                                                                 <FiSend /> ตีออก ({filteredSelectedCount})

@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useToast } from '../../contexts/ToastContext'
 import { FiAlertTriangle, FiX, FiPlus, FiTrash2 } from 'react-icons/fi'
 import { BET_TYPES, BET_TYPES_BY_LOTTERY } from '../../constants/lotteryTypes'
 
 export default function NumberLimitsModal({ round, onClose }) {
+    const { toast } = useToast()
     const [limits, setLimits] = useState([])
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
@@ -36,7 +38,7 @@ export default function NumberLimitsModal({ round, onClose }) {
 
     async function handleAddLimit() {
         if (!newLimit.numbers || !newLimit.max_amount) {
-            alert('กรุณากรอกข้อมูลให้ครบ')
+            toast.warning('กรุณากรอกข้อมูลให้ครบ')
             return
         }
 
@@ -57,7 +59,7 @@ export default function NumberLimitsModal({ round, onClose }) {
             fetchLimits()
         } catch (error) {
             console.error('Error adding limit:', error)
-            alert('เกิดข้อผิดพลาด: ' + error.message)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         } finally {
             setSaving(false)
         }

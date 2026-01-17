@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
 import { supabase } from '../lib/supabase'
 import {
     FiSettings,
@@ -18,6 +19,7 @@ import './Admin.css'
 
 export default function Admin() {
     const { isSuperAdmin } = useAuth()
+    const { toast } = useToast()
     const [activeTab, setActiveTab] = useState('draws')
     const [draws, setDraws] = useState([])
     const [users, setUsers] = useState([])
@@ -129,7 +131,7 @@ export default function Admin() {
             fetchDraws()
         } catch (error) {
             console.error('Error saving draw:', error)
-            alert('เกิดข้อผิดพลาด กรุณาลองใหม่')
+            toast.error('เกิดข้อผิดพลาด กรุณาลองใหม่')
         }
     }
 
