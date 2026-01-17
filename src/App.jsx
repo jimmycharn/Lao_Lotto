@@ -5,6 +5,7 @@ import Home from './pages/Home'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import InvitationAccept from './pages/InvitationAccept'
+import DealerConnect from './pages/DealerConnect'
 import BuyLottery from './pages/BuyLottery'
 import Profile from './pages/Profile'
 import Dealer from './pages/Dealer'
@@ -83,6 +84,7 @@ function AppContent() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/invite" element={<InvitationAccept />} />
+          <Route path="/dealer-connect" element={<DealerConnect />} />
           <Route
             path="/profile"
             element={

@@ -3295,6 +3295,40 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
                 จัดการรายชื่อเจ้ามือที่คุณสามารถตีเลขออกไปได้ สามารถเพิ่มเจ้ามือด้วยตนเอง หรือเชื่อมต่อกับเจ้ามือในระบบผ่าน QR Code
             </p>
 
+            {/* QR Code for other dealers to connect to you */}
+            <div className="invitation-card card" style={{ marginBottom: '1.5rem' }}>
+                <div className="invitation-header">
+                    <h3><FiShare2 /> ลิงก์ให้เจ้ามืออื่นเชื่อมต่อ</h3>
+                    <p>ส่งลิงก์หรือ QR Code นี้ให้เจ้ามือคนอื่นที่ต้องการตีเลขมาให้คุณ</p>
+                </div>
+                <div className="invitation-content" style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div className="qr-wrapper">
+                        <div className="qr-code-bg">
+                            <QRCode
+                                value={`${window.location.origin}/dealer-connect?ref=${user?.id}`}
+                                size={100}
+                                style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                            />
+                        </div>
+                    </div>
+                    <div className="link-wrapper" style={{ flex: 1, minWidth: '200px' }}>
+                        <div className="referral-link" style={{ fontSize: '0.85rem', wordBreak: 'break-all' }}>
+                            {`${window.location.origin}/dealer-connect?ref=${user?.id}`}
+                        </div>
+                        <button
+                            className="btn btn-outline btn-sm"
+                            onClick={() => {
+                                navigator.clipboard.writeText(`${window.location.origin}/dealer-connect?ref=${user?.id}`)
+                                alert('คัดลอกลิงก์แล้ว!')
+                            }}
+                            style={{ marginTop: '0.5rem' }}
+                        >
+                            <FiCopy /> คัดลอก
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             {loadingUpstream ? (
                 <div className="loading-state">
                     <div className="spinner"></div>
@@ -3312,54 +3346,103 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
                     </button>
                 </div>
             ) : (
-                <div className="upstream-dealers-grid">
-                    {upstreamDealers.map(dealer => (
-                        <div key={dealer.id} className="upstream-dealer-card card">
-                            <div className="dealer-card-header">
-                                <div className="dealer-info">
-                                    <h3 className="dealer-name">
-                                        {dealer.upstream_name}
-                                        {dealer.is_linked && (
-                                            <span className="linked-badge" title="เชื่อมต่อกับระบบ">
-                                                <FiCheck />
-                                            </span>
-                                        )}
-                                    </h3>
-                                    {dealer.upstream_contact && (
-                                        <p className="dealer-contact">
-                                            <FiUser style={{ marginRight: '0.25rem' }} />
-                                            {dealer.upstream_contact}
-                                        </p>
-                                    )}
-                                    {dealer.notes && (
-                                        <p className="dealer-notes">{dealer.notes}</p>
-                                    )}
-                                </div>
-                                <div className="dealer-actions">
-                                    <button
-                                        className="icon-btn"
-                                        onClick={() => handleEditDealer(dealer)}
-                                        title="แก้ไข"
-                                    >
-                                        <FiEdit2 />
-                                    </button>
-                                    <button
-                                        className="icon-btn danger"
-                                        onClick={() => handleDelete(dealer)}
-                                        title="ลบ"
-                                    >
-                                        <FiTrash2 />
-                                    </button>
-                                </div>
+                <>
+                    {/* Linked Dealers Section */}
+                    {upstreamDealers.filter(d => d.is_linked).length > 0 && (
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <FiCheck style={{ color: 'var(--color-success)' }} /> เจ้ามือในระบบ ({upstreamDealers.filter(d => d.is_linked).length})
+                            </h4>
+                            <div className="upstream-dealers-grid">
+                                {upstreamDealers.filter(d => d.is_linked).map(dealer => (
+                                    <div key={dealer.id} className="upstream-dealer-card card linked">
+                                        <div className="dealer-card-header">
+                                            <div className="dealer-info">
+                                                <h3 className="dealer-name">
+                                                    {dealer.upstream_name}
+                                                    <span className="linked-badge" title="เชื่อมต่อกับระบบ" style={{ 
+                                                        background: 'var(--color-success)', 
+                                                        color: 'white', 
+                                                        padding: '0.15rem 0.4rem', 
+                                                        borderRadius: '4px', 
+                                                        fontSize: '0.7rem',
+                                                        marginLeft: '0.5rem'
+                                                    }}>
+                                                        <FiCheck style={{ marginRight: '0.2rem' }} /> ในระบบ
+                                                    </span>
+                                                </h3>
+                                                {dealer.upstream_profile && (
+                                                    <p className="dealer-contact" style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                                                        {dealer.upstream_profile.email}
+                                                    </p>
+                                                )}
+                                                {dealer.notes && (
+                                                    <p className="dealer-notes">{dealer.notes}</p>
+                                                )}
+                                            </div>
+                                            <div className="dealer-actions">
+                                                <button
+                                                    className="icon-btn danger"
+                                                    onClick={() => handleDelete(dealer)}
+                                                    title="ยกเลิกการเชื่อมต่อ"
+                                                >
+                                                    <FiTrash2 />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
-                            {dealer.is_linked && dealer.upstream_profile && (
-                                <div className="linked-profile-info">
-                                    <span>เชื่อมต่อกับ: {dealer.upstream_profile.full_name || dealer.upstream_profile.email}</span>
-                                </div>
-                            )}
                         </div>
-                    ))}
-                </div>
+                    )}
+
+                    {/* Manual Dealers Section */}
+                    {upstreamDealers.filter(d => !d.is_linked).length > 0 && (
+                        <div>
+                            <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <FiUser style={{ color: 'var(--color-text-muted)' }} /> เจ้ามือนอกระบบ ({upstreamDealers.filter(d => !d.is_linked).length})
+                            </h4>
+                            <div className="upstream-dealers-grid">
+                                {upstreamDealers.filter(d => !d.is_linked).map(dealer => (
+                                    <div key={dealer.id} className="upstream-dealer-card card">
+                                        <div className="dealer-card-header">
+                                            <div className="dealer-info">
+                                                <h3 className="dealer-name">
+                                                    {dealer.upstream_name}
+                                                </h3>
+                                                {dealer.upstream_contact && (
+                                                    <p className="dealer-contact">
+                                                        <FiUser style={{ marginRight: '0.25rem' }} />
+                                                        {dealer.upstream_contact}
+                                                    </p>
+                                                )}
+                                                {dealer.notes && (
+                                                    <p className="dealer-notes">{dealer.notes}</p>
+                                                )}
+                                            </div>
+                                            <div className="dealer-actions">
+                                                <button
+                                                    className="icon-btn"
+                                                    onClick={() => handleEditDealer(dealer)}
+                                                    title="แก้ไข"
+                                                >
+                                                    <FiEdit2 />
+                                                </button>
+                                                <button
+                                                    className="icon-btn danger"
+                                                    onClick={() => handleDelete(dealer)}
+                                                    title="ลบ"
+                                                >
+                                                    <FiTrash2 />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </>
             )}
 
             {/* Add/Edit Modal */}
