@@ -27,7 +27,7 @@ export const BET_TYPES_BY_LOTTERY = {
         '5_run': { label: '5 ตัวลอย', defaultLimit: 100 }
     },
     lao: {
-        '4_top': { label: '4 ตัวตรง', defaultLimit: 200, isSet: true, defaultSetPrice: 120 },
+        '4_top': { label: '4 ตัวชุด', defaultLimit: 200, isSet: true, isFixedPayout: true },
         'run_top': { label: 'ลอยบน', defaultLimit: 5000 },
         'run_bottom': { label: 'ลอยล่าง', defaultLimit: 5000 },
         'pak_top': { label: 'ปักบน (หน้า/กลาง/หลัง)', defaultLimit: 5000 },
@@ -47,7 +47,7 @@ export const BET_TYPES_BY_LOTTERY = {
         '5_run': { label: '5 ตัวลอย', defaultLimit: 100 }
     },
     hanoi: {
-        '4_top': { label: '4 ตัวตรง', defaultLimit: 200, isSet: true, defaultSetPrice: 120 },
+        '4_top': { label: '4 ตัวชุด', defaultLimit: 200, isSet: true, isFixedPayout: true },
         'run_top': { label: 'ลอยบน', defaultLimit: 5000 },
         'run_bottom': { label: 'ลอยล่าง', defaultLimit: 5000 },
         'pak_top': { label: 'ปักบน (หน้า/กลาง/หลัง)', defaultLimit: 5000 },
@@ -112,7 +112,7 @@ export const BET_TYPES = {
     '3_tod_single': '3 ตัวโต๊ด',
 
     // 4 Digits
-    '4_top': '4 ตัวตรง',
+    '4_top': '4 ตัวชุด',
     '4_tod': '4 ตัวโต๊ด',
     '4_set': '4 ตัวชุด',
     '4_float': '4 ตัวลอย',

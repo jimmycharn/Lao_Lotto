@@ -3009,7 +3009,7 @@ function DealerInfoTab({ dealer, userSettings }) {
             '5_run': '5 ตัวลอย'
         },
         lao: {
-            '4_top': '4 ตัวตรง (ชุด)',
+            '4_top': '4 ตัวชุด',
             'run_top': 'ลอยบน',
             'run_bottom': 'ลอยล่าง',
             'pak_top': 'ปักบน (หน้า/กลาง/หลัง)',
@@ -3178,7 +3178,7 @@ function DealerInfoTab({ dealer, userSettings }) {
                                             </td>
                                             <td className="rate-cell">
                                                 <span className="rate-value">{value.payout?.toLocaleString()}</span>
-                                                <span className="rate-unit">เท่า</span>
+                                                <span className="rate-unit">{value.isFixed ? 'บาท' : 'เท่า'}</span>
                                             </td>
                                         </tr>
                                     ))}

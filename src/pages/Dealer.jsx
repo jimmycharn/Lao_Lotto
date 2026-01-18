@@ -3934,7 +3934,7 @@ function UpstreamDealerSettings({ dealer, onClose, onSaved }) {
             '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
         },
         lao: {
-            '4_top': '4 ตัวตรง (ชุด)',
+            '4_top': '4 ตัวชุด',
             'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
             'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
             '2_top': '2 ตัวบน', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
@@ -4070,7 +4070,7 @@ function UpstreamDealerSettings({ dealer, onClose, onSaved }) {
                                                             value={value.payout}
                                                             onChange={e => updateSetting(activeTab, key, 'payout', e.target.value)}
                                                         />
-                                                        <span className="input-suffix">เท่า</span>
+                                                        <span className="input-suffix">{value.isFixed ? 'บาท' : 'เท่า'}</span>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -4161,7 +4161,7 @@ function MemberSettings({ member, onClose, isInline = false }) {
             '5_run': '5 ตัวลอย'
         },
         lao: {
-            '4_top': '4 ตัวตรง (ชุด 120฿)',
+            '4_top': '4 ตัวชุด',
             'run_top': 'ลอยบน',
             'run_bottom': 'ลอยล่าง',
             'pak_top': 'ปักบน (หน้า/กลาง/หลัง)',
@@ -4327,7 +4327,7 @@ function MemberSettings({ member, onClose, isInline = false }) {
                                                         value={value.payout}
                                                         onChange={e => updateSetting(activeTab, key, 'payout', e.target.value)}
                                                     />
-                                                    <span className="input-suffix">เท่า</span>
+                                                    <span className="input-suffix">{value.isFixed ? 'บาท' : 'เท่า'}</span>
                                                 </div>
                                             </td>
                                         </tr>
@@ -4338,7 +4338,7 @@ function MemberSettings({ member, onClose, isInline = false }) {
 
                         {activeTab === 'lao' && (
                             <p className="text-muted" style={{ marginTop: '1rem', fontSize: '0.85rem' }}>
-                                * หวยชุด 4 ตัว ขายชุดละ 120 บาท - ค่าคอมเป็นบาทต่อชุด
+                                * 4 ตัวชุด - ค่าคอมเป็นบาทต่อชุด, อัตราจ่ายเป็นจำนวนเงิน (บาท)
                             </p>
                         )}
 
