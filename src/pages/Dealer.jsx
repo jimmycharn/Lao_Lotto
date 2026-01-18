@@ -3580,8 +3580,13 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
                 .eq('id', dealer.id)
 
             if (error) throw error
+            
+            // Update state immediately for instant UI feedback
+            setUpstreamDealers(prev => prev.map(d => 
+                d.id === dealer.id ? { ...d, is_blocked: newBlockedState } : d
+            ))
+            
             toast.success(newBlockedState ? 'บล็อกเจ้ามือแล้ว' : 'ยกเลิกการบล็อกแล้ว')
-            fetchUpstreamDealers()
         } catch (error) {
             console.error('Error toggling block:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
@@ -3735,11 +3740,23 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
                             </h4>
                             <div className="upstream-dealers-grid">
                                 {upstreamDealers.filter(d => !d.is_linked).map(dealer => (
-                                    <div key={dealer.id} className="upstream-dealer-card card">
+                                    <div key={dealer.id} className={`upstream-dealer-card card ${dealer.is_blocked ? 'blocked' : ''}`} style={dealer.is_blocked ? { opacity: 0.6, borderColor: 'var(--color-danger)' } : {}}>
                                         <div className="dealer-card-header">
                                             <div className="dealer-info">
                                                 <h3 className="dealer-name">
                                                     {dealer.upstream_name}
+                                                    {dealer.is_blocked && (
+                                                        <span style={{ 
+                                                            background: 'var(--color-danger)', 
+                                                            color: 'white', 
+                                                            padding: '0.15rem 0.4rem', 
+                                                            borderRadius: '4px', 
+                                                            fontSize: '0.7rem',
+                                                            marginLeft: '0.5rem'
+                                                        }}>
+                                                            <FiSlash style={{ marginRight: '0.2rem' }} /> ถูกบล็อก
+                                                        </span>
+                                                    )}
                                                 </h3>
                                                 {dealer.upstream_contact && (
                                                     <p className="dealer-contact">
@@ -3751,7 +3768,22 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
                                                     <p className="dealer-notes">{dealer.notes}</p>
                                                 )}
                                             </div>
-                                            <div className="dealer-actions">
+                                            <div className="dealer-actions" style={{ display: 'flex', gap: '0.25rem' }}>
+                                                <button
+                                                    className="icon-btn"
+                                                    onClick={() => handleOpenSettings(dealer)}
+                                                    title="ตั้งค่าค่าคอมและอัตราจ่าย"
+                                                >
+                                                    <FiSettings />
+                                                </button>
+                                                <button
+                                                    className={`icon-btn ${dealer.is_blocked ? 'success' : 'warning'}`}
+                                                    onClick={() => handleToggleBlock(dealer)}
+                                                    title={dealer.is_blocked ? 'ยกเลิกการบล็อก' : 'บล็อกเจ้ามือนี้'}
+                                                    style={{ color: dealer.is_blocked ? 'var(--color-success)' : 'var(--color-warning)' }}
+                                                >
+                                                    {dealer.is_blocked ? <FiCheck /> : <FiSlash />}
+                                                </button>
                                                 <button
                                                     className="icon-btn"
                                                     onClick={() => handleEditDealer(dealer)}
