@@ -4309,7 +4309,19 @@ function MemberSettings({ member, onClose, isInline = false }) {
                     if (merged[tab]) {
                         Object.keys(data.lottery_settings[tab]).forEach(key => {
                             if (merged[tab][key]) {
-                                merged[tab][key] = { ...merged[tab][key], ...data.lottery_settings[tab][key] }
+                                // Handle 4_set with nested prizes structure
+                                if (key === '4_set' && data.lottery_settings[tab][key].prizes) {
+                                    merged[tab][key] = {
+                                        ...merged[tab][key],
+                                        ...data.lottery_settings[tab][key],
+                                        prizes: {
+                                            ...merged[tab][key].prizes,
+                                            ...data.lottery_settings[tab][key].prizes
+                                        }
+                                    }
+                                } else {
+                                    merged[tab][key] = { ...merged[tab][key], ...data.lottery_settings[tab][key] }
+                                }
                             }
                         })
                     }
