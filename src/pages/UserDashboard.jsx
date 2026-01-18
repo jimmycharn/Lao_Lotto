@@ -2971,7 +2971,19 @@ function DealerInfoTab({ dealer, userSettings }) {
             '5_run': { commission: 15, payout: 10 }
         },
         lao: {
-            '4_top': { commission: 25, payout: 100000, isFixed: true },
+            '4_set': { 
+                commission: 25, 
+                setPrice: 120,
+                isSet: true,
+                prizes: {
+                    '4_straight_set': 100000,
+                    '4_tod_set': 4000,
+                    '3_straight_set': 30000,
+                    '3_tod_set': 3000,
+                    '2_front_set': 1000,
+                    '2_back_set': 1000
+                }
+            },
             'run_top': { commission: 15, payout: 3 },
             'run_bottom': { commission: 15, payout: 4 },
             'pak_top': { commission: 15, payout: 8 },
@@ -3009,7 +3021,7 @@ function DealerInfoTab({ dealer, userSettings }) {
             '5_run': '5 ตัวลอย'
         },
         lao: {
-            '4_top': '4 ตัวชุด',
+            '4_set': '4 ตัวชุด',
             'run_top': 'ลอยบน',
             'run_bottom': 'ลอยล่าง',
             'pak_top': 'ปักบน (หน้า/กลาง/หลัง)',
@@ -3027,6 +3039,15 @@ function DealerInfoTab({ dealer, userSettings }) {
             '2_top': '2 ตัวบน',
             '2_bottom': '2 ตัวล่าง'
         }
+    }
+
+    const SET_PRIZE_LABELS = {
+        '4_straight_set': '4 ตัวตรงชุด',
+        '4_tod_set': '4 ตัวโต๊ดชุด',
+        '3_straight_set': '3 ตัวตรงชุด',
+        '3_tod_set': '3 ตัวโต๊ดชุด',
+        '2_front_set': '2 ตัวหน้าชุด',
+        '2_back_set': '2 ตัวหลังชุด'
     }
 
     const LOTTERY_TABS = [
@@ -3158,7 +3179,41 @@ function DealerInfoTab({ dealer, userSettings }) {
                             ))}
                         </div>
 
-                        {/* Rates Table */}
+                        {/* 4 ตัวชุด Section for Lao/Hanoi */}
+                        {ratesTab === 'lao' && settings.lao?.['4_set'] && (
+                            <div className="set-rates-section" style={{ marginBottom: '1.5rem' }}>
+                                <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-primary)', fontSize: '1rem' }}>
+                                    4 ตัวชุด (ราคาชุดละ {settings.lao['4_set'].setPrice || 120} บาท)
+                                </h4>
+                                <div className="info-row" style={{ marginBottom: '0.75rem' }}>
+                                    <span className="info-label">ค่าคอม:</span>
+                                    <span className="info-value" style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
+                                        {settings.lao['4_set'].commission} ฿/ชุด
+                                    </span>
+                                </div>
+                                <table className="rates-table">
+                                    <thead>
+                                        <tr>
+                                            <th>ประเภทรางวัล</th>
+                                            <th>เงินรางวัล</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {Object.entries(settings.lao['4_set'].prizes || {}).map(([prizeKey, prizeAmount]) => (
+                                            <tr key={prizeKey}>
+                                                <td className="type-cell">{SET_PRIZE_LABELS[prizeKey] || prizeKey}</td>
+                                                <td className="rate-cell">
+                                                    <span className="rate-value">{prizeAmount?.toLocaleString()}</span>
+                                                    <span className="rate-unit">บาท/ชุด</span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {/* Regular Rates Table */}
                         <div className="rates-table-container">
                             <table className="rates-table">
                                 <thead>
@@ -3169,16 +3224,18 @@ function DealerInfoTab({ dealer, userSettings }) {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {Object.entries(settings[ratesTab] || {}).map(([key, value]) => (
-                                        <tr key={key} className={value.isFixed ? 'fixed-row' : ''}>
+                                    {Object.entries(settings[ratesTab] || {})
+                                        .filter(([key]) => key !== '4_set')
+                                        .map(([key, value]) => (
+                                        <tr key={key}>
                                             <td className="type-cell">{BET_LABELS[ratesTab]?.[key] || key}</td>
                                             <td className="rate-cell">
                                                 <span className="rate-value">{value.commission}</span>
-                                                <span className="rate-unit">{value.isFixed ? '฿/ชุด' : '%'}</span>
+                                                <span className="rate-unit">%</span>
                                             </td>
                                             <td className="rate-cell">
                                                 <span className="rate-value">{value.payout?.toLocaleString()}</span>
-                                                <span className="rate-unit">{value.isFixed ? 'บาท' : 'เท่า'}</span>
+                                                <span className="rate-unit">เท่า</span>
                                             </td>
                                         </tr>
                                     ))}

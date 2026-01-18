@@ -27,7 +27,21 @@ export const BET_TYPES_BY_LOTTERY = {
         '5_run': { label: '5 ตัวลอย', defaultLimit: 100 }
     },
     lao: {
-        '4_top': { label: '4 ตัวชุด', defaultLimit: 200, isSet: true, isFixedPayout: true },
+        '4_set': { 
+            label: '4 ตัวชุด', 
+            defaultLimit: 200, 
+            isSet: true, 
+            defaultSetPrice: 120,
+            defaultCommission: 25,
+            prizes: {
+                '4_straight_set': { label: '4 ตัวตรงชุด', defaultPayout: 100000 },
+                '4_tod_set': { label: '4 ตัวโต๊ดชุด', defaultPayout: 4000 },
+                '3_straight_set': { label: '3 ตัวตรงชุด', defaultPayout: 30000 },
+                '3_tod_set': { label: '3 ตัวโต๊ดชุด', defaultPayout: 3000 },
+                '2_front_set': { label: '2 ตัวหน้าชุด', defaultPayout: 1000 },
+                '2_back_set': { label: '2 ตัวหลังชุด', defaultPayout: 1000 }
+            }
+        },
         'run_top': { label: 'ลอยบน', defaultLimit: 5000 },
         'run_bottom': { label: 'ลอยล่าง', defaultLimit: 5000 },
         'pak_top': { label: 'ปักบน (หน้า/กลาง/หลัง)', defaultLimit: 5000 },
@@ -47,7 +61,21 @@ export const BET_TYPES_BY_LOTTERY = {
         '5_run': { label: '5 ตัวลอย', defaultLimit: 100 }
     },
     hanoi: {
-        '4_top': { label: '4 ตัวชุด', defaultLimit: 200, isSet: true, isFixedPayout: true },
+        '4_set': { 
+            label: '4 ตัวชุด', 
+            defaultLimit: 200, 
+            isSet: true, 
+            defaultSetPrice: 120,
+            defaultCommission: 25,
+            prizes: {
+                '4_straight_set': { label: '4 ตัวตรงชุด', defaultPayout: 100000 },
+                '4_tod_set': { label: '4 ตัวโต๊ดชุด', defaultPayout: 4000 },
+                '3_straight_set': { label: '3 ตัวตรงชุด', defaultPayout: 30000 },
+                '3_tod_set': { label: '3 ตัวโต๊ดชุด', defaultPayout: 3000 },
+                '2_front_set': { label: '2 ตัวหน้าชุด', defaultPayout: 1000 },
+                '2_back_set': { label: '2 ตัวหลังชุด', defaultPayout: 1000 }
+            }
+        },
         'run_top': { label: 'ลอยบน', defaultLimit: 5000 },
         'run_bottom': { label: 'ลอยล่าง', defaultLimit: 5000 },
         'pak_top': { label: 'ปักบน (หน้า/กลาง/หลัง)', defaultLimit: 5000 },
@@ -112,11 +140,19 @@ export const BET_TYPES = {
     '3_tod_single': '3 ตัวโต๊ด',
 
     // 4 Digits
-    '4_top': '4 ตัวชุด',
-    '4_tod': '4 ตัวโต๊ด',
     '4_set': '4 ตัวชุด',
+    '4_straight_set': '4 ตัวตรงชุด',
+    '4_tod_set': '4 ตัวโต๊ดชุด',
+    '4_top': '4 ตัวตรง',
+    '4_tod': '4 ตัวโต๊ด',
     '4_float': '4 ตัวลอย',
     '4_run': '4 ตัวลอย',
+    
+    // 4 ตัวชุด Prize Types
+    '3_straight_set': '3 ตัวตรงชุด',
+    '3_tod_set': '3 ตัวโต๊ดชุด',
+    '2_front_set': '2 ตัวหน้าชุด',
+    '2_back_set': '2 ตัวหลังชุด',
 
     // 5 Digits
     '5_float': '5 ตัวลอย',
@@ -279,4 +315,105 @@ export function getLotteryTypeKey(lotteryType) {
     if (lotteryType === 'lao' || lotteryType === 'hanoi') return 'lao'
     if (lotteryType === 'stock') return 'stock'
     return 'thai'
+}
+
+// Default 4 ตัวชุด settings
+export const DEFAULT_4_SET_SETTINGS = {
+    setPrice: 120,
+    commission: 25,
+    prizes: {
+        '4_straight_set': 100000,  // 4 ตัวตรงชุด
+        '4_tod_set': 4000,         // 4 ตัวโต๊ดชุด
+        '3_straight_set': 30000,   // 3 ตัวตรงชุด
+        '3_tod_set': 3000,         // 3 ตัวโต๊ดชุด
+        '2_front_set': 1000,       // 2 ตัวหน้าชุด
+        '2_back_set': 1000         // 2 ตัวหลังชุด
+    }
+}
+
+// 4 ตัวชุด Prize Labels
+export const SET_PRIZE_LABELS = {
+    '4_straight_set': '4 ตัวตรงชุด',
+    '4_tod_set': '4 ตัวโต๊ดชุด',
+    '3_straight_set': '3 ตัวตรงชุด',
+    '3_tod_set': '3 ตัวโต๊ดชุด',
+    '2_front_set': '2 ตัวหน้าชุด',
+    '2_back_set': '2 ตัวหลังชุด'
+}
+
+// Calculate 4 ตัวชุด prizes for a given number against winning result
+export function calculate4SetPrizes(betNumber, winningNumber, prizeSettings = DEFAULT_4_SET_SETTINGS.prizes) {
+    if (!betNumber || !winningNumber || betNumber.length !== 4 || winningNumber.length !== 4) {
+        return { prizes: [], totalPrize: 0 }
+    }
+
+    const prizes = []
+    
+    // 1. 4 ตัวตรงชุด - exact match (all 4 digits in exact position)
+    if (betNumber === winningNumber) {
+        prizes.push({
+            type: '4_straight_set',
+            label: '4 ตัวตรงชุด',
+            amount: prizeSettings['4_straight_set'] || 100000
+        })
+    }
+    
+    // 2. 4 ตัวโต๊ดชุด - same digits, any order (but not exact match)
+    const betSorted = betNumber.split('').sort().join('')
+    const winSorted = winningNumber.split('').sort().join('')
+    if (betSorted === winSorted && betNumber !== winningNumber) {
+        prizes.push({
+            type: '4_tod_set',
+            label: '4 ตัวโต๊ดชุด',
+            amount: prizeSettings['4_tod_set'] || 4000
+        })
+    }
+    
+    // 3. 3 ตัวตรงชุด - last 3 digits exact match
+    const betLast3 = betNumber.slice(1)
+    const winLast3 = winningNumber.slice(1)
+    if (betLast3 === winLast3) {
+        prizes.push({
+            type: '3_straight_set',
+            label: '3 ตัวตรงชุด',
+            amount: prizeSettings['3_straight_set'] || 30000
+        })
+    }
+    
+    // 4. 3 ตัวโต๊ดชุด - last 3 digits same but different order (and not exact)
+    const betLast3Sorted = betLast3.split('').sort().join('')
+    const winLast3Sorted = winLast3.split('').sort().join('')
+    if (betLast3Sorted === winLast3Sorted && betLast3 !== winLast3) {
+        prizes.push({
+            type: '3_tod_set',
+            label: '3 ตัวโต๊ดชุด',
+            amount: prizeSettings['3_tod_set'] || 3000
+        })
+    }
+    
+    // 5. 2 ตัวหน้าชุด - first 2 digits exact match
+    const betFirst2 = betNumber.slice(0, 2)
+    const winFirst2 = winningNumber.slice(0, 2)
+    if (betFirst2 === winFirst2) {
+        prizes.push({
+            type: '2_front_set',
+            label: '2 ตัวหน้าชุด',
+            amount: prizeSettings['2_front_set'] || 1000
+        })
+    }
+    
+    // 6. 2 ตัวหลังชุด - last 2 digits exact match
+    const betLast2 = betNumber.slice(2)
+    const winLast2 = winningNumber.slice(2)
+    if (betLast2 === winLast2) {
+        prizes.push({
+            type: '2_back_set',
+            label: '2 ตัวหลังชุด',
+            amount: prizeSettings['2_back_set'] || 1000
+        })
+    }
+    
+    const totalPrize = prizes.reduce((sum, p) => sum + p.amount, 0)
+    
+    return { prizes, totalPrize }
 }

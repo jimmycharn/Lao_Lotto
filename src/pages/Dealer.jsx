@@ -3903,7 +3903,19 @@ function UpstreamDealerSettings({ dealer, onClose, onSaved }) {
             '5_run': { commission: 15, payout: 10 }
         },
         lao: {
-            '4_top': { commission: 25, payout: 100000, isFixed: true },
+            '4_set': { 
+                commission: 25, 
+                setPrice: 120,
+                isSet: true,
+                prizes: {
+                    '4_straight_set': 100000,
+                    '4_tod_set': 4000,
+                    '3_straight_set': 30000,
+                    '3_tod_set': 3000,
+                    '2_front_set': 1000,
+                    '2_back_set': 1000
+                }
+            },
             'run_top': { commission: 15, payout: 3 },
             'run_bottom': { commission: 15, payout: 4 },
             'pak_top': { commission: 15, payout: 8 },
@@ -3934,7 +3946,7 @@ function UpstreamDealerSettings({ dealer, onClose, onSaved }) {
             '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
         },
         lao: {
-            '4_top': '4 ตัวชุด',
+            '4_set': '4 ตัวชุด',
             'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
             'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
             '2_top': '2 ตัวบน', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
@@ -3942,6 +3954,15 @@ function UpstreamDealerSettings({ dealer, onClose, onSaved }) {
             '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
         },
         stock: { '2_top': '2 ตัวบน', '2_bottom': '2 ตัวล่าง' }
+    }
+
+    const SET_PRIZE_LABELS = {
+        '4_straight_set': '4 ตัวตรงชุด',
+        '4_tod_set': '4 ตัวโต๊ดชุด',
+        '3_straight_set': '3 ตัวตรงชุด',
+        '3_tod_set': '3 ตัวโต๊ดชุด',
+        '2_front_set': '2 ตัวหน้าชุด',
+        '2_back_set': '2 ตัวหลังชุด'
     }
 
     useEffect(() => {
@@ -4038,6 +4059,67 @@ function UpstreamDealerSettings({ dealer, onClose, onSaved }) {
                                 ))}
                             </div>
 
+                            {/* 4 ตัวชุด Section for Lao/Hanoi */}
+                            {activeTab === 'lao' && settings.lao?.['4_set'] && (
+                                <div className="set-settings-section" style={{ marginBottom: '1.5rem' }}>
+                                    <h4 style={{ marginBottom: '1rem', color: 'var(--color-primary)' }}>
+                                        <FiPackage style={{ marginRight: '0.5rem' }} />
+                                        4 ตัวชุด (ราคาชุดละ {settings.lao['4_set'].setPrice || 120} บาท)
+                                    </h4>
+                                    
+                                    {/* Commission */}
+                                    <div className="info-row" style={{ marginBottom: '1rem' }}>
+                                        <span className="info-label">ค่าคอม:</span>
+                                        <div className="input-group" style={{ width: '120px' }}>
+                                            <input
+                                                type="number"
+                                                className="form-input small"
+                                                value={settings.lao['4_set'].commission}
+                                                onChange={e => {
+                                                    const newSettings = { ...settings }
+                                                    newSettings.lao['4_set'].commission = Number(e.target.value)
+                                                    setSettings(newSettings)
+                                                }}
+                                            />
+                                            <span className="input-suffix">฿/ชุด</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Prize Table */}
+                                    <table className="settings-table">
+                                        <thead>
+                                            <tr>
+                                                <th>ประเภทรางวัล</th>
+                                                <th>เงินรางวัล (บาท/ชุด)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {Object.entries(settings.lao['4_set'].prizes || {}).map(([prizeKey, prizeAmount]) => (
+                                                <tr key={prizeKey}>
+                                                    <td className="type-cell">{SET_PRIZE_LABELS[prizeKey] || prizeKey}</td>
+                                                    <td>
+                                                        <div className="input-group">
+                                                            <input
+                                                                type="number"
+                                                                className="form-input small"
+                                                                value={prizeAmount}
+                                                                onChange={e => {
+                                                                    const newSettings = { ...settings }
+                                                                    newSettings.lao['4_set'].prizes[prizeKey] = Number(e.target.value)
+                                                                    setSettings(newSettings)
+                                                                }}
+                                                            />
+                                                            <span className="input-suffix">บาท</span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+
+                            {/* Regular Bet Types Table */}
                             <div className="settings-table-wrap">
                                 <table className="settings-table">
                                     <thead>
@@ -4048,8 +4130,10 @@ function UpstreamDealerSettings({ dealer, onClose, onSaved }) {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {Object.entries(settings[activeTab] || {}).map(([key, value]) => (
-                                            <tr key={key} className={value.isFixed ? 'fixed-row' : ''}>
+                                        {Object.entries(settings[activeTab] || {})
+                                            .filter(([key]) => key !== '4_set')
+                                            .map(([key, value]) => (
+                                            <tr key={key}>
                                                 <td className="type-cell">{BET_LABELS[activeTab]?.[key] || key}</td>
                                                 <td>
                                                     <div className="input-group">
@@ -4059,7 +4143,7 @@ function UpstreamDealerSettings({ dealer, onClose, onSaved }) {
                                                             value={value.commission}
                                                             onChange={e => updateSetting(activeTab, key, 'commission', e.target.value)}
                                                         />
-                                                        <span className="input-suffix">{value.isFixed ? '฿' : '%'}</span>
+                                                        <span className="input-suffix">%</span>
                                                     </div>
                                                 </td>
                                                 <td>
@@ -4070,7 +4154,7 @@ function UpstreamDealerSettings({ dealer, onClose, onSaved }) {
                                                             value={value.payout}
                                                             onChange={e => updateSetting(activeTab, key, 'payout', e.target.value)}
                                                         />
-                                                        <span className="input-suffix">{value.isFixed ? 'บาท' : 'เท่า'}</span>
+                                                        <span className="input-suffix">เท่า</span>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -4120,7 +4204,19 @@ function MemberSettings({ member, onClose, isInline = false }) {
             '5_run': { commission: 15, payout: 10 }
         },
         lao: {
-            '4_top': { commission: 25, payout: 100000, isFixed: true },
+            '4_set': { 
+                commission: 25, 
+                setPrice: 120,
+                isSet: true,
+                prizes: {
+                    '4_straight_set': 100000,
+                    '4_tod_set': 4000,
+                    '3_straight_set': 30000,
+                    '3_tod_set': 3000,
+                    '2_front_set': 1000,
+                    '2_back_set': 1000
+                }
+            },
             'run_top': { commission: 15, payout: 3 },
             'run_bottom': { commission: 15, payout: 4 },
             'pak_top': { commission: 15, payout: 8 },
@@ -4161,7 +4257,7 @@ function MemberSettings({ member, onClose, isInline = false }) {
             '5_run': '5 ตัวลอย'
         },
         lao: {
-            '4_top': '4 ตัวชุด',
+            '4_set': '4 ตัวชุด',
             'run_top': 'ลอยบน',
             'run_bottom': 'ลอยล่าง',
             'pak_top': 'ปักบน (หน้า/กลาง/หลัง)',
@@ -4179,6 +4275,15 @@ function MemberSettings({ member, onClose, isInline = false }) {
             '2_top': '2 ตัวบน',
             '2_bottom': '2 ตัวล่าง'
         }
+    }
+
+    const SET_PRIZE_LABELS = {
+        '4_straight_set': '4 ตัวตรงชุด',
+        '4_tod_set': '4 ตัวโต๊ดชุด',
+        '3_straight_set': '3 ตัวตรงชุด',
+        '3_tod_set': '3 ตัวโต๊ดชุด',
+        '2_front_set': '2 ตัวหน้าชุด',
+        '2_back_set': '2 ตัวหลังชุด'
     }
 
     useEffect(() => {
@@ -4293,6 +4398,67 @@ function MemberSettings({ member, onClose, isInline = false }) {
                             ))}
                         </div>
 
+                        {/* 4 ตัวชุด Section for Lao/Hanoi */}
+                        {activeTab === 'lao' && settings.lao?.['4_set'] && (
+                            <div className="set-settings-section" style={{ marginBottom: '1.5rem' }}>
+                                <h4 style={{ marginBottom: '1rem', color: 'var(--color-primary)' }}>
+                                    <FiPackage style={{ marginRight: '0.5rem' }} />
+                                    4 ตัวชุด (ราคาชุดละ {settings.lao['4_set'].setPrice || 120} บาท)
+                                </h4>
+                                
+                                {/* Commission */}
+                                <div className="info-row" style={{ marginBottom: '1rem' }}>
+                                    <span className="info-label">ค่าคอม:</span>
+                                    <div className="input-group" style={{ width: '120px' }}>
+                                        <input
+                                            type="number"
+                                            className="form-input small"
+                                            value={settings.lao['4_set'].commission}
+                                            onChange={e => {
+                                                const newSettings = { ...settings }
+                                                newSettings.lao['4_set'].commission = Number(e.target.value)
+                                                setSettings(newSettings)
+                                            }}
+                                        />
+                                        <span className="input-suffix">฿/ชุด</span>
+                                    </div>
+                                </div>
+
+                                {/* Prize Table */}
+                                <table className="settings-table">
+                                    <thead>
+                                        <tr>
+                                            <th>ประเภทรางวัล</th>
+                                            <th>เงินรางวัล (บาท/ชุด)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {Object.entries(settings.lao['4_set'].prizes || {}).map(([prizeKey, prizeAmount]) => (
+                                            <tr key={prizeKey}>
+                                                <td className="type-cell">{SET_PRIZE_LABELS[prizeKey] || prizeKey}</td>
+                                                <td>
+                                                    <div className="input-group">
+                                                        <input
+                                                            type="number"
+                                                            className="form-input small"
+                                                            value={prizeAmount}
+                                                            onChange={e => {
+                                                                const newSettings = { ...settings }
+                                                                newSettings.lao['4_set'].prizes[prizeKey] = Number(e.target.value)
+                                                                setSettings(newSettings)
+                                                            }}
+                                                        />
+                                                        <span className="input-suffix">บาท</span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {/* Regular Bet Types Table */}
                         <div className="settings-table-wrap">
                             <table className="settings-table">
                                 <thead>
@@ -4303,8 +4469,10 @@ function MemberSettings({ member, onClose, isInline = false }) {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {Object.entries(settings[activeTab] || {}).map(([key, value]) => (
-                                        <tr key={key} className={value.isFixed ? 'fixed-row' : ''}>
+                                    {Object.entries(settings[activeTab] || {})
+                                        .filter(([key]) => key !== '4_set')
+                                        .map(([key, value]) => (
+                                        <tr key={key}>
                                             <td className="type-cell">
                                                 {BET_LABELS[activeTab]?.[key] || key}
                                             </td>
@@ -4316,7 +4484,7 @@ function MemberSettings({ member, onClose, isInline = false }) {
                                                         value={value.commission}
                                                         onChange={e => updateSetting(activeTab, key, 'commission', e.target.value)}
                                                     />
-                                                    <span className="input-suffix">{value.isFixed ? '฿' : '%'}</span>
+                                                    <span className="input-suffix">%</span>
                                                 </div>
                                             </td>
                                             <td>
@@ -4327,7 +4495,7 @@ function MemberSettings({ member, onClose, isInline = false }) {
                                                         value={value.payout}
                                                         onChange={e => updateSetting(activeTab, key, 'payout', e.target.value)}
                                                     />
-                                                    <span className="input-suffix">{value.isFixed ? 'บาท' : 'เท่า'}</span>
+                                                    <span className="input-suffix">เท่า</span>
                                                 </div>
                                             </td>
                                         </tr>
@@ -4335,12 +4503,6 @@ function MemberSettings({ member, onClose, isInline = false }) {
                                 </tbody>
                             </table>
                         </div>
-
-                        {activeTab === 'lao' && (
-                            <p className="text-muted" style={{ marginTop: '1rem', fontSize: '0.85rem' }}>
-                                * 4 ตัวชุด - ค่าคอมเป็นบาทต่อชุด, อัตราจ่ายเป็นจำนวนเงิน (บาท)
-                            </p>
-                        )}
 
                         {/* Save Button - Inline mode only */}
                         {isInline && (
