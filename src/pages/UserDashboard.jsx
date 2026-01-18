@@ -205,11 +205,9 @@ export default function UserDashboard() {
 
             if (!error) {
                 setRounds(data || [])
-                // Select first open round
-                const openRound = data?.find(r => r.status === 'open')
-                if (openRound && !selectedRound) {
-                    setSelectedRound(openRound)
-                }
+                // Don't auto-select round - let user click to expand
+                // Reset selectedRound when switching tabs or dealers
+                setSelectedRound(null)
             }
         } catch (error) {
             console.error('Error:', error)
@@ -2882,6 +2880,8 @@ function DealerInfoTab({ dealer, userSettings }) {
     const [dealerBankAccounts, setDealerBankAccounts] = useState([])
     const [assignedBankAccountId, setAssignedBankAccountId] = useState(null)
     const [loading, setLoading] = useState(true)
+    const [subTab, setSubTab] = useState('profile') // 'profile' or 'rates'
+    const [ratesTab, setRatesTab] = useState('thai') // lottery type tab for rates
 
     useEffect(() => {
         if (dealer?.id) {
@@ -2952,70 +2952,242 @@ function DealerInfoTab({ dealer, userSettings }) {
         )
     }
 
+    // Default settings and labels for rates display
+    const getDefaultSettings = () => ({
+        thai: {
+            'run_top': { commission: 15, payout: 3 },
+            'run_bottom': { commission: 15, payout: 4 },
+            'pak_top': { commission: 15, payout: 8 },
+            'pak_bottom': { commission: 15, payout: 6 },
+            '2_top': { commission: 15, payout: 65 },
+            '2_front': { commission: 15, payout: 65 },
+            '2_center': { commission: 15, payout: 65 },
+            '2_run': { commission: 15, payout: 10 },
+            '2_bottom': { commission: 15, payout: 65 },
+            '3_top': { commission: 30, payout: 550 },
+            '3_tod': { commission: 15, payout: 100 },
+            '3_bottom': { commission: 15, payout: 135 },
+            '4_run': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 }
+        },
+        lao: {
+            '4_top': { commission: 25, payout: 100000, isFixed: true },
+            'run_top': { commission: 15, payout: 3 },
+            'run_bottom': { commission: 15, payout: 4 },
+            'pak_top': { commission: 15, payout: 8 },
+            'pak_bottom': { commission: 15, payout: 6 },
+            '2_top': { commission: 15, payout: 65 },
+            '2_center': { commission: 15, payout: 65 },
+            '2_run': { commission: 15, payout: 10 },
+            '2_bottom': { commission: 15, payout: 65 },
+            '3_straight': { commission: 30, payout: 550 },
+            '3_tod_single': { commission: 15, payout: 100 },
+            '4_run': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 }
+        },
+        stock: {
+            '2_top': { commission: 15, payout: 65 },
+            '2_bottom': { commission: 15, payout: 65 }
+        }
+    })
+
+    const BET_LABELS = {
+        thai: {
+            'run_top': 'ลอยบน',
+            'run_bottom': 'ลอยล่าง',
+            'pak_top': 'ปักบน (หน้า/กลาง/หลัง)',
+            'pak_bottom': 'ปักล่าง (หน้า/หลัง)',
+            '2_top': '2 ตัวบน',
+            '2_front': '2 ตัวหน้า',
+            '2_center': '2 ตัวถ่าง',
+            '2_run': '2 ตัวลอย',
+            '2_bottom': '2 ตัวล่าง',
+            '3_top': '3 ตัวตรง',
+            '3_tod': '3 ตัวโต๊ด',
+            '3_bottom': '3 ตัวล่าง',
+            '4_run': '4 ตัวลอย',
+            '5_run': '5 ตัวลอย'
+        },
+        lao: {
+            '4_top': '4 ตัวตรง (ชุด)',
+            'run_top': 'ลอยบน',
+            'run_bottom': 'ลอยล่าง',
+            'pak_top': 'ปักบน (หน้า/กลาง/หลัง)',
+            'pak_bottom': 'ปักล่าง (หน้า/หลัง)',
+            '2_top': '2 ตัวบน',
+            '2_center': '2 ตัวถ่าง',
+            '2_run': '2 ตัวลอย',
+            '2_bottom': '2 ตัวล่าง',
+            '3_straight': '3 ตัวตรง',
+            '3_tod_single': '3 ตัวโต๊ด',
+            '4_run': '4 ตัวลอย',
+            '5_run': '5 ตัวลอย'
+        },
+        stock: {
+            '2_top': '2 ตัวบน',
+            '2_bottom': '2 ตัวล่าง'
+        }
+    }
+
+    const LOTTERY_TABS = [
+        { key: 'thai', label: 'หวยไทย' },
+        { key: 'lao', label: 'หวยลาว/ฮานอย' },
+        { key: 'stock', label: 'หวยหุ้น' }
+    ]
+
+    // Merge user settings with defaults
+    const getMergedSettings = () => {
+        const defaults = getDefaultSettings()
+        if (!userSettings?.lottery_settings) return defaults
+        
+        const merged = { ...defaults }
+        Object.keys(userSettings.lottery_settings).forEach(tab => {
+            if (merged[tab]) {
+                Object.keys(userSettings.lottery_settings[tab]).forEach(key => {
+                    if (merged[tab][key]) {
+                        merged[tab][key] = { ...merged[tab][key], ...userSettings.lottery_settings[tab][key] }
+                    }
+                })
+            }
+        })
+        return merged
+    }
+
+    const settings = getMergedSettings()
+
     return (
         <div className="dealer-info-section">
-            {/* Dealer Info Card */}
-            <div className="profile-card card">
-                <div className="profile-header">
-                    <div className="profile-avatar dealer-avatar">
-                        <FiUser />
-                    </div>
-                    <div className="profile-info">
-                        <h2>{dealerProfile?.full_name || dealer.full_name || 'ไม่ระบุชื่อ'}</h2>
-                        <p className="email">{dealerProfile?.email || dealer.email}</p>
-                        <span className="role-badge role-dealer">เจ้ามือ</span>
-                    </div>
-                </div>
+            {/* Sub-tabs */}
+            <div className="sub-tabs">
+                <button
+                    className={`sub-tab-btn ${subTab === 'profile' ? 'active' : ''}`}
+                    onClick={() => setSubTab('profile')}
+                >
+                    <FiUser /> โปรไฟล์เจ้ามือ
+                </button>
+                <button
+                    className={`sub-tab-btn ${subTab === 'rates' ? 'active' : ''}`}
+                    onClick={() => setSubTab('rates')}
+                >
+                    <FiDollarSign /> ค่าคอม/อัตราจ่าย
+                </button>
             </div>
 
-            {/* Contact Info */}
-            <div className="profile-details card">
-                <h3>ข้อมูลติดต่อ</h3>
-                <div className="profile-info-list">
-                    <div className="info-row">
-                        <span className="info-label">ชื่อ</span>
-                        <span className="info-value">{dealerProfile?.full_name || '-'}</span>
+            {subTab === 'profile' ? (
+                <>
+                    {/* Dealer Info Card */}
+                    <div className="profile-card card">
+                        <div className="profile-header">
+                            <div className="profile-avatar dealer-avatar">
+                                <FiUser />
+                            </div>
+                            <div className="profile-info">
+                                <h2>{dealerProfile?.full_name || dealer.full_name || 'ไม่ระบุชื่อ'}</h2>
+                                <p className="email">{dealerProfile?.email || dealer.email}</p>
+                                <span className="role-badge role-dealer">เจ้ามือ</span>
+                            </div>
+                        </div>
                     </div>
-                    <div className="info-row">
-                        <span className="info-label">อีเมล</span>
-                        <span className="info-value">{dealerProfile?.email || '-'}</span>
-                    </div>
-                    <div className="info-row">
-                        <span className="info-label">เบอร์โทร</span>
-                        <span className="info-value">{dealerProfile?.phone || '-'}</span>
-                    </div>
-                </div>
-            </div>
 
-            {/* Bank Account for Transfer */}
-            <div className="profile-details card">
-                <h3>บัญชีธนาคาร (สำหรับโอนเงิน)</h3>
-                {primaryBank ? (
-                    <div className="profile-info-list">
-                        <div className="info-row">
-                            <span className="info-label">ธนาคาร</span>
-                            <span className="info-value">{primaryBank.bank_name}</span>
+                    {/* Contact Info */}
+                    <div className="profile-details card">
+                        <h3>ข้อมูลติดต่อ</h3>
+                        <div className="profile-info-list">
+                            <div className="info-row">
+                                <span className="info-label">ชื่อ</span>
+                                <span className="info-value">{dealerProfile?.full_name || '-'}</span>
+                            </div>
+                            <div className="info-row">
+                                <span className="info-label">อีเมล</span>
+                                <span className="info-value">{dealerProfile?.email || '-'}</span>
+                            </div>
+                            <div className="info-row">
+                                <span className="info-label">เบอร์โทร</span>
+                                <span className="info-value">{dealerProfile?.phone || '-'}</span>
+                            </div>
                         </div>
-                        <div className="info-row">
-                            <span className="info-label">ชื่อบัญชี</span>
-                            <span className="info-value">{primaryBank.account_name || '-'}</span>
-                        </div>
-                        <div className="info-row">
-                            <span className="info-label">เลขบัญชี</span>
-                            <span className="info-value bank-account-number">{primaryBank.bank_account}</span>
-                        </div>
-                        {primaryBank.is_default && (
-                            <div className="default-badge">
-                                <FiCheck /> บัญชีหลัก
+                    </div>
+
+                    {/* Bank Account for Transfer */}
+                    <div className="profile-details card">
+                        <h3>บัญชีธนาคาร (สำหรับโอนเงิน)</h3>
+                        {primaryBank ? (
+                            <div className="profile-info-list">
+                                <div className="info-row">
+                                    <span className="info-label">ธนาคาร</span>
+                                    <span className="info-value">{primaryBank.bank_name}</span>
+                                </div>
+                                <div className="info-row">
+                                    <span className="info-label">ชื่อบัญชี</span>
+                                    <span className="info-value">{primaryBank.account_name || '-'}</span>
+                                </div>
+                                <div className="info-row">
+                                    <span className="info-label">เลขบัญชี</span>
+                                    <span className="info-value bank-account-number">{primaryBank.bank_account}</span>
+                                </div>
+                                {primaryBank.is_default && (
+                                    <div className="default-badge">
+                                        <FiCheck /> บัญชีหลัก
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="empty-state small">
+                                <p>ยังไม่มีข้อมูลบัญชีธนาคาร</p>
                             </div>
                         )}
                     </div>
-                ) : (
-                    <div className="empty-state small">
-                        <p>ยังไม่มีข้อมูลบัญชีธนาคาร</p>
+                </>
+            ) : (
+                <>
+                    {/* Commission and Payout Rates */}
+                    <div className="rates-section card">
+                        <h3><FiDollarSign /> ค่าคอมมิชชั่นและอัตราจ่าย</h3>
+                        <p className="rates-description">อัตราที่เจ้ามือกำหนดให้กับคุณ</p>
+                        
+                        {/* Lottery Type Tabs */}
+                        <div className="rates-tabs">
+                            {LOTTERY_TABS.map(tab => (
+                                <button
+                                    key={tab.key}
+                                    className={`rates-tab ${ratesTab === tab.key ? 'active' : ''}`}
+                                    onClick={() => setRatesTab(tab.key)}
+                                >
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Rates Table */}
+                        <div className="rates-table-container">
+                            <table className="rates-table">
+                                <thead>
+                                    <tr>
+                                        <th>ประเภทเลข</th>
+                                        <th>ค่าคอม</th>
+                                        <th>อัตราจ่าย</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {Object.entries(settings[ratesTab] || {}).map(([key, value]) => (
+                                        <tr key={key} className={value.isFixed ? 'fixed-row' : ''}>
+                                            <td className="type-cell">{BET_LABELS[ratesTab]?.[key] || key}</td>
+                                            <td className="rate-cell">
+                                                <span className="rate-value">{value.commission}</span>
+                                                <span className="rate-unit">{value.isFixed ? '฿/ชุด' : '%'}</span>
+                                            </td>
+                                            <td className="rate-cell">
+                                                <span className="rate-value">{value.payout?.toLocaleString()}</span>
+                                                <span className="rate-unit">เท่า</span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                )}
-            </div>
+                </>
+            )}
         </div>
     )
 }
