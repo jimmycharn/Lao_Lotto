@@ -33,7 +33,8 @@ import {
     FiStar,
     FiPackage,
     FiAlertCircle,
-    FiSearch
+    FiSearch,
+    FiSlash
 } from 'react-icons/fi'
 import './Dealer.css'
 import './SettingsTabs.css'
@@ -3427,6 +3428,8 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
         upstream_contact: '',
         notes: ''
     })
+    const [showSettingsModal, setShowSettingsModal] = useState(false)
+    const [settingsDealer, setSettingsDealer] = useState(null)
 
     // Fetch upstream dealers on mount - only if not already loaded
     useEffect(() => {
@@ -3564,6 +3567,33 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
         }
     }
 
+    // Toggle block/unblock
+    async function handleToggleBlock(dealer) {
+        const newBlockedState = !dealer.is_blocked
+        try {
+            const { error } = await supabase
+                .from('dealer_upstream_connections')
+                .update({ 
+                    is_blocked: newBlockedState,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', dealer.id)
+
+            if (error) throw error
+            toast.success(newBlockedState ? 'บล็อกเจ้ามือแล้ว' : 'ยกเลิกการบล็อกแล้ว')
+            fetchUpstreamDealers()
+        } catch (error) {
+            console.error('Error toggling block:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+
+    // Open settings modal
+    function handleOpenSettings(dealer) {
+        setSettingsDealer(dealer)
+        setShowSettingsModal(true)
+    }
+
     return (
         <div className="upstream-dealers-section">
             {/* Header */}
@@ -3638,20 +3668,20 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
                             </h4>
                             <div className="upstream-dealers-grid">
                                 {upstreamDealers.filter(d => d.is_linked).map(dealer => (
-                                    <div key={dealer.id} className="upstream-dealer-card card linked">
+                                    <div key={dealer.id} className={`upstream-dealer-card card linked ${dealer.is_blocked ? 'blocked' : ''}`} style={dealer.is_blocked ? { opacity: 0.6, borderColor: 'var(--color-danger)' } : {}}>
                                         <div className="dealer-card-header">
                                             <div className="dealer-info">
                                                 <h3 className="dealer-name">
                                                     {dealer.upstream_name}
                                                     <span className="linked-badge" title="เชื่อมต่อกับระบบ" style={{ 
-                                                        background: 'var(--color-success)', 
+                                                        background: dealer.is_blocked ? 'var(--color-danger)' : 'var(--color-success)', 
                                                         color: 'white', 
                                                         padding: '0.15rem 0.4rem', 
                                                         borderRadius: '4px', 
                                                         fontSize: '0.7rem',
                                                         marginLeft: '0.5rem'
                                                     }}>
-                                                        <FiCheck style={{ marginRight: '0.2rem' }} /> ในระบบ
+                                                        {dealer.is_blocked ? <><FiSlash style={{ marginRight: '0.2rem' }} /> ถูกบล็อก</> : <><FiCheck style={{ marginRight: '0.2rem' }} /> ในระบบ</>}
                                                     </span>
                                                 </h3>
                                                 {dealer.upstream_profile && (
@@ -3662,8 +3692,26 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
                                                 {dealer.notes && (
                                                     <p className="dealer-notes">{dealer.notes}</p>
                                                 )}
+                                                <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
+                                                    เชื่อมต่อผ่าน QR Code/Link
+                                                </p>
                                             </div>
-                                            <div className="dealer-actions">
+                                            <div className="dealer-actions" style={{ display: 'flex', gap: '0.25rem' }}>
+                                                <button
+                                                    className="icon-btn"
+                                                    onClick={() => handleOpenSettings(dealer)}
+                                                    title="ตั้งค่าค่าคอมและอัตราจ่าย"
+                                                >
+                                                    <FiSettings />
+                                                </button>
+                                                <button
+                                                    className={`icon-btn ${dealer.is_blocked ? 'success' : 'warning'}`}
+                                                    onClick={() => handleToggleBlock(dealer)}
+                                                    title={dealer.is_blocked ? 'ยกเลิกการบล็อก' : 'บล็อกเจ้ามือนี้'}
+                                                    style={{ color: dealer.is_blocked ? 'var(--color-success)' : 'var(--color-warning)' }}
+                                                >
+                                                    {dealer.is_blocked ? <FiCheck /> : <FiSlash />}
+                                                </button>
                                                 <button
                                                     className="icon-btn danger"
                                                     onClick={() => handleDelete(dealer)}
@@ -3785,6 +3833,230 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
                     </div>
                 </div>
             )}
+
+            {/* Upstream Dealer Settings Modal */}
+            {showSettingsModal && settingsDealer && (
+                <UpstreamDealerSettings 
+                    dealer={settingsDealer} 
+                    onClose={() => { setShowSettingsModal(false); setSettingsDealer(null); }}
+                    onSaved={fetchUpstreamDealers}
+                />
+            )}
+        </div>
+    )
+}
+
+// Upstream Dealer Settings Component - For setting commission and payout rates
+function UpstreamDealerSettings({ dealer, onClose, onSaved }) {
+    const { user } = useAuth()
+    const [loading, setLoading] = useState(true)
+    const [saving, setSaving] = useState(false)
+    const [activeTab, setActiveTab] = useState('thai')
+
+    const getDefaultSettings = () => ({
+        thai: {
+            'run_top': { commission: 15, payout: 3 },
+            'run_bottom': { commission: 15, payout: 4 },
+            'pak_top': { commission: 15, payout: 8 },
+            'pak_bottom': { commission: 15, payout: 6 },
+            '2_top': { commission: 15, payout: 65 },
+            '2_front': { commission: 15, payout: 65 },
+            '2_center': { commission: 15, payout: 65 },
+            '2_run': { commission: 15, payout: 10 },
+            '2_bottom': { commission: 15, payout: 65 },
+            '3_top': { commission: 30, payout: 550 },
+            '3_tod': { commission: 15, payout: 100 },
+            '3_bottom': { commission: 15, payout: 135 },
+            '4_run': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 }
+        },
+        lao: {
+            '4_top': { commission: 25, payout: 100000, isFixed: true },
+            'run_top': { commission: 15, payout: 3 },
+            'run_bottom': { commission: 15, payout: 4 },
+            'pak_top': { commission: 15, payout: 8 },
+            'pak_bottom': { commission: 15, payout: 6 },
+            '2_top': { commission: 15, payout: 65 },
+            '2_center': { commission: 15, payout: 65 },
+            '2_run': { commission: 15, payout: 10 },
+            '2_bottom': { commission: 15, payout: 65 },
+            '3_straight': { commission: 30, payout: 550 },
+            '3_tod_single': { commission: 15, payout: 100 },
+            '4_run': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 }
+        },
+        stock: {
+            '2_top': { commission: 15, payout: 65 },
+            '2_bottom': { commission: 15, payout: 65 }
+        }
+    })
+
+    const [settings, setSettings] = useState(getDefaultSettings())
+
+    const BET_LABELS = {
+        thai: {
+            'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
+            'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
+            '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
+            '3_top': '3 ตัวตรง', '3_tod': '3 ตัวโต๊ด', '3_bottom': '3 ตัวล่าง',
+            '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
+        },
+        lao: {
+            '4_top': '4 ตัวตรง (ชุด)',
+            'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
+            'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
+            '2_top': '2 ตัวบน', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
+            '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
+            '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
+        },
+        stock: { '2_top': '2 ตัวบน', '2_bottom': '2 ตัวล่าง' }
+    }
+
+    useEffect(() => {
+        fetchSettings()
+    }, [dealer.id])
+
+    async function fetchSettings() {
+        setLoading(true)
+        try {
+            if (dealer.lottery_settings) {
+                const merged = { ...getDefaultSettings() }
+                Object.keys(dealer.lottery_settings).forEach(tab => {
+                    if (merged[tab]) {
+                        Object.keys(dealer.lottery_settings[tab]).forEach(key => {
+                            if (merged[tab][key]) {
+                                merged[tab][key] = { ...merged[tab][key], ...dealer.lottery_settings[tab][key] }
+                            }
+                        })
+                    }
+                })
+                setSettings(merged)
+            }
+        } catch (error) {
+            console.error('Error loading settings:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    async function handleSave() {
+        setSaving(true)
+        try {
+            const { error } = await supabase
+                .from('dealer_upstream_connections')
+                .update({
+                    lottery_settings: settings,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', dealer.id)
+
+            if (error) throw error
+            toast.success('บันทึกการตั้งค่าสำเร็จ')
+            onSaved?.()
+            onClose()
+        } catch (error) {
+            console.error('Error saving settings:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    const updateSetting = (tab, key, field, value) => {
+        setSettings(prev => ({
+            ...prev,
+            [tab]: {
+                ...prev[tab],
+                [key]: { ...prev[tab][key], [field]: parseFloat(value) || 0 }
+            }
+        }))
+    }
+
+    const LOTTERY_TABS = [
+        { key: 'thai', label: 'หวยไทย' },
+        { key: 'lao', label: 'หวยลาว/ฮานอย' },
+        { key: 'stock', label: 'หวยหุ้น' }
+    ]
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal modal-xl" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                    <h3><FiSettings /> ตั้งค่าเจ้ามือ: {dealer.upstream_name}</h3>
+                    <button className="modal-close" onClick={onClose}><FiX /></button>
+                </div>
+
+                <div className="modal-body">
+                    {loading ? (
+                        <div className="loading-state"><div className="spinner"></div></div>
+                    ) : (
+                        <div className="settings-form">
+                            <p style={{ marginBottom: '1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+                                ตั้งค่าคอมมิชชั่นและอัตราจ่ายสำหรับเลขที่รับจากเจ้ามือนี้
+                            </p>
+                            <div className="settings-tabs">
+                                {LOTTERY_TABS.map(tab => (
+                                    <button
+                                        key={tab.key}
+                                        className={`settings-tab ${activeTab === tab.key ? 'active' : ''}`}
+                                        onClick={() => setActiveTab(tab.key)}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="settings-table-wrap">
+                                <table className="settings-table">
+                                    <thead>
+                                        <tr>
+                                            <th>ประเภท</th>
+                                            <th>ค่าคอม</th>
+                                            <th>อัตราจ่าย</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {Object.entries(settings[activeTab] || {}).map(([key, value]) => (
+                                            <tr key={key} className={value.isFixed ? 'fixed-row' : ''}>
+                                                <td className="type-cell">{BET_LABELS[activeTab]?.[key] || key}</td>
+                                                <td>
+                                                    <div className="input-group">
+                                                        <input
+                                                            type="number"
+                                                            className="form-input small"
+                                                            value={value.commission}
+                                                            onChange={e => updateSetting(activeTab, key, 'commission', e.target.value)}
+                                                        />
+                                                        <span className="input-suffix">{value.isFixed ? '฿' : '%'}</span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div className="input-group">
+                                                        <input
+                                                            type="number"
+                                                            className="form-input small"
+                                                            value={value.payout}
+                                                            onChange={e => updateSetting(activeTab, key, 'payout', e.target.value)}
+                                                        />
+                                                        <span className="input-suffix">เท่า</span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="modal-footer">
+                    <button className="btn btn-secondary" onClick={onClose}>ยกเลิก</button>
+                    <button className="btn btn-primary" onClick={handleSave} disabled={saving || loading}>
+                        {saving ? 'กำลังบันทึก...' : <><FiCheck /> บันทึก</>}
+                    </button>
+                </div>
+            </div>
         </div>
     )
 }
