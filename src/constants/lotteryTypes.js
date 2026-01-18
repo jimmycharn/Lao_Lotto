@@ -13,8 +13,8 @@ export const BET_TYPES_BY_LOTTERY = {
     thai: {
         'run_top': { label: 'ลอยบน', defaultLimit: 5000 },
         'run_bottom': { label: 'ลอยล่าง', defaultLimit: 5000 },
-        'pak_top': { label: 'ปักบน (หน้า/กลาง/หลัง)', defaultLimit: 5000 },
-        'pak_bottom': { label: 'ปักล่าง (หน้า/หลัง)', defaultLimit: 5000 },
+        'pak_top': { label: 'ปักบน', defaultLimit: 5000 },
+        'pak_bottom': { label: 'ปักล่าง', defaultLimit: 5000 },
         '2_top': { label: '2 ตัวบน', defaultLimit: 1000 },
         '2_front': { label: '2 ตัวหน้า', defaultLimit: 1000 },
         '2_center': { label: '2 ตัวถ่าง', defaultLimit: 1000 },
@@ -44,8 +44,8 @@ export const BET_TYPES_BY_LOTTERY = {
         },
         'run_top': { label: 'ลอยบน', defaultLimit: 5000 },
         'run_bottom': { label: 'ลอยล่าง', defaultLimit: 5000 },
-        'pak_top': { label: 'ปักบน (หน้า/กลาง/หลัง)', defaultLimit: 5000 },
-        'pak_bottom': { label: 'ปักล่าง (หน้า/หลัง)', defaultLimit: 5000 },
+        'pak_top': { label: 'ปักบน', defaultLimit: 5000 },
+        'pak_bottom': { label: 'ปักล่าง', defaultLimit: 5000 },
         '2_top': { label: '2 ตัวบน', defaultLimit: 1000 },
         '2_front': { label: '2 ตัวหน้า', defaultLimit: 1000 },
         '2_bottom': { label: '2 ตัวล่าง', defaultLimit: 1000 },
@@ -78,8 +78,8 @@ export const BET_TYPES_BY_LOTTERY = {
         },
         'run_top': { label: 'ลอยบน', defaultLimit: 5000 },
         'run_bottom': { label: 'ลอยล่าง', defaultLimit: 5000 },
-        'pak_top': { label: 'ปักบน (หน้า/กลาง/หลัง)', defaultLimit: 5000 },
-        'pak_bottom': { label: 'ปักล่าง (หน้า/หลัง)', defaultLimit: 5000 },
+        'pak_top': { label: 'ปักบน', defaultLimit: 5000 },
+        'pak_bottom': { label: 'ปักล่าง', defaultLimit: 5000 },
         '2_top': { label: '2 ตัวบน', defaultLimit: 1000 },
         '2_front': { label: '2 ตัวหน้า', defaultLimit: 1000 },
         '2_bottom': { label: '2 ตัวล่าง', defaultLimit: 1000 },
@@ -342,16 +342,17 @@ export const SET_PRIZE_LABELS = {
 }
 
 // Calculate 4 ตัวชุด prizes for a given number against winning result
+// Returns only the HIGHEST prize when multiple prizes are won
 export function calculate4SetPrizes(betNumber, winningNumber, prizeSettings = DEFAULT_4_SET_SETTINGS.prizes) {
     if (!betNumber || !winningNumber || betNumber.length !== 4 || winningNumber.length !== 4) {
-        return { prizes: [], totalPrize: 0 }
+        return { prizes: [], totalPrize: 0, allMatchedPrizes: [] }
     }
 
-    const prizes = []
+    const allMatchedPrizes = []
     
     // 1. 4 ตัวตรงชุด - exact match (all 4 digits in exact position)
     if (betNumber === winningNumber) {
-        prizes.push({
+        allMatchedPrizes.push({
             type: '4_straight_set',
             label: '4 ตัวตรงชุด',
             amount: prizeSettings['4_straight_set'] || 100000
@@ -362,7 +363,7 @@ export function calculate4SetPrizes(betNumber, winningNumber, prizeSettings = DE
     const betSorted = betNumber.split('').sort().join('')
     const winSorted = winningNumber.split('').sort().join('')
     if (betSorted === winSorted && betNumber !== winningNumber) {
-        prizes.push({
+        allMatchedPrizes.push({
             type: '4_tod_set',
             label: '4 ตัวโต๊ดชุด',
             amount: prizeSettings['4_tod_set'] || 4000
@@ -373,7 +374,7 @@ export function calculate4SetPrizes(betNumber, winningNumber, prizeSettings = DE
     const betLast3 = betNumber.slice(1)
     const winLast3 = winningNumber.slice(1)
     if (betLast3 === winLast3) {
-        prizes.push({
+        allMatchedPrizes.push({
             type: '3_straight_set',
             label: '3 ตัวตรงชุด',
             amount: prizeSettings['3_straight_set'] || 30000
@@ -384,7 +385,7 @@ export function calculate4SetPrizes(betNumber, winningNumber, prizeSettings = DE
     const betLast3Sorted = betLast3.split('').sort().join('')
     const winLast3Sorted = winLast3.split('').sort().join('')
     if (betLast3Sorted === winLast3Sorted && betLast3 !== winLast3) {
-        prizes.push({
+        allMatchedPrizes.push({
             type: '3_tod_set',
             label: '3 ตัวโต๊ดชุด',
             amount: prizeSettings['3_tod_set'] || 3000
@@ -395,7 +396,7 @@ export function calculate4SetPrizes(betNumber, winningNumber, prizeSettings = DE
     const betFirst2 = betNumber.slice(0, 2)
     const winFirst2 = winningNumber.slice(0, 2)
     if (betFirst2 === winFirst2) {
-        prizes.push({
+        allMatchedPrizes.push({
             type: '2_front_set',
             label: '2 ตัวหน้าชุด',
             amount: prizeSettings['2_front_set'] || 1000
@@ -406,14 +407,25 @@ export function calculate4SetPrizes(betNumber, winningNumber, prizeSettings = DE
     const betLast2 = betNumber.slice(2)
     const winLast2 = winningNumber.slice(2)
     if (betLast2 === winLast2) {
-        prizes.push({
+        allMatchedPrizes.push({
             type: '2_back_set',
             label: '2 ตัวหลังชุด',
             amount: prizeSettings['2_back_set'] || 1000
         })
     }
     
-    const totalPrize = prizes.reduce((sum, p) => sum + p.amount, 0)
+    // Return only the highest prize (one prize only)
+    if (allMatchedPrizes.length === 0) {
+        return { prizes: [], totalPrize: 0, allMatchedPrizes: [] }
+    }
     
-    return { prizes, totalPrize }
+    // Sort by amount descending and take the highest
+    allMatchedPrizes.sort((a, b) => b.amount - a.amount)
+    const highestPrize = allMatchedPrizes[0]
+    
+    return { 
+        prizes: [highestPrize], 
+        totalPrize: highestPrize.amount,
+        allMatchedPrizes // Keep all matched prizes for reference if needed
+    }
 }

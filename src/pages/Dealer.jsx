@@ -4245,8 +4245,8 @@ function MemberSettings({ member, onClose, isInline = false }) {
         thai: {
             'run_top': 'ลอยบน',
             'run_bottom': 'ลอยล่าง',
-            'pak_top': 'ปักบน (หน้า/กลาง/หลัง)',
-            'pak_bottom': 'ปักล่าง (หน้า/หลัง)',
+            'pak_top': 'ปักบน',
+            'pak_bottom': 'ปักล่าง',
             '2_top': '2 ตัวบน',
             '2_front': '2 ตัวหน้า',
             '2_center': '2 ตัวถ่าง',
@@ -4262,8 +4262,8 @@ function MemberSettings({ member, onClose, isInline = false }) {
             '4_set': '4 ตัวชุด',
             'run_top': 'ลอยบน',
             'run_bottom': 'ลอยล่าง',
-            'pak_top': 'ปักบน (หน้า/กลาง/หลัง)',
-            'pak_bottom': 'ปักล่าง (หน้า/หลัง)',
+            'pak_top': 'ปักบน',
+            'pak_bottom': 'ปักล่าง',
             '2_top': '2 ตัวบน',
             '2_front': '2 ตัวหน้า',
             '2_center': '2 ตัวถ่าง',
@@ -4406,29 +4406,47 @@ function MemberSettings({ member, onClose, isInline = false }) {
                             <div className="set-settings-section" style={{ marginBottom: '1.5rem' }}>
                                 <h4 style={{ marginBottom: '1rem', color: 'var(--color-primary)' }}>
                                     <FiPackage style={{ marginRight: '0.5rem' }} />
-                                    4 ตัวชุด (ราคาชุดละ {settings.lao['4_set'].setPrice || 120} บาท)
+                                    4 ตัวชุด
                                 </h4>
                                 
-                                {/* Commission */}
-                                <div className="info-row" style={{ marginBottom: '1rem' }}>
-                                    <span className="info-label">ค่าคอม:</span>
-                                    <div className="input-group" style={{ width: '120px' }}>
-                                        <input
-                                            type="number"
-                                            className="form-input small"
-                                            value={settings.lao['4_set'].commission}
-                                            onChange={e => {
-                                                const newSettings = { ...settings }
-                                                newSettings.lao['4_set'].commission = Number(e.target.value)
-                                                setSettings(newSettings)
-                                            }}
-                                        />
-                                        <span className="input-suffix">฿/ชุด</span>
+                                {/* Set Price and Commission Row */}
+                                <div className="set-config-row">
+                                    <div className="set-config-item">
+                                        <span className="info-label">ราคาชุดละ:</span>
+                                        <div className="input-group input-group-wide">
+                                            <input
+                                                type="number"
+                                                className="form-input"
+                                                value={settings.lao['4_set'].setPrice || 120}
+                                                onChange={e => {
+                                                    const newSettings = { ...settings }
+                                                    newSettings.lao['4_set'].setPrice = Number(e.target.value)
+                                                    setSettings(newSettings)
+                                                }}
+                                            />
+                                            <span className="input-suffix">บาท</span>
+                                        </div>
+                                    </div>
+                                    <div className="set-config-item">
+                                        <span className="info-label">ค่าคอม:</span>
+                                        <div className="input-group input-group-wide">
+                                            <input
+                                                type="number"
+                                                className="form-input"
+                                                value={settings.lao['4_set'].commission}
+                                                onChange={e => {
+                                                    const newSettings = { ...settings }
+                                                    newSettings.lao['4_set'].commission = Number(e.target.value)
+                                                    setSettings(newSettings)
+                                                }}
+                                            />
+                                            <span className="input-suffix">฿/ชุด</span>
+                                        </div>
                                     </div>
                                 </div>
 
                                 {/* Prize Table */}
-                                <table className="settings-table">
+                                <table className="settings-table settings-table-wide">
                                     <thead>
                                         <tr>
                                             <th>ประเภทรางวัล</th>
@@ -4440,10 +4458,10 @@ function MemberSettings({ member, onClose, isInline = false }) {
                                             <tr key={prizeKey}>
                                                 <td className="type-cell">{SET_PRIZE_LABELS[prizeKey] || prizeKey}</td>
                                                 <td>
-                                                    <div className="input-group">
+                                                    <div className="input-group input-group-wide">
                                                         <input
                                                             type="number"
-                                                            className="form-input small"
+                                                            className="form-input"
                                                             value={prizeAmount}
                                                             onChange={e => {
                                                                 const newSettings = { ...settings }
