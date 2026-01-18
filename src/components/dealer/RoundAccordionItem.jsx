@@ -75,6 +75,10 @@ export default function RoundAccordionItem({
     // Inline revert transfer states
     const [selectedTransferBatches, setSelectedTransferBatches] = useState({})
     const [revertingTransfer, setRevertingTransfer] = useState(false)
+    
+    // Incoming transfer return states (for receiving dealer)
+    const [selectedIncomingItems, setSelectedIncomingItems] = useState({})
+    const [returningIncoming, setReturningIncoming] = useState(false)
 
     const isAnnounced = round.status === 'announced' && round.is_result_announced
 
@@ -241,6 +245,7 @@ export default function RoundAccordionItem({
             setInlineTypeLimits(limitsObj)
 
             setInlineNumberLimits(numLimitsResult.data || [])
+            console.log('Fetched bet_transfers:', transfersResult.data)
             setInlineTransfers(transfersResult.data || [])
         } catch (error) {
             clearTimeout(timeoutId)
@@ -482,6 +487,112 @@ export default function RoundAccordionItem({
             toast.success(`เอาคืนสำเร็จ ${selectedBatchIds.length} รายการ!`)
         } catch (error) {
             console.error('Error reverting transfers:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setRevertingTransfer(false)
+        }
+    }
+
+    // Return incoming transfers back to sender (for receiving dealer)
+    const handleReturnIncomingTransfers = async (submissionIds) => {
+        const selectedIds = submissionIds.filter(id => selectedIncomingItems[id])
+        if (selectedIds.length === 0) {
+            toast.warning('กรุณาเลือกรายการที่ต้องการคืน')
+            return
+        }
+        if (!confirm(`ต้องการคืนเลข ${selectedIds.length} รายการกลับไปยังเจ้ามือต้นทางหรือไม่?`)) return
+
+        setReturningIncoming(true)
+        try {
+            // Get the submissions to be returned (to match with bet_transfers)
+            const submissionsToReturn = inlineSubmissions.filter(s => selectedIds.includes(s.id))
+            
+            // Soft delete the submissions (mark as deleted)
+            const { error: subError } = await supabase
+                .from('submissions')
+                .update({ is_deleted: true })
+                .in('id', selectedIds)
+
+            if (subError) throw subError
+
+            // Update bet_transfers to mark them as returned
+            // Try multiple methods to find matching transfers
+            for (const sub of submissionsToReturn) {
+                // Method 1: Try by target_submission_id
+                let { data: updated, error } = await supabase
+                    .from('bet_transfers')
+                    .update({ status: 'returned' })
+                    .eq('target_submission_id', sub.id)
+                    .select()
+
+                // Method 2: If no match, try by target_round_id + numbers + bet_type
+                if (!updated || updated.length === 0) {
+                    const { data: updated2, error: err2 } = await supabase
+                        .from('bet_transfers')
+                        .update({ status: 'returned' })
+                        .eq('target_round_id', round.id)
+                        .eq('numbers', sub.numbers)
+                        .eq('bet_type', sub.bet_type)
+                        .eq('status', 'active')
+                        .select()
+                    
+                    console.log(`Updated bet_transfer for ${sub.numbers} via target_round_id:`, updated2, err2)
+                } else {
+                    console.log(`Updated bet_transfer for ${sub.numbers} via target_submission_id:`, updated)
+                }
+            }
+
+            await fetchInlineSubmissions(true)
+            setSelectedIncomingItems({})
+            toast.success(`คืนเลขสำเร็จ ${selectedIds.length} รายการ!`)
+        } catch (error) {
+            console.error('Error returning incoming transfers:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setReturningIncoming(false)
+        }
+    }
+
+    const toggleIncomingItem = (id) => {
+        setSelectedIncomingItems(prev => ({ ...prev, [id]: !prev[id] }))
+    }
+
+    const toggleSelectAllIncoming = (ids) => {
+        const allSelected = ids.every(id => selectedIncomingItems[id])
+        if (allSelected) {
+            setSelectedIncomingItems({})
+        } else {
+            const newSelected = {}
+            ids.forEach(id => { newSelected[id] = true })
+            setSelectedIncomingItems(newSelected)
+        }
+    }
+
+    const getSelectedIncomingCount = (ids) => ids.filter(id => selectedIncomingItems[id]).length
+
+    // Reclaim returned transfers back into the system (for sending dealer)
+    const handleReclaimReturnedTransfers = async (transferItems) => {
+        if (transferItems.length === 0) {
+            toast.warning('ไม่มีรายการที่ต้องการเอาคืน')
+            return
+        }
+        if (!confirm(`ต้องการเอาคืน ${transferItems.length} รายการที่ถูกคืนกลับเข้าระบบหรือไม่?`)) return
+
+        setRevertingTransfer(true)
+        try {
+            // Delete the bet_transfers records (this effectively "reclaims" them)
+            const transferIds = transferItems.map(t => t.id)
+            const { error } = await supabase
+                .from('bet_transfers')
+                .delete()
+                .in('id', transferIds)
+
+            if (error) throw error
+
+            await fetchInlineSubmissions(true)
+            toast.success(`เอาคืนสำเร็จ ${transferItems.length} รายการ!`)
+        } catch (error) {
+            console.error('Error reclaiming returned transfers:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
         } finally {
             setRevertingTransfer(false)
@@ -877,6 +988,8 @@ export default function RoundAccordionItem({
                                                     if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
                                                     return true
                                                 })
+                                                
+                                                const incomingIds = filteredIncoming.map(s => s.id)
 
                                                 return (
                                                     <>
@@ -893,10 +1006,31 @@ export default function RoundAccordionItem({
                                                             </div>
                                                         </div>
 
+                                                        {/* Bulk actions for returning transfers */}
+                                                        <div className="bulk-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-surface)', borderRadius: '8px', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                            <label className="checkbox-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                                                <input 
+                                                                    type="checkbox" 
+                                                                    checked={incomingIds.length > 0 && incomingIds.every(id => selectedIncomingItems[id])} 
+                                                                    onChange={() => toggleSelectAllIncoming(incomingIds)} 
+                                                                    style={{ width: '18px', height: '18px', accentColor: 'var(--color-danger)' }} 
+                                                                />
+                                                                <span>เลือกทั้งหมด ({filteredIncoming.length})</span>
+                                                            </label>
+                                                            <button 
+                                                                className="btn btn-danger" 
+                                                                onClick={(e) => { e.stopPropagation(); handleReturnIncomingTransfers(incomingIds); }} 
+                                                                disabled={getSelectedIncomingCount(incomingIds) === 0 || returningIncoming}
+                                                            >
+                                                                <FiRotateCcw /> {returningIncoming ? 'กำลังคืน...' : `คืนเลข (${getSelectedIncomingCount(incomingIds)})`}
+                                                            </button>
+                                                        </div>
+
                                                         <div className="inline-table-wrap">
                                                             <table className="inline-table">
                                                                 <thead>
                                                                     <tr>
+                                                                        <th style={{ width: '40px' }}></th>
                                                                         <th>เลข</th>
                                                                         <th>จำนวน</th>
                                                                         <th>จาก</th>
@@ -904,19 +1038,38 @@ export default function RoundAccordionItem({
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody>
-                                                                    {filteredIncoming.map(sub => (
-                                                                        <tr key={sub.id}>
-                                                                            <td className="number-cell">
-                                                                                <div className="number-value">{sub.numbers}</div>
-                                                                                <div className="type-sub-label">{BET_TYPES[sub.bet_type] || sub.bet_type}</div>
-                                                                            </td>
-                                                                            <td>{round.currency_symbol}{sub.amount.toLocaleString()}</td>
-                                                                            <td className="source-cell" style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                                                                                {sub.bill_note || 'ไม่ระบุ'}
-                                                                            </td>
-                                                                            <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>
-                                                                        </tr>
-                                                                    ))}
+                                                                    {filteredIncoming.map(sub => {
+                                                                        const isSelected = selectedIncomingItems[sub.id]
+                                                                        return (
+                                                                            <tr 
+                                                                                key={sub.id} 
+                                                                                onClick={() => toggleIncomingItem(sub.id)}
+                                                                                style={{ 
+                                                                                    cursor: 'pointer', 
+                                                                                    background: isSelected ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
+                                                                                    transition: 'background 0.2s ease'
+                                                                                }}
+                                                                            >
+                                                                                <td style={{ textAlign: 'center' }}>
+                                                                                    <input 
+                                                                                        type="checkbox" 
+                                                                                        checked={isSelected || false} 
+                                                                                        onChange={() => {}} 
+                                                                                        style={{ width: '16px', height: '16px', accentColor: 'var(--color-danger)' }} 
+                                                                                    />
+                                                                                </td>
+                                                                                <td className="number-cell">
+                                                                                    <div className="number-value">{sub.numbers}</div>
+                                                                                    <div className="type-sub-label">{BET_TYPES[sub.bet_type] || sub.bet_type}</div>
+                                                                                </td>
+                                                                                <td>{round.currency_symbol}{sub.amount.toLocaleString()}</td>
+                                                                                <td className="source-cell" style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                                                    {sub.bill_note || 'ไม่ระบุ'}
+                                                                                </td>
+                                                                                <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>
+                                                                            </tr>
+                                                                        )
+                                                                    })}
                                                                 </tbody>
                                                             </table>
                                                         </div>
@@ -1134,12 +1287,28 @@ export default function RoundAccordionItem({
                                                     const batches = {}
                                                     filteredTransfers.forEach(t => {
                                                         const batchId = t.transfer_batch_id || t.id
-                                                        if (!batches[batchId]) batches[batchId] = { id: batchId, target_dealer_name: t.target_dealer_name, created_at: t.created_at, items: [], totalAmount: 0 }
+                                                        const itemStatus = t.status || 'active'
+                                                        if (!batches[batchId]) batches[batchId] = { id: batchId, target_dealer_name: t.target_dealer_name, created_at: t.created_at, items: [], totalAmount: 0, is_linked: t.is_linked, status: itemStatus, returnedItems: [], activeItems: [] }
                                                         batches[batchId].items.push(t)
                                                         batches[batchId].totalAmount += t.amount || 0
+                                                        // Track returned vs active items separately
+                                                        if (itemStatus === 'returned') {
+                                                            batches[batchId].returnedItems.push(t)
+                                                            batches[batchId].status = 'returned' // Mark batch as having returned items
+                                                        } else {
+                                                            batches[batchId].activeItems.push(t)
+                                                        }
                                                     })
                                                     const batchList = Object.values(batches).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
                                                     const grandTotal = filteredTransfers.reduce((sum, t) => sum + (t.amount || 0), 0)
+                                                    
+                                                    // Only non-linked batches can be reverted by sender
+                                                    const revertableBatches = batchList.filter(b => !b.is_linked && b.status !== 'returned')
+                                                    const revertableBatchIds = revertableBatches.map(b => b.id)
+                                                    
+                                                    // Batches with returned items (use returnedItems array, not all items)
+                                                    const batchesWithReturns = batchList.filter(b => (b.returnedItems?.length || 0) > 0)
+                                                    const returnedItems = batchesWithReturns.flatMap(b => b.returnedItems || [])
 
                                                     return (
                                                         <>
@@ -1148,52 +1317,119 @@ export default function RoundAccordionItem({
                                                                 <div className="summary-item"><span className="label">รวมทั้งหมด</span><span className="value">{round.currency_symbol}{grandTotal.toLocaleString()}</span></div>
                                                             </div>
 
-                                                            <div className="bulk-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-surface)', borderRadius: '8px', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                                                <label className="checkbox-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                                                                    <input type="checkbox" checked={batchList.length > 0 && batchList.every(b => selectedTransferBatches[b.id])} onChange={() => toggleSelectAllBatches(batchList.map(b => b.id))} style={{ width: '18px', height: '18px', accentColor: 'var(--color-danger)' }} />
-                                                                    <span>เลือกทั้งหมด ({batchList.length})</span>
-                                                                </label>
-                                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                                    <button className="btn btn-outline" onClick={(e) => { e.stopPropagation(); handleCopySelectedBatches(batchList); }} disabled={getSelectedBatchCount(batchList.map(b => b.id)) === 0} title="คัดลอกรายการที่เลือก">
-                                                                        <FiCopy /> คัดลอก ({getSelectedBatchCount(batchList.map(b => b.id))})
-                                                                    </button>
-                                                                    <button className="btn btn-danger" onClick={(e) => { e.stopPropagation(); handleRevertTransfers(batchList.map(b => b.id)); }} disabled={getSelectedBatchCount(batchList.map(b => b.id)) === 0 || revertingTransfer}>
-                                                                        <FiRotateCcw /> {revertingTransfer ? 'กำลังเอาคืน...' : `เอาคืน (${getSelectedBatchCount(batchList.map(b => b.id))})`}
-                                                                    </button>
+                                                            {revertableBatches.length > 0 && (
+                                                                <div className="bulk-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-surface)', borderRadius: '8px', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                                    <label className="checkbox-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                                                        <input type="checkbox" checked={revertableBatches.length > 0 && revertableBatches.every(b => selectedTransferBatches[b.id])} onChange={() => toggleSelectAllBatches(revertableBatchIds)} style={{ width: '18px', height: '18px', accentColor: 'var(--color-danger)' }} />
+                                                                        <span>เลือกทั้งหมด (นอกระบบ: {revertableBatches.length})</span>
+                                                                    </label>
+                                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                                        <button className="btn btn-outline" onClick={(e) => { e.stopPropagation(); handleCopySelectedBatches(batchList); }} disabled={getSelectedBatchCount(batchList.map(b => b.id)) === 0} title="คัดลอกรายการที่เลือก">
+                                                                            <FiCopy /> คัดลอก ({getSelectedBatchCount(batchList.map(b => b.id))})
+                                                                        </button>
+                                                                        <button className="btn btn-danger" onClick={(e) => { e.stopPropagation(); handleRevertTransfers(revertableBatchIds); }} disabled={getSelectedBatchCount(revertableBatchIds) === 0 || revertingTransfer}>
+                                                                            <FiRotateCcw /> {revertingTransfer ? 'กำลังเอาคืน...' : `เอาคืน (${getSelectedBatchCount(revertableBatchIds)})`}
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
+                                                            )}
+
+                                                            {/* Returned transfers notification */}
+                                                            {batchesWithReturns.length > 0 && (
+                                                                <div style={{ marginBottom: '1rem', padding: '1rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--color-danger)', borderRadius: '8px' }}>
+                                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-danger)', fontWeight: 600 }}>
+                                                                            <FiAlertCircle /> มีเลขถูกคืนจากเจ้ามือปลายทาง ({returnedItems.length} รายการ)
+                                                                        </div>
+                                                                        <button 
+                                                                            className="btn btn-success" 
+                                                                            onClick={(e) => { e.stopPropagation(); handleReclaimReturnedTransfers(returnedItems); }}
+                                                                            disabled={revertingTransfer}
+                                                                            style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
+                                                                        >
+                                                                            <FiRotateCcw /> {revertingTransfer ? 'กำลังเอาคืน...' : 'เอาคืนทั้งหมด'}
+                                                                        </button>
+                                                                    </div>
+                                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                                        {returnedItems.map(item => (
+                                                                            <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', padding: '0.25rem 0.5rem', background: 'var(--color-surface)', borderRadius: '4px', fontSize: '0.85rem' }}>
+                                                                                <span style={{ fontWeight: 500, color: 'var(--color-primary)' }}>{item.numbers}</span>
+                                                                                <span style={{ color: 'var(--color-text-muted)' }}>={round.currency_symbol}{item.amount?.toLocaleString()}</span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
 
                                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                                                 {batchList.map(batch => {
                                                                     const isSelected = selectedTransferBatches[batch.id]
+                                                                    const returnedCount = batch.returnedItems?.length || 0
+                                                                    const activeCount = batch.activeItems?.length || 0
+                                                                    const hasReturned = returnedCount > 0
+                                                                    const allReturned = activeCount === 0 && hasReturned
+                                                                    const partialReturned = hasReturned && activeCount > 0
+                                                                    const canRevert = !batch.is_linked && !allReturned
                                                                     return (
-                                                                        <div key={batch.id} onClick={() => toggleTransferBatch(batch.id)} style={{ background: isSelected ? 'rgba(239, 68, 68, 0.1)' : 'var(--color-surface)', border: isSelected ? '2px solid var(--color-danger)' : '1px solid var(--color-border)', borderRadius: '8px', overflow: 'hidden', cursor: 'pointer', transition: 'all 0.2s ease' }}>
-                                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', background: isSelected ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 193, 7, 0.1)', borderBottom: '1px solid var(--color-border)' }}>
+                                                                        <div key={batch.id} onClick={() => canRevert && toggleTransferBatch(batch.id)} style={{ background: allReturned ? 'rgba(239, 68, 68, 0.05)' : isSelected ? 'rgba(239, 68, 68, 0.1)' : 'var(--color-surface)', border: allReturned ? '2px dashed var(--color-danger)' : partialReturned ? '2px solid var(--color-warning)' : isSelected ? '2px solid var(--color-danger)' : '1px solid var(--color-border)', borderRadius: '8px', overflow: 'hidden', cursor: canRevert ? 'pointer' : 'default', transition: 'all 0.2s ease', opacity: allReturned ? 0.7 : batch.is_linked ? 0.85 : 1 }}>
+                                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', background: allReturned ? 'rgba(239, 68, 68, 0.15)' : partialReturned ? 'rgba(255, 193, 7, 0.15)' : isSelected ? 'rgba(239, 68, 68, 0.15)' : batch.is_linked ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255, 193, 7, 0.1)', borderBottom: '1px solid var(--color-border)' }}>
                                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                                                    <input type="checkbox" checked={isSelected || false} onChange={() => { }} style={{ width: '18px', height: '18px', accentColor: 'var(--color-danger)' }} />
+                                                                                    {allReturned ? (
+                                                                                        <FiRotateCcw style={{ color: 'var(--color-danger)', fontSize: '1.25rem' }} />
+                                                                                    ) : canRevert ? (
+                                                                                        <input type="checkbox" checked={isSelected || false} onChange={() => { }} style={{ width: '18px', height: '18px', accentColor: 'var(--color-danger)' }} />
+                                                                                    ) : (
+                                                                                        <FiCheck style={{ color: 'var(--color-success)', fontSize: '1.25rem' }} />
+                                                                                    )}
                                                                                     <div>
-                                                                                        <div style={{ fontWeight: 600 }}>{batch.target_dealer_name}</div>
-                                                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{new Date(batch.created_at).toLocaleString('th-TH', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                                                                                        <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                                            {batch.target_dealer_name}
+                                                                                            {allReturned && <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.4rem', background: 'var(--color-danger)', color: 'white', borderRadius: '4px' }}>ถูกคืนทั้งหมด</span>}
+                                                                                            {partialReturned && <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.4rem', background: 'var(--color-warning)', color: 'black', borderRadius: '4px' }}>ถูกคืนบางส่วน ({batch.returnedItems.length}/{batch.items.length})</span>}
+                                                                                            {batch.is_linked && !hasReturned && <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.4rem', background: 'var(--color-success)', color: 'white', borderRadius: '4px' }}>ในระบบ</span>}
+                                                                                        </div>
+                                                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                            {new Date(batch.created_at).toLocaleString('th-TH', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                                                                            {allReturned && <span style={{ marginLeft: '0.5rem', color: 'var(--color-danger)' }}>• เจ้ามือปลายทางคืนมาทั้งหมด</span>}
+                                                                                            {partialReturned && <span style={{ marginLeft: '0.5rem', color: 'var(--color-warning)' }}>• มีบางรายการถูกคืน</span>}
+                                                                                            {batch.is_linked && !hasReturned && <span style={{ marginLeft: '0.5rem', color: 'var(--color-success)' }}>• รอเจ้ามือปลายทางคืน</span>}
+                                                                                        </div>
                                                                                     </div>
                                                                                 </div>
                                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                                                                     <div style={{ textAlign: 'right' }}>
-                                                                                        <div style={{ fontWeight: 600, color: 'var(--color-warning)' }}>{round.currency_symbol}{batch.totalAmount.toLocaleString()}</div>
+                                                                                        <div style={{ fontWeight: 600, color: allReturned ? 'var(--color-danger)' : 'var(--color-warning)' }}>{round.currency_symbol}{batch.totalAmount.toLocaleString()}</div>
                                                                                         <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{batch.items.length} รายการ</div>
                                                                                     </div>
-                                                                                    <button className="btn btn-sm btn-outline" onClick={(e) => { e.stopPropagation(); handleCopySingleBatch(batch); }} title="คัดลอกรายการนี้" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}><FiCopy /></button>
+                                                                                    {hasReturned ? (
+                                                                                        <button 
+                                                                                            className="btn btn-sm btn-success" 
+                                                                                            onClick={(e) => { e.stopPropagation(); handleReclaimReturnedTransfers(batch.returnedItems || []); }} 
+                                                                                            title="เอาคืนรายการที่ถูกคืน" 
+                                                                                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                                                                                            disabled={revertingTransfer}
+                                                                                        >
+                                                                                            <FiRotateCcw /> เอาคืน ({returnedCount})
+                                                                                        </button>
+                                                                                    ) : (
+                                                                                        <button className="btn btn-sm btn-outline" onClick={(e) => { e.stopPropagation(); handleCopySingleBatch(batch); }} title="คัดลอกรายการนี้" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}><FiCopy /></button>
+                                                                                    )}
                                                                                 </div>
                                                                             </div>
                                                                             <div style={{ padding: '0.5rem' }}>
-                                                                                {batch.items.map(item => (
-                                                                                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', borderBottom: '1px solid var(--color-border)' }}>
-                                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                                            <span className="type-badge" style={{ fontSize: '0.7rem' }}>{BET_TYPES[item.bet_type] || item.bet_type}</span>
-                                                                                            <span style={{ fontWeight: 500, color: 'var(--color-primary)' }}>{item.numbers}</span>
+                                                                                {batch.items.map(item => {
+                                                                                    const itemReturned = (item.status || 'active') === 'returned'
+                                                                                    return (
+                                                                                        <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', borderBottom: '1px solid var(--color-border)', textDecoration: itemReturned ? 'line-through' : 'none', opacity: itemReturned ? 0.6 : 1, background: itemReturned ? 'rgba(239, 68, 68, 0.05)' : 'transparent' }}>
+                                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                                                <span className="type-badge" style={{ fontSize: '0.7rem' }}>{BET_TYPES[item.bet_type] || item.bet_type}</span>
+                                                                                                <span style={{ fontWeight: 500, color: itemReturned ? 'var(--color-danger)' : 'var(--color-primary)' }}>{item.numbers}</span>
+                                                                                                {itemReturned && <span style={{ fontSize: '0.6rem', padding: '0.1rem 0.3rem', background: 'var(--color-danger)', color: 'white', borderRadius: '3px' }}>คืน</span>}
+                                                                                            </div>
+                                                                                            <span style={{ color: itemReturned ? 'var(--color-danger)' : 'inherit' }}>{round.currency_symbol}{item.amount?.toLocaleString()}</span>
                                                                                         </div>
-                                                                                        <span>{round.currency_symbol}{item.amount?.toLocaleString()}</span>
-                                                                                    </div>
-                                                                                ))}
+                                                                                    )
+                                                                                })}
                                                                             </div>
                                                                         </div>
                                                                     )
