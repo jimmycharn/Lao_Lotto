@@ -41,9 +41,23 @@ export default function SummaryModal({ round, onClose }) {
         }
     }
 
+    // Map bet_type to settings key for Lao/Hanoi lottery
+    const getSettingsKey = (betType, lotteryKey) => {
+        if (lotteryKey === 'lao') {
+            const LAO_BET_TYPE_MAP = {
+                '3_top': '3_straight',
+                '3_tod': '3_tod_single',
+                '4_set': '4_top'
+            }
+            return LAO_BET_TYPE_MAP[betType] || betType
+        }
+        return betType
+    }
+
     const getCommission = (sub) => {
         const lotteryKey = getLotteryTypeKey(round.lottery_type)
-        const settings = userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[sub.bet_type]
+        const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
+        const settings = userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
 
         if (settings?.commission !== undefined) {
             return settings.isFixed ? settings.commission : sub.amount * (settings.commission / 100)
@@ -54,7 +68,8 @@ export default function SummaryModal({ round, onClose }) {
     const getExpectedPayout = (sub) => {
         if (!sub.is_winner) return 0
         const lotteryKey = getLotteryTypeKey(round.lottery_type)
-        const settings = userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[sub.bet_type]
+        const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
+        const settings = userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
 
         if (settings?.payout !== undefined) return sub.amount * settings.payout
         return sub.amount * (DEFAULT_PAYOUTS[sub.bet_type] || 1)

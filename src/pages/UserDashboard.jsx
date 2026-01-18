@@ -388,10 +388,24 @@ export default function UserDashboard() {
 
         const currentSettings = settingsOverride || userSettings
         const lotteryKey = getLotteryKeyForDraft(selectedRound.lottery_type)
-        const settings = currentSettings?.lottery_settings?.[lotteryKey]?.[betType]
+        
+        // Map bet_type to settings key for Lao/Hanoi lottery
+        // In settings, Lao uses different keys than the actual bet_type used in submissions
+        let settingsKey = betType
+        if (lotteryKey === 'lao') {
+            const LAO_BET_TYPE_MAP = {
+                '3_top': '3_straight',      // 3 ตัวตรง
+                '3_tod': '3_tod_single',    // 3 ตัวโต๊ด
+                '4_set': '4_top'            // 4 ตัวตรง (ชุด)
+            }
+            settingsKey = LAO_BET_TYPE_MAP[betType] || betType
+        }
+        
+        const settings = currentSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
 
         console.log('getCommissionForBetType:', {
             betType,
+            settingsKey,
             lotteryKey,
             settings,
             currentSettings: currentSettings?.lottery_settings?.[lotteryKey]
@@ -405,7 +419,8 @@ export default function UserDashboard() {
         // These match the defaults in Dealer.jsx MemberSettings
         if (lotteryKey === 'lao') {
             const LAO_SET_DEFAULTS = {
-                '4_top': { commission: 25, isFixed: true }
+                '4_top': { commission: 25, isFixed: true },
+                '4_set': { commission: 25, isFixed: true }
             }
             if (LAO_SET_DEFAULTS[betType]) {
                 console.log('Using Lao default for', betType, LAO_SET_DEFAULTS[betType])
