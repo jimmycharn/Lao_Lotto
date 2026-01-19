@@ -34,7 +34,8 @@ import {
     FiPackage,
     FiAlertCircle,
     FiSearch,
-    FiSlash
+    FiSlash,
+    FiInfo
 } from 'react-icons/fi'
 import './Dealer.css'
 import './SettingsTabs.css'
@@ -730,7 +731,7 @@ export default function Dealer() {
                         className={`tab-btn ${activeTab === 'upstreamDealers' ? 'active' : ''}`}
                         onClick={() => setActiveTab('upstreamDealers')}
                     >
-                        <FiSend /> เจ้ามือตีออก
+                        <FiSend /> เจ้ามือตีออก ({upstreamDealers.length})
                     </button>
                     <button
                         className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
@@ -3584,6 +3585,612 @@ function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock
     )
 }
 
+// Upstream Dealer Settings Inline Component - For displaying commission and payout rates inline
+function UpstreamDealerSettingsInline({ dealer, isLinked, onSaved }) {
+    const [loading, setLoading] = useState(true)
+    const [saving, setSaving] = useState(false)
+    const [activeTab, setActiveTab] = useState('lao')
+
+    const getDefaultSettings = () => ({
+        thai: {
+            'run_top': { commission: 15, payout: 3 },
+            'run_bottom': { commission: 15, payout: 4 },
+            'pak_top': { commission: 15, payout: 8 },
+            'pak_bottom': { commission: 15, payout: 6 },
+            '2_top': { commission: 15, payout: 65 },
+            '2_front': { commission: 15, payout: 65 },
+            '2_center': { commission: 15, payout: 65 },
+            '2_run': { commission: 15, payout: 10 },
+            '2_bottom': { commission: 15, payout: 65 },
+            '3_top': { commission: 30, payout: 550 },
+            '3_tod': { commission: 15, payout: 100 },
+            '3_bottom': { commission: 15, payout: 135 },
+            '4_run': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 }
+        },
+        lao: {
+            '4_set': { 
+                commission: 25, 
+                setPrice: 120,
+                isSet: true,
+                prizes: {
+                    '4_straight_set': 100000,
+                    '4_tod_set': 4000,
+                    '3_straight_set': 30000,
+                    '3_tod_set': 3000,
+                    '2_front_set': 1000,
+                    '2_back_set': 1000
+                }
+            },
+            'run_top': { commission: 15, payout: 3 },
+            'run_bottom': { commission: 15, payout: 4 },
+            'pak_top': { commission: 15, payout: 8 },
+            'pak_bottom': { commission: 15, payout: 6 },
+            '2_top': { commission: 15, payout: 65 },
+            '2_front': { commission: 15, payout: 65 },
+            '2_center': { commission: 15, payout: 65 },
+            '2_run': { commission: 15, payout: 10 },
+            '2_bottom': { commission: 15, payout: 65 },
+            '3_straight': { commission: 30, payout: 550 },
+            '3_tod_single': { commission: 15, payout: 100 },
+            '4_run': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 }
+        },
+        hanoi: {
+            '4_set': { 
+                commission: 25, 
+                setPrice: 120,
+                isSet: true,
+                prizes: {
+                    '4_straight_set': 100000,
+                    '4_tod_set': 4000,
+                    '3_straight_set': 30000,
+                    '3_tod_set': 3000,
+                    '2_front_set': 1000,
+                    '2_back_set': 1000
+                }
+            },
+            'run_top': { commission: 15, payout: 3 },
+            'run_bottom': { commission: 15, payout: 4 },
+            'pak_top': { commission: 15, payout: 8 },
+            'pak_bottom': { commission: 15, payout: 6 },
+            '2_top': { commission: 15, payout: 65 },
+            '2_front': { commission: 15, payout: 65 },
+            '2_center': { commission: 15, payout: 65 },
+            '2_run': { commission: 15, payout: 10 },
+            '2_bottom': { commission: 15, payout: 65 },
+            '3_straight': { commission: 30, payout: 550 },
+            '3_tod_single': { commission: 15, payout: 100 },
+            '4_run': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 }
+        },
+        stock: {
+            '2_top': { commission: 15, payout: 65 },
+            '2_bottom': { commission: 15, payout: 65 }
+        }
+    })
+
+    const [settings, setSettings] = useState(getDefaultSettings())
+
+    const BET_LABELS = {
+        thai: {
+            'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
+            'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
+            '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
+            '3_top': '3 ตัวตรง', '3_tod': '3 ตัวโต๊ด', '3_bottom': '3 ตัวล่าง',
+            '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
+        },
+        lao: {
+            '4_set': '4 ตัวชุด',
+            'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
+            'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
+            '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
+            '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
+            '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
+        },
+        hanoi: {
+            '4_set': '4 ตัวชุด',
+            'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
+            'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
+            '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
+            '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
+            '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
+        },
+        stock: { '2_top': '2 ตัวบน', '2_bottom': '2 ตัวล่าง' }
+    }
+
+    const SET_PRIZE_LABELS = {
+        '4_straight_set': '4 ตัวตรงชุด',
+        '4_tod_set': '4 ตัวโต๊ดชุด',
+        '3_straight_set': '3 ตัวตรงชุด',
+        '3_tod_set': '3 ตัวโต๊ดชุด',
+        '2_front_set': '2 ตัวหน้าชุด',
+        '2_back_set': '2 ตัวหลังชุด'
+    }
+
+    const LOTTERY_TABS = [
+        { key: 'lao', label: 'หวยลาว' },
+        { key: 'hanoi', label: 'หวยฮานอย' },
+        { key: 'thai', label: 'หวยไทย' },
+        { key: 'stock', label: 'หวยหุ้น' }
+    ]
+
+    useEffect(() => {
+        fetchSettings()
+    }, [dealer.id])
+
+    async function fetchSettings() {
+        setLoading(true)
+        try {
+            if (dealer.lottery_settings) {
+                const merged = { ...getDefaultSettings() }
+                Object.keys(dealer.lottery_settings).forEach(tab => {
+                    if (merged[tab]) {
+                        Object.keys(dealer.lottery_settings[tab]).forEach(key => {
+                            if (merged[tab][key]) {
+                                merged[tab][key] = { ...merged[tab][key], ...dealer.lottery_settings[tab][key] }
+                            }
+                        })
+                    }
+                })
+                setSettings(merged)
+            }
+        } catch (error) {
+            console.error('Error loading settings:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    async function handleSave() {
+        setSaving(true)
+        try {
+            const { error } = await supabase
+                .from('dealer_upstream_connections')
+                .update({
+                    lottery_settings: settings,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', dealer.id)
+
+            if (error) throw error
+            toast.success('บันทึกการตั้งค่าสำเร็จ')
+            onSaved?.()
+        } catch (error) {
+            console.error('Error saving settings:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    const updateSetting = (tab, key, field, value) => {
+        setSettings(prev => ({
+            ...prev,
+            [tab]: {
+                ...prev[tab],
+                [key]: { ...prev[tab][key], [field]: parseFloat(value) || 0 }
+            }
+        }))
+    }
+
+    const updateSetPrize = (tab, prizeKey, value) => {
+        setSettings(prev => ({
+            ...prev,
+            [tab]: {
+                ...prev[tab],
+                '4_set': {
+                    ...prev[tab]['4_set'],
+                    prizes: {
+                        ...prev[tab]['4_set'].prizes,
+                        [prizeKey]: parseFloat(value) || 0
+                    }
+                }
+            }
+        }))
+    }
+
+    if (loading) {
+        return <div className="loading-state"><div className="spinner"></div></div>
+    }
+
+    // For linked dealers, show read-only view
+    const readOnly = isLinked
+
+    return (
+        <div className="upstream-dealer-settings-inline">
+            {readOnly && (
+                <div style={{ 
+                    background: 'rgba(212, 175, 55, 0.1)', 
+                    border: '1px solid rgba(212, 175, 55, 0.3)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '0.75rem 1rem',
+                    marginBottom: '1rem',
+                    fontSize: '0.9rem',
+                    color: 'var(--color-warning)'
+                }}>
+                    <FiInfo style={{ marginRight: '0.5rem' }} />
+                    ค่าคอมและอัตราจ่ายถูกกำหนดโดยเจ้ามือที่รับเลขจากคุณ (แก้ไขไม่ได้)
+                </div>
+            )}
+            {!readOnly && (
+                <div style={{ 
+                    background: 'rgba(76, 175, 80, 0.1)', 
+                    border: '1px solid rgba(76, 175, 80, 0.3)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '0.75rem 1rem',
+                    marginBottom: '1rem',
+                    fontSize: '0.9rem',
+                    color: 'var(--color-success)'
+                }}>
+                    <FiEdit2 style={{ marginRight: '0.5rem' }} />
+                    กรอกค่าคอมและอัตราจ่ายที่เจ้ามือนอกระบบให้คุณ เพื่อใช้คำนวณรายได้
+                </div>
+            )}
+
+            {/* Lottery Type Tabs */}
+            <div className="settings-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                {LOTTERY_TABS.map(tab => (
+                    <button
+                        key={tab.key}
+                        className={`btn btn-sm ${activeTab === tab.key ? 'btn-primary' : 'btn-outline'}`}
+                        onClick={() => setActiveTab(tab.key)}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
+
+            {/* 4 ตัวชุด Section for Lao or Hanoi */}
+            {(activeTab === 'lao' || activeTab === 'hanoi') && settings[activeTab]?.['4_set'] && (
+                <div className="set-settings-section" style={{ 
+                    marginBottom: '1.5rem', 
+                    padding: '1rem',
+                    background: 'rgba(212, 175, 55, 0.05)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid rgba(212, 175, 55, 0.2)'
+                }}>
+                    <h4 style={{ marginBottom: '1rem', color: 'var(--color-primary)', fontSize: '1rem' }}>
+                        <FiPackage style={{ marginRight: '0.5rem' }} />
+                        4 ตัวชุด
+                    </h4>
+                    
+                    {/* Set Price and Commission */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>ราคาชุดละ</label>
+                            <input
+                                type="number"
+                                className="form-input"
+                                value={settings[activeTab]['4_set'].setPrice || 0}
+                                onChange={e => updateSetting(activeTab, '4_set', 'setPrice', e.target.value)}
+                                disabled={readOnly}
+                                style={{ width: '100%' }}
+                            />
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>ค่าคอม (%)</label>
+                            <input
+                                type="number"
+                                className="form-input"
+                                value={settings[activeTab]['4_set'].commission || 0}
+                                onChange={e => updateSetting(activeTab, '4_set', 'commission', e.target.value)}
+                                disabled={readOnly}
+                                style={{ width: '100%' }}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Prize Settings */}
+                    <div style={{ fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem', color: 'var(--color-text)' }}>อัตราจ่ายรางวัล</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
+                        {Object.entries(settings[activeTab]['4_set'].prizes || {}).map(([prizeKey, prizeValue]) => (
+                            <div key={prizeKey}>
+                                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>
+                                    {SET_PRIZE_LABELS[prizeKey] || prizeKey}
+                                </label>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    value={prizeValue}
+                                    onChange={e => updateSetPrize(activeTab, prizeKey, e.target.value)}
+                                    disabled={readOnly}
+                                    style={{ width: '100%', fontSize: '0.9rem' }}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Regular Bet Types */}
+            <div className="bet-settings-grid" style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
+                gap: '0.75rem' 
+            }}>
+                {Object.entries(BET_LABELS[activeTab] || {}).filter(([key]) => key !== '4_set').map(([key, label]) => (
+                    <div key={key} className="bet-setting-row" style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        padding: '0.5rem 0.75rem',
+                        background: 'var(--color-surface-light)',
+                        borderRadius: 'var(--radius-sm)'
+                    }}>
+                        <span style={{ flex: '1', fontSize: '0.9rem', color: 'var(--color-text)' }}>{label}</span>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>คอม%</span>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    value={settings[activeTab]?.[key]?.commission || 0}
+                                    onChange={e => updateSetting(activeTab, key, 'commission', e.target.value)}
+                                    disabled={readOnly}
+                                    style={{ width: '60px', textAlign: 'center', fontSize: '0.85rem', padding: '0.3rem' }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>จ่าย</span>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    value={settings[activeTab]?.[key]?.payout || 0}
+                                    onChange={e => updateSetting(activeTab, key, 'payout', e.target.value)}
+                                    disabled={readOnly}
+                                    style={{ width: '70px', textAlign: 'center', fontSize: '0.85rem', padding: '0.3rem' }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Save Button - Only for non-linked dealers */}
+            {!readOnly && (
+                <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
+                    <button 
+                        className="btn btn-primary" 
+                        onClick={handleSave}
+                        disabled={saving}
+                    >
+                        {saving ? 'กำลังบันทึก...' : <><FiCheck /> บันทึกการตั้งค่า</>}
+                    </button>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// Upstream Dealer Accordion Item Component
+function UpstreamDealerAccordionItem({ dealer, isExpanded, onToggle, onEdit, onDelete, onToggleBlock, onSaveSettings }) {
+    const [activeTab, setActiveTab] = useState('info') // 'info' | 'settings'
+    const isLinked = dealer.is_linked
+    const isBlocked = dealer.is_blocked
+
+    return (
+        <div className={`upstream-dealer-accordion-item ${isExpanded ? 'expanded' : ''}`} style={{
+            background: 'var(--color-surface)',
+            borderRadius: 'var(--radius-lg)',
+            marginBottom: '1rem',
+            border: isLinked ? '2px solid var(--color-success)' : '1px solid var(--color-border)',
+            overflow: 'hidden',
+            transition: 'all 0.3s ease',
+            opacity: isBlocked ? 0.7 : 1
+        }}>
+            {/* Header - Click to toggle */}
+            <div
+                className="upstream-dealer-accordion-header"
+                onClick={onToggle}
+                style={{
+                    padding: '1.25rem 1.5rem',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    background: isExpanded ? 'var(--color-surface-light)' : 'transparent',
+                    borderBottom: isExpanded ? '1px solid var(--color-border)' : 'none'
+                }}
+            >
+                <div className="dealer-info-summary" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <div className="dealer-avatar" style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '50%',
+                        background: isLinked ? 'var(--color-success)' : 'var(--color-warning)',
+                        color: '#fff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '1.2rem',
+                        fontWeight: 'bold'
+                    }}>
+                        {isLinked ? <FiCheck /> : <FiUser />}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span className="dealer-name" style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '1.1rem' }}>
+                                {dealer.upstream_name || 'ไม่ระบุชื่อ'}
+                            </span>
+                            {isLinked && (
+                                <span style={{
+                                    background: 'var(--color-success)',
+                                    color: '#fff',
+                                    padding: '0.15rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: '600'
+                                }}>
+                                    ในระบบ
+                                </span>
+                            )}
+                            {isBlocked && (
+                                <span style={{
+                                    background: 'var(--color-danger)',
+                                    color: '#fff',
+                                    padding: '0.15rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: '600'
+                                }}>
+                                    <FiSlash size={10} /> บล็อก
+                                </span>
+                            )}
+                        </div>
+                        <span className="dealer-contact" style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+                            {isLinked && dealer.upstream_profile ? dealer.upstream_profile.email : (dealer.upstream_contact || 'ไม่มีข้อมูลติดต่อ')}
+                        </span>
+                    </div>
+                </div>
+                <div className="accordion-icon" style={{
+                    color: isExpanded ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.3s ease'
+                }}>
+                    <FiChevronDown size={24} />
+                </div>
+            </div>
+
+            {/* Body - Only visible if expanded */}
+            {isExpanded && (
+                <div className="upstream-dealer-accordion-body" style={{ padding: '1.5rem' }}>
+                    {/* Internal Tabs */}
+                    <div className="dealer-internal-tabs" style={{
+                        display: 'flex',
+                        gap: '1rem',
+                        marginBottom: '1.5rem',
+                        borderBottom: '1px solid var(--color-border)'
+                    }}>
+                        <button
+                            onClick={() => setActiveTab('info')}
+                            style={{
+                                padding: '0.75rem 1rem',
+                                background: 'transparent',
+                                border: 'none',
+                                borderBottom: activeTab === 'info' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                                color: activeTab === 'info' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                fontWeight: '500',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem'
+                            }}
+                        >
+                            <FiUser /> โปรไฟล์
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('settings')}
+                            style={{
+                                padding: '0.75rem 1rem',
+                                background: 'transparent',
+                                border: 'none',
+                                borderBottom: activeTab === 'settings' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                                color: activeTab === 'settings' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                fontWeight: '500',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem'
+                            }}
+                        >
+                            <FiSettings /> ค่าคอม/อัตราจ่าย
+                        </button>
+                    </div>
+
+                    {/* Tab Content */}
+                    {activeTab === 'info' && (
+                        <div className="dealer-info-content" style={{ animation: 'fadeIn 0.3s ease' }}>
+                            <div className="info-grid" style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                                gap: '1.5rem'
+                            }}>
+                                <div className="info-item">
+                                    <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>ชื่อเจ้ามือ</label>
+                                    <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{dealer.upstream_name || '-'}</div>
+                                </div>
+                                {isLinked && dealer.upstream_profile && (
+                                    <>
+                                        <div className="info-item">
+                                            <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>อีเมล</label>
+                                            <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{dealer.upstream_profile.email || '-'}</div>
+                                        </div>
+                                        <div className="info-item">
+                                            <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>เบอร์โทร</label>
+                                            <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{dealer.upstream_profile.phone || '-'}</div>
+                                        </div>
+                                    </>
+                                )}
+                                {!isLinked && (
+                                    <div className="info-item">
+                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>ข้อมูลติดต่อ</label>
+                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{dealer.upstream_contact || '-'}</div>
+                                    </div>
+                                )}
+                                <div className="info-item">
+                                    <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>ประเภท</label>
+                                    <div style={{ fontSize: '1.1rem', color: isLinked ? 'var(--color-success)' : 'var(--color-warning)' }}>
+                                        {isLinked ? 'เจ้ามือในระบบ' : 'เจ้ามือนอกระบบ'}
+                                    </div>
+                                </div>
+                                <div className="info-item">
+                                    <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>สถานะ</label>
+                                    <div style={{ fontSize: '1.1rem', color: isBlocked ? 'var(--color-danger)' : 'var(--color-success)' }}>
+                                        {isBlocked ? 'ถูกบล็อก' : 'ปกติ'}
+                                    </div>
+                                </div>
+                                {dealer.notes && (
+                                    <div className="info-item" style={{ gridColumn: '1 / -1' }}>
+                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>หมายเหตุ</label>
+                                        <div style={{ fontSize: '1rem', color: 'var(--color-text)' }}>{dealer.notes}</div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <button
+                                    className="btn btn-outline btn-sm"
+                                    onClick={(e) => { e.stopPropagation(); onToggleBlock(); }}
+                                    style={{ color: isBlocked ? 'var(--color-success)' : 'var(--color-warning)', borderColor: isBlocked ? 'var(--color-success)' : 'var(--color-warning)' }}
+                                >
+                                    {isBlocked ? <><FiCheck /> ปลดบล็อก</> : <><FiSlash /> บล็อก</>}
+                                </button>
+                                {!isLinked && (
+                                    <button
+                                        className="btn btn-outline btn-sm"
+                                        onClick={(e) => { e.stopPropagation(); onEdit(); }}
+                                    >
+                                        <FiEdit2 /> แก้ไข
+                                    </button>
+                                )}
+                                <button
+                                    className="btn btn-outline btn-sm"
+                                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                                    style={{ color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
+                                >
+                                    <FiTrash2 /> {isLinked ? 'ยกเลิกการเชื่อมต่อ' : 'ลบ'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'settings' && (
+                        <div className="dealer-settings-content" style={{ animation: 'fadeIn 0.3s ease' }}>
+                            <UpstreamDealerSettingsInline
+                                dealer={dealer}
+                                isLinked={isLinked}
+                                onSaved={onSaveSettings}
+                            />
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    )
+}
+
 // Upstream Dealers Tab - For managing dealers to transfer bets to
 function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loadingUpstream, setLoadingUpstream }) {
     const [showAddModal, setShowAddModal] = useState(false)
@@ -3596,6 +4203,7 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
     })
     const [showSettingsModal, setShowSettingsModal] = useState(false)
     const [settingsDealer, setSettingsDealer] = useState(null)
+    const [expandedDealerId, setExpandedDealerId] = useState(null)
 
     // Fetch upstream dealers on mount - only if not already loaded
     useEffect(() => {
@@ -3837,66 +4445,18 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
                             <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                 <FiCheck style={{ color: 'var(--color-success)' }} /> เจ้ามือในระบบ ({upstreamDealers.filter(d => d.is_linked).length})
                             </h4>
-                            <div className="upstream-dealers-grid">
+                            <div className="upstream-dealers-accordion-list">
                                 {upstreamDealers.filter(d => d.is_linked).map(dealer => (
-                                    <div key={dealer.id} className={`upstream-dealer-card card linked ${dealer.is_blocked ? 'blocked' : ''}`} style={dealer.is_blocked ? { opacity: 0.6, borderColor: 'var(--color-danger)' } : {}}>
-                                        <div className="dealer-card-header">
-                                            <div className="dealer-info">
-                                                <h3 className="dealer-name">
-                                                    {dealer.upstream_name}
-                                                    <span 
-                                                        className="linked-badge" 
-                                                        title={dealer.is_blocked ? 'ถูกบล็อก' : 'เชื่อมต่อในระบบ'} 
-                                                        style={{ 
-                                                            background: dealer.is_blocked ? 'var(--color-danger)' : 'var(--color-success)', 
-                                                            color: 'white', 
-                                                            width: '20px',
-                                                            height: '20px',
-                                                            borderRadius: '50%', 
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            marginLeft: '0.5rem'
-                                                        }}
-                                                    >
-                                                        {dealer.is_blocked ? <FiSlash size={12} /> : <FiCheck size={12} />}
-                                                    </span>
-                                                </h3>
-                                                {dealer.upstream_profile && (
-                                                    <p className="dealer-contact" style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
-                                                        {dealer.upstream_profile.email}
-                                                    </p>
-                                                )}
-                                                {dealer.notes && (
-                                                    <p className="dealer-notes">{dealer.notes}</p>
-                                                )}
-                                            </div>
-                                            <div className="dealer-actions" style={{ display: 'flex', gap: '0.25rem' }}>
-                                                <button
-                                                    className="icon-btn"
-                                                    onClick={() => handleOpenSettings(dealer)}
-                                                    title="ตั้งค่าค่าคอมและอัตราจ่าย"
-                                                >
-                                                    <FiSettings />
-                                                </button>
-                                                <button
-                                                    className={`icon-btn ${dealer.is_blocked ? 'success' : 'warning'}`}
-                                                    onClick={() => handleToggleBlock(dealer)}
-                                                    title={dealer.is_blocked ? 'ยกเลิกการบล็อก' : 'บล็อกเจ้ามือนี้'}
-                                                    style={{ color: dealer.is_blocked ? 'var(--color-success)' : 'var(--color-warning)' }}
-                                                >
-                                                    {dealer.is_blocked ? <FiCheck /> : <FiSlash />}
-                                                </button>
-                                                <button
-                                                    className="icon-btn danger"
-                                                    onClick={() => handleDelete(dealer)}
-                                                    title="ยกเลิกการเชื่อมต่อ"
-                                                >
-                                                    <FiTrash2 />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <UpstreamDealerAccordionItem
+                                        key={dealer.id}
+                                        dealer={dealer}
+                                        isExpanded={expandedDealerId === dealer.id}
+                                        onToggle={() => setExpandedDealerId(expandedDealerId === dealer.id ? null : dealer.id)}
+                                        onEdit={() => handleEditDealer(dealer)}
+                                        onDelete={() => handleDelete(dealer)}
+                                        onToggleBlock={() => handleToggleBlock(dealer)}
+                                        onSaveSettings={fetchUpstreamDealers}
+                                    />
                                 ))}
                             </div>
                         </div>
@@ -3908,69 +4468,18 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
                             <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                 <FiUser style={{ color: 'var(--color-text-muted)' }} /> เจ้ามือนอกระบบ ({upstreamDealers.filter(d => !d.is_linked).length})
                             </h4>
-                            <div className="upstream-dealers-grid">
+                            <div className="upstream-dealers-accordion-list">
                                 {upstreamDealers.filter(d => !d.is_linked).map(dealer => (
-                                    <div key={dealer.id} className={`upstream-dealer-card card ${dealer.is_blocked ? 'blocked' : ''}`} style={dealer.is_blocked ? { opacity: 0.6, borderColor: 'var(--color-danger)' } : {}}>
-                                        <div className="dealer-card-header">
-                                            <div className="dealer-info">
-                                                <h3 className="dealer-name">
-                                                    {dealer.upstream_name}
-                                                    {dealer.is_blocked && (
-                                                        <span style={{ 
-                                                            background: 'var(--color-danger)', 
-                                                            color: 'white', 
-                                                            padding: '0.15rem 0.4rem', 
-                                                            borderRadius: '4px', 
-                                                            fontSize: '0.7rem',
-                                                            marginLeft: '0.5rem'
-                                                        }}>
-                                                            <FiSlash style={{ marginRight: '0.2rem' }} /> ถูกบล็อก
-                                                        </span>
-                                                    )}
-                                                </h3>
-                                                {dealer.upstream_contact && (
-                                                    <p className="dealer-contact">
-                                                        <FiUser style={{ marginRight: '0.25rem' }} />
-                                                        {dealer.upstream_contact}
-                                                    </p>
-                                                )}
-                                                {dealer.notes && (
-                                                    <p className="dealer-notes">{dealer.notes}</p>
-                                                )}
-                                            </div>
-                                            <div className="dealer-actions" style={{ display: 'flex', gap: '0.25rem' }}>
-                                                <button
-                                                    className="icon-btn"
-                                                    onClick={() => handleOpenSettings(dealer)}
-                                                    title="ตั้งค่าค่าคอมและอัตราจ่าย"
-                                                >
-                                                    <FiSettings />
-                                                </button>
-                                                <button
-                                                    className={`icon-btn ${dealer.is_blocked ? 'success' : 'warning'}`}
-                                                    onClick={() => handleToggleBlock(dealer)}
-                                                    title={dealer.is_blocked ? 'ยกเลิกการบล็อก' : 'บล็อกเจ้ามือนี้'}
-                                                    style={{ color: dealer.is_blocked ? 'var(--color-success)' : 'var(--color-warning)' }}
-                                                >
-                                                    {dealer.is_blocked ? <FiCheck /> : <FiSlash />}
-                                                </button>
-                                                <button
-                                                    className="icon-btn"
-                                                    onClick={() => handleEditDealer(dealer)}
-                                                    title="แก้ไข"
-                                                >
-                                                    <FiEdit2 />
-                                                </button>
-                                                <button
-                                                    className="icon-btn danger"
-                                                    onClick={() => handleDelete(dealer)}
-                                                    title="ลบ"
-                                                >
-                                                    <FiTrash2 />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <UpstreamDealerAccordionItem
+                                        key={dealer.id}
+                                        dealer={dealer}
+                                        isExpanded={expandedDealerId === dealer.id}
+                                        onToggle={() => setExpandedDealerId(expandedDealerId === dealer.id ? null : dealer.id)}
+                                        onEdit={() => handleEditDealer(dealer)}
+                                        onDelete={() => handleDelete(dealer)}
+                                        onToggleBlock={() => handleToggleBlock(dealer)}
+                                        onSaveSettings={fetchUpstreamDealers}
+                                    />
                                 ))}
                             </div>
                         </div>
