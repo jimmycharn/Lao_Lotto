@@ -434,6 +434,20 @@
     box-shadow: 0 0 15px rgba(212, 175, 55, 0.1);
 }
 
+.bet-type-btn.dragging {
+    opacity: 0.5;
+    border: 2px dashed var(--color-primary);
+}
+
+.bet-type-btn[draggable="true"] {
+    cursor: grab;
+    touch-action: none;
+}
+
+.bet-type-btn[draggable="true"]:active {
+    cursor: grabbing;
+}
+
 .number-input {
     font-family: 'Monaco', 'Menlo', monospace;
     font-size: 2rem;

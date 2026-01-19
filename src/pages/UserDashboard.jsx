@@ -83,10 +83,79 @@ export default function UserDashboard() {
     const [filterBetType, setFilterBetType] = useState('') // Filter by bet type
     const [showPasteModal, setShowPasteModal] = useState(false)
     const [pasteText, setPasteText] = useState('')
+    const [betTypeOrder, setBetTypeOrder] = useState(() => {
+        const saved = localStorage.getItem('betTypeOrder')
+        return saved ? JSON.parse(saved) : {}
+    })
+    const [draggedBetType, setDraggedBetType] = useState(null)
     const numberInputRef = useRef(null)
     const amountInputRef = useRef(null)
     const billNoteInputRef = useRef(null)
     const audioContextRef = useRef(null)
+
+    // Sort bet types by saved order
+    const sortBetTypes = (items, digitCount) => {
+        const orderKey = `digit_${digitCount}`
+        const savedOrder = betTypeOrder[orderKey] || []
+        if (savedOrder.length === 0) return items
+        
+        return [...items].sort((a, b) => {
+            const keyA = typeof a === 'string' ? a : a.id
+            const keyB = typeof b === 'string' ? b : b.id
+            const indexA = savedOrder.indexOf(keyA)
+            const indexB = savedOrder.indexOf(keyB)
+            if (indexA === -1 && indexB === -1) return 0
+            if (indexA === -1) return 1
+            if (indexB === -1) return -1
+            return indexA - indexB
+        })
+    }
+
+    // Handle drag start
+    const handleBetTypeDragStart = (e, item, digitCount) => {
+        const key = typeof item === 'string' ? item : item.id
+        setDraggedBetType({ key, digitCount })
+        e.dataTransfer.effectAllowed = 'move'
+        e.target.style.opacity = '0.5'
+    }
+
+    // Handle drag end
+    const handleBetTypeDragEnd = (e) => {
+        e.target.style.opacity = '1'
+        setDraggedBetType(null)
+    }
+
+    // Handle drag over
+    const handleBetTypeDragOver = (e) => {
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+    }
+
+    // Handle drop
+    const handleBetTypeDrop = (e, targetItem, items, digitCount) => {
+        e.preventDefault()
+        if (!draggedBetType || draggedBetType.digitCount !== digitCount) return
+
+        const targetKey = typeof targetItem === 'string' ? targetItem : targetItem.id
+        if (draggedBetType.key === targetKey) return
+
+        // Build order from current items
+        const currentOrder = items.map(i => typeof i === 'string' ? i : i.id)
+        const dragIndex = currentOrder.indexOf(draggedBetType.key)
+        const targetIndex = currentOrder.indexOf(targetKey)
+        
+        if (dragIndex !== -1 && targetIndex !== -1) {
+            currentOrder.splice(dragIndex, 1)
+            currentOrder.splice(targetIndex, 0, draggedBetType.key)
+            
+            const orderKey = `digit_${digitCount}`
+            const updated = { ...betTypeOrder, [orderKey]: currentOrder }
+            setBetTypeOrder(updated)
+            localStorage.setItem('betTypeOrder', JSON.stringify(updated))
+        }
+        
+        setDraggedBetType(null)
+    }
 
     // Play a short beep sound when adding draft
     const playAddSound = () => {
@@ -2745,16 +2814,22 @@ export default function UserDashboard() {
                                                 }
                                             }
 
-                                            return available.map(item => {
+                                            // Sort by saved order
+                                            const sortedAvailable = sortBetTypes(available, digits)
+                                            
+                                            return sortedAvailable.map(item => {
                                                 const key = typeof item === 'string' ? item : item.id
                                                 const label = typeof item === 'string' ? (BET_TYPES[key]?.label || key) : item.label
                                                 return (
                                                     <button
                                                         key={key}
                                                         type="button"
-                                                        className="bet-type-btn"
-                                                        onMouseDown={(e) => e.preventDefault()}
-                                                        onTouchStart={(e) => e.preventDefault()}
+                                                        className={`bet-type-btn ${draggedBetType?.key === key ? 'dragging' : ''}`}
+                                                        draggable
+                                                        onDragStart={(e) => handleBetTypeDragStart(e, item, digits)}
+                                                        onDragEnd={handleBetTypeDragEnd}
+                                                        onDragOver={handleBetTypeDragOver}
+                                                        onDrop={(e) => handleBetTypeDrop(e, item, sortedAvailable, digits)}
                                                         onClick={() => addToDraft(key)}
                                                     >
                                                         {label}
