@@ -85,11 +85,46 @@ export default function UserDashboard() {
     const [pasteText, setPasteText] = useState('')
     const numberInputRef = useRef(null)
     const amountInputRef = useRef(null)
+    const billNoteInputRef = useRef(null)
+    const audioContextRef = useRef(null)
+
+    // Play a short beep sound when adding draft
+    const playAddSound = () => {
+        try {
+            if (!audioContextRef.current) {
+                audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
+            }
+            const ctx = audioContextRef.current
+            const oscillator = ctx.createOscillator()
+            const gainNode = ctx.createGain()
+            
+            oscillator.connect(gainNode)
+            gainNode.connect(ctx.destination)
+            
+            oscillator.frequency.value = 800 // Hz
+            oscillator.type = 'sine'
+            gainNode.gain.value = 0.1 // Volume
+            
+            oscillator.start(ctx.currentTime)
+            oscillator.stop(ctx.currentTime + 0.08) // 80ms beep
+        } catch (e) {
+            console.log('Audio not supported')
+        }
+    }
 
     // Edit submission state
     const [editingSubmission, setEditingSubmission] = useState(null)
     const [editForm, setEditForm] = useState({ numbers: '', amount: '', bet_type: '' })
     const [editSaving, setEditSaving] = useState(false)
+
+    // Focus on bill note input when modal opens
+    useEffect(() => {
+        if (showSubmitModal && billNoteInputRef.current) {
+            setTimeout(() => {
+                billNoteInputRef.current.focus()
+            }, 100)
+        }
+    }, [showSubmitModal])
 
     // Fetch active dealer memberships
     useEffect(() => {
@@ -749,6 +784,7 @@ export default function UserDashboard() {
         }))
 
         setDrafts(prev => [...prev, ...draftsWithCount])
+        playAddSound() // Play sound feedback
 
         // Focus back to number input (minimal delay since we prevent blur)
         if (numberInputRef.current) {
@@ -825,6 +861,7 @@ export default function UserDashboard() {
             }
             
             setDrafts(prev => [...prev, ...newDrafts])
+            playAddSound() // Play sound feedback
             setShowPasteModal(false)
             setPasteText('')
             toast.success(`เพิ่ม ${addedCount} รายการสำเร็จ`)
@@ -2460,11 +2497,21 @@ export default function UserDashboard() {
                             {/* Bill Note Input */}
                             <div className="bill-note-section">
                                 <input
+                                    ref={billNoteInputRef}
                                     type="text"
                                     className="form-input bill-note-input"
                                     placeholder="ชื่อผู้ซื้อ / บันทึกช่วยจำ (ไม่บังคับ)"
                                     value={billNote}
                                     onChange={e => setBillNote(e.target.value)}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault()
+                                            if (numberInputRef.current) {
+                                                numberInputRef.current.focus()
+                                                numberInputRef.current.select()
+                                            }
+                                        }
+                                    }}
                                 />
                             </div>
 
@@ -2569,10 +2616,11 @@ export default function UserDashboard() {
                                                 onKeyDown={e => {
                                                     if (e.key === 'Enter') {
                                                         e.preventDefault()
-                                                        // Auto-add default bet type if possible
-                                                        const digits = submitForm.numbers.replace(/\*/g, '').length
-                                                        if (digits === 2) addToDraft('2_top')
-                                                        else if (digits === 3) addToDraft('3_top')
+                                                        // Go back to number input and select all (don't save draft)
+                                                        if (numberInputRef.current) {
+                                                            numberInputRef.current.focus()
+                                                            numberInputRef.current.select()
+                                                        }
                                                     }
                                                 }}
                                             />
