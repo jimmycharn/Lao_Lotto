@@ -4384,42 +4384,8 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
             </div>
 
             <p className="section-description" style={{ marginBottom: '1.5rem', color: 'var(--color-text-muted)' }}>
-                จัดการรายชื่อเจ้ามือที่คุณสามารถตีเลขออกไปได้ สามารถเพิ่มเจ้ามือด้วยตนเอง หรือเชื่อมต่อกับเจ้ามือในระบบผ่าน QR Code
+                จัดการรายชื่อเจ้ามือที่คุณสามารถตีเลขออกไปได้ สามารถเพิ่มเจ้ามือด้วยตนเอง หรือเชื่อมต่อกับเจ้ามือในระบบ
             </p>
-
-            {/* QR Code for other dealers to connect to you */}
-            <div className="invitation-card card" style={{ marginBottom: '1.5rem' }}>
-                <div className="invitation-header">
-                    <h3><FiShare2 /> ลิงก์ให้เจ้ามืออื่นเชื่อมต่อ</h3>
-                    <p>ส่งลิงก์หรือ QR Code นี้ให้เจ้ามือคนอื่นที่ต้องการตีเลขมาให้คุณ</p>
-                </div>
-                <div className="invitation-content" style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <div className="qr-wrapper">
-                        <div className="qr-code-bg">
-                            <QRCode
-                                value={`${window.location.origin}/dealer-connect?ref=${user?.id}`}
-                                size={100}
-                                style={{ height: "auto", maxWidth: "100%", width: "100%" }}
-                            />
-                        </div>
-                    </div>
-                    <div className="link-wrapper" style={{ flex: 1, minWidth: '200px' }}>
-                        <div className="referral-link" style={{ fontSize: '0.85rem', wordBreak: 'break-all' }}>
-                            {`${window.location.origin}/dealer-connect?ref=${user?.id}`}
-                        </div>
-                        <button
-                            className="btn btn-outline btn-sm"
-                            onClick={() => {
-                                navigator.clipboard.writeText(`${window.location.origin}/dealer-connect?ref=${user?.id}`)
-                                toast.success('คัดลอกลิงก์แล้ว!')
-                            }}
-                            style={{ marginTop: '0.5rem' }}
-                        >
-                            <FiCopy /> คัดลอก
-                        </button>
-                    </div>
-                </div>
-            </div>
 
             {loadingUpstream ? (
                 <div className="loading-state">
