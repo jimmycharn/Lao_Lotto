@@ -42,7 +42,8 @@ export default function RoundAccordionItem({
     getStatusBadge, 
     formatDate, 
     formatTime, 
-    user 
+    user,
+    allMembers = [] // All members of the dealer
 }) {
     const { toast } = useToast()
     const [isExpanded, setIsExpanded] = useState(false)
@@ -62,6 +63,8 @@ export default function RoundAccordionItem({
     const [inlineBetTypeFilter, setInlineBetTypeFilter] = useState('all')
     const [isGrouped, setIsGrouped] = useState(true)
     const [inlineSearch, setInlineSearch] = useState('')
+    // Member filter: 'all' = all members, 'submitted' = only members who submitted
+    const [memberFilterMode, setMemberFilterMode] = useState('submitted')
 
     // Inline excess transfer states
     const [selectedExcessItems, setSelectedExcessItems] = useState({})
@@ -930,12 +933,62 @@ export default function RoundAccordionItem({
                                 <>
                                     {inlineTab === 'total' && (
                                         <div className="inline-tab-content">
+                                            {/* Member filter buttons */}
+                                            <div className="member-filter-buttons" style={{
+                                                display: 'flex',
+                                                gap: '0.5rem',
+                                                marginBottom: '0.75rem'
+                                            }}>
+                                                <button
+                                                    className={`filter-btn ${memberFilterMode === 'all' ? 'active' : ''}`}
+                                                    onClick={() => { setMemberFilterMode('all'); setInlineUserFilter('all'); }}
+                                                    style={{
+                                                        padding: '0.4rem 0.75rem',
+                                                        borderRadius: '20px',
+                                                        border: memberFilterMode === 'all' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                                        background: memberFilterMode === 'all' ? 'var(--color-primary)' : 'transparent',
+                                                        color: memberFilterMode === 'all' ? '#000' : 'var(--color-text)',
+                                                        fontSize: '0.85rem',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s ease'
+                                                    }}
+                                                >
+                                                    สมาชิกทั้งหมด ({allMembers.length})
+                                                </button>
+                                                <button
+                                                    className={`filter-btn ${memberFilterMode === 'submitted' ? 'active' : ''}`}
+                                                    onClick={() => { setMemberFilterMode('submitted'); setInlineUserFilter('all'); }}
+                                                    style={{
+                                                        padding: '0.4rem 0.75rem',
+                                                        borderRadius: '20px',
+                                                        border: memberFilterMode === 'submitted' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                                        background: memberFilterMode === 'submitted' ? 'var(--color-primary)' : 'transparent',
+                                                        color: memberFilterMode === 'submitted' ? '#000' : 'var(--color-text)',
+                                                        fontSize: '0.85rem',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s ease'
+                                                    }}
+                                                >
+                                                    สมาชิกที่ส่งเลข ({[...new Set(inlineSubmissions.map(s => s.user_id))].length})
+                                                </button>
+                                            </div>
+
                                             <div className="inline-filters">
                                                 <select value={inlineUserFilter} onChange={(e) => setInlineUserFilter(e.target.value)} className="form-input">
                                                     <option value="all">ทุกคน</option>
-                                                    {[...new Set(inlineSubmissions.map(s => s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'))].map(name => (
-                                                        <option key={name} value={name}>{name}</option>
-                                                    ))}
+                                                    {memberFilterMode === 'all' ? (
+                                                        // Show all members
+                                                        allMembers.map(member => (
+                                                            <option key={member.id} value={member.full_name || member.email || 'ไม่ระบุ'}>
+                                                                {member.full_name || member.email || 'ไม่ระบุ'}
+                                                            </option>
+                                                        ))
+                                                    ) : (
+                                                        // Show only members who submitted
+                                                        [...new Set(inlineSubmissions.map(s => s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'))].map(name => (
+                                                            <option key={name} value={name}>{name}</option>
+                                                        ))
+                                                    )}
                                                 </select>
                                             </div>
 

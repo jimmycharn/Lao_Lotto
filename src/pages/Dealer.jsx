@@ -807,6 +807,7 @@ export default function Dealer() {
                                                 formatDate={formatDate}
                                                 formatTime={formatTime}
                                                 user={user}
+                                                allMembers={members}
                                             />
                                         ))}
                                     </div>
