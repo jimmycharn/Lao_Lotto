@@ -2998,6 +2998,34 @@ function DealerInfoTab({ dealer, userSettings }) {
             '4_run': { commission: 15, payout: 20 },
             '5_run': { commission: 15, payout: 10 }
         },
+        hanoi: {
+            '4_set': { 
+                commission: 25, 
+                setPrice: 120,
+                isSet: true,
+                prizes: {
+                    '4_straight_set': 100000,
+                    '4_tod_set': 4000,
+                    '3_straight_set': 30000,
+                    '3_tod_set': 3000,
+                    '2_front_set': 1000,
+                    '2_back_set': 1000
+                }
+            },
+            'run_top': { commission: 15, payout: 3 },
+            'run_bottom': { commission: 15, payout: 4 },
+            'pak_top': { commission: 15, payout: 8 },
+            'pak_bottom': { commission: 15, payout: 6 },
+            '2_top': { commission: 15, payout: 65 },
+            '2_front': { commission: 15, payout: 65 },
+            '2_center': { commission: 15, payout: 65 },
+            '2_run': { commission: 15, payout: 10 },
+            '2_bottom': { commission: 15, payout: 65 },
+            '3_straight': { commission: 30, payout: 550 },
+            '3_tod_single': { commission: 15, payout: 100 },
+            '4_run': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 }
+        },
         stock: {
             '2_top': { commission: 15, payout: 65 },
             '2_bottom': { commission: 15, payout: 65 }
@@ -3037,6 +3065,22 @@ function DealerInfoTab({ dealer, userSettings }) {
             '4_run': '4 ตัวลอย',
             '5_run': '5 ตัวลอย'
         },
+        hanoi: {
+            '4_set': '4 ตัวชุด',
+            'run_top': 'ลอยบน',
+            'run_bottom': 'ลอยล่าง',
+            'pak_top': 'ปักบน',
+            'pak_bottom': 'ปักล่าง',
+            '2_top': '2 ตัวบน',
+            '2_front': '2 ตัวหน้า',
+            '2_center': '2 ตัวถ่าง',
+            '2_run': '2 ตัวลอย',
+            '2_bottom': '2 ตัวล่าง',
+            '3_straight': '3 ตัวตรง',
+            '3_tod_single': '3 ตัวโต๊ด',
+            '4_run': '4 ตัวลอย',
+            '5_run': '5 ตัวลอย'
+        },
         stock: {
             '2_top': '2 ตัวบน',
             '2_bottom': '2 ตัวล่าง'
@@ -3054,7 +3098,8 @@ function DealerInfoTab({ dealer, userSettings }) {
 
     const LOTTERY_TABS = [
         { key: 'thai', label: 'หวยไทย' },
-        { key: 'lao', label: 'หวยลาว/ฮานอย' },
+        { key: 'lao', label: 'หวยลาว' },
+        { key: 'hanoi', label: 'หวยฮานอย' },
         { key: 'stock', label: 'หวยหุ้น' }
     ]
 
@@ -3181,16 +3226,16 @@ function DealerInfoTab({ dealer, userSettings }) {
                             ))}
                         </div>
 
-                        {/* 4 ตัวชุด Section for Lao/Hanoi */}
-                        {ratesTab === 'lao' && settings.lao?.['4_set'] && (
+                        {/* 4 ตัวชุด Section for Lao or Hanoi */}
+                        {(ratesTab === 'lao' || ratesTab === 'hanoi') && settings[ratesTab]?.['4_set'] && (
                             <div className="set-rates-section" style={{ marginBottom: '1.5rem' }}>
                                 <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-primary)', fontSize: '1rem' }}>
-                                    4 ตัวชุด (ราคาชุดละ {settings.lao['4_set'].setPrice || 120} บาท)
+                                    4 ตัวชุด (ราคาชุดละ {settings[ratesTab]['4_set'].setPrice || 120} บาท)
                                 </h4>
                                 <div className="info-row" style={{ marginBottom: '0.75rem' }}>
                                     <span className="info-label">ค่าคอม:</span>
                                     <span className="info-value" style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
-                                        {settings.lao['4_set'].commission} ฿/ชุด
+                                        {settings[ratesTab]['4_set'].commission} ฿/ชุด
                                     </span>
                                 </div>
                                 <table className="rates-table">
@@ -3201,7 +3246,7 @@ function DealerInfoTab({ dealer, userSettings }) {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {Object.entries(settings.lao['4_set'].prizes || {}).map(([prizeKey, prizeAmount]) => (
+                                        {Object.entries(settings[ratesTab]['4_set'].prizes || {}).map(([prizeKey, prizeAmount]) => (
                                             <tr key={prizeKey}>
                                                 <td className="type-cell">{SET_PRIZE_LABELS[prizeKey] || prizeKey}</td>
                                                 <td className="rate-cell">
