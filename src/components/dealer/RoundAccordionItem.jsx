@@ -15,7 +15,8 @@ import {
     FiSend,
     FiRotateCcw,
     FiSearch,
-    FiCopy
+    FiCopy,
+    FiFileText
 } from 'react-icons/fi'
 import {
     LOTTERY_TYPES,
@@ -28,6 +29,7 @@ import {
     getDefaultLimitsForType,
     getLotteryTypeKey
 } from '../../constants/lotteryTypes'
+import WriteSubmissionModal from './WriteSubmissionModal'
 
 export default function RoundAccordionItem({ 
     round, 
@@ -65,6 +67,10 @@ export default function RoundAccordionItem({
     const [inlineSearch, setInlineSearch] = useState('')
     // Member filter: 'all' = all members, 'submitted' = only members who submitted
     const [memberFilterMode, setMemberFilterMode] = useState('submitted')
+
+    // Write bet on behalf of user states
+    const [showWriteBetModal, setShowWriteBetModal] = useState(false)
+    const [selectedMemberForBet, setSelectedMemberForBet] = useState(null)
 
     // Inline excess transfer states
     const [selectedExcessItems, setSelectedExcessItems] = useState({})
@@ -221,7 +227,7 @@ export default function RoundAccordionItem({
             const [subsResult, typeLimitsResult, numLimitsResult, transfersResult] = await Promise.all([
                 supabase
                     .from('submissions')
-                    .select(`*, profiles (full_name, email)`)
+                    .select(`*, profiles:user_id (full_name, email)`)
                     .eq('round_id', round.id)
                     .eq('is_deleted', false)
                     .order('created_at', { ascending: false }),
@@ -242,6 +248,7 @@ export default function RoundAccordionItem({
             
             clearTimeout(timeoutId)
             
+            console.log('Fetched submissions:', subsResult.data, 'Error:', subsResult.error)
             setInlineSubmissions(subsResult.data || [])
 
             const defaultLimits = getDefaultLimitsForType(round.lottery_type)
@@ -267,6 +274,19 @@ export default function RoundAccordionItem({
             fetchInlineSubmissions()
         } else {
             setIsExpanded(false)
+        }
+    }
+
+    // Open write bet modal for selected member
+    const handleOpenWriteBet = () => {
+        // Find the member object from allMembers based on selected name
+        const memberName = inlineUserFilter
+        const member = allMembers.find(m => 
+            (m.full_name || m.email || 'ไม่ระบุ') === memberName
+        )
+        if (member) {
+            setSelectedMemberForBet(member)
+            setShowWriteBetModal(true)
         }
     }
 
@@ -973,8 +993,8 @@ export default function RoundAccordionItem({
                                                 </button>
                                             </div>
 
-                                            <div className="inline-filters">
-                                                <select value={inlineUserFilter} onChange={(e) => setInlineUserFilter(e.target.value)} className="form-input">
+                                            <div className="inline-filters" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                                <select value={inlineUserFilter} onChange={(e) => setInlineUserFilter(e.target.value)} className="form-input" style={{ flex: 1 }}>
                                                     <option value="all">ทุกคน</option>
                                                     {memberFilterMode === 'all' ? (
                                                         // Show all members
@@ -990,6 +1010,21 @@ export default function RoundAccordionItem({
                                                         ))
                                                     )}
                                                 </select>
+                                                {/* Write bet button - only show when a specific member is selected and round is open */}
+                                                {inlineUserFilter !== 'all' && isOpen && (
+                                                    <button
+                                                        className="btn btn-primary btn-sm"
+                                                        onClick={handleOpenWriteBet}
+                                                        style={{
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '0.35rem',
+                                                            whiteSpace: 'nowrap'
+                                                        }}
+                                                    >
+                                                        <FiFileText /> เขียนโพย
+                                                    </button>
+                                                )}
                                             </div>
 
                                             <div className="inline-summary">
@@ -1562,6 +1597,20 @@ export default function RoundAccordionItem({
                         </div>
                     )}
                 </div>
+            )}
+
+            {/* Write Bet Modal - Uses WriteSubmissionModal component */}
+            {showWriteBetModal && selectedMemberForBet && (
+                <WriteSubmissionModal
+                    round={round}
+                    targetUser={selectedMemberForBet}
+                    dealerId={user.id}
+                    onClose={() => {
+                        setShowWriteBetModal(false)
+                        setSelectedMemberForBet(null)
+                    }}
+                    onSuccess={() => fetchInlineSubmissions(true)}
+                />
             )}
         </div>
     )
