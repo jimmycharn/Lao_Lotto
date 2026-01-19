@@ -515,15 +515,32 @@ export default function Dealer() {
     }
 
     async function handleDeleteMember(member) {
+        console.log('handleDeleteMember called:', member)
+        console.log('membership_id:', member.membership_id)
+        
+        if (!member.membership_id) {
+            toast.error('ไม่พบ membership_id')
+            return
+        }
+        
         if (!confirm(`ต้องการลบ "${member.full_name || member.email}" ออกจากรายชื่อสมาชิกหรือไม่?\n\nการลบจะยกเลิกการเป็นสมาชิกของเจ้ามือนี้`)) return
 
         try {
-            const { error } = await supabase
+            const { data, error, count } = await supabase
                 .from('user_dealer_memberships')
                 .delete()
                 .eq('id', member.membership_id)
+                .select()
+
+            console.log('Delete response:', { data, error, count })
 
             if (error) throw error
+            
+            if (!data || data.length === 0) {
+                toast.error('ไม่สามารถลบได้ - อาจไม่มีสิทธิ์หรือไม่พบข้อมูล')
+                return
+            }
+            
             toast.success('ลบสมาชิกสำเร็จ')
             fetchData()
         } catch (error) {

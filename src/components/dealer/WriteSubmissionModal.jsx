@@ -214,35 +214,27 @@ export default function WriteSubmissionModal({
                 })
             }
         } else if (betType === '4_set') {
-            const setPrice = round.set_prices?.['4_top'] || 120
-            const numSets = Math.max(1, Math.floor(totalAmount / setPrice))
+            // 4 ตัวชุด for Lao/Hanoi - same logic as UserDashboard
+            // Get set price from user_settings (targetUser's settings), fallback to round.set_prices, then default 120
+            const lotteryKey = round.lottery_type === 'lao' ? 'lao' : round.lottery_type === 'hanoi' ? 'hanoi' : 'thai'
+            const userSetPrice = userSettings?.lottery_settings?.[lotteryKey]?.['4_set']?.setPrice
+            const setPrice = userSetPrice || round.set_prices?.['4_top'] || 120
+            
+            // amount field = number of sets (default: 1 if empty)
+            // Use submitForm.amount directly as set count, not totalAmount
+            const setCount = parseInt(submitForm.amount) || 1
+            const finalAmount = setCount * setPrice
             const commInfo = getCommissionForBetType('4_top')
 
-            // 4 ตัวบน
             newDrafts.push({
                 entry_id: entryId,
-                bet_type: '4_top',
+                bet_type: '4_set',
                 numbers: cleanNumbers,
-                amount: numSets * setPrice,
+                amount: finalAmount,
                 commission_rate: commInfo.rate,
-                commission_amount: commInfo.isFixed ? commInfo.rate : (numSets * setPrice * commInfo.rate) / 100,
+                commission_amount: setCount * commInfo.rate,
                 display_numbers: cleanNumbers,
-                display_amount: `${numSets} ชุด`,
-                display_bet_type: '4 ตัวชุด',
-                created_at: timestamp
-            })
-
-            // 4 ตัวโต๊ด
-            const commInfoTod = getCommissionForBetType('4_tod')
-            newDrafts.push({
-                entry_id: entryId,
-                bet_type: '4_tod',
-                numbers: cleanNumbers.split('').sort().join(''),
-                amount: numSets * setPrice,
-                commission_rate: commInfoTod.rate,
-                commission_amount: commInfoTod.isFixed ? commInfoTod.rate : (numSets * setPrice * commInfoTod.rate) / 100,
-                display_numbers: cleanNumbers,
-                display_amount: `${numSets} ชุด`,
+                display_amount: `${finalAmount} บาท (${setCount} ชุด)`,
                 display_bet_type: '4 ตัวชุด',
                 created_at: timestamp
             })
