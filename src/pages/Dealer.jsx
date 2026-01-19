@@ -90,6 +90,8 @@ export default function Dealer() {
     const [roundsTab, setRoundsTab] = useState('open') // 'open' | 'closed'
     const [upstreamDealers, setUpstreamDealers] = useState([])
     const [loadingUpstream, setLoadingUpstream] = useState(false)
+    const [downstreamDealers, setDownstreamDealers] = useState([]) // Dealers who send bets TO us
+    const [memberTypeFilter, setMemberTypeFilter] = useState('all') // 'all' | 'member' | 'dealer'
 
     // Read tab from URL params
     useEffect(() => {
@@ -294,6 +296,42 @@ export default function Dealer() {
 
             setDealerBankAccounts(bankAccountsData || [])
 
+            // Fetch downstream dealers (dealers who send bets TO us)
+            try {
+                const { data: downstreamData, error: downstreamError } = await supabase
+                    .from('dealer_upstream_connections')
+                    .select(`
+                        *,
+                        dealer_profile:dealer_id (
+                            id, full_name, email, phone, created_at
+                        )
+                    `)
+                    .eq('upstream_dealer_id', user.id)
+                    .order('created_at', { ascending: false })
+
+                if (!downstreamError && downstreamData) {
+                    // Transform to match member structure
+                    const transformedDownstream = downstreamData.map(d => ({
+                        id: d.dealer_profile?.id,
+                        email: d.dealer_profile?.email,
+                        full_name: d.dealer_profile?.full_name || d.upstream_name,
+                        phone: d.dealer_profile?.phone,
+                        created_at: d.dealer_profile?.created_at,
+                        membership_id: d.id,
+                        membership_status: d.is_blocked ? 'blocked' : 'active',
+                        membership_created_at: d.created_at,
+                        is_dealer: true,
+                        is_linked: d.is_linked,
+                        lottery_settings: d.lottery_settings,
+                        connection_id: d.id
+                    }))
+                    setDownstreamDealers(transformedDownstream)
+                }
+            } catch (downstreamErr) {
+                console.log('Downstream dealers fetch error:', downstreamErr)
+                setDownstreamDealers([])
+            }
+
         } catch (error) {
             console.error('Error:', error)
         } finally {
@@ -364,6 +402,36 @@ export default function Dealer() {
         } catch (error) {
             console.error('Error unblocking member:', error)
             toast.error('เกิดข้อผิดพลาดในการปลดบล็อคสมาชิก')
+        }
+    }
+
+    // Block/Unblock downstream dealer (dealer who sends bets to us)
+    async function handleBlockDownstreamDealer(dealer) {
+        const newBlockedState = dealer.membership_status !== 'blocked'
+        if (newBlockedState && !confirm(`ต้องการบล็อค "${dealer.full_name || dealer.email}" หรือไม่?\nเจ้ามือนี้จะไม่สามารถตีเลขมาให้คุณได้`)) return
+
+        try {
+            const { error } = await supabase
+                .from('dealer_upstream_connections')
+                .update({ 
+                    is_blocked: newBlockedState,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', dealer.connection_id)
+
+            if (error) throw error
+            
+            // Update local state
+            setDownstreamDealers(prev => prev.map(d => 
+                d.connection_id === dealer.connection_id 
+                    ? { ...d, membership_status: newBlockedState ? 'blocked' : 'active' } 
+                    : d
+            ))
+            
+            toast.success(newBlockedState ? 'บล็อคเจ้ามือสำเร็จ' : 'ปลดบล็อคเจ้ามือสำเร็จ')
+        } catch (error) {
+            console.error('Error blocking downstream dealer:', error)
+            toast.error('เกิดข้อผิดพลาด')
         }
     }
 
@@ -656,7 +724,7 @@ export default function Dealer() {
                         className={`tab-btn ${activeTab === 'members' ? 'active' : ''}`}
                         onClick={() => setActiveTab('members')}
                     >
-                        <FiUsers /> สมาชิก ({members.length})
+                        <FiUsers /> สมาชิก ({members.length + downstreamDealers.filter(d => d.membership_status === 'active').length})
                     </button>
                     <button
                         className={`tab-btn ${activeTab === 'upstreamDealers' ? 'active' : ''}`}
@@ -828,75 +896,159 @@ export default function Dealer() {
                                 </div>
                             )}
 
-                            {/* Members List - Accordion Style */}
-                            <div className="section-header">
-                                <h2>สมาชิกที่อนุมัติแล้ว</h2>
-                                <span className="badge">{members.length} คน</span>
+                            {/* Member Type Filter */}
+                            <div className="member-type-filter" style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <button
+                                    className={`btn btn-sm ${memberTypeFilter === 'all' ? 'btn-primary' : 'btn-outline'}`}
+                                    onClick={() => setMemberTypeFilter('all')}
+                                >
+                                    ทั้งหมด ({members.length + downstreamDealers.filter(d => d.membership_status === 'active').length})
+                                </button>
+                                <button
+                                    className={`btn btn-sm ${memberTypeFilter === 'member' ? 'btn-primary' : 'btn-outline'}`}
+                                    onClick={() => setMemberTypeFilter('member')}
+                                >
+                                    <FiUser /> สมาชิกทั่วไป ({members.length})
+                                </button>
+                                <button
+                                    className={`btn btn-sm ${memberTypeFilter === 'dealer' ? 'btn-primary' : 'btn-outline'}`}
+                                    onClick={() => setMemberTypeFilter('dealer')}
+                                >
+                                    <FiSend /> เจ้ามือตีเข้า ({downstreamDealers.filter(d => d.membership_status === 'active').length})
+                                </button>
                             </div>
 
-                            {members.length === 0 && pendingMembers.length === 0 ? (
-                                <div className="empty-state card">
-                                    <FiUsers className="empty-icon" />
-                                    <h3>ยังไม่มีสมาชิก</h3>
-                                    <p>ส่งลิงก์ด้านบนให้คนที่ต้องการเข้าร่วม</p>
-                                </div>
-                            ) : members.length === 0 ? (
-                                <div className="empty-state card" style={{ padding: '1.5rem' }}>
-                                    <p style={{ opacity: 0.7 }}>ยังไม่มีสมาชิกที่อนุมัติแล้ว</p>
-                                </div>
-                            ) : (
-                                <div className="members-accordion-list">
-                                    {members.map(member => (
-                                        <MemberAccordionItem
-                                            key={member.id}
-                                            member={member}
-                                            formatDate={formatDate}
-                                            isExpanded={expandedMemberId === member.id}
-                                            onToggle={() => setExpandedMemberId(expandedMemberId === member.id ? null : member.id)}
-                                            onBlock={() => handleBlockMember(member)}
-                                            dealerBankAccounts={dealerBankAccounts}
-                                            onUpdateBank={(bankAccountId) => handleUpdateMemberBank(member, bankAccountId)}
-                                        />
-                                    ))}
-                                </div>
-                            )}
+                            {/* Members List - Accordion Style */}
+                            <div className="section-header">
+                                <h2>
+                                    {memberTypeFilter === 'all' ? 'สมาชิกทั้งหมด' : 
+                                     memberTypeFilter === 'member' ? 'สมาชิกทั่วไป' : 'เจ้ามือที่ตีเลขเข้ามา'}
+                                </h2>
+                                <span className="badge">
+                                    {memberTypeFilter === 'all' 
+                                        ? members.length + downstreamDealers.filter(d => d.membership_status === 'active').length
+                                        : memberTypeFilter === 'member' 
+                                            ? members.length 
+                                            : downstreamDealers.filter(d => d.membership_status === 'active').length} คน
+                                </span>
+                            </div>
 
-                            {/* Blocked Members Section */}
-                            {blockedMembers.length > 0 && (
-                                <div className="blocked-members-section" style={{ marginTop: '1.5rem' }}>
-                                    <div className="section-header" style={{ marginBottom: '0.75rem' }}>
-                                        <h3 style={{ fontSize: '1rem', color: 'var(--color-error)' }}>
-                                            <FiLock /> สมาชิกที่บล็อค
-                                        </h3>
-                                        <span className="badge" style={{ background: 'var(--color-error)' }}>
-                                            {blockedMembers.length} คน
-                                        </span>
-                                    </div>
-                                    <div className="blocked-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                        {blockedMembers.map(member => (
-                                            <div key={member.id} className="blocked-member-item card" style={{
-                                                padding: '0.75rem 1rem',
-                                                display: 'flex',
-                                                justifyContent: 'space-between',
-                                                alignItems: 'center',
-                                                opacity: 0.7
-                                            }}>
-                                                <div className="member-info">
-                                                    <div style={{ fontWeight: 500 }}>{member.full_name || 'ไม่มีชื่อ'}</div>
-                                                    <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{member.email}</div>
-                                                </div>
-                                                <button
-                                                    className="btn btn-outline btn-sm"
-                                                    onClick={() => handleUnblockMember(member)}
-                                                    style={{ padding: '0.35rem 0.75rem' }}
-                                                >
-                                                    ปลดบล็อค
-                                                </button>
-                                            </div>
+                            {(() => {
+                                const activeDownstreamDealers = downstreamDealers.filter(d => d.membership_status === 'active')
+                                const filteredMembers = memberTypeFilter === 'all' 
+                                    ? [...members.map(m => ({ ...m, is_dealer: false })), ...activeDownstreamDealers]
+                                    : memberTypeFilter === 'member' 
+                                        ? members.map(m => ({ ...m, is_dealer: false }))
+                                        : activeDownstreamDealers
+                                
+                                if (filteredMembers.length === 0 && pendingMembers.length === 0) {
+                                    return (
+                                        <div className="empty-state card">
+                                            <FiUsers className="empty-icon" />
+                                            <h3>ยังไม่มีสมาชิก</h3>
+                                            <p>ส่งลิงก์ด้านบนให้คนที่ต้องการเข้าร่วม</p>
+                                        </div>
+                                    )
+                                }
+                                
+                                if (filteredMembers.length === 0) {
+                                    return (
+                                        <div className="empty-state card" style={{ padding: '1.5rem' }}>
+                                            <p style={{ opacity: 0.7 }}>
+                                                {memberTypeFilter === 'dealer' 
+                                                    ? 'ยังไม่มีเจ้ามือที่ตีเลขเข้ามา' 
+                                                    : 'ยังไม่มีสมาชิกที่อนุมัติแล้ว'}
+                                            </p>
+                                        </div>
+                                    )
+                                }
+                                
+                                return (
+                                    <div className="members-accordion-list">
+                                        {filteredMembers.map(member => (
+                                            <MemberAccordionItem
+                                                key={member.is_dealer ? `dealer-${member.id}` : member.id}
+                                                member={member}
+                                                formatDate={formatDate}
+                                                isExpanded={expandedMemberId === (member.is_dealer ? `dealer-${member.id}` : member.id)}
+                                                onToggle={() => setExpandedMemberId(
+                                                    expandedMemberId === (member.is_dealer ? `dealer-${member.id}` : member.id) 
+                                                        ? null 
+                                                        : (member.is_dealer ? `dealer-${member.id}` : member.id)
+                                                )}
+                                                onBlock={() => member.is_dealer ? handleBlockDownstreamDealer(member) : handleBlockMember(member)}
+                                                dealerBankAccounts={dealerBankAccounts}
+                                                onUpdateBank={(bankAccountId) => handleUpdateMemberBank(member, bankAccountId)}
+                                                isDealer={member.is_dealer}
+                                            />
                                         ))}
                                     </div>
-                                </div>
-                            )}
+                                )
+                            })()}
+
+                            {/* Blocked Members Section */}
+                            {(() => {
+                                const blockedDownstreamDealers = downstreamDealers.filter(d => d.membership_status === 'blocked')
+                                const allBlocked = [
+                                    ...blockedMembers.map(m => ({ ...m, is_dealer: false })),
+                                    ...blockedDownstreamDealers
+                                ]
+                                
+                                if (allBlocked.length === 0) return null
+                                
+                                return (
+                                    <div className="blocked-members-section" style={{ marginTop: '1.5rem' }}>
+                                        <div className="section-header" style={{ marginBottom: '0.75rem' }}>
+                                            <h3 style={{ fontSize: '1rem', color: 'var(--color-error)' }}>
+                                                <FiLock /> บล็อคแล้ว
+                                            </h3>
+                                            <span className="badge" style={{ background: 'var(--color-error)' }}>
+                                                {allBlocked.length} คน
+                                            </span>
+                                        </div>
+                                        <div className="blocked-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                            {allBlocked.map(member => (
+                                                <div key={member.is_dealer ? `dealer-${member.id}` : member.id} className="blocked-member-item card" style={{
+                                                    padding: '0.75rem 1rem',
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    opacity: 0.7,
+                                                    border: member.is_dealer ? '1px solid var(--color-info)' : undefined
+                                                }}>
+                                                    <div className="member-info" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                        <div>
+                                                            <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                {member.full_name || 'ไม่มีชื่อ'}
+                                                                {member.is_dealer && (
+                                                                    <span style={{
+                                                                        background: 'var(--color-info)',
+                                                                        color: '#fff',
+                                                                        padding: '0.1rem 0.4rem',
+                                                                        borderRadius: '4px',
+                                                                        fontSize: '0.65rem',
+                                                                        fontWeight: '600'
+                                                                    }}>
+                                                                        เจ้ามือ
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{member.email}</div>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        className="btn btn-outline btn-sm"
+                                                        onClick={() => member.is_dealer ? handleBlockDownstreamDealer(member) : handleUnblockMember(member)}
+                                                        style={{ padding: '0.35rem 0.75rem' }}
+                                                    >
+                                                        ปลดบล็อค
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )
+                            })()}
                         </div>
                     )}
 
@@ -3199,7 +3351,7 @@ function DealerProfileTab({ user, profile, subscription, formatDate }) {
 }
 
 // Member Accordion Item Component
-function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock, dealerBankAccounts = [], onUpdateBank }) {
+function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock, dealerBankAccounts = [], onUpdateBank, isDealer = false }) {
     const [activeTab, setActiveTab] = useState('info') // 'info' | 'settings'
 
     return (
@@ -3207,7 +3359,7 @@ function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock
             background: 'var(--color-surface)',
             borderRadius: 'var(--radius-lg)',
             marginBottom: '1rem',
-            border: '1px solid var(--color-border)',
+            border: isDealer ? '2px solid var(--color-info)' : '1px solid var(--color-border)',
             overflow: 'hidden',
             transition: 'all 0.3s ease'
         }}>
@@ -3230,20 +3382,34 @@ function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock
                         width: '40px',
                         height: '40px',
                         borderRadius: '50%',
-                        background: 'var(--color-primary)',
-                        color: '#000',
+                        background: isDealer ? 'var(--color-info)' : 'var(--color-primary)',
+                        color: '#fff',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontSize: '1.2rem',
                         fontWeight: 'bold'
                     }}>
-                        {member.full_name ? member.full_name.charAt(0).toUpperCase() : <FiUsers />}
+                        {isDealer ? <FiSend /> : (member.full_name ? member.full_name.charAt(0).toUpperCase() : <FiUsers />)}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span className="member-name" style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '1.1rem' }}>
-                            {member.full_name || 'ไม่ระบุชื่อ'}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span className="member-name" style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '1.1rem' }}>
+                                {member.full_name || 'ไม่ระบุชื่อ'}
+                            </span>
+                            {isDealer && (
+                                <span style={{
+                                    background: 'var(--color-info)',
+                                    color: '#fff',
+                                    padding: '0.15rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: '600'
+                                }}>
+                                    เจ้ามือ
+                                </span>
+                            )}
+                        </div>
                         <span className="member-email" style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
                             {member.email}
                         </span>
