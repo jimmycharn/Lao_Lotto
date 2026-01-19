@@ -22,7 +22,8 @@ import {
     FiEdit2,
     FiSave,
     FiSearch,
-    FiCopy
+    FiCopy,
+    FiClipboard
 } from 'react-icons/fi'
 import './UserDashboard.css'
 import './ViewToggle.css'
@@ -80,6 +81,8 @@ export default function UserDashboard() {
     const [isDraftsExpanded, setIsDraftsExpanded] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
     const [filterBetType, setFilterBetType] = useState('') // Filter by bet type
+    const [showPasteModal, setShowPasteModal] = useState(false)
+    const [pasteText, setPasteText] = useState('')
     const numberInputRef = useRef(null)
     const amountInputRef = useRef(null)
 
@@ -754,6 +757,83 @@ export default function UserDashboard() {
                 numberInputRef.current.select()
                 numberInputRef.current.setSelectionRange(0, 9999)
             }, 10)
+        }
+    }
+
+    // Parse pasted text and add 4-digit numbers as 4_set drafts (for Lao/Hanoi)
+    function handlePasteNumbers() {
+        if (!pasteText.trim()) {
+            toast.warning('กรุณาวางข้อมูลก่อน')
+            return
+        }
+
+        const isLaoOrHanoi = ['lao', 'hanoi'].includes(selectedRound?.lottery_type)
+        if (!isLaoOrHanoi) {
+            toast.warning('ฟีเจอร์นี้ใช้ได้เฉพาะหวยลาว และ หวยฮานอย')
+            return
+        }
+
+        // Get set price from round settings or user settings
+        const lotteryKey = selectedRound.lottery_type
+        const userSetPrice = userSettings?.lottery_settings?.[lotteryKey]?.['4_set']?.setPrice
+        const setPrice = userSetPrice || selectedRound?.set_prices?.['4_top'] || 120
+
+        // Get commission info
+        const getCommissionForBetType = (betType) => {
+            const lotterySettings = userSettings?.lottery_settings?.[lotteryKey]
+            if (lotterySettings && lotterySettings[betType]) {
+                return { rate: lotterySettings[betType].commission || 0, isFixed: true }
+            }
+            return { rate: 0, isFixed: true }
+        }
+
+        const lines = pasteText.split('\n')
+        const newDrafts = []
+        const timestamp = new Date().toISOString()
+        let addedCount = 0
+
+        lines.forEach(line => {
+            // Find all 4-digit sequences in the line
+            const matches = line.match(/\d{4}/g)
+            if (matches) {
+                matches.forEach(numbers => {
+                    const entryId = generateUUID()
+                    const commInfo = getCommissionForBetType('4_top')
+                    
+                    newDrafts.push({
+                        entry_id: entryId,
+                        round_id: selectedRound.id,
+                        user_id: profile.id,
+                        bill_id: currentBillId || generateUUID(),
+                        bet_type: '4_set',
+                        numbers: numbers,
+                        amount: setPrice, // 1 set = setPrice
+                        commission_rate: commInfo.rate,
+                        commission_amount: commInfo.rate,
+                        display_numbers: numbers,
+                        display_amount: `${setPrice} บาท (1 ชุด)`,
+                        display_bet_type: '4 ตัวชุด',
+                        created_at: timestamp,
+                        original_count: 1
+                    })
+                    addedCount++
+                })
+            }
+        })
+
+        if (newDrafts.length > 0) {
+            // Generate bill ID if not exists
+            if (!currentBillId) {
+                const shortId = 'B-' + Math.random().toString(36).substring(2, 8).toUpperCase()
+                setCurrentBillId(shortId)
+            }
+            
+            setDrafts(prev => [...prev, ...newDrafts])
+            setShowPasteModal(false)
+            setPasteText('')
+            toast.success(`เพิ่ม ${addedCount} รายการสำเร็จ`)
+        } else {
+            toast.warning('ไม่พบเลข 4 ตัวในข้อความ')
         }
     }
 
@@ -1969,7 +2049,8 @@ export default function UserDashboard() {
                                                                                                 </div>
                                                                                             </div>
 
-                                                                                            {/* Bill Items - Always visible */}
+                                                                                            {/* Bill Items - Collapsible */}
+                                                                                            {isExpandedBill && (
                                                                                             <div className="bill-items-list">
                                                                                                 {processedBillItems.map(sub => (
                                                                                                     <div
@@ -1991,9 +2072,10 @@ export default function UserDashboard() {
                                                                                                     </div>
                                                                                                 ))}
                                                                                             </div>
+                                                                                            )}
 
                                                                                             {/* Bill Actions - For editing/deleting */}
-                                                                                            {canSubmit() && billId !== 'no-bill' && (
+                                                                                            {isExpandedBill && canSubmit() && billId !== 'no-bill' && (
                                                                                                 <div className="bill-card-actions">
                                                                                                     <button
                                                                                                         className="bill-action-btn edit"
@@ -2391,6 +2473,24 @@ export default function UserDashboard() {
                             </div>
 
                             <div className="input-section card">
+                                {/* Paste button for Lao/Hanoi */}
+                                {['lao', 'hanoi'].includes(selectedRound?.lottery_type) && (
+                                    <div style={{ marginBottom: '1rem' }}>
+                                        <button
+                                            type="button"
+                                            className="btn btn-outline btn-sm"
+                                            onClick={(e) => {
+                                                e.preventDefault()
+                                                e.stopPropagation()
+                                                console.log('Paste button clicked, setting showPasteModal to true')
+                                                setShowPasteModal(true)
+                                            }}
+                                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                                        >
+                                            <FiClipboard /> วางเลข
+                                        </button>
+                                    </div>
+                                )}
 
                                 <div className="form-row form-row-inline">
                                     <div className="form-group">
@@ -2402,10 +2502,25 @@ export default function UserDashboard() {
                                             inputMode="decimal"
                                             placeholder="ป้อนตัวเลข"
                                             value={submitForm.numbers}
-                                            onChange={e => setSubmitForm({
-                                                ...submitForm,
-                                                numbers: e.target.value.replace(/[ \-.,]/g, '*').replace(/[^\d*]/g, '')
-                                            })}
+                                            onChange={e => {
+                                                const newNumbers = e.target.value.replace(/[ \-.,]/g, '*').replace(/[^\d*]/g, '')
+                                                const digitsOnly = newNumbers.replace(/\*/g, '')
+                                                const isLaoOrHanoi = ['lao', 'hanoi'].includes(selectedRound?.lottery_type)
+                                                
+                                                // For Lao/Hanoi: clear amount when entering 4+ digits
+                                                if (isLaoOrHanoi && digitsOnly.length >= 4) {
+                                                    setSubmitForm({
+                                                        ...submitForm,
+                                                        numbers: newNumbers,
+                                                        amount: ''
+                                                    })
+                                                } else {
+                                                    setSubmitForm({
+                                                        ...submitForm,
+                                                        numbers: newNumbers
+                                                    })
+                                                }
+                                            }}
                                             onKeyDown={e => {
                                                 if (e.key === 'Enter') {
                                                     e.preventDefault()
@@ -2600,7 +2715,7 @@ export default function UserDashboard() {
                             {/* Drafts List */}
                             <div className="drafts-section card">
                                 <div className="section-header">
-                                    <h4>รายการที่เลือก ({drafts.length})</h4>
+                                    <h4>รายการที่เลือก ({Object.keys(drafts.reduce((acc, d) => { acc[d.entry_id || d.id || Math.random()] = true; return acc }, {})).length})</h4>
                                     <div className="section-header-actions">
                                         {drafts.length > 0 && (
                                             <button className="text-btn danger" onClick={() => setDrafts([])}>
@@ -2689,12 +2804,82 @@ export default function UserDashboard() {
                             </div>
                         </div>
 
-                        {/* Toast Notification */}
-                        {toast && (
-                            <div className={`toast-notification ${toast.type}`}>
-                                <FiCheck /> {toast.message}
-                            </div>
-                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Paste Numbers Modal - inside showSubmitModal scope */}
+            {showSubmitModal && showPasteModal && (
+                <div className="modal-overlay" onClick={() => setShowPasteModal(false)} style={{ zIndex: 1100 }}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px', zIndex: 1101 }}>
+                        <div className="modal-header">
+                            <h3><FiClipboard /> วางเลข 4 ตัวชุด</h3>
+                            <button className="modal-close" onClick={() => setShowPasteModal(false)}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <p style={{ marginBottom: '1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+                                วางข้อความที่มีเลข 4 ตัว ระบบจะค้นหาเลข 4 ตัวติดกันทั้งหมดและเพิ่มเป็นเลขชุด
+                            </p>
+                            <textarea
+                                className="form-input"
+                                rows={10}
+                                placeholder={"วางข้อความที่นี่...\nเช่น:\n1234\n2345\n3456=120\n4567 test"}
+                                value={pasteText}
+                                onChange={e => setPasteText(e.target.value)}
+                                style={{ 
+                                    width: '100%', 
+                                    resize: 'vertical',
+                                    fontFamily: 'monospace',
+                                    fontSize: '1rem'
+                                }}
+                                autoFocus
+                            />
+                            {pasteText && (
+                                <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'var(--color-surface-light)', borderRadius: 'var(--radius-md)' }}>
+                                    <strong style={{ fontSize: '0.85rem' }}>ตัวอย่างเลขที่พบ:</strong>
+                                    <div style={{ marginTop: '0.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                        {(() => {
+                                            const matches = pasteText.match(/\d{4}/g) || []
+                                            const unique = [...new Set(matches)]
+                                            return unique.slice(0, 20).map((num, i) => (
+                                                <span key={i} style={{ 
+                                                    padding: '0.25rem 0.5rem', 
+                                                    background: 'var(--color-primary)', 
+                                                    color: '#000',
+                                                    borderRadius: '4px',
+                                                    fontSize: '0.85rem',
+                                                    fontFamily: 'monospace'
+                                                }}>
+                                                    {num}
+                                                </span>
+                                            ))
+                                        })()}
+                                        {(pasteText.match(/\d{4}/g) || []).length > 20 && (
+                                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                                                +{(pasteText.match(/\d{4}/g) || []).length - 20} รายการ
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                        พบทั้งหมด {(pasteText.match(/\d{4}/g) || []).length} รายการ
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => { setShowPasteModal(false); setPasteText(''); }}>
+                                ยกเลิก
+                            </button>
+                            <button 
+                                className="btn btn-primary" 
+                                onClick={handlePasteNumbers}
+                                disabled={!pasteText.trim() || !(pasteText.match(/\d{4}/g))}
+                            >
+                                <FiPlus /> เพิ่ม {(pasteText.match(/\d{4}/g) || []).length} รายการ
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -3627,12 +3812,6 @@ function ProfileTab({ user, profile }) {
                 )}
             </div>
 
-            {/* Toast Notification */}
-            {toast && (
-                <div className={`toast-notification ${toast.type}`}>
-                    <FiCheck /> {toast.message}
-                </div>
-            )}
         </div>
     )
 }
