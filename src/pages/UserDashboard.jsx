@@ -397,7 +397,7 @@ export default function UserDashboard() {
             const LAO_BET_TYPE_MAP = {
                 '3_top': '3_straight',      // 3 ตัวตรง
                 '3_tod': '3_tod_single',    // 3 ตัวโต๊ด
-                '4_set': '4_top'            // 4 ตัวตรง (ชุด)
+                '4_top': '4_set'            // 4 ตัวตรง (ชุด) - stored as 4_set in settings
             }
             settingsKey = LAO_BET_TYPE_MAP[betType] || betType
         }
@@ -773,19 +773,16 @@ export default function UserDashboard() {
             return
         }
 
-        // Get set price from round settings or user settings
+        // Get set price from user_settings or round settings
         const lotteryKey = selectedRound.lottery_type
-        const userSetPrice = userSettings?.lottery_settings?.[lotteryKey]?.['4_set']?.setPrice
-        const setPrice = userSetPrice || selectedRound?.set_prices?.['4_top'] || 120
-
-        // Get commission info
-        const getCommissionForBetType = (betType) => {
-            const lotterySettings = userSettings?.lottery_settings?.[lotteryKey]
-            if (lotterySettings && lotterySettings[betType]) {
-                return { rate: lotterySettings[betType].commission || 0, isFixed: true }
-            }
-            return { rate: 0, isFixed: true }
-        }
+        const setSettings = userSettings?.lottery_settings?.[lotteryKey]?.['4_set']
+        const setPrice = setSettings?.setPrice || selectedRound?.set_prices?.['4_top'] || 120
+        
+        // Use same logic as normal 4_set input - getCommissionForBetType('4_set')
+        const commInfo = getCommissionForBetType('4_set', userSettings)
+        const commissionPerSet = commInfo.rate
+        
+        console.log('Paste numbers - commInfo:', commInfo, 'commissionPerSet:', commissionPerSet)
 
         const lines = pasteText.split('\n')
         const newDrafts = []
@@ -798,7 +795,6 @@ export default function UserDashboard() {
             if (matches) {
                 matches.forEach(numbers => {
                     const entryId = generateUUID()
-                    const commInfo = getCommissionForBetType('4_top')
                     
                     newDrafts.push({
                         entry_id: entryId,
@@ -808,8 +804,8 @@ export default function UserDashboard() {
                         bet_type: '4_set',
                         numbers: numbers,
                         amount: setPrice, // 1 set = setPrice
-                        commission_rate: commInfo.rate,
-                        commission_amount: commInfo.rate,
+                        commission_rate: commissionPerSet,
+                        commission_amount: commissionPerSet, // Fixed amount per set
                         display_numbers: numbers,
                         display_amount: `${setPrice} บาท (1 ชุด)`,
                         display_bet_type: '4 ตัวชุด',
@@ -2724,7 +2720,7 @@ export default function UserDashboard() {
                                         )}
                                     </div>
                                 </div>
-                                <div className="drafts-list">
+                                <div className="drafts-list" style={{ maxHeight: '300px', overflowY: 'auto' }}>
                                     {drafts.length === 0 ? (
                                         <div className="empty-draft">ยังไม่มีรายการ</div>
                                     ) : (
