@@ -51,6 +51,8 @@ export default function RoundAccordionItem({
     // Inline submissions view states
     const [viewMode, setViewMode] = useState('summary')
     const [inlineTab, setInlineTab] = useState('total')
+    // Tab for closed rounds: 'submissions' or 'results'
+    const [closedRoundTab, setClosedRoundTab] = useState('submissions')
     const [inlineSubmissions, setInlineSubmissions] = useState([])
     const [inlineTypeLimits, setInlineTypeLimits] = useState({})
     const [inlineNumberLimits, setInlineNumberLimits] = useState([])
@@ -255,14 +257,13 @@ export default function RoundAccordionItem({
         }
     }
 
-    const handleEyeClick = (e) => {
-        e.stopPropagation()
-        if (!isExpanded) setIsExpanded(true)
-        if (viewMode === 'submissions') {
-            setViewMode('summary')
-        } else {
-            setViewMode('submissions')
+    const handleHeaderClick = () => {
+        if (!isExpanded) {
+            setIsExpanded(true)
+            // Auto-load submissions when expanding
             fetchInlineSubmissions()
+        } else {
+            setIsExpanded(false)
         }
     }
 
@@ -733,7 +734,7 @@ export default function RoundAccordionItem({
 
     return (
         <div className={`round-accordion-item ${round.lottery_type} ${isExpanded ? 'expanded' : ''}`}>
-            <div className="round-accordion-header card" onClick={() => setIsExpanded(!isExpanded)}>
+            <div className="round-accordion-header card" onClick={handleHeaderClick} style={{ cursor: 'pointer' }}>
                 <div className="round-header-left">
                     <span className={`lottery-badge ${round.lottery_type}`}>{LOTTERY_TYPES[round.lottery_type]}</span>
                     {getStatusBadge(round)}
@@ -764,7 +765,6 @@ export default function RoundAccordionItem({
                 </div>
                 <div className="round-header-right">
                     <div className="round-actions">
-                        <button className={`icon-btn ${viewMode === 'submissions' ? 'active' : ''}`} onClick={handleEyeClick} title="ดูเลขที่ส่ง"><FiEye /></button>
                         <button className="icon-btn" onClick={(e) => { e.stopPropagation(); onEditRound(); }} title="แก้ไขงวด"><FiEdit2 /></button>
                         {round.status === 'open' && <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onCloseRound(); }} title="ปิดงวด"><FiLock /></button>}
                         <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onShowNumberLimits(); }} title="ตั้งค่าเลขอั้น"><FiAlertTriangle /></button>
@@ -778,60 +778,102 @@ export default function RoundAccordionItem({
 
             {isExpanded && (
                 <div className="round-accordion-content">
-                    {((round.status === 'closed' || new Date() > new Date(round.close_time)) && !isAnnounced) || isAnnounced ? (
-                        <div className="accordion-actions">
-                            {(round.status === 'closed' || new Date() > new Date(round.close_time)) && !isAnnounced && (
-                                <button className="btn btn-accent" onClick={onShowResults}><FiCheck /> ใส่ผลรางวัล</button>
-                            )}
-                            {isAnnounced && (
-                                <button className="btn btn-outline" onClick={onShowResults}><FiEdit2 /> แก้ไขผลรางวัล</button>
-                            )}
+                    {/* For CLOSED rounds (not open): Show tabs for submissions and results */}
+                    {!isOpen && (
+                        <div className="closed-round-tabs" style={{ 
+                            display: 'flex', 
+                            gap: '0.5rem', 
+                            marginBottom: '1rem',
+                            borderBottom: '1px solid var(--color-border)',
+                            paddingBottom: '0.5rem'
+                        }}>
+                            <button
+                                className={`btn btn-sm ${closedRoundTab === 'submissions' ? 'btn-primary' : 'btn-outline'}`}
+                                onClick={() => setClosedRoundTab('submissions')}
+                            >
+                                <FiEye /> เลขรับ/เลขตีออก
+                            </button>
+                            <button
+                                className={`btn btn-sm ${closedRoundTab === 'results' ? 'btn-primary' : 'btn-outline'}`}
+                                onClick={() => setClosedRoundTab('results')}
+                            >
+                                <FiCheck /> ผลรางวัล
+                            </button>
                         </div>
-                    ) : null}
-
-                    {isAnnounced && viewMode === 'summary' && (
-                        summaryData.loading ? (
-                            <div className="loading-state"><div className="spinner"></div></div>
-                        ) : (
-                            <>
-                                {userSummaries.length > 0 && (
-                                    <div className="user-summary-list" style={{ marginTop: '1rem' }}>
-                                        <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-text-muted)' }}>รายละเอียดแต่ละคน</h4>
-                                        {userSummaries.map(usr => {
-                                            const userNet = usr.totalWin + usr.totalCommission - usr.totalBet
-                                            const dealerNet = -userNet
-                                            return (
-                                                <div key={usr.userId} className={`user-summary-card ${dealerNet < 0 ? 'loser' : dealerNet > 0 ? 'winner' : ''}`}>
-                                                    <div className="user-summary-header">
-                                                        <div className="user-info">
-                                                            <span className="user-name">{usr.userName}</span>
-                                                            <span className="user-email">{usr.email}</span>
-                                                        </div>
-                                                        <div className={`net-amount ${dealerNet < 0 ? 'negative' : dealerNet > 0 ? 'positive' : ''}`}>
-                                                            {dealerNet > 0 ? '+' : ''}{round.currency_symbol}{dealerNet.toLocaleString()}
-                                                        </div>
-                                                    </div>
-                                                    <div className="user-summary-details">
-                                                        <div className="detail-item"><span className="detail-label">แทง</span><span className="detail-value">{usr.ticketCount} รายการ</span></div>
-                                                        <div className="detail-item"><span className="detail-label">ยอดแทง</span><span className="detail-value">{round.currency_symbol}{usr.totalBet.toLocaleString()}</span></div>
-                                                        <div className="detail-item"><span className="detail-label">ค่าคอม</span><span className="detail-value" style={{ color: 'var(--color-warning)' }}>{round.currency_symbol}{usr.totalCommission.toLocaleString()}</span></div>
-                                                        <div className="detail-item"><span className="detail-label">ถูก/ยอดได้</span><span className={`detail-value ${usr.totalWin > 0 ? 'text-success' : ''}`}>{usr.winCount > 0 ? `${usr.winCount}/${round.currency_symbol}${usr.totalWin.toLocaleString()}` : '-'}</span></div>
-                                                    </div>
-                                                    <div className="user-summary-footer">
-                                                        {dealerNet < 0 ? <span className="status-badge lost">ต้องจ่าย {round.currency_symbol}{Math.abs(dealerNet).toLocaleString()}</span>
-                                                            : dealerNet > 0 ? <span className="status-badge won">ต้องเก็บ {round.currency_symbol}{dealerNet.toLocaleString()}</span>
-                                                                : <span className="status-badge pending">เสมอ</span>}
-                                                    </div>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                )}
-                            </>
-                        )
                     )}
 
-                    {viewMode === 'submissions' && (
+                    {/* Results Tab Content for closed rounds */}
+                    {!isOpen && closedRoundTab === 'results' && (
+                        <div className="results-tab-content">
+                            {/* Action buttons for results */}
+                            <div className="accordion-actions" style={{ marginBottom: '1rem' }}>
+                                {!isAnnounced && (
+                                    <button className="btn btn-accent" onClick={onShowResults}><FiCheck /> ใส่ผลรางวัล</button>
+                                )}
+                                {isAnnounced && (
+                                    <button className="btn btn-outline" onClick={onShowResults}><FiEdit2 /> แก้ไขผลรางวัล</button>
+                                )}
+                            </div>
+
+                            {/* User summaries for announced rounds */}
+                            {isAnnounced && (
+                                summaryData.loading ? (
+                                    <div className="loading-state"><div className="spinner"></div></div>
+                                ) : (
+                                    <>
+                                        {userSummaries.length > 0 && (
+                                            <div className="user-summary-list">
+                                                <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-text-muted)' }}>รายละเอียดแต่ละคน</h4>
+                                                {userSummaries.map(usr => {
+                                                    const userNet = usr.totalWin + usr.totalCommission - usr.totalBet
+                                                    const dealerNet = -userNet
+                                                    return (
+                                                        <div key={usr.userId} className={`user-summary-card ${dealerNet < 0 ? 'loser' : dealerNet > 0 ? 'winner' : ''}`}>
+                                                            <div className="user-summary-header">
+                                                                <div className="user-info">
+                                                                    <span className="user-name">{usr.userName}</span>
+                                                                    <span className="user-email">{usr.email}</span>
+                                                                </div>
+                                                                <div className={`net-amount ${dealerNet < 0 ? 'negative' : dealerNet > 0 ? 'positive' : ''}`}>
+                                                                    {dealerNet > 0 ? '+' : ''}{round.currency_symbol}{dealerNet.toLocaleString()}
+                                                                </div>
+                                                            </div>
+                                                            <div className="user-summary-details">
+                                                                <div className="detail-item"><span className="detail-label">แทง</span><span className="detail-value">{usr.ticketCount} รายการ</span></div>
+                                                                <div className="detail-item"><span className="detail-label">ยอดแทง</span><span className="detail-value">{round.currency_symbol}{usr.totalBet.toLocaleString()}</span></div>
+                                                                <div className="detail-item"><span className="detail-label">ค่าคอม</span><span className="detail-value" style={{ color: 'var(--color-warning)' }}>{round.currency_symbol}{usr.totalCommission.toLocaleString()}</span></div>
+                                                                <div className="detail-item"><span className="detail-label">ถูก/ยอดได้</span><span className={`detail-value ${usr.totalWin > 0 ? 'text-success' : ''}`}>{usr.winCount > 0 ? `${usr.winCount}/${round.currency_symbol}${usr.totalWin.toLocaleString()}` : '-'}</span></div>
+                                                            </div>
+                                                            <div className="user-summary-footer">
+                                                                {dealerNet < 0 ? <span className="status-badge lost">ต้องจ่าย {round.currency_symbol}{Math.abs(dealerNet).toLocaleString()}</span>
+                                                                    : dealerNet > 0 ? <span className="status-badge won">ต้องเก็บ {round.currency_symbol}{dealerNet.toLocaleString()}</span>
+                                                                        : <span className="status-badge pending">เสมอ</span>}
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
+                                        {userSummaries.length === 0 && (
+                                            <div className="empty-state" style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                                                <p>ยังไม่มีข้อมูลผลรางวัล</p>
+                                            </div>
+                                        )}
+                                    </>
+                                )
+                            )}
+
+                            {/* Message for non-announced closed rounds */}
+                            {!isAnnounced && (
+                                <div className="empty-state" style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                                    <p>กรุณาใส่ผลรางวัลเพื่อดูสรุปผล</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Submissions Tab Content - for both open rounds and closed rounds with submissions tab */}
+                    {(isOpen || (!isOpen && closedRoundTab === 'submissions')) && (
                         <div className="inline-submissions-view">
                             <div className="inline-global-filters">
                                 <div className="search-input-wrapper">
