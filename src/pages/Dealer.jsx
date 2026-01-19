@@ -587,7 +587,14 @@ export default function Dealer() {
     // Redirect if not dealer or admin (after hooks)
     if (!profile) {
         return (
-            <div className="loading-screen">
+            <div className="loading-screen" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: '100vh',
+                width: '100%'
+            }}>
                 <div className="spinner"></div>
                 <p>กำลังโหลด...</p>
             </div>
@@ -878,11 +885,12 @@ export default function Dealer() {
                         return (
                             <div className="rounds-section">
                                 {/* Create Button */}
-                                <div className="section-header">
+                                <div className="section-header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '1rem' }}>
                                     <h2>งวดหวยทั้งหมด</h2>
                                     <button
                                         className="btn btn-primary"
                                         onClick={() => setShowCreateModal(true)}
+                                        style={{ width: '100%', justifyContent: 'center' }}
                                     >
                                         <FiPlus /> สร้างงวดใหม่
                                     </button>
@@ -1354,53 +1362,33 @@ export default function Dealer() {
                                     อัตราจ่ายจะใช้ตามที่ตั้งค่าให้แต่ละลูกค้า
                                 </p>
 
-                                {/* Global set price for 4-digit (Lao/Hanoi only) */}
-                                {(roundForm.lottery_type === 'lao' || roundForm.lottery_type === 'hanoi') && (
-                                    <div className="global-set-price" style={{
-                                        marginBottom: '1.5rem',
-                                        padding: '1rem',
-                                        background: 'rgba(212, 175, 55, 0.1)',
-                                        borderRadius: 'var(--radius-md)',
-                                        border: '1px solid rgba(212, 175, 55, 0.3)'
-                                    }}>
-                                        <div className="input-group" style={{ justifyContent: 'flex-start', gap: '0.75rem' }}>
-                                            <span style={{ fontWeight: 500, color: 'var(--color-primary)' }}>เลขชุด 4 ตัว</span>
-                                            <span className="input-prefix">ชุดละ</span>
-                                            <input
-                                                type="number"
-                                                className="form-input small"
-                                                value={roundForm.set_prices['4_top'] || 120}
-                                                onChange={e => {
-                                                    const newPrice = parseInt(e.target.value) || 0
-                                                    setRoundForm({
-                                                        ...roundForm,
-                                                        set_prices: {
-                                                            ...roundForm.set_prices,
-                                                            '4_top': newPrice,
-                                                            '4_tod': newPrice
-                                                        }
-                                                    })
-                                                }}
-                                            />
-                                            <span className="input-suffix">{roundForm.currency_name}</span>
-                                        </div>
-                                    </div>
-                                )}
-
                                 <div className="limits-grid">
                                     {Object.entries(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {}).map(([key, config]) => (
-                                        <div key={key} className="limit-row">
-                                            <span className="limit-label">
-                                                {config.label}
-                                                {config.isSet && <span className="set-badge">ชุด</span>}
-                                            </span>
-                                            <div className="limit-inputs">
-                                                {/* Limit input */}
-                                                <div className="input-group">
-                                                    <span className="input-prefix">อั้น</span>
+                                        <div key={key} className="limit-row" style={{
+                                            padding: '0.75rem 1rem',
+                                            background: 'rgba(212, 175, 55, 0.1)',
+                                            borderRadius: 'var(--radius-md)',
+                                            border: '1px solid rgba(212, 175, 55, 0.3)',
+                                            marginBottom: '0.5rem'
+                                        }}>
+                                            <div className="input-group" style={{ 
+                                                justifyContent: 'space-between', 
+                                                gap: '0.5rem',
+                                                flexWrap: 'nowrap',
+                                                alignItems: 'center'
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexShrink: 0 }}>
+                                                    <span style={{ fontWeight: 500, color: 'var(--color-primary)', fontSize: '0.9rem' }}>
+                                                        {config.label}
+                                                    </span>
+                                                    {config.isSet && <span className="set-badge" style={{ fontSize: '0.7rem', padding: '0.1rem 0.3rem' }}>ชุด</span>}
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                    <span className="input-prefix" style={{ fontSize: '0.85rem' }}>อั้น</span>
                                                     <input
                                                         type="number"
                                                         className="form-input small"
+                                                        style={{ width: '70px', textAlign: 'center' }}
                                                         value={roundForm.type_limits[key] || 0}
                                                         onChange={e => setRoundForm({
                                                             ...roundForm,
@@ -1412,7 +1400,7 @@ export default function Dealer() {
                                                         onFocus={handleInputFocus}
                                                         onKeyDown={handleInputKeyDown}
                                                     />
-                                                    <span className="input-suffix">{config.isSet ? 'ชุด' : roundForm.currency_name}</span>
+                                                    <span className="input-suffix" style={{ fontSize: '0.85rem' }}>{config.isSet ? 'ชุด' : roundForm.currency_name}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -2715,49 +2703,47 @@ function SubmissionsModal({ round, onClose }) {
                                                 </button>
                                             </div>
 
-                                            <div className="excess-list">
+                                            <div className="excess-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                                 {excessItems.map((item, idx) => {
                                                     const isSelected = selectedExcessItems[`${item.bet_type}|${item.numbers}`]
                                                     return (
-                                                        <div key={idx} className={`excess-card ${isSelected ? 'selected' : ''}`}>
-                                                            <label className="checkbox-container excess-checkbox">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={isSelected || false}
-                                                                    onChange={() => toggleExcessItem(item)}
-                                                                />
-                                                                <span className="checkmark"></span>
-                                                            </label>
-                                                            <div className="excess-info" onClick={() => toggleExcessItem(item)}>
-                                                                <span className="type-badge">{BET_TYPES[item.bet_type]}</span>
-                                                                <span className="excess-number">{item.numbers}</span>
-                                                            </div>
-                                                            <div className="excess-details">
-                                                                <div className="excess-row">
-                                                                    <span>ค่าอั้น:</span>
-                                                                    <span>{item.isSetBased ? `${item.limit} ชุด` : `${round.currency_symbol}${item.limit.toLocaleString()}`}</span>
+                                                        <div 
+                                                            key={idx} 
+                                                            className={`excess-card ${isSelected ? 'selected' : ''}`}
+                                                            onClick={() => toggleExcessItem(item)}
+                                                            style={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '0.75rem',
+                                                                padding: '0.75rem 1rem',
+                                                                background: isSelected ? 'rgba(255, 193, 7, 0.15)' : 'var(--color-surface)',
+                                                                border: isSelected ? '2px solid var(--color-warning)' : '1px solid var(--color-border)',
+                                                                borderRadius: '8px',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                        >
+                                                            <input 
+                                                                type="checkbox" 
+                                                                checked={isSelected || false} 
+                                                                onChange={() => {}} 
+                                                                style={{ width: '18px', height: '18px', accentColor: 'var(--color-warning)', flexShrink: 0 }} 
+                                                            />
+                                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                                                                    <span className="type-badge">{BET_TYPES[item.bet_type]}</span>
+                                                                    <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '1.1rem' }}>{item.numbers}</span>
                                                                 </div>
-                                                                <div className="excess-row">
-                                                                    <span>ยอดรับ:</span>
-                                                                    <span>{item.isSetBased ? `${item.setCount} ชุด` : `${round.currency_symbol}${item.total.toLocaleString()}`}</span>
-                                                                </div>
-                                                                {item.transferredAmount > 0 && (
-                                                                    <div className="excess-row transferred">
-                                                                        <span>ตีออกแล้ว:</span>
-                                                                        <span>{item.isSetBased ? `-${item.transferredAmount} ชุด` : `-${round.currency_symbol}${item.transferredAmount.toLocaleString()}`}</span>
-                                                                    </div>
-                                                                )}
-                                                                <div className="excess-row excess-amount">
-                                                                    <span>เกิน:</span>
-                                                                    <span className="text-warning">{item.isSetBased ? `${item.excess} ชุด` : `${round.currency_symbol}${item.excess.toLocaleString()}`}</span>
+                                                                <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', color: 'var(--color-text-muted)', flexWrap: 'wrap' }}>
+                                                                    <span>ยอด: {item.isSetBased ? `${item.setCount} ชุด` : `${round.currency_symbol}${item.total.toLocaleString()}`}</span>
+                                                                    <span>อั้น: {item.isSetBased ? `${item.limit} ชุด` : `${round.currency_symbol}${item.limit.toLocaleString()}`}</span>
                                                                 </div>
                                                             </div>
-                                                            <button
-                                                                className="btn btn-warning btn-sm"
-                                                                onClick={() => handleOpenTransfer(item)}
-                                                            >
-                                                                <FiSend /> ตีออก
-                                                            </button>
+                                                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                                                <div style={{ color: 'var(--color-warning)', fontWeight: 600, fontSize: '1rem' }}>
+                                                                    {item.isSetBased ? `${item.excess} ชุด` : `${round.currency_symbol}${item.excess.toLocaleString()}`}
+                                                                </div>
+                                                                <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>เกิน</div>
+                                                            </div>
                                                         </div>
                                                     )
                                                 })}

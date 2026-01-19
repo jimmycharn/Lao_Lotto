@@ -322,26 +322,49 @@ export default function RoundAccordionItem({
 
         const excessItems = []
         Object.values(grouped).forEach(item => {
-            const limitLookupBetType = item.bet_type === '4_set' ? '4_top' : item.bet_type
-            const typeLimit = inlineTypeLimits[limitLookupBetType]
+            // For 4-digit sets, check both 4_set and 4_top for limit lookup
+            const isSet4Digit = item.bet_type === '4_set' || item.bet_type === '4_top'
+            let typeLimit = inlineTypeLimits[item.bet_type]
+            // Fallback: if 4_set not found, try 4_top and vice versa
+            if (typeLimit === undefined && isSet4Digit) {
+                typeLimit = inlineTypeLimits['4_set'] ?? inlineTypeLimits['4_top']
+            }
 
             const numberLimit = inlineNumberLimits.find(nl => {
                 const nlNormalized = normalizeNumber(nl.numbers, nl.bet_type)
-                const nlBetType = nl.bet_type === '4_set' ? '4_top' : nl.bet_type
-                return nlBetType === limitLookupBetType && nlNormalized === item.numbers
+                const nlIsSet4 = nl.bet_type === '4_set' || nl.bet_type === '4_top'
+                // Match if same bet type, or both are 4-digit sets
+                return (nl.bet_type === item.bet_type || (isSet4Digit && nlIsSet4)) && nlNormalized === item.numbers
             })
             const effectiveLimit = numberLimit?.max_amount ?? typeLimit
-            const isSetBased = isSetBasedLottery && (item.bet_type === '4_set' || item.bet_type === '4_top')
+            const isSetBased = isSetBasedLottery && isSet4Digit
 
             const transferredForThis = inlineTransfers.filter(t => {
-                const tBetType = t.bet_type === '4_set' ? '4_top' : t.bet_type
+                const tIsSet4 = t.bet_type === '4_set' || t.bet_type === '4_top'
                 const tNormalized = normalizeNumber(t.numbers, t.bet_type)
-                return tBetType === limitLookupBetType && tNormalized === item.numbers
+                // Match if same bet type, or both are 4-digit sets
+                return (t.bet_type === item.bet_type || (isSet4Digit && tIsSet4)) && tNormalized === item.numbers
             }).reduce((sum, t) => sum + (t.amount || 0), 0)
 
             const transferredSets = isSetBased ? Math.floor(transferredForThis / setPrice) : 0
 
-            if (effectiveLimit) {
+            // Debug log for 4-digit sets
+            if (item.bet_type === '4_top' || item.bet_type === '4_set') {
+                console.log('Excess calc for 4-digit:', {
+                    bet_type: item.bet_type,
+                    numbers: item.numbers,
+                    setCount: item.setCount,
+                    total: item.total,
+                    typeLimit,
+                    effectiveLimit,
+                    isSetBased,
+                    transferredSets,
+                    inlineTypeLimits
+                })
+            }
+
+            // Check if limit exists (including 0)
+            if (effectiveLimit !== undefined && effectiveLimit !== null) {
                 if (isSetBased) {
                     const effectiveExcess = item.setCount - effectiveLimit - transferredSets
                     if (effectiveExcess > 0) {
@@ -628,6 +651,8 @@ export default function RoundAccordionItem({
         const totalItems = batchesToCopy.reduce((sum, b) => sum + b.items.length, 0)
         const grandTotal = batchesToCopy.reduce((sum, b) => sum + b.totalAmount, 0)
         const targetDealer = batchesToCopy[0]?.target_dealer_name || ''
+        const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
+        const setPrice = round?.set_prices?.['4_top'] || 120
 
         let text = `📤 ยอดตีออก - ${lotteryName}\n`
         text += `📅 ทั้งหมด (${totalItems} รายการ)\n`
@@ -639,14 +664,31 @@ export default function RoundAccordionItem({
         batchesToCopy.forEach(batch => {
             batch.items.forEach(item => {
                 const typeName = BET_TYPES[item.bet_type] || item.bet_type
-                if (!byType[typeName]) byType[typeName] = []
-                byType[typeName].push(item)
+                if (!byType[typeName]) byType[typeName] = { items: [], isSet4Digit: item.bet_type === '4_set' || item.bet_type === '4_top' }
+                byType[typeName].items.push(item)
             })
         })
 
-        Object.entries(byType).forEach(([typeName, items]) => {
+        Object.entries(byType).forEach(([typeName, typeData]) => {
             text += `${typeName}\n`
-            items.forEach(item => { text += `${item.numbers}=${item.amount?.toLocaleString()}\n` })
+            
+            // For 4-digit sets, group by numbers and show set count
+            if (isSetBasedLottery && typeData.isSet4Digit) {
+                const grouped = {}
+                typeData.items.forEach(item => {
+                    if (!grouped[item.numbers]) {
+                        grouped[item.numbers] = { amount: 0, count: 0 }
+                    }
+                    grouped[item.numbers].amount += item.amount || 0
+                    grouped[item.numbers].count += 1
+                })
+                Object.entries(grouped).forEach(([numbers, data]) => {
+                    const setCount = Math.ceil(data.amount / setPrice)
+                    text += `${numbers}=${data.amount.toLocaleString()} (${setCount} ชุด)\n`
+                })
+            } else {
+                typeData.items.forEach(item => { text += `${item.numbers}=${item.amount?.toLocaleString()}\n` })
+            }
         })
 
         text += `━━━━━━━━━━━━━━━━\n`
@@ -1097,17 +1139,30 @@ export default function RoundAccordionItem({
                                                                 filteredData = Object.values(grouped).sort((a, b) => b.amount - a.amount)
                                                             }
 
-                                                            return filteredData.map(sub => (
-                                                                <tr key={isGrouped ? sub.id : sub.id}>
-                                                                    <td className="number-cell">
-                                                                        <div className="number-value">{sub.numbers}</div>
-                                                                        <div className="type-sub-label">{BET_TYPES[sub.bet_type] || sub.bet_type}</div>
-                                                                        {isGrouped && sub.count > 1 && <div className="count-sub-label">({sub.count} รายการ)</div>}
-                                                                    </td>
-                                                                    <td>{round.currency_symbol}{sub.amount.toLocaleString()}</td>
-                                                                    {!isGrouped && <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>}
-                                                                </tr>
-                                                            ))
+                                                            const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
+                                                            const setPrice = round?.set_prices?.['4_top'] || 120
+
+                                                            return filteredData.map(sub => {
+                                                                const isSet4Digit = sub.bet_type === '4_set' || sub.bet_type === '4_top'
+                                                                const setCount = isSetBasedLottery && isSet4Digit ? Math.ceil(sub.amount / setPrice) : 0
+
+                                                                return (
+                                                                    <tr key={isGrouped ? sub.id : sub.id}>
+                                                                        <td className="number-cell">
+                                                                            <div className="number-value">{sub.numbers}</div>
+                                                                            <div className="type-sub-label">{BET_TYPES[sub.bet_type] || sub.bet_type}</div>
+                                                                            {isGrouped && sub.count > 1 && <div className="count-sub-label">({sub.count} รายการ)</div>}
+                                                                        </td>
+                                                                        <td>
+                                                                            {round.currency_symbol}{sub.amount.toLocaleString()}
+                                                                            {isSetBasedLottery && isSet4Digit && setCount > 0 && (
+                                                                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>({setCount} ชุด)</div>
+                                                                            )}
+                                                                        </td>
+                                                                        {!isGrouped && <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>}
+                                                                    </tr>
+                                                                )
+                                                            })
                                                         })()}
                                                     </tbody>
                                                 </table>
@@ -1183,38 +1238,51 @@ export default function RoundAccordionItem({
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody>
-                                                                    {filteredIncoming.map(sub => {
-                                                                        const isSelected = selectedIncomingItems[sub.id]
-                                                                        return (
-                                                                            <tr 
-                                                                                key={sub.id} 
-                                                                                onClick={() => toggleIncomingItem(sub.id)}
-                                                                                style={{ 
-                                                                                    cursor: 'pointer', 
-                                                                                    background: isSelected ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
-                                                                                    transition: 'background 0.2s ease'
-                                                                                }}
-                                                                            >
-                                                                                <td style={{ textAlign: 'center' }}>
-                                                                                    <input 
-                                                                                        type="checkbox" 
-                                                                                        checked={isSelected || false} 
-                                                                                        onChange={() => {}} 
-                                                                                        style={{ width: '16px', height: '16px', accentColor: 'var(--color-danger)' }} 
-                                                                                    />
-                                                                                </td>
-                                                                                <td className="number-cell">
-                                                                                    <div className="number-value">{sub.numbers}</div>
-                                                                                    <div className="type-sub-label">{BET_TYPES[sub.bet_type] || sub.bet_type}</div>
-                                                                                </td>
-                                                                                <td>{round.currency_symbol}{sub.amount.toLocaleString()}</td>
-                                                                                <td className="source-cell" style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                                                                                    {sub.bill_note || 'ไม่ระบุ'}
-                                                                                </td>
-                                                                                <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>
-                                                                            </tr>
-                                                                        )
-                                                                    })}
+                                                                    {(() => {
+                                                                        const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
+                                                                        const setPrice = round?.set_prices?.['4_top'] || 120
+
+                                                                        return filteredIncoming.map(sub => {
+                                                                            const isSelected = selectedIncomingItems[sub.id]
+                                                                            const isSet4Digit = sub.bet_type === '4_set' || sub.bet_type === '4_top'
+                                                                            const setCount = isSetBasedLottery && isSet4Digit ? Math.ceil(sub.amount / setPrice) : 0
+
+                                                                            return (
+                                                                                <tr 
+                                                                                    key={sub.id} 
+                                                                                    onClick={() => toggleIncomingItem(sub.id)}
+                                                                                    style={{ 
+                                                                                        cursor: 'pointer', 
+                                                                                        background: isSelected ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
+                                                                                        transition: 'background 0.2s ease'
+                                                                                    }}
+                                                                                >
+                                                                                    <td style={{ textAlign: 'center' }}>
+                                                                                        <input 
+                                                                                            type="checkbox" 
+                                                                                            checked={isSelected || false} 
+                                                                                            onChange={() => {}} 
+                                                                                            style={{ width: '16px', height: '16px', accentColor: 'var(--color-danger)' }} 
+                                                                                        />
+                                                                                    </td>
+                                                                                    <td className="number-cell">
+                                                                                        <div className="number-value">{sub.numbers}</div>
+                                                                                        <div className="type-sub-label">{BET_TYPES[sub.bet_type] || sub.bet_type}</div>
+                                                                                    </td>
+                                                                                    <td>
+                                                                                        {round.currency_symbol}{sub.amount.toLocaleString()}
+                                                                                        {isSetBasedLottery && isSet4Digit && setCount > 0 && (
+                                                                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>({setCount} ชุด)</div>
+                                                                                        )}
+                                                                                    </td>
+                                                                                    <td className="source-cell" style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                                                        {sub.bill_note || 'ไม่ระบุ'}
+                                                                                    </td>
+                                                                                    <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>
+                                                                                </tr>
+                                                                            )
+                                                                        })
+                                                                    })()}
                                                                 </tbody>
                                                             </table>
                                                         </div>
@@ -1285,6 +1353,8 @@ export default function RoundAccordionItem({
                                                         <div className="excess-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                                             {filteredExcessItems.map((item, idx) => {
                                                                 const isSelected = selectedExcessItems[`${item.bet_type}|${item.numbers}`]
+                                                                const setPrice = round?.set_prices?.['4_top'] || 120
+                                                                const excessAmount = item.isSetBased ? item.excess * setPrice : item.excess
                                                                 return (
                                                                     <div
                                                                         key={idx}
@@ -1304,15 +1374,17 @@ export default function RoundAccordionItem({
                                                                                 <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '1.1rem' }}>{item.numbers}</span>
                                                                             </div>
                                                                             <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-                                                                                <span>ยอด: {item.isSetBased ? `${item.setCount} ชุด` : `${round.currency_symbol}${item.total.toLocaleString()}`}</span>
+                                                                                <span>ยอด: {round.currency_symbol}{item.total.toLocaleString()}{item.isSetBased && ` (${item.setCount} ชุด)`}</span>
                                                                                 <span>อั้น: {item.isSetBased ? `${item.limit} ชุด` : `${round.currency_symbol}${item.limit.toLocaleString()}`}</span>
                                                                             </div>
                                                                         </div>
                                                                         <div style={{ textAlign: 'right' }}>
                                                                             <div style={{ color: 'var(--color-warning)', fontWeight: 600, fontSize: '1.1rem' }}>
-                                                                                {item.isSetBased ? `${item.excess} ชุด` : `${round.currency_symbol}${item.excess.toLocaleString()}`}
+                                                                                {round.currency_symbol}{excessAmount.toLocaleString()}
                                                                             </div>
-                                                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>เกิน</div>
+                                                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                {item.isSetBased ? `เกิน ${item.excess} ชุด` : 'เกิน'}
+                                                                            </div>
                                                                         </div>
                                                                     </div>
                                                                 )
@@ -1562,19 +1634,32 @@ export default function RoundAccordionItem({
                                                                                 </div>
                                                                             </div>
                                                                             <div style={{ padding: '0.5rem' }}>
-                                                                                {batch.items.map(item => {
-                                                                                    const itemReturned = (item.status || 'active') === 'returned'
-                                                                                    return (
-                                                                                        <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', borderBottom: '1px solid var(--color-border)', textDecoration: itemReturned ? 'line-through' : 'none', opacity: itemReturned ? 0.6 : 1, background: itemReturned ? 'rgba(239, 68, 68, 0.05)' : 'transparent' }}>
-                                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                                                <span className="type-badge" style={{ fontSize: '0.7rem' }}>{BET_TYPES[item.bet_type] || item.bet_type}</span>
-                                                                                                <span style={{ fontWeight: 500, color: itemReturned ? 'var(--color-danger)' : 'var(--color-primary)' }}>{item.numbers}</span>
-                                                                                                {itemReturned && <span style={{ fontSize: '0.6rem', padding: '0.1rem 0.3rem', background: 'var(--color-danger)', color: 'white', borderRadius: '3px' }}>คืน</span>}
+                                                                                {(() => {
+                                                                                    const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
+                                                                                    const setPrice = round?.set_prices?.['4_top'] || 120
+
+                                                                                    return batch.items.map(item => {
+                                                                                        const itemReturned = (item.status || 'active') === 'returned'
+                                                                                        const isSet4Digit = item.bet_type === '4_set' || item.bet_type === '4_top'
+                                                                                        const setCount = isSetBasedLottery && isSet4Digit ? Math.ceil(item.amount / setPrice) : 0
+
+                                                                                        return (
+                                                                                            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', borderBottom: '1px solid var(--color-border)', textDecoration: itemReturned ? 'line-through' : 'none', opacity: itemReturned ? 0.6 : 1, background: itemReturned ? 'rgba(239, 68, 68, 0.05)' : 'transparent' }}>
+                                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                                                    <span className="type-badge" style={{ fontSize: '0.7rem' }}>{BET_TYPES[item.bet_type] || item.bet_type}</span>
+                                                                                                    <span style={{ fontWeight: 500, color: itemReturned ? 'var(--color-danger)' : 'var(--color-primary)' }}>{item.numbers}</span>
+                                                                                                    {itemReturned && <span style={{ fontSize: '0.6rem', padding: '0.1rem 0.3rem', background: 'var(--color-danger)', color: 'white', borderRadius: '3px' }}>คืน</span>}
+                                                                                                </div>
+                                                                                                <div style={{ textAlign: 'right' }}>
+                                                                                                    <span style={{ color: itemReturned ? 'var(--color-danger)' : 'inherit' }}>{round.currency_symbol}{item.amount?.toLocaleString()}</span>
+                                                                                                    {isSetBasedLottery && isSet4Digit && setCount > 0 && (
+                                                                                                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>({setCount} ชุด)</div>
+                                                                                                    )}
+                                                                                                </div>
                                                                                             </div>
-                                                                                            <span style={{ color: itemReturned ? 'var(--color-danger)' : 'inherit' }}>{round.currency_symbol}{item.amount?.toLocaleString()}</span>
-                                                                                        </div>
-                                                                                    )
-                                                                                })}
+                                                                                        )
+                                                                                    })
+                                                                                })()}
                                                                             </div>
                                                                         </div>
                                                                     )
