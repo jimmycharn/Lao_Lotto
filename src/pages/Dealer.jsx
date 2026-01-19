@@ -3678,15 +3678,22 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
                                             <div className="dealer-info">
                                                 <h3 className="dealer-name">
                                                     {dealer.upstream_name}
-                                                    <span className="linked-badge" title="เชื่อมต่อกับระบบ" style={{ 
-                                                        background: dealer.is_blocked ? 'var(--color-danger)' : 'var(--color-success)', 
-                                                        color: 'white', 
-                                                        padding: '0.15rem 0.4rem', 
-                                                        borderRadius: '4px', 
-                                                        fontSize: '0.7rem',
-                                                        marginLeft: '0.5rem'
-                                                    }}>
-                                                        {dealer.is_blocked ? <><FiSlash style={{ marginRight: '0.2rem' }} /> ถูกบล็อก</> : <><FiCheck style={{ marginRight: '0.2rem' }} /> ในระบบ</>}
+                                                    <span 
+                                                        className="linked-badge" 
+                                                        title={dealer.is_blocked ? 'ถูกบล็อก' : 'เชื่อมต่อในระบบ'} 
+                                                        style={{ 
+                                                            background: dealer.is_blocked ? 'var(--color-danger)' : 'var(--color-success)', 
+                                                            color: 'white', 
+                                                            width: '20px',
+                                                            height: '20px',
+                                                            borderRadius: '50%', 
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            marginLeft: '0.5rem'
+                                                        }}
+                                                    >
+                                                        {dealer.is_blocked ? <FiSlash size={12} /> : <FiCheck size={12} />}
                                                     </span>
                                                 </h3>
                                                 {dealer.upstream_profile && (
@@ -3697,9 +3704,6 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
                                                 {dealer.notes && (
                                                     <p className="dealer-notes">{dealer.notes}</p>
                                                 )}
-                                                <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
-                                                    เชื่อมต่อผ่าน QR Code/Link
-                                                </p>
                                             </div>
                                             <div className="dealer-actions" style={{ display: 'flex', gap: '0.25rem' }}>
                                                 <button
