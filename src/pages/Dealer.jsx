@@ -409,8 +409,11 @@ export default function Dealer() {
             const defaultPassword = '123456'
             const loginUrl = window.location.origin + '/login'
 
-            // Call Supabase Admin API to create user (requires service role or edge function)
-            // For now, we'll use signUp which creates a user
+            // Store current dealer session before creating new user
+            const { data: currentSession } = await supabase.auth.getSession()
+            const dealerSession = currentSession?.session
+
+            // Create new user with signUp
             const { data: authData, error: authError } = await supabase.auth.signUp({
                 email: addMemberForm.email,
                 password: defaultPassword,
@@ -425,18 +428,30 @@ export default function Dealer() {
 
             if (authError) throw authError
 
-            if (authData.user) {
-                // Create membership for this user
+            const newUserId = authData.user?.id
+
+            // Immediately restore dealer session FIRST
+            // signUp auto-logs in as new user, we need to switch back to dealer
+            if (dealerSession) {
+                await supabase.auth.setSession({
+                    access_token: dealerSession.access_token,
+                    refresh_token: dealerSession.refresh_token
+                })
+            }
+
+            if (newUserId) {
+                // Now create membership as dealer (RLS policy: dealer_id = auth.uid())
                 const { error: membershipError } = await supabase
                     .from('user_dealer_memberships')
                     .insert({
-                        user_id: authData.user.id,
+                        user_id: newUserId,
                         dealer_id: user.id,
                         status: 'active' // Auto-approve since dealer created them
                     })
 
                 if (membershipError) {
                     console.error('Membership error:', membershipError)
+                    toast.error('สร้าง user สำเร็จ แต่ไม่สามารถเพิ่มเป็นสมาชิกได้: ' + membershipError.message)
                 }
 
                 // Store credentials to show to dealer
