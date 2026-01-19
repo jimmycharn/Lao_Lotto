@@ -93,6 +93,12 @@ export default function Dealer() {
     const [loadingUpstream, setLoadingUpstream] = useState(false)
     const [downstreamDealers, setDownstreamDealers] = useState([]) // Dealers who send bets TO us
     const [memberTypeFilter, setMemberTypeFilter] = useState('all') // 'all' | 'member' | 'dealer'
+    
+    // Add member modal states
+    const [showAddMemberModal, setShowAddMemberModal] = useState(false)
+    const [addMemberForm, setAddMemberForm] = useState({ email: '', full_name: '', phone: '' })
+    const [addingMember, setAddingMember] = useState(false)
+    const [newMemberCredentials, setNewMemberCredentials] = useState(null) // { email, password, url }
 
     // Read tab from URL params
     useEffect(() => {
@@ -391,6 +397,108 @@ export default function Dealer() {
         }
     }
 
+    // Add new member function - creates user with default password
+    async function handleAddMember() {
+        if (!addMemberForm.email) {
+            toast.error('กรุณากรอกอีเมล')
+            return
+        }
+
+        setAddingMember(true)
+        try {
+            const defaultPassword = '123456'
+            const loginUrl = window.location.origin + '/login'
+
+            // Call Supabase Admin API to create user (requires service role or edge function)
+            // For now, we'll use signUp which creates a user
+            const { data: authData, error: authError } = await supabase.auth.signUp({
+                email: addMemberForm.email,
+                password: defaultPassword,
+                options: {
+                    data: {
+                        full_name: addMemberForm.full_name || '',
+                        phone: addMemberForm.phone || '',
+                        role: 'user'
+                    }
+                }
+            })
+
+            if (authError) throw authError
+
+            if (authData.user) {
+                // Create membership for this user
+                const { error: membershipError } = await supabase
+                    .from('user_dealer_memberships')
+                    .insert({
+                        user_id: authData.user.id,
+                        dealer_id: user.id,
+                        status: 'active' // Auto-approve since dealer created them
+                    })
+
+                if (membershipError) {
+                    console.error('Membership error:', membershipError)
+                }
+
+                // Store credentials to show to dealer
+                setNewMemberCredentials({
+                    email: addMemberForm.email,
+                    password: defaultPassword,
+                    url: loginUrl,
+                    full_name: addMemberForm.full_name
+                })
+
+                toast.success('สร้างสมาชิกใหม่สำเร็จ!')
+                setAddMemberForm({ email: '', full_name: '', phone: '' })
+                fetchData()
+            }
+        } catch (error) {
+            console.error('Error adding member:', error)
+            if (error.message?.includes('already registered')) {
+                toast.error('อีเมลนี้ถูกใช้งานแล้ว')
+            } else {
+                toast.error('เกิดข้อผิดพลาด: ' + error.message)
+            }
+        } finally {
+            setAddingMember(false)
+        }
+    }
+
+    // Copy member credentials to clipboard
+    function copyMemberCredentials(member) {
+        const loginUrl = window.location.origin + '/login'
+        const text = `🎰 ข้อมูลเข้าสู่ระบบ\n\n📧 อีเมล: ${member.email}\n🔑 รหัสผ่าน: 123456\n🔗 ลิงก์: ${loginUrl}\n\n⚠️ กรุณาเปลี่ยนรหัสผ่านหลังเข้าสู่ระบบ`
+        
+        // Try modern clipboard API first, fallback to execCommand
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => {
+                toast.success('คัดลอกข้อมูลแล้ว!')
+            }).catch(() => {
+                fallbackCopyToClipboard(text)
+            })
+        } else {
+            fallbackCopyToClipboard(text)
+        }
+    }
+
+    // Fallback copy function for older browsers or non-HTTPS
+    function fallbackCopyToClipboard(text) {
+        const textArea = document.createElement('textarea')
+        textArea.value = text
+        textArea.style.position = 'fixed'
+        textArea.style.left = '-9999px'
+        textArea.style.top = '-9999px'
+        document.body.appendChild(textArea)
+        textArea.focus()
+        textArea.select()
+        try {
+            document.execCommand('copy')
+            toast.success('คัดลอกข้อมูลแล้ว!')
+        } catch (err) {
+            toast.error('ไม่สามารถคัดลอกได้')
+        }
+        document.body.removeChild(textArea)
+    }
+
     async function handleUnblockMember(member) {
         try {
             const { error } = await supabase
@@ -403,6 +511,24 @@ export default function Dealer() {
         } catch (error) {
             console.error('Error unblocking member:', error)
             toast.error('เกิดข้อผิดพลาดในการปลดบล็อคสมาชิก')
+        }
+    }
+
+    async function handleDeleteMember(member) {
+        if (!confirm(`ต้องการลบ "${member.full_name || member.email}" ออกจากรายชื่อสมาชิกหรือไม่?\n\nการลบจะยกเลิกการเป็นสมาชิกของเจ้ามือนี้`)) return
+
+        try {
+            const { error } = await supabase
+                .from('user_dealer_memberships')
+                .delete()
+                .eq('id', member.membership_id)
+
+            if (error) throw error
+            toast.success('ลบสมาชิกสำเร็จ')
+            fetchData()
+        } catch (error) {
+            console.error('Error deleting member:', error)
+            toast.error('เกิดข้อผิดพลาดในการลบสมาชิก')
         }
     }
 
@@ -818,6 +944,34 @@ export default function Dealer() {
 
                     {activeTab === 'members' && (
                         <div className="members-section">
+                            {/* Section Title */}
+                            <h2 style={{ 
+                                fontSize: '1.25rem', 
+                                fontWeight: '600', 
+                                marginBottom: '1rem',
+                                color: 'var(--color-text)'
+                            }}>
+                                <FiUsers style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                                สมาชิก
+                            </h2>
+
+                            {/* Add Member Button - Full width on mobile */}
+                            <button 
+                                className="btn btn-primary"
+                                onClick={() => setShowAddMemberModal(true)}
+                                style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center',
+                                    gap: '0.5rem',
+                                    width: '100%',
+                                    marginBottom: '1.5rem',
+                                    padding: '0.75rem 1rem'
+                                }}
+                            >
+                                <FiPlus /> เพิ่มสมาชิก
+                            </button>
+
                             {/* Referral Section - Moved to top */}
                             <div className="referral-card card" style={{ marginBottom: '1.5rem' }}>
                                 <div className="referral-header">
@@ -899,40 +1053,54 @@ export default function Dealer() {
                             )}
 
                             {/* Member Type Filter */}
-                            <div className="member-type-filter" style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <div className="member-type-filter" style={{ 
+                                marginBottom: '1rem', 
+                                display: 'flex', 
+                                flexDirection: 'column',
+                                gap: '0.5rem'
+                            }}>
+                                {/* First row: ทั้งหมด - full width */}
                                 <button
                                     className={`btn btn-sm ${memberTypeFilter === 'all' ? 'btn-primary' : 'btn-outline'}`}
                                     onClick={() => setMemberTypeFilter('all')}
+                                    style={{ width: '100%' }}
                                 >
                                     ทั้งหมด ({members.length + downstreamDealers.filter(d => d.membership_status === 'active').length})
                                 </button>
-                                <button
-                                    className={`btn btn-sm ${memberTypeFilter === 'member' ? 'btn-primary' : 'btn-outline'}`}
-                                    onClick={() => setMemberTypeFilter('member')}
-                                >
-                                    <FiUser /> สมาชิกทั่วไป ({members.length})
-                                </button>
-                                <button
-                                    className={`btn btn-sm ${memberTypeFilter === 'dealer' ? 'btn-primary' : 'btn-outline'}`}
-                                    onClick={() => setMemberTypeFilter('dealer')}
-                                >
-                                    <FiSend /> เจ้ามือตีเข้า ({downstreamDealers.filter(d => d.membership_status === 'active').length})
-                                </button>
+                                {/* Second row: สมาชิก + เจ้ามือ - 50% each */}
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button
+                                        className={`btn btn-sm ${memberTypeFilter === 'member' ? 'btn-primary' : 'btn-outline'}`}
+                                        onClick={() => setMemberTypeFilter('member')}
+                                        style={{ flex: 1 }}
+                                    >
+                                        <FiUser /> สมาชิกทั่วไป ({members.length})
+                                    </button>
+                                    <button
+                                        className={`btn btn-sm ${memberTypeFilter === 'dealer' ? 'btn-primary' : 'btn-outline'}`}
+                                        onClick={() => setMemberTypeFilter('dealer')}
+                                        style={{ flex: 1 }}
+                                    >
+                                        <FiSend /> เจ้ามือตีเข้า ({downstreamDealers.filter(d => d.membership_status === 'active').length})
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Members List - Accordion Style */}
-                            <div className="section-header">
-                                <h2>
-                                    {memberTypeFilter === 'all' ? 'สมาชิกทั้งหมด' : 
-                                     memberTypeFilter === 'member' ? 'สมาชิกทั่วไป' : 'เจ้ามือที่ตีเลขเข้ามา'}
-                                </h2>
-                                <span className="badge">
-                                    {memberTypeFilter === 'all' 
-                                        ? members.length + downstreamDealers.filter(d => d.membership_status === 'active').length
-                                        : memberTypeFilter === 'member' 
-                                            ? members.length 
-                                            : downstreamDealers.filter(d => d.membership_status === 'active').length} คน
-                                </span>
+                            <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                    <h2>
+                                        {memberTypeFilter === 'all' ? 'สมาชิกทั้งหมด' : 
+                                         memberTypeFilter === 'member' ? 'สมาชิกทั่วไป' : 'เจ้ามือที่ตีเลขเข้ามา'}
+                                    </h2>
+                                    <span className="badge">
+                                        {memberTypeFilter === 'all' 
+                                            ? members.length + downstreamDealers.filter(d => d.membership_status === 'active').length
+                                            : memberTypeFilter === 'member' 
+                                                ? members.length 
+                                                : downstreamDealers.filter(d => d.membership_status === 'active').length} คน
+                                    </span>
+                                </div>
                             </div>
 
                             {(() => {
@@ -979,9 +1147,11 @@ export default function Dealer() {
                                                         : (member.is_dealer ? `dealer-${member.id}` : member.id)
                                                 )}
                                                 onBlock={() => member.is_dealer ? handleBlockDownstreamDealer(member) : handleBlockMember(member)}
+                                                onDelete={() => member.is_dealer ? null : handleDeleteMember(member)}
                                                 dealerBankAccounts={dealerBankAccounts}
                                                 onUpdateBank={(bankAccountId) => handleUpdateMemberBank(member, bankAccountId)}
                                                 isDealer={member.is_dealer}
+                                                onCopyCredentials={copyMemberCredentials}
                                             />
                                         ))}
                                     </div>
@@ -1476,7 +1646,144 @@ export default function Dealer() {
                 />
             )}
 
+            {/* Add Member Modal */}
+            {showAddMemberModal && (
+                <div className="modal-overlay" onClick={() => { setShowAddMemberModal(false); setNewMemberCredentials(null); }}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+                        <div className="modal-header">
+                            <h3><FiPlus /> เพิ่มสมาชิกใหม่</h3>
+                            <button className="modal-close" onClick={() => { setShowAddMemberModal(false); setNewMemberCredentials(null); }}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            {newMemberCredentials ? (
+                                <div className="credentials-result">
+                                    <div style={{ 
+                                        textAlign: 'center', 
+                                        padding: '1rem',
+                                        background: 'rgba(34, 197, 94, 0.1)',
+                                        borderRadius: 'var(--radius-md)',
+                                        marginBottom: '1rem'
+                                    }}>
+                                        <FiCheck style={{ fontSize: '2rem', color: 'var(--color-success)' }} />
+                                        <h4 style={{ margin: '0.5rem 0', color: 'var(--color-success)' }}>สร้างสมาชิกสำเร็จ!</h4>
+                                    </div>
+                                    
+                                    <div style={{ 
+                                        background: 'var(--color-surface-light)', 
+                                        padding: '1rem', 
+                                        borderRadius: 'var(--radius-md)',
+                                        marginBottom: '1rem'
+                                    }}>
+                                        <div style={{ marginBottom: '0.75rem' }}>
+                                            <label style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>ชื่อ</label>
+                                            <div style={{ fontWeight: 600 }}>{newMemberCredentials.full_name || '-'}</div>
+                                        </div>
+                                        <div style={{ marginBottom: '0.75rem' }}>
+                                            <label style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>อีเมล</label>
+                                            <div style={{ fontWeight: 600 }}>{newMemberCredentials.email}</div>
+                                        </div>
+                                        <div style={{ marginBottom: '0.75rem' }}>
+                                            <label style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>รหัสผ่าน</label>
+                                            <div style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{newMemberCredentials.password}</div>
+                                        </div>
+                                        <div>
+                                            <label style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>ลิงก์เข้าสู่ระบบ</label>
+                                            <div style={{ fontWeight: 600, fontSize: '0.9rem', wordBreak: 'break-all' }}>{newMemberCredentials.url}</div>
+                                        </div>
+                                    </div>
 
+                                    <button
+                                        className="btn btn-primary"
+                                        style={{ width: '100%' }}
+                                        onClick={() => {
+                                            const text = `🎰 ข้อมูลเข้าสู่ระบบ\n\n👤 ชื่อ: ${newMemberCredentials.full_name || '-'}\n📧 อีเมล: ${newMemberCredentials.email}\n🔑 รหัสผ่าน: ${newMemberCredentials.password}\n🔗 ลิงก์: ${newMemberCredentials.url}\n\n⚠️ กรุณาเปลี่ยนรหัสผ่านหลังเข้าสู่ระบบ`
+                                            navigator.clipboard.writeText(text).then(() => {
+                                                toast.success('คัดลอกข้อมูลแล้ว!')
+                                            })
+                                        }}
+                                    >
+                                        <FiCopy /> คัดลอกข้อมูลทั้งหมด
+                                    </button>
+
+                                    <p style={{ 
+                                        marginTop: '1rem', 
+                                        fontSize: '0.85rem', 
+                                        color: 'var(--color-warning)',
+                                        textAlign: 'center'
+                                    }}>
+                                        ⚠️ แนะนำให้สมาชิกเปลี่ยนรหัสผ่านหลังเข้าสู่ระบบ
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="add-member-form">
+                                    <div className="form-group" style={{ marginBottom: '1rem' }}>
+                                        <label className="form-label">อีเมล *</label>
+                                        <input
+                                            type="email"
+                                            className="form-input"
+                                            placeholder="example@email.com"
+                                            value={addMemberForm.email}
+                                            onChange={e => setAddMemberForm({ ...addMemberForm, email: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="form-group" style={{ marginBottom: '1rem' }}>
+                                        <label className="form-label">ชื่อ-นามสกุล</label>
+                                        <input
+                                            type="text"
+                                            className="form-input"
+                                            placeholder="ชื่อ นามสกุล"
+                                            value={addMemberForm.full_name}
+                                            onChange={e => setAddMemberForm({ ...addMemberForm, full_name: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="form-group" style={{ marginBottom: '1rem' }}>
+                                        <label className="form-label">เบอร์โทรศัพท์</label>
+                                        <input
+                                            type="tel"
+                                            className="form-input"
+                                            placeholder="0812345678"
+                                            value={addMemberForm.phone}
+                                            onChange={e => setAddMemberForm({ ...addMemberForm, phone: e.target.value })}
+                                        />
+                                    </div>
+
+                                    <div style={{ 
+                                        padding: '0.75rem', 
+                                        background: 'rgba(212, 175, 55, 0.1)', 
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid rgba(212, 175, 55, 0.3)',
+                                        fontSize: '0.85rem'
+                                    }}>
+                                        <strong>หมายเหตุ:</strong> สมาชิกใหม่จะได้รับรหัสผ่านเริ่มต้น <strong>123456</strong> และสามารถเปลี่ยนได้ภายหลัง
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div className="modal-footer">
+                            {newMemberCredentials ? (
+                                <button className="btn btn-secondary" onClick={() => { setShowAddMemberModal(false); setNewMemberCredentials(null); }}>
+                                    ปิด
+                                </button>
+                            ) : (
+                                <>
+                                    <button className="btn btn-secondary" onClick={() => setShowAddMemberModal(false)}>
+                                        ยกเลิก
+                                    </button>
+                                    <button 
+                                        className="btn btn-primary" 
+                                        onClick={handleAddMember}
+                                        disabled={addingMember}
+                                    >
+                                        {addingMember ? 'กำลังสร้าง...' : <><FiPlus /> สร้างสมาชิก</>}
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Summary Modal */}
             {showSummaryModal && selectedRound && (
@@ -3344,7 +3651,7 @@ function DealerProfileTab({ user, profile, subscription, formatDate }) {
 }
 
 // Member Accordion Item Component
-function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock, dealerBankAccounts = [], onUpdateBank, isDealer = false }) {
+function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock, onDelete, dealerBankAccounts = [], onUpdateBank, isDealer = false, onCopyCredentials }) {
     const [activeTab, setActiveTab] = useState('info') // 'info' | 'settings'
 
     return (
@@ -3361,59 +3668,136 @@ function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock
                 className="member-accordion-header"
                 onClick={onToggle}
                 style={{
-                    padding: '1.25rem 1.5rem',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
+                    padding: '1rem 1.25rem',
                     cursor: 'pointer',
                     background: isExpanded ? 'var(--color-surface-light)' : 'transparent',
                     borderBottom: isExpanded ? '1px solid var(--color-border)' : 'none'
                 }}
             >
-                <div className="member-info-summary" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <div className="member-avatar" style={{
-                        width: '40px',
-                        height: '40px',
-                        borderRadius: '50%',
-                        background: isDealer ? 'var(--color-info)' : 'var(--color-primary)',
-                        color: '#fff',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '1.2rem',
-                        fontWeight: 'bold'
-                    }}>
-                        {isDealer ? <FiSend /> : (member.full_name ? member.full_name.charAt(0).toUpperCase() : <FiUsers />)}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <span className="member-name" style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '1.1rem' }}>
-                                {member.full_name || 'ไม่ระบุชื่อ'}
-                            </span>
-                            {isDealer && (
-                                <span style={{
-                                    background: 'var(--color-info)',
-                                    color: '#fff',
-                                    padding: '0.15rem 0.5rem',
-                                    borderRadius: '4px',
-                                    fontSize: '0.7rem',
-                                    fontWeight: '600'
-                                }}>
-                                    เจ้ามือ
-                                </span>
-                            )}
+                {/* Top row: Avatar, Name/Email, Chevron */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div className="member-info-summary" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <div className="member-avatar" style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '50%',
+                            background: isDealer ? 'var(--color-info)' : 'var(--color-primary)',
+                            color: '#fff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '1.2rem',
+                            fontWeight: 'bold'
+                        }}>
+                            {isDealer ? <FiSend /> : (member.full_name ? member.full_name.charAt(0).toUpperCase() : <FiUsers />)}
                         </div>
-                        <span className="member-email" style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
-                            {member.email}
-                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <span className="member-name" style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '1.1rem' }}>
+                                    {member.full_name || 'ไม่ระบุชื่อ'}
+                                </span>
+                                {isDealer && (
+                                    <span style={{
+                                        background: 'var(--color-info)',
+                                        color: '#fff',
+                                        padding: '0.15rem 0.5rem',
+                                        borderRadius: '4px',
+                                        fontSize: '0.7rem',
+                                        fontWeight: '600'
+                                    }}>
+                                        เจ้ามือ
+                                    </span>
+                                )}
+                            </div>
+                            <span className="member-email" style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+                                {member.email}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="accordion-icon" style={{
+                        color: isExpanded ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                        transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.3s ease'
+                    }}>
+                        <FiChevronDown size={24} />
                     </div>
                 </div>
-                <div className="accordion-icon" style={{
-                    color: isExpanded ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                    transition: 'transform 0.3s ease'
+
+                {/* Bottom row: Action buttons - icon only for mobile friendly */}
+                <div style={{ 
+                    display: 'flex', 
+                    gap: '0.5rem', 
+                    marginTop: '0.75rem',
+                    paddingTop: '0.75rem',
+                    borderTop: '1px solid var(--color-border)',
+                    marginLeft: '56px'
                 }}>
-                    <FiChevronDown size={24} />
+                    {/* Copy button - only for non-dealer */}
+                    {!isDealer && onCopyCredentials && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onCopyCredentials(member); }}
+                            style={{ 
+                                padding: '0.5rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'transparent',
+                                border: '1px solid var(--color-border)',
+                                borderRadius: '50%',
+                                color: 'var(--color-text-muted)',
+                                cursor: 'pointer',
+                                width: '32px',
+                                height: '32px'
+                            }}
+                            title="คัดลอกข้อมูลเข้าสู่ระบบ"
+                        >
+                            <FiCopy size={14} />
+                        </button>
+                    )}
+                    {/* Block button - for all members */}
+                    {onBlock && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onBlock(); }}
+                            style={{ 
+                                padding: '0.5rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'transparent',
+                                border: '1px solid var(--color-warning)',
+                                borderRadius: '50%',
+                                color: 'var(--color-warning)',
+                                cursor: 'pointer',
+                                width: '32px',
+                                height: '32px'
+                            }}
+                            title="บล็อคสมาชิก"
+                        >
+                            <FiLock size={14} />
+                        </button>
+                    )}
+                    {/* Delete button - only for non-dealer */}
+                    {!isDealer && onDelete && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                            style={{ 
+                                padding: '0.5rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'transparent',
+                                border: '1px solid var(--color-error)',
+                                borderRadius: '50%',
+                                color: 'var(--color-error)',
+                                cursor: 'pointer',
+                                width: '32px',
+                                height: '32px'
+                            }}
+                            title="ลบสมาชิก"
+                        >
+                            <FiTrash2 size={14} />
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -3544,18 +3928,6 @@ function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock
                                         }}>
                                             ลูกค้าจะเห็นบัญชีนี้ในหน้าข้อมูลเจ้ามือ
                                         </p>
-                                    </div>
-                                )}
-                                {/* Block Button */}
-                                {onBlock && (
-                                    <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)' }}>
-                                        <button
-                                            className="btn btn-outline btn-sm"
-                                            onClick={(e) => { e.stopPropagation(); onBlock(); }}
-                                            style={{ color: 'var(--color-error)', borderColor: 'var(--color-error)' }}
-                                        >
-                                            <FiLock style={{ marginRight: '0.5rem' }} /> บล็อคสมาชิก
-                                        </button>
                                     </div>
                                 )}
                             </div>
