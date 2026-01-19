@@ -2516,9 +2516,10 @@ export default function UserDashboard() {
                             </div>
 
                             <div className="input-section card">
-                                {/* Paste button for Lao/Hanoi */}
-                                {['lao', 'hanoi'].includes(selectedRound?.lottery_type) && (
-                                    <div style={{ marginBottom: '1rem' }}>
+                                {/* Top action buttons row */}
+                                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                                    {/* Paste button for Lao/Hanoi */}
+                                    {['lao', 'hanoi'].includes(selectedRound?.lottery_type) ? (
                                         <button
                                             type="button"
                                             className="btn btn-outline btn-sm"
@@ -2532,8 +2533,17 @@ export default function UserDashboard() {
                                         >
                                             <FiClipboard /> วางเลข
                                         </button>
-                                    </div>
-                                )}
+                                    ) : <div></div>}
+                                    {/* Save button moved to top-right */}
+                                    <button
+                                        className="btn btn-primary btn-sm"
+                                        disabled={drafts.length === 0 || submitting}
+                                        onClick={handleSaveBill}
+                                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                                    >
+                                        <FiSave /> {submitting ? 'กำลังบันทึก...' : 'บันทึกโพย'}
+                                    </button>
+                                </div>
 
                                 <div className="form-row form-row-inline">
                                     <div className="form-group">
