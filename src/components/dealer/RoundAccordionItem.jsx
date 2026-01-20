@@ -1069,39 +1069,54 @@ export default function RoundAccordionItem({
                                                 )}
                                             </div>
 
-                                            <div className="inline-summary">
-                                                <div className="summary-item">
-                                                    <span className="label">จำนวน</span>
-                                                    <span className="value">{(() => {
-                                                        let filtered = inlineSubmissions.filter(s => {
-                                                            const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
-                                                            if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
-                                                            if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
-                                                            if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
-                                                            return true
-                                                        })
-                                                        if (isGrouped) {
-                                                            const grouped = {}
-                                                            filtered.forEach(s => {
-                                                                const normalizedNumbers = normalizeNumber(s.numbers, s.bet_type)
-                                                                const key = `${normalizedNumbers}|${s.bet_type}`
-                                                                if (!grouped[key]) grouped[key] = true
-                                                            })
-                                                            return Object.keys(grouped).length
-                                                        }
-                                                        return filtered.length
-                                                    })()} รายการ</span>
-                                                </div>
-                                                <div className="summary-item">
-                                                    <span className="label">ยอดรวม</span>
-                                                    <span className="value">{round.currency_symbol}{inlineSubmissions.filter(s => {
+                                            {/* แสดงผลแบบตาราง 2 แถว: หัวข้อ + ค่า */}
+                                            <div className="inline-summary-table" style={{ 
+                                                display: 'grid', 
+                                                gridTemplateColumns: 'repeat(3, 1fr)', 
+                                                gap: '0.25rem 0.5rem',
+                                                background: 'rgba(255,255,255,0.03)',
+                                                borderRadius: 'var(--radius-md)',
+                                                padding: '0.5rem 0.75rem',
+                                                marginBottom: '0.5rem'
+                                            }}>
+                                                {/* แถวหัวข้อ */}
+                                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>จำนวน</span>
+                                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ยอดรวม</span>
+                                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ค่าคอม</span>
+                                                {/* แถวค่า */}
+                                                <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>{(() => {
+                                                    let filtered = inlineSubmissions.filter(s => {
                                                         const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
                                                         if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
                                                         if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
                                                         if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
                                                         return true
-                                                    }).reduce((sum, s) => sum + s.amount, 0).toLocaleString()}</span>
-                                                </div>
+                                                    })
+                                                    if (isGrouped) {
+                                                        const grouped = {}
+                                                        filtered.forEach(s => {
+                                                            const normalizedNumbers = normalizeNumber(s.numbers, s.bet_type)
+                                                            const key = `${normalizedNumbers}|${s.bet_type}`
+                                                            if (!grouped[key]) grouped[key] = true
+                                                        })
+                                                        return Object.keys(grouped).length
+                                                    }
+                                                    return filtered.length
+                                                })()} รายการ</span>
+                                                <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>{round.currency_symbol}{inlineSubmissions.filter(s => {
+                                                    const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
+                                                    if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
+                                                    if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
+                                                    if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
+                                                    return true
+                                                }).reduce((sum, s) => sum + s.amount, 0).toLocaleString()}</span>
+                                                <span style={{ fontWeight: '600', fontSize: '0.9rem', color: 'var(--color-warning)' }}>{round.currency_symbol}{inlineSubmissions.filter(s => {
+                                                    const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
+                                                    if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
+                                                    if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
+                                                    if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
+                                                    return true
+                                                }).reduce((sum, s) => sum + (s.commission_amount || 0), 0).toLocaleString()}</span>
                                             </div>
 
                                             <div className="inline-table-wrap">
@@ -1676,11 +1691,7 @@ export default function RoundAccordionItem({
                         </div>
                     )}
 
-                    {!isAnnounced && viewMode === 'summary' && (
-                        <div className="empty-state" style={{ padding: '1.5rem', textAlign: 'center' }}>
-                            <p style={{ color: 'var(--color-text-muted)' }}>ยังไม่ได้ประกาศผลรางวัล</p>
-                        </div>
-                    )}
+                    {/* ลบแบนเนอร์ "ยังไม่ได้ประกาศผลรางวัล" ตามที่ผู้ใช้ต้องการ */}
                 </div>
             )}
 
