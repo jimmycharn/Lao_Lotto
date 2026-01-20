@@ -407,6 +407,18 @@
     gap: 0.75rem;
 }
 
+.bet-type-grid.grid-cols-1 {
+    grid-template-columns: 1fr;
+}
+
+.bet-type-grid.grid-cols-2 {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.bet-type-grid.grid-cols-3 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
 .bet-type-btn {
     padding: 0.75rem;
     border: 1px solid rgba(255, 255, 255, 0.1);

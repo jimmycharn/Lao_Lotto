@@ -88,6 +88,7 @@ export default function UserDashboard() {
         return saved ? JSON.parse(saved) : {}
     })
     const [draggedBetType, setDraggedBetType] = useState(null)
+    const [isReversed, setIsReversed] = useState(false) // Toggle for 2-digit reversed bets
     const numberInputRef = useRef(null)
     const amountInputRef = useRef(null)
     const billNoteInputRef = useRef(null)
@@ -2670,23 +2671,19 @@ export default function UserDashboard() {
                                                 onFocus={e => e.target.select()}
                                                 onChange={e => {
                                                     let value = e.target.value
-                                                    // Convert separators to *
-                                                    value = value.replace(/[ \-.,]/g, '*')
-                                                    // Remove non-digit and non-* characters
-                                                    value = value.replace(/[^\d*]/g, '')
-                                                    // Rule 1: Cannot start with *
-                                                    value = value.replace(/^\*+/, '')
-
-                                                    // Special rule for 4-digit inputs on Lao/Hanoi: No "*" allowed
                                                     const digits = submitForm.numbers.replace(/\*/g, '').length
-                                                    const isLaoOrHanoi = ['lao', 'hanoi'].includes(selectedRound?.lottery_type)
-                                                    if (digits === 4 && isLaoOrHanoi) {
-                                                        value = value.replace(/\*/g, '')
+                                                    
+                                                    // สำหรับ 1, 4, 5 หลัก - รับเฉพาะตัวเลขเท่านั้น ไม่รับ * หรือเครื่องหมายอื่น
+                                                    if (digits === 1 || digits === 4 || digits === 5 || digits === 0) {
+                                                        value = value.replace(/[^\d]/g, '')
                                                     } else {
-                                                        // Rule 2: Only allow one *
+                                                        // สำหรับ 2, 3 หลัก - รับตัวเลขและ * (แปลงจาก space, -, ., ,)
+                                                        value = value.replace(/[ \-.,]/g, '*')
+                                                        value = value.replace(/[^\d*]/g, '')
+                                                        value = value.replace(/^\*+/, '')
+                                                        // อนุญาตให้มี * ได้แค่ 1 ตัว
                                                         const starCount = (value.match(/\*/g) || []).length
                                                         if (starCount > 1) {
-                                                            // Keep only the first *
                                                             const firstStarIndex = value.indexOf('*')
                                                             value = value.substring(0, firstStarIndex + 1) + value.substring(firstStarIndex + 1).replace(/\*/g, '')
                                                         }
@@ -2724,124 +2721,197 @@ export default function UserDashboard() {
 
                                 <div className="bet-type-selection">
                                     <label className="form-label">เลือกประเภท</label>
-                                    <div className="bet-type-grid">
-                                        {(() => {
-                                            const digits = submitForm.numbers.replace(/\*/g, '').length
-                                            const hasStarInAmount = submitForm.amount.toString().includes('*')
-                                            const lotteryType = selectedRound.lottery_type
-                                            const amount = submitForm.amount.toString()
-                                            const isAmountEmpty = !amount || amount === '0' || amount === ''
+                                    {(() => {
+                                        const digits = submitForm.numbers.replace(/\*/g, '').length
+                                        const hasStarInAmount = submitForm.amount.toString().includes('*')
+                                        const lotteryType = selectedRound.lottery_type
+                                        const amount = submitForm.amount.toString()
+                                        const isAmountEmpty = !amount || amount === '0' || amount === ''
+                                        const amtParts = amount.split('*').filter(p => p && !isNaN(parseFloat(p)))
+                                        const isIncompleteAmount = amount.includes('*') && amtParts.length < 2
+                                        const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
 
-                                            let available = []
+                                        let available = []
 
-                                            // Check if amount is incomplete (ends with * but no second number)
-                                            const amtParts = amount.split('*').filter(p => p && !isNaN(parseFloat(p)))
-                                            const isIncompleteAmount = amount.includes('*') && amtParts.length < 2
-
-                                            // Only show bet type buttons if amount is also entered and complete
-                                            // Exception: For 4-digit on Lao/Hanoi, show "4 ตัวชุด" even when amount is empty
-                                            const isLaoOrHanoi4Digit = digits === 4 && ['lao', 'hanoi'].includes(lotteryType)
-                                            if ((isAmountEmpty || isIncompleteAmount) && !isLaoOrHanoi4Digit) {
-                                                // Don't show any buttons if amount is empty or incomplete
-                                                available = []
-                                            } else if (digits === 1) {
-                                                available = ['run_top', 'run_bottom', 'front_top_1', 'middle_top_1', 'back_top_1', 'front_bottom_1', 'back_bottom_1']
-                                            } else if (digits === 2) {
-
-                                                // Check if we have 2 complete amount parts (e.g., "100*50")
-                                                const amtParts = amount.split('*').filter(p => p && !isNaN(parseFloat(p)))
-                                                const hasTwoAmounts = amtParts.length === 2
-
-                                                if (hasTwoAmounts) {
-                                                    // With 2 amounts - show reversed types (กลับ)
-                                                    available = ['2_top_rev', '2_front_rev', '2_spread_rev', '2_bottom_rev']
-                                                } else if (amtParts.length === 1 && !amount.includes('*')) {
-                                                    // Single amount without "*" - show normal types
-                                                    available = ['2_top', '2_front', '2_spread', '2_have', '2_bottom']
+                                        // 1. ป้อนเลข 1 ตัว - ใช้ทั้งหวยไทย ลาว ฮานอย
+                                        if (digits === 1) {
+                                            if (!isAmountEmpty) {
+                                                available = [
+                                                    { id: 'run_top', label: 'วิ่งบน' },
+                                                    { id: 'run_bottom', label: 'วิ่งล่าง' },
+                                                    { id: 'front_top_1', label: 'หน้าบน' },
+                                                    { id: 'middle_top_1', label: 'กลางบน' },
+                                                    { id: 'back_top_1', label: 'หลังบน' },
+                                                    { id: 'front_bottom_1', label: 'หน้าล่าง' },
+                                                    { id: 'back_bottom_1', label: 'หลังล่าง' }
+                                                ]
+                                            }
+                                        }
+                                        // 2. ป้อนเลข 2 ตัว - ใช้ทั้งหวยไทย ลาว ฮานอย
+                                        else if (digits === 2) {
+                                            if (!isAmountEmpty && !isIncompleteAmount) {
+                                                if (hasStarInAmount && amtParts.length === 2) {
+                                                    // มีเครื่องหมาย * เช่น 100*100
+                                                    available = [
+                                                        { id: '2_top_rev', label: '2 ตัวบนกลับ' },
+                                                        { id: '2_front_rev', label: '2 ตัวหน้ากลับ' },
+                                                        { id: '2_spread_rev', label: '2 ตัวถ่างกลับ' },
+                                                        { id: '2_bottom_rev', label: '2 ตัวล่างกลับ' }
+                                                    ]
+                                                } else if (amtParts.length === 1 && !hasStarInAmount) {
+                                                    // ตัวเลขอย่างเดียวเช่น 100
+                                                    if (isReversed) {
+                                                        available = [
+                                                            { id: '2_top_rev', label: '2 ตัวบนกลับ' },
+                                                            { id: '2_front_rev', label: '2 ตัวหน้ากลับ' },
+                                                            { id: '2_spread_rev', label: '2 ตัวถ่างกลับ' },
+                                                            { id: '2_bottom_rev', label: '2 ตัวล่างกลับ' }
+                                                        ]
+                                                    } else {
+                                                        available = [
+                                                            { id: '2_top', label: '2 ตัวบน' },
+                                                            { id: '2_bottom', label: '2 ตัวล่าง' },
+                                                            { id: '2_have', label: '2 มี' },
+                                                            { id: '2_front', label: '2 ตัวหน้า' },
+                                                            { id: '2_spread', label: '2 ตัวถ่าง' }
+                                                        ]
+                                                    }
                                                 }
-                                                // If amount ends with "*" but doesn't have 2nd number, show nothing
-
-
-                                            } else if (digits === 3) {
-                                                if (hasStarInAmount) {
+                                            }
+                                        }
+                                        // 3. ป้อนเลข 3 ตัว - ใช้ทั้งหวยไทย ลาว ฮานอย
+                                        else if (digits === 3) {
+                                            if (!isAmountEmpty && !isIncompleteAmount) {
+                                                if (hasStarInAmount && amtParts.length === 2) {
+                                                    // มีเครื่องหมาย * เช่น 100*100
                                                     const permCount = getPermutations(submitForm.numbers).length
                                                     available = [
                                                         { id: '3_straight_tod', label: 'เต็ง-โต๊ด' },
                                                         { id: '3_straight_perm', label: `1+กลับ (${permCount - 1})` }
                                                     ]
-                                                } else {
+                                                } else if (amtParts.length === 1 && !hasStarInAmount) {
+                                                    // ตัวเลขอย่างเดียวเช่น 100
                                                     const permCount = getPermutations(submitForm.numbers).length
                                                     available = [
-                                                        '3_top',
-                                                        '3_tod',
-                                                        { id: '3_perm_from_3', label: `คูณชุด ${permCount}` }
+                                                        { id: '3_perm_from_3', label: `คูณชุด ${permCount}` },
+                                                        { id: '3_straight_tod', label: 'เต็ง-โต๊ด' },
+                                                        { id: '3_top', label: '3 ตัวบน' },
+                                                        { id: '3_tod', label: '3 ตัวโต๊ด' }
                                                     ]
-                                                    if (lotteryType === 'thai') available.push('3_bottom')
-                                                }
-                                            }
-                                            else if (digits === 4) {
-                                                const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
-                                                if (isLaoOrHanoi) {
-                                                    // For Lao and Hanoi: special logic for 4-digit
-                                                    if (isAmountEmpty) {
-                                                        // When amount is empty, only show "4 ตัวชุด"
-                                                        available = ['4_set']
-                                                    } else {
-                                                        // When amount has value, show all options
-                                                        const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
-                                                        available = [
-                                                            '4_set',
-                                                            '4_float',
-                                                            { id: '3_perm_from_4', label: `3 X ${permCount}` }
-                                                        ]
-                                                    }
-                                                } else {
-                                                    // For other lottery types (Thai, etc.)
-                                                    if (!isAmountEmpty) {
-                                                        const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
-                                                        available = [
-                                                            '4_float',
-                                                            { id: '3_perm_from_4', label: `3 X ${permCount}` }
-                                                        ]
+                                                    if (lotteryType === 'thai') {
+                                                        available.push({ id: '3_bottom', label: '3 ตัวล่าง' })
                                                     }
                                                 }
                                             }
-                                            else if (digits === 5) {
-                                                if (!isAmountEmpty) {
-                                                    const permCount = getUnique3DigitPermsFrom5(submitForm.numbers).length
+                                        }
+                                        // 4 & 5. ป้อนเลข 4 ตัว
+                                        else if (digits === 4) {
+                                            if (isLaoOrHanoi) {
+                                                // หวยลาว ฮานอย
+                                                if (submitForm.numbers && !isAmountEmpty) {
+                                                    const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
                                                     available = [
-                                                        '5_float',
-                                                        { id: '3_perm_from_5', label: `3 X ${permCount}` }
+                                                        { id: '4_set', label: '4 ตัวชุด' },
+                                                        { id: '4_float', label: '4 ตัวลอย' },
+                                                        { id: '3_perm_from_4', label: `3 X ${permCount}` }
+                                                    ]
+                                                } else if (submitForm.numbers && isAmountEmpty) {
+                                                    // ช่องจำนวนเงินว่าง แสดงเฉพาะ "4 ตัวชุด"
+                                                    available = [{ id: '4_set', label: '4 ตัวชุด' }]
+                                                }
+                                            } else {
+                                                // หวยไทย
+                                                if (!isAmountEmpty) {
+                                                    const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
+                                                    available = [
+                                                        { id: '4_float', label: '4 ตัวลอย' },
+                                                        { id: '3_perm_from_4', label: `3 X ${permCount}` }
                                                     ]
                                                 }
                                             }
+                                        }
+                                        // 6. ป้อนเลข 5 ตัว
+                                        else if (digits === 5) {
+                                            if (!isAmountEmpty) {
+                                                const permCount = getUnique3DigitPermsFrom5(submitForm.numbers).length
+                                                available = [
+                                                    { id: '5_float', label: '5 ตัวลอย' },
+                                                    { id: '3_perm_from_5', label: `3 X ${permCount}` }
+                                                ]
+                                            }
+                                        }
 
-                                            // Sort by saved order
-                                            const sortedAvailable = sortBetTypes(available, digits)
-                                            
-                                            return sortedAvailable.map(item => {
-                                                const key = typeof item === 'string' ? item : item.id
-                                                const label = typeof item === 'string' ? (BET_TYPES[key]?.label || key) : item.label
-                                                return (
+                                        // ไม่แสดงอะไรถ้าไม่มีปุ่ม
+                                        if (available.length === 0) {
+                                            return <div className="bet-type-grid"></div>
+                                        }
+
+                                        // กำหนด CSS class ตามจำนวนหลัก
+                                        let gridClass = 'bet-type-grid'
+                                        if (digits === 1) {
+                                            gridClass = 'bet-type-grid grid-cols-3'
+                                        } else if (digits === 2) {
+                                            gridClass = 'bet-type-grid grid-cols-3'
+                                        } else if (digits === 3) {
+                                            gridClass = 'bet-type-grid grid-cols-2'
+                                        } else if (digits === 4) {
+                                            if (isLaoOrHanoi && isAmountEmpty) {
+                                                gridClass = 'bet-type-grid grid-cols-1'
+                                            } else if (isLaoOrHanoi) {
+                                                gridClass = 'bet-type-grid grid-cols-3'
+                                            } else {
+                                                gridClass = 'bet-type-grid grid-cols-2'
+                                            }
+                                        } else if (digits === 5) {
+                                            gridClass = 'bet-type-grid grid-cols-2'
+                                        }
+
+                                        // Sort by saved order
+                                        const sortedAvailable = sortBetTypes(available, digits)
+                                        
+                                        // สำหรับ 2 หลัก ที่ไม่มี * ให้แสดงปุ่ม toggle "กลับ" เป็นปุ่มแรก
+                                        const show2DigitToggle = digits === 2 && !hasStarInAmount && available.length > 0
+
+                                        return (
+                                            <div className={gridClass}>
+                                                {/* ปุ่ม toggle กลับ/ไม่กลับ สำหรับ 2 หลัก (แสดงเป็นปุ่มแรก) */}
+                                                {show2DigitToggle && (
                                                     <button
-                                                        key={key}
                                                         type="button"
-                                                        className={`bet-type-btn ${draggedBetType?.key === key ? 'dragging' : ''}`}
-                                                        draggable
+                                                        className={`bet-type-btn ${isReversed ? 'active' : ''}`}
                                                         onMouseDown={(e) => e.preventDefault()}
                                                         onTouchStart={(e) => e.preventDefault()}
-                                                        onDragStart={(e) => handleBetTypeDragStart(e, item, digits)}
-                                                        onDragEnd={handleBetTypeDragEnd}
-                                                        onDragOver={handleBetTypeDragOver}
-                                                        onDrop={(e) => handleBetTypeDrop(e, item, sortedAvailable, digits)}
-                                                        onClick={() => addToDraft(key)}
+                                                        onClick={() => setIsReversed(!isReversed)}
                                                     >
-                                                        {label}
+                                                        {isReversed ? 'ไม่กลับ' : 'กลับ'}
                                                     </button>
-                                                )
-                                            })
-                                        })()}
-                                    </div>
+                                                )}
+                                                
+                                                {/* ปุ่มประเภทเลข */}
+                                                {sortedAvailable.map(item => {
+                                                    const key = typeof item === 'string' ? item : item.id
+                                                    const label = typeof item === 'string' ? (BET_TYPES[key]?.label || key) : item.label
+                                                    return (
+                                                        <button
+                                                            key={key}
+                                                            type="button"
+                                                            className={`bet-type-btn ${draggedBetType?.key === key ? 'dragging' : ''}`}
+                                                            draggable
+                                                            onMouseDown={(e) => e.preventDefault()}
+                                                            onTouchStart={(e) => e.preventDefault()}
+                                                            onDragStart={(e) => handleBetTypeDragStart(e, item, digits)}
+                                                            onDragEnd={handleBetTypeDragEnd}
+                                                            onDragOver={handleBetTypeDragOver}
+                                                            onDrop={(e) => handleBetTypeDrop(e, item, sortedAvailable, digits)}
+                                                            onClick={() => addToDraft(key)}
+                                                        >
+                                                            {label}
+                                                        </button>
+                                                    )
+                                                })}
+                                            </div>
+                                        )
+                                    })()}
                                 </div>
                             </div>
 
