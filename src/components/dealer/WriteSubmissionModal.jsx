@@ -28,6 +28,7 @@ export default function WriteSubmissionModal({
     const { toast } = useToast()
     const numberInputRef = useRef(null)
     const amountInputRef = useRef(null)
+    const audioContextRef = useRef(null)
 
     const [submitForm, setSubmitForm] = useState({
         bet_type: '2_top',
@@ -39,6 +40,30 @@ export default function WriteSubmissionModal({
     const [billNote, setBillNote] = useState('')
     const [userSettings, setUserSettings] = useState(null)
     const [isReversed, setIsReversed] = useState(false) // Toggle for 2-digit reversed bets
+    const [showPasteModal, setShowPasteModal] = useState(false)
+    const [pasteText, setPasteText] = useState('')
+
+    // Play sound when adding to draft
+    function playAddSound() {
+        try {
+            if (!audioContextRef.current) {
+                audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
+            }
+            const ctx = audioContextRef.current
+            const oscillator = ctx.createOscillator()
+            const gainNode = ctx.createGain()
+            oscillator.connect(gainNode)
+            gainNode.connect(ctx.destination)
+            oscillator.frequency.value = 800
+            oscillator.type = 'sine'
+            gainNode.gain.setValueAtTime(0.1, ctx.currentTime)
+            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1)
+            oscillator.start(ctx.currentTime)
+            oscillator.stop(ctx.currentTime + 0.1)
+        } catch (e) {
+            console.log('Audio not supported')
+        }
+    }
 
     useEffect(() => {
         if (targetUser?.id && dealerId) {
@@ -190,7 +215,19 @@ export default function WriteSubmissionModal({
                 })
             })
         } else if (betType === '3_straight_tod') {
-            const [straightAmt, todAmt] = amountParts
+            // เต็ง-โต๊ด: ถ้าไม่มี * ใช้จำนวนเงินเดียวกันสำหรับทั้ง 3 ตัวบนและ 3 ตัวโต๊ด
+            // ถ้ามี * ใช้จำนวนเงินแรกสำหรับ 3 ตัวบน และจำนวนเงินที่สองสำหรับ 3 ตัวโต๊ด
+            const hasStarInAmount = amountStr.includes('*')
+            let straightAmt, todAmt
+            if (hasStarInAmount && amountParts.length === 2) {
+                straightAmt = amountParts[0]
+                todAmt = amountParts[1]
+            } else {
+                // ไม่มี * - ใช้จำนวนเงินเดียวกันทั้ง 2 ประเภท
+                straightAmt = totalAmount
+                todAmt = totalAmount
+            }
+            
             if (straightAmt > 0) {
                 const commInfo = getCommissionForBetType('3_top')
                 newDrafts.push({
@@ -284,11 +321,24 @@ export default function WriteSubmissionModal({
                 created_at: timestamp
             })
         } else if (betType.includes('_rev')) {
-            // Reversed bets (กลับ)
+            // กลับ (2 หลัก): สร้างทั้งเลขต้นฉบับและเลขกลับ
+            // ถ้าไม่มี * ใช้จำนวนเงินเดียวกันสำหรับทั้ง 2 รายการ
+            // ถ้ามี * ใช้จำนวนเงินแรกสำหรับเลขต้นฉบับ และจำนวนเงินที่สองสำหรับเลขกลับ
             const baseBetType = betType.replace('_rev', '')
-            const [amt1, amt2] = amountParts
             const reversedNumbers = cleanNumbers.split('').reverse().join('')
+            const hasStarInAmount = amountStr.includes('*')
+            
+            let amt1, amt2
+            if (hasStarInAmount && amountParts.length === 2) {
+                amt1 = amountParts[0]
+                amt2 = amountParts[1]
+            } else {
+                // ไม่มี * - ใช้จำนวนเงินเดียวกันทั้ง 2 เลข
+                amt1 = totalAmount
+                amt2 = totalAmount
+            }
 
+            // เลขต้นฉบับกับจำนวนเงินแรก
             if (amt1 > 0) {
                 const commInfo = getCommissionForBetType(baseBetType)
                 newDrafts.push({
@@ -300,11 +350,13 @@ export default function WriteSubmissionModal({
                     commission_amount: commInfo.isFixed ? commInfo.rate : (amt1 * commInfo.rate) / 100,
                     display_numbers: cleanNumbers,
                     display_amount: submitForm.amount,
-                    display_bet_type: `${BET_TYPES[baseBetType]?.label || baseBetType} กลับ`,
+                    display_bet_type: displayLabel,
                     created_at: timestamp
                 })
             }
-            if (amt2 > 0 && cleanNumbers !== reversedNumbers) {
+            
+            // เลขกลับกับจำนวนเงินที่สอง (ถ้าเลขไม่เหมือนกัน เช่น 12 → 21)
+            if (amt2 > 0 && reversedNumbers !== cleanNumbers) {
                 const commInfo = getCommissionForBetType(baseBetType)
                 newDrafts.push({
                     entry_id: entryId,
@@ -315,7 +367,22 @@ export default function WriteSubmissionModal({
                     commission_amount: commInfo.isFixed ? commInfo.rate : (amt2 * commInfo.rate) / 100,
                     display_numbers: cleanNumbers,
                     display_amount: submitForm.amount,
-                    display_bet_type: `${BET_TYPES[baseBetType]?.label || baseBetType} กลับ`,
+                    display_bet_type: displayLabel,
+                    created_at: timestamp
+                })
+            } else if (amt2 > 0 && reversedNumbers === cleanNumbers) {
+                // เลขเหมือนกัน (เช่น 11, 22) - เพิ่มจำนวนเงินที่สองให้เลขเดิม
+                const commInfo = getCommissionForBetType(baseBetType)
+                newDrafts.push({
+                    entry_id: entryId,
+                    bet_type: baseBetType,
+                    numbers: cleanNumbers,
+                    amount: amt2,
+                    commission_rate: commInfo.rate,
+                    commission_amount: commInfo.isFixed ? commInfo.rate : (amt2 * commInfo.rate) / 100,
+                    display_numbers: cleanNumbers,
+                    display_amount: submitForm.amount,
+                    display_bet_type: displayLabel,
                     created_at: timestamp
                 })
             }
@@ -337,8 +404,69 @@ export default function WriteSubmissionModal({
         }
 
         setDrafts([...drafts, ...newDrafts])
-        setSubmitForm({ ...submitForm, numbers: '', amount: '' })
-        numberInputRef.current?.focus()
+        playAddSound() // Play sound feedback
+        // ไม่เคลียร์ช่องป้อน แต่ให้ select all เพื่อรอป้อนเลขรายการถัดไป
+        if (numberInputRef.current) {
+            numberInputRef.current.focus()
+            numberInputRef.current.select()
+        }
+    }
+
+    // Handle paste numbers for 4-digit sets (Lao/Hanoi)
+    function handlePasteNumbers() {
+        if (!pasteText.trim()) {
+            toast.warning('กรุณาวางข้อมูลก่อน')
+            return
+        }
+
+        const isLaoOrHanoi = ['lao', 'hanoi'].includes(round.lottery_type)
+        if (!isLaoOrHanoi) {
+            toast.warning('ฟีเจอร์นี้ใช้ได้เฉพาะหวยลาว และ หวยฮานอย')
+            return
+        }
+
+        const lotteryKey = round.lottery_type
+        const userSetPrice = userSettings?.lottery_settings?.[lotteryKey]?.['4_set']?.setPrice
+        const setPrice = userSetPrice || round.set_prices?.['4_top'] || 120
+        const commInfo = getCommissionForBetType('4_top')
+        const commissionPerSet = commInfo.rate
+
+        const lines = pasteText.split('\n')
+        const newDrafts = []
+        const timestamp = new Date().toISOString()
+        let addedCount = 0
+
+        lines.forEach(line => {
+            const matches = line.match(/\d{4}/g)
+            if (matches) {
+                matches.forEach(numbers => {
+                    const entryId = generateUUID()
+                    newDrafts.push({
+                        entry_id: entryId,
+                        bet_type: '4_set',
+                        numbers: numbers,
+                        amount: setPrice,
+                        commission_rate: commissionPerSet,
+                        commission_amount: commissionPerSet,
+                        display_numbers: numbers,
+                        display_amount: `${setPrice} บาท (1 ชุด)`,
+                        display_bet_type: '4 ตัวชุด',
+                        created_at: timestamp
+                    })
+                    addedCount++
+                })
+            }
+        })
+
+        if (newDrafts.length > 0) {
+            setDrafts(prev => [...prev, ...newDrafts])
+            setShowPasteModal(false)
+            setPasteText('')
+            playAddSound()
+            toast.success(`เพิ่ม ${addedCount} รายการสำเร็จ`)
+        } else {
+            toast.warning('ไม่พบเลข 4 ตัวในข้อความ')
+        }
     }
 
     function removeDraft(entryId) {
@@ -357,7 +485,7 @@ export default function WriteSubmissionModal({
             const timestamp = new Date().toISOString()
 
             const inserts = drafts.map(d => {
-                const { display_numbers, display_amount, display_bet_type, ...rest } = d
+                const { display_numbers, display_bet_type, ...rest } = d
                 return {
                     ...rest,
                     round_id: round.id,
@@ -552,6 +680,29 @@ export default function WriteSubmissionModal({
 
                     {/* Input Section */}
                     <div className="input-section card" style={{ padding: '1rem', marginBottom: '1rem' }}>
+                        {/* Action Buttons - วางเลข และ บันทึกโพย */}
+                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                            {['lao', 'hanoi'].includes(round.lottery_type) && (
+                                <button
+                                    type="button"
+                                    className="btn btn-outline btn-sm"
+                                    onClick={() => setShowPasteModal(true)}
+                                    style={{ flex: 1 }}
+                                >
+                                    <FiPlus style={{ marginRight: '0.25rem' }} /> วางเลข
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                className={`btn ${drafts.length > 0 ? 'btn-primary' : 'btn-outline'} btn-sm`}
+                                onClick={handleSubmit}
+                                disabled={drafts.length === 0 || submitting}
+                                style={{ flex: 1 }}
+                            >
+                                <FiCheck style={{ marginRight: '0.25rem' }} /> บันทึกโพย ({drafts.length})
+                            </button>
+                        </div>
+
                         <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem' }}>
                             <div style={{ flex: 1 }}>
                                 <label className="form-label">ตัวเลข</label>
@@ -607,21 +758,21 @@ export default function WriteSubmissionModal({
                                         let value = e.target.value
                                         const digits = submitForm.numbers.replace(/\*/g, '').length
                                         
-                                        // For 2 and 3 digits, allow * for split amounts
-                                        if (digits === 2 || digits === 3) {
+                                        // สำหรับ 1, 4, 5 หลัก - รับเฉพาะตัวเลขเท่านั้น ไม่รับ * หรือเครื่องหมายอื่น
+                                        if (digits === 1 || digits === 4 || digits === 5 || digits === 0) {
+                                            value = value.replace(/[^\d]/g, '')
+                                        } else {
+                                            // สำหรับ 2, 3 หลัก - รับตัวเลขและ * (แปลงจาก space, -, ., ,)
+                                            value = value.replace(/[ \-.,]/g, '*')
                                             value = value.replace(/[^\d*]/g, '')
                                             value = value.replace(/^\*+/, '')
-                                            
+                                            // อนุญาตให้มี * ได้แค่ 1 ตัว
                                             const starCount = (value.match(/\*/g) || []).length
                                             if (starCount > 1) {
                                                 const firstStarIndex = value.indexOf('*')
                                                 value = value.substring(0, firstStarIndex + 1) + value.substring(firstStarIndex + 1).replace(/\*/g, '')
                                             }
-                                        } else {
-                                            // For other digits, only allow numbers
-                                            value = value.replace(/[^\d]/g, '')
                                         }
-                                        
                                         setSubmitForm({ ...submitForm, amount: value })
                                     }}
                                     onKeyDown={e => {
@@ -865,6 +1016,41 @@ export default function WriteSubmissionModal({
                     </button>
                 </div>
             </div>
+
+            {/* Paste Modal */}
+            {showPasteModal && (
+                <div className="modal-overlay" onClick={() => setShowPasteModal(false)} style={{ zIndex: 1001 }}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+                        <div className="modal-header">
+                            <h3>วางเลข 4 ตัว</h3>
+                            <button className="modal-close" onClick={() => setShowPasteModal(false)}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <p style={{ marginBottom: '1rem', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+                                วางข้อความที่มีเลข 4 ตัว ระบบจะดึงเลข 4 ตัวทั้งหมดมาเพิ่มเป็น "4 ตัวชุด"
+                            </p>
+                            <textarea
+                                className="form-input"
+                                rows={6}
+                                placeholder="วางข้อความที่นี่..."
+                                value={pasteText}
+                                onChange={e => setPasteText(e.target.value)}
+                                style={{ width: '100%', resize: 'vertical' }}
+                            />
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowPasteModal(false)}>
+                                ยกเลิก
+                            </button>
+                            <button className="btn btn-primary" onClick={handlePasteNumbers}>
+                                <FiPlus /> เพิ่มเลข
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

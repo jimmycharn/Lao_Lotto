@@ -2194,7 +2194,9 @@ export default function UserDashboard() {
                                                                                                             </span>
                                                                                                         </div>
                                                                                                         <span className="bill-item-amount">
-                                                                                                            {round.currency_symbol}{(displayMode === 'summary' ? sub.display_amount : sub.amount)?.toLocaleString()}
+                                                                                                            {round.currency_symbol}{displayMode === 'summary' 
+                                                                                                                ? (typeof sub.display_amount === 'string' ? sub.display_amount : sub.amount?.toLocaleString()) 
+                                                                                                                : sub.amount?.toLocaleString()}
                                                                                                         </span>
                                                                                                     </div>
                                                                                                 ))}
@@ -2262,7 +2264,9 @@ export default function UserDashboard() {
                                                                                                     </span>
                                                                                                 </div>
                                                                                             </td>
-                                                                                            <td>{round.currency_symbol}{(displayMode === 'summary' ? sub.display_amount : sub.amount)?.toLocaleString()}</td>
+                                                                                            <td>{round.currency_symbol}{displayMode === 'summary' 
+                                                                                                ? (typeof sub.display_amount === 'string' ? sub.display_amount : sub.amount?.toLocaleString()) 
+                                                                                                : sub.amount?.toLocaleString()}</td>
                                                                                             <td className="commission-cell">
                                                                                                 {round.currency_symbol}{sub.commission_amount?.toLocaleString()}
                                                                                             </td>
