@@ -868,11 +868,20 @@ export default function WriteSubmissionModal({
                                         {show2DigitToggle && (
                                             <button
                                                 type="button"
-                                                className={`btn ${isReversed ? 'btn-primary' : 'btn-outline'} btn-sm`}
                                                 onClick={() => setIsReversed(!isReversed)}
-                                                style={{ fontSize: '0.85rem' }}
+                                                style={{ 
+                                                    fontSize: '0.85rem',
+                                                    padding: '0.5rem 1rem',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    border: '2px solid #9b59b6',
+                                                    background: isReversed ? '#9b59b6' : 'transparent',
+                                                    color: isReversed ? '#fff' : '#9b59b6',
+                                                    cursor: 'pointer',
+                                                    fontWeight: 500,
+                                                    transition: 'all 0.15s ease'
+                                                }}
                                             >
-                                                {isReversed ? 'ไม่กลับ' : 'กลับ'}
+                                                กลับ
                                             </button>
                                         )}
                                         
