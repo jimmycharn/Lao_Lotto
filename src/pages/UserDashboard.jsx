@@ -693,7 +693,19 @@ export default function UserDashboard() {
                 })
             })
         } else if (betType === '3_straight_tod') {
-            const [straightAmt, todAmt] = amountParts
+            // เต็ง-โต๊ด: ถ้าไม่มี * ใช้จำนวนเงินเดียวกันสำหรับทั้ง 3 ตัวบนและ 3 ตัวโต๊ด
+            // ถ้ามี * ใช้จำนวนเงินแรกสำหรับ 3 ตัวบน และจำนวนเงินที่สองสำหรับ 3 ตัวโต๊ด
+            const hasStarInAmount = submitForm.amount.toString().includes('*')
+            let straightAmt, todAmt
+            if (hasStarInAmount && amountParts.length === 2) {
+                straightAmt = amountParts[0]
+                todAmt = amountParts[1]
+            } else {
+                // ไม่มี * - ใช้จำนวนเงินเดียวกันทั้ง 2 ประเภท
+                straightAmt = totalAmount
+                todAmt = totalAmount
+            }
+            
             if (straightAmt > 0) {
                 const commInfo = getCommissionForBetType('3_top', freshUserSettings)
                 newDrafts.push({
@@ -763,12 +775,24 @@ export default function UserDashboard() {
                 })
             }
         } else if (betType.endsWith('_rev') && cleanNumbers.length === 2) {
-            // 2-digit reversed bet types - create both normal and reversed entries
+            // กลับ (2 หลัก): สร้างทั้งเลขต้นฉบับและเลขกลับ
+            // ถ้าไม่มี * ใช้จำนวนเงินเดียวกันสำหรับทั้ง 2 รายการ
+            // ถ้ามี * ใช้จำนวนเงินแรกสำหรับเลขต้นฉบับ และจำนวนเงินที่สองสำหรับเลขกลับ
             const baseBetType = betType.replace('_rev', '')
             const reversedNumbers = cleanNumbers.split('').reverse().join('')
-            const [amt1, amt2] = amountParts
+            const hasStarInAmount = submitForm.amount.toString().includes('*')
+            
+            let amt1, amt2
+            if (hasStarInAmount && amountParts.length === 2) {
+                amt1 = amountParts[0]
+                amt2 = amountParts[1]
+            } else {
+                // ไม่มี * - ใช้จำนวนเงินเดียวกันทั้ง 2 เลข
+                amt1 = totalAmount
+                amt2 = totalAmount
+            }
 
-            // First number with first amount
+            // เลขต้นฉบับกับจำนวนเงินแรก
             if (amt1 > 0) {
                 const commInfo = getCommissionForBetType(baseBetType, freshUserSettings)
                 newDrafts.push({
@@ -785,7 +809,7 @@ export default function UserDashboard() {
                 })
             }
 
-            // Reversed number with second amount (if different from original)
+            // เลขกลับกับจำนวนเงินที่สอง (ถ้าเลขไม่เหมือนกัน เช่น 12 → 21)
             if (amt2 > 0 && reversedNumbers !== cleanNumbers) {
                 const commInfo = getCommissionForBetType(baseBetType, freshUserSettings)
                 newDrafts.push({
@@ -801,7 +825,7 @@ export default function UserDashboard() {
                     created_at: timestamp
                 })
             } else if (amt2 > 0 && reversedNumbers === cleanNumbers) {
-                // Same number (e.g., 11, 22) - just add the second amount to same number
+                // เลขเหมือนกัน (เช่น 11, 22) - เพิ่มจำนวนเงินที่สองให้เลขเดิม
                 const commInfo = getCommissionForBetType(baseBetType, freshUserSettings)
                 newDrafts.push({
                     entry_id: entryId,
