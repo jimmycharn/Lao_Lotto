@@ -2621,11 +2621,13 @@ export default function UserDashboard() {
                                             ref={numberInputRef}
                                             type="text"
                                             className="form-input number-input"
-                                            inputMode="decimal"
+                                            inputMode="numeric"
+                                            pattern="[0-9]*"
                                             placeholder="ป้อนตัวเลข"
                                             value={submitForm.numbers}
                                             onChange={e => {
-                                                const newNumbers = e.target.value.replace(/[ \-.,]/g, '*').replace(/[^\d*]/g, '')
+                                                // Only allow digits (0-9)
+                                                const newNumbers = e.target.value.replace(/[^\d]/g, '')
                                                 const digitsOnly = newNumbers.replace(/\*/g, '')
                                                 const isLaoOrHanoi = ['lao', 'hanoi'].includes(selectedRound?.lottery_type)
                                                 
@@ -2826,6 +2828,8 @@ export default function UserDashboard() {
                                                         type="button"
                                                         className={`bet-type-btn ${draggedBetType?.key === key ? 'dragging' : ''}`}
                                                         draggable
+                                                        onMouseDown={(e) => e.preventDefault()}
+                                                        onTouchStart={(e) => e.preventDefault()}
                                                         onDragStart={(e) => handleBetTypeDragStart(e, item, digits)}
                                                         onDragEnd={handleBetTypeDragEnd}
                                                         onDragOver={handleBetTypeDragOver}
