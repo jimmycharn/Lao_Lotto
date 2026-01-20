@@ -912,6 +912,19 @@
     white-space: nowrap;
 }
 
+.list-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0 0.5rem 0.75rem;
+    flex-wrap: wrap;
+}
+
+.list-header-actions .toggle-label {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+}
+
 .view-toggle-group {
     display: flex;
     align-items: center;
@@ -3902,6 +3915,20 @@
 
 .bill-card-new:hover {
     border-color: rgba(212, 175, 55, 0.2);
+}
+
+/* Bill submitted by dealer - different color */
+.bill-card-new.dealer-submitted {
+    border-color: rgba(156, 39, 176, 0.3);
+    background: linear-gradient(135deg, rgba(156, 39, 176, 0.08) 0%, var(--color-card) 100%);
+}
+
+.bill-card-new.dealer-submitted:hover {
+    border-color: rgba(156, 39, 176, 0.5);
+}
+
+.bill-card-new.dealer-submitted .bill-card-header {
+    background: rgba(156, 39, 176, 0.1);
 }
 
 /* Bill Card Header */

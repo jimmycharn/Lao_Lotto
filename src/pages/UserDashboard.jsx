@@ -23,7 +23,8 @@ import {
     FiSave,
     FiSearch,
     FiCopy,
-    FiClipboard
+    FiClipboard,
+    FiRefreshCw
 } from 'react-icons/fi'
 import './UserDashboard.css'
 import './ViewToggle.css'
@@ -2012,22 +2013,102 @@ export default function UserDashboard() {
                                                                 <option key={key} value={key}>{label}</option>
                                                             ))}
                                                         </select>
+                                                        <button
+                                                            className="icon-btn"
+                                                            onClick={() => fetchSubmissions(selectedRound.id)}
+                                                            title="รีเฟรชรายการ"
+                                                        >
+                                                            <FiRefreshCw />
+                                                        </button>
                                                     </div>
 
                                                     <div className="submissions-list card">
                                                         <div className="list-header">
                                                             <h3>รายการที่ส่ง</h3>
-                                                            <div className="view-toggle-group">
-                                                                <div className="view-toggle-container">
-                                                                    <span className="toggle-label">จัดกลุ่ม</span>
-                                                                    <button
-                                                                        className={`toggle-btn group-toggle ${isGroupByBill ? 'active' : ''}`}
-                                                                        onClick={() => setIsGroupByBill(!isGroupByBill)}
-                                                                    >
-                                                                        <FiLayers /> <span>แยกใบโพย</span>
-                                                                    </button>
-                                                                </div>
-                                                            </div>
+                                                        </div>
+                                                        <div className="list-header-actions">
+                                                            <span className="toggle-label">จัดกลุ่ม</span>
+                                                            <button
+                                                                className={`toggle-btn group-toggle ${isGroupByBill ? 'active' : ''}`}
+                                                                onClick={() => setIsGroupByBill(!isGroupByBill)}
+                                                                style={{ padding: '0.35rem 0.6rem', fontSize: '0.8rem' }}
+                                                            >
+                                                                <FiLayers /> <span>แยกใบโพย</span>
+                                                            </button>
+                                                            {submissions.length > 0 && (
+                                                                <button
+                                                                    className="bill-copy-btn"
+                                                                    onClick={async () => {
+                                                                        // กลุ่มตาม entry_id ก่อนเพื่อไม่ให้ซ้ำ
+                                                                        const uniqueByEntry = submissions.reduce((acc, sub) => {
+                                                                            const key = sub.entry_id || sub.id
+                                                                            if (!acc[key]) acc[key] = sub
+                                                                            return acc
+                                                                        }, {})
+                                                                        const uniqueSubs = Object.values(uniqueByEntry)
+                                                                        
+                                                                        const grouped = {}
+                                                                        uniqueSubs.forEach(sub => {
+                                                                            const betType = sub.display_bet_type || BET_TYPES[sub.bet_type]?.label || sub.bet_type
+                                                                            if (!grouped[betType]) grouped[betType] = []
+                                                                            grouped[betType].push(sub)
+                                                                        })
+                                                                        
+                                                                        const betTypeOrder = ['4 ตัวชุด', '4 ตัวโต๊ด', '3 ตัวบน', '3 ตัวโต๊ด', 'เต็ง-โต๊ด', '2 ตัวบน', '2 ตัวล่าง', '2 ตัวบนกลับ', '2 ตัวล่างกลับ', '1 ตัวบน', '1 ตัวล่าง']
+                                                                        const sortedTypes = Object.keys(grouped).sort((a, b) => {
+                                                                            const idxA = betTypeOrder.indexOf(a)
+                                                                            const idxB = betTypeOrder.indexOf(b)
+                                                                            return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB)
+                                                                        })
+                                                                        
+                                                                        const totalAmount = submissions.reduce((sum, s) => sum + s.amount, 0)
+                                                                        const now = new Date()
+                                                                        const dateStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
+                                                                        const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+                                                                        
+                                                                        let text = `📋 ${round.lottery_name || LOTTERY_TYPES[round.lottery_type]}\n`
+                                                                        text += `📅 ${dateStr} ${timeStr}\n`
+                                                                        text += `👤 ผู้ส่ง: ${profile?.full_name || profile?.email || '-'}\n`
+                                                                        text += `📊 ทั้งหมด (${uniqueSubs.length} รายการ)\n`
+                                                                        text += `👤 เจ้ามือ: ${selectedRound?.dealer_name || '-'}\n`
+                                                                        text += `💰 ยอดรวม: ${round.currency_symbol}${totalAmount.toLocaleString()}\n`
+                                                                        text += `━━━━━━━━━━━━━━━━\n`
+                                                                        
+                                                                        sortedTypes.forEach(betType => {
+                                                                            text += `${betType}\n`
+                                                                            const items = grouped[betType].sort((a, b) => {
+                                                                                const numA = a.display_numbers || a.numbers
+                                                                                const numB = b.display_numbers || b.numbers
+                                                                                return numA.localeCompare(numB, undefined, { numeric: true })
+                                                                            })
+                                                                            items.forEach(sub => {
+                                                                                const nums = sub.display_numbers || sub.numbers
+                                                                                const amt = sub.display_amount || sub.amount
+                                                                                text += `${nums}=${amt}\n`
+                                                                            })
+                                                                        })
+                                                                        text += `━━━━━━━━━━━━━━━━`
+                                                                        
+                                                                        try {
+                                                                            await navigator.clipboard.writeText(text)
+                                                                            toast.success('คัดลอกแล้ว!')
+                                                                        } catch (err) {
+                                                                            const textArea = document.createElement('textarea')
+                                                                            textArea.value = text
+                                                                            textArea.style.position = 'fixed'
+                                                                            textArea.style.left = '-9999px'
+                                                                            document.body.appendChild(textArea)
+                                                                            textArea.select()
+                                                                            document.execCommand('copy')
+                                                                            document.body.removeChild(textArea)
+                                                                            toast.success('คัดลอกแล้ว!')
+                                                                        }
+                                                                    }}
+                                                                    title="คัดลอกทั้งหมด"
+                                                                >
+                                                                    <FiCopy />
+                                                                </button>
+                                                            )}
                                                         </div>
                                                         {submissions.length === 0 ? (
                                                             <div className="empty-state">
@@ -2108,22 +2189,62 @@ export default function UserDashboard() {
                                                                                     })
                                                                                     const isExpandedBill = expandedBills.includes(billId)
                                                                                     const processedBillItems = processItems(billItems)
+                                                                                    const isDealerSubmitted = billItems[0]?.submitted_by_type === 'dealer'
 
                                                                                     // Copy bill function
                                                                                     const handleCopyBill = async (e) => {
                                                                                         e.stopPropagation()
                                                                                         const billName = billItems[0]?.bill_note || billId
-                                                                                        let text = `📋 ${billName}\n`
-                                                                                        text += `📅 ${billDate} ${billTime}\n`
-                                                                                        text += `━━━━━━━━━━━━━━━━\n`
-                                                                                        processedBillItems.forEach(sub => {
+                                                                                        
+                                                                                        // กลุ่มตาม entry_id ก่อนเพื่อไม่ให้ซ้ำ
+                                                                                        const uniqueByEntry = processedBillItems.reduce((acc, sub) => {
+                                                                                            const key = sub.entry_id || sub.id
+                                                                                            if (!acc[key]) {
+                                                                                                acc[key] = sub
+                                                                                            }
+                                                                                            return acc
+                                                                                        }, {})
+                                                                                        const uniqueItems = Object.values(uniqueByEntry)
+                                                                                        
+                                                                                        // จัดกลุ่มตามประเภทเลข
+                                                                                        const grouped = {}
+                                                                                        uniqueItems.forEach(sub => {
                                                                                             const betType = displayMode === 'summary' ? (sub.display_bet_type || BET_TYPES[sub.bet_type]?.label) : BET_TYPES[sub.bet_type]?.label
-                                                                                            const nums = displayMode === 'summary' ? (sub.display_numbers || sub.numbers) : sub.numbers
-                                                                                            const amt = displayMode === 'summary' ? (sub.display_amount || sub.amount) : sub.amount
-                                                                                            text += `${betType}  ${nums}  ${round.currency_symbol}${amt?.toLocaleString()}\n`
+                                                                                            if (!grouped[betType]) grouped[betType] = []
+                                                                                            grouped[betType].push(sub)
                                                                                         })
+                                                                                        
+                                                                                        // เรียงลำดับประเภทเลข
+                                                                                        const betTypeOrder = ['4 ตัวชุด', '4 ตัวโต๊ด', '3 ตัวบน', '3 ตัวโต๊ด', 'เต็ง-โต๊ด', '2 ตัวบน', '2 ตัวล่าง', '2 ตัวบนกลับ', '2 ตัวล่างกลับ', '1 ตัวบน', '1 ตัวล่าง']
+                                                                                        const sortedTypes = Object.keys(grouped).sort((a, b) => {
+                                                                                            const idxA = betTypeOrder.indexOf(a)
+                                                                                            const idxB = betTypeOrder.indexOf(b)
+                                                                                            return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB)
+                                                                                        })
+                                                                                        
+                                                                                        let text = `📋 ${round.lottery_name || LOTTERY_TYPES[round.lottery_type]}\n`
+                                                                                        text += `🎫 ${billName}\n`
+                                                                                        text += `📅 ${billDate} ${billTime}\n`
+                                                                                        text += `📊 ทั้งหมด (${uniqueItems.length} รายการ)\n`
+                                                                                        text += `💰 ยอดรวม: ${round.currency_symbol}${billTotal.toLocaleString()}\n`
                                                                                         text += `━━━━━━━━━━━━━━━━\n`
-                                                                                        text += `รวม: ${round.currency_symbol}${billTotal.toLocaleString()}`
+                                                                                        
+                                                                                        sortedTypes.forEach(betType => {
+                                                                                            text += `${betType}\n`
+                                                                                            // เรียงเลขจากน้อยไปมาก
+                                                                                            const items = grouped[betType].sort((a, b) => {
+                                                                                                const numA = displayMode === 'summary' ? (a.display_numbers || a.numbers) : a.numbers
+                                                                                                const numB = displayMode === 'summary' ? (b.display_numbers || b.numbers) : b.numbers
+                                                                                                return numA.localeCompare(numB, undefined, { numeric: true })
+                                                                                            })
+                                                                                            items.forEach(sub => {
+                                                                                                const nums = displayMode === 'summary' ? (sub.display_numbers || sub.numbers) : sub.numbers
+                                                                                                const amt = displayMode === 'summary' ? (sub.display_amount || sub.amount) : sub.amount
+                                                                                                text += `${nums}=${amt}\n`
+                                                                                            })
+                                                                                        })
+                                                                                        text += `━━━━━━━━━━━━━━━━`
+                                                                                        
                                                                                         try {
                                                                                             await navigator.clipboard.writeText(text)
                                                                                             toast.success('คัดลอกแล้ว!')
@@ -2141,7 +2262,7 @@ export default function UserDashboard() {
                                                                                     }
 
                                                                                     return (
-                                                                                        <div key={billId} className={`bill-card-new ${isExpandedBill ? 'expanded' : ''}`}>
+                                                                                        <div key={billId} className={`bill-card-new ${isExpandedBill ? 'expanded' : ''} ${isDealerSubmitted ? 'dealer-submitted' : ''}`}>
                                                                                             {/* Bill Header */}
                                                                                             <div
                                                                                                 className="bill-card-header"

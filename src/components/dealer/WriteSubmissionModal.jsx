@@ -88,16 +88,42 @@ export default function WriteSubmissionModal({
     }
 
     function getCommissionForBetType(betType, settings = userSettings) {
-        if (!settings?.lottery_settings) return { rate: 0, isFixed: false }
         const lotteryKey = round.lottery_type === 'lao' ? 'lao' : round.lottery_type === 'hanoi' ? 'hanoi' : 'thai'
-        const lotterySettings = settings.lottery_settings[lotteryKey]
-        if (!lotterySettings) return { rate: 0, isFixed: false }
-
-        const betSettings = lotterySettings[betType]
-        if (betSettings?.commission !== undefined) {
-            return { rate: betSettings.commission, isFixed: false }
+        
+        // Map bet_type to settings key for Lao/Hanoi lottery
+        let settingsKey = betType
+        if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+            const LAO_BET_TYPE_MAP = {
+                '3_top': '3_straight',      // 3 ตัวตรง
+                '3_tod': '3_tod_single',    // 3 ตัวโต๊ด
+                '4_top': '4_set'            // 4 ตัวตรง (ชุด)
+            }
+            settingsKey = LAO_BET_TYPE_MAP[betType] || betType
         }
-        return { rate: 0, isFixed: false }
+        
+        const betSettings = settings?.lottery_settings?.[lotteryKey]?.[settingsKey]
+        if (betSettings?.commission !== undefined) {
+            return { rate: betSettings.commission, isFixed: betSettings.isFixed || false }
+        }
+
+        // Default rates for Lao/Hanoi set-based bets
+        if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+            const LAO_SET_DEFAULTS = {
+                '4_top': { commission: 25, isFixed: true },
+                '4_set': { commission: 25, isFixed: true }
+            }
+            if (LAO_SET_DEFAULTS[betType]) {
+                return { rate: LAO_SET_DEFAULTS[betType].commission, isFixed: true }
+            }
+        }
+
+        // Default commission rates (percentage)
+        const DEFAULT_COMMISSIONS = {
+            '2_top': 15, '2_bottom': 15, '2_front': 15, '2_spread': 15,
+            '3_top': 15, '3_tod': 15, '3_bottom': 15,
+            'run_top': 15, 'run_bottom': 15
+        }
+        return { rate: DEFAULT_COMMISSIONS[betType] || 15, isFixed: false }
     }
 
     function addToDraft(betType) {
@@ -200,6 +226,9 @@ export default function WriteSubmissionModal({
             else if (betType === '3_perm_from_3') perms = getPermutations(cleanNumbers)
 
             const commInfo = getCommissionForBetType('3_top')
+            // คำนวณค่าคอมต่อ 1 รายการ (totalAmount * rate / 100)
+            const commissionPerItem = commInfo.isFixed ? commInfo.rate : (totalAmount * commInfo.rate) / 100
+            
             perms.forEach(p => {
                 newDrafts.push({
                     entry_id: entryId,
@@ -207,9 +236,9 @@ export default function WriteSubmissionModal({
                     numbers: p,
                     amount: totalAmount,
                     commission_rate: commInfo.rate,
-                    commission_amount: commInfo.isFixed ? commInfo.rate : (totalAmount * commInfo.rate) / 100,
+                    commission_amount: commissionPerItem,
                     display_numbers: cleanNumbers,
-                    display_amount: submitForm.amount,
+                    display_amount: `${totalAmount} (${perms.length} ชุด)`,
                     display_bet_type: displayLabel,
                     created_at: timestamp
                 })
@@ -485,7 +514,7 @@ export default function WriteSubmissionModal({
             const timestamp = new Date().toISOString()
 
             const inserts = drafts.map(d => {
-                const { display_numbers, display_bet_type, ...rest } = d
+                const { display_numbers, ...rest } = d
                 return {
                     ...rest,
                     round_id: round.id,
