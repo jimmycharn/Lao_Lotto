@@ -242,10 +242,12 @@ export default function Dealer() {
                         email,
                         full_name,
                         phone,
-                        created_at
+                        created_at,
+                        role
                     )
                 `)
                 .eq('dealer_id', user.id)
+                .neq('user_id', user.id) // Exclude self-membership
                 .order('created_at', { ascending: false })
 
             // Transform and categorize memberships
@@ -256,12 +258,32 @@ export default function Dealer() {
                 membership_created_at: m.created_at,
                 approved_at: m.approved_at,
                 blocked_at: m.blocked_at,
-                assigned_bank_account_id: m.assigned_bank_account_id
+                assigned_bank_account_id: m.assigned_bank_account_id,
+                is_dealer: m.profiles?.role === 'dealer' // Mark if member is also a dealer
             }))
 
-            setMembers(allMemberships.filter(m => m.membership_status === 'active'))
-            setPendingMembers(allMemberships.filter(m => m.membership_status === 'pending'))
-            setBlockedMembers(allMemberships.filter(m => m.membership_status === 'blocked'))
+            // Separate regular members from dealer members (เจ้ามือตีเข้า)
+            const regularMembers = allMemberships.filter(m => !m.is_dealer)
+            const dealerMembers = allMemberships.filter(m => m.is_dealer)
+
+            setMembers(regularMembers.filter(m => m.membership_status === 'active'))
+            setPendingMembers(regularMembers.filter(m => m.membership_status === 'pending'))
+            setBlockedMembers(regularMembers.filter(m => m.membership_status === 'blocked'))
+            
+            // Add dealer members to downstreamDealers (will be merged with connections later)
+            const dealerMembersTransformed = dealerMembers.map(m => ({
+                id: m.id,
+                email: m.email,
+                full_name: m.full_name,
+                phone: m.phone,
+                created_at: m.created_at,
+                membership_id: m.membership_id,
+                membership_status: m.membership_status,
+                membership_created_at: m.membership_created_at,
+                is_dealer: true,
+                is_from_membership: true, // Mark as from membership table
+                connection_id: m.membership_id
+            }))
 
             // Fetch subscription (if table exists)
             try {
@@ -303,7 +325,7 @@ export default function Dealer() {
 
             setDealerBankAccounts(bankAccountsData || [])
 
-            // Fetch downstream dealers (dealers who send bets TO us)
+            // Fetch downstream dealers (dealers who send bets TO us via dealer_upstream_connections)
             try {
                 const { data: downstreamData, error: downstreamError } = await supabase
                     .from('dealer_upstream_connections')
@@ -315,6 +337,8 @@ export default function Dealer() {
                     `)
                     .eq('upstream_dealer_id', user.id)
                     .order('created_at', { ascending: false })
+
+                let allDownstreamDealers = []
 
                 if (!downstreamError && downstreamData) {
                     // Transform to match member structure
@@ -332,11 +356,20 @@ export default function Dealer() {
                         lottery_settings: d.lottery_settings,
                         connection_id: d.id
                     }))
-                    setDownstreamDealers(transformedDownstream)
+                    allDownstreamDealers = [...transformedDownstream]
                 }
+
+                // Merge with dealer members from memberships (users who became dealers)
+                // Avoid duplicates by checking if already exists in connections
+                const existingIds = allDownstreamDealers.map(d => d.id).filter(Boolean)
+                const newDealerMembers = dealerMembersTransformed.filter(d => !existingIds.includes(d.id))
+                allDownstreamDealers = [...allDownstreamDealers, ...newDealerMembers]
+
+                setDownstreamDealers(allDownstreamDealers)
             } catch (downstreamErr) {
                 console.log('Downstream dealers fetch error:', downstreamErr)
-                setDownstreamDealers([])
+                // Still set dealer members even if connections fetch fails
+                setDownstreamDealers(dealerMembersTransformed)
             }
 
         } catch (error) {
