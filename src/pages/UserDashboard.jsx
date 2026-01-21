@@ -447,15 +447,9 @@ export default function UserDashboard() {
                             return 'thai'
                         })()
 
-                        // Commission from user_settings (priority) or commission_amount from submission (fallback)
-                        const totalCommission = subs.reduce((sum, s) => {
-                            const settings = userSettings?.lottery_settings?.[lotteryKey]?.[s.bet_type]
-                            if (settings?.commission !== undefined) {
-                                return sum + (settings.isFixed ? settings.commission : s.amount * (settings.commission / 100))
-                            }
-                            // Fallback: use commission_amount that was recorded when submission was made
-                            return sum + (s.commission_amount || 0)
-                        }, 0)
+                        // Use commission_amount that was recorded when submission was made
+                        // This ensures consistency between submission time and results display
+                        const totalCommission = subs.reduce((sum, s) => sum + (s.commission_amount || 0), 0)
 
                         const totalPrize = subs.reduce((sum, s) => {
                             if (!s.is_winner) return sum
@@ -1839,19 +1833,10 @@ export default function UserDashboard() {
         '4_run': 15, '4_tod': 15, '4_set': 15, '4_float': 15, '5_run': 15, '5_float': 15, '6_top': 15
     }
 
-    // Calculate commission for a submission based on user settings
+    // Calculate commission for a submission - use recorded commission_amount for consistency
     const getCalculatedCommission = (sub, round) => {
-        const lotteryKey = getLotteryTypeKey(round?.lottery_type)
-        const settings = userSettings?.lottery_settings?.[lotteryKey]?.[sub.bet_type]
-
-        if (settings && settings.commission !== undefined) {
-            if (settings.isFixed) {
-                return settings.commission // Fixed amount per bet
-            }
-            return sub.amount * (settings.commission / 100) // Percentage
-        }
-
-        // Fallback: use commission_amount that was recorded when submission was made
+        // Always use commission_amount that was recorded when submission was made
+        // This ensures consistency between submission time and results display
         return sub.commission_amount || 0
     }
 
