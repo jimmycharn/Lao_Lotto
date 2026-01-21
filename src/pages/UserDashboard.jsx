@@ -55,6 +55,7 @@ export default function UserDashboard() {
     const [selectedDealer, setSelectedDealer] = useState(null)
     const [dealersLoading, setDealersLoading] = useState(true)
     const [isOwnDealer, setIsOwnDealer] = useState(false) // Track if selected dealer is the user themselves
+    const [showDealerConfirmModal, setShowDealerConfirmModal] = useState(false) // Confirm dialog for becoming dealer
 
     // Results tab state
     const [resultsRounds, setResultsRounds] = useState([])
@@ -246,8 +247,13 @@ export default function UserDashboard() {
         }
     }
 
-    // Handle switching to dealer dashboard
-    const handleSwitchToDealerDashboard = async () => {
+    // Handle switching to dealer dashboard - show confirmation modal first
+    const handleSwitchToDealerDashboard = () => {
+        setShowDealerConfirmModal(true)
+    }
+
+    // Confirm and create dealer account
+    const confirmBecomeDealear = async () => {
         try {
             // Update user role to dealer
             const { error: updateError } = await supabase
@@ -270,6 +276,7 @@ export default function UserDashboard() {
                     status: 'active'
                 })
 
+            setShowDealerConfirmModal(false)
             toast.success('สร้างบัญชีเจ้ามือสำเร็จ!')
             
             // Redirect to dealer dashboard
@@ -3278,6 +3285,48 @@ export default function UserDashboard() {
                                 disabled={!pasteText.trim() || !(pasteText.match(/\d{4}/g))}
                             >
                                 <FiPlus /> เพิ่ม {(pasteText.match(/\d{4}/g) || []).length} รายการ
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Confirm Become Dealer Modal */}
+            {showDealerConfirmModal && (
+                <div className="modal-overlay" onClick={() => setShowDealerConfirmModal(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+                        <div className="modal-header">
+                            <h3><FiUser /> ยืนยันการเป็นเจ้ามือ</h3>
+                            <button className="modal-close" onClick={() => setShowDealerConfirmModal(false)}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="modal-body" style={{ textAlign: 'center', padding: '2rem' }}>
+                            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎯</div>
+                            <h4 style={{ marginBottom: '1rem', color: 'var(--color-text)' }}>คุณต้องการเป็นเจ้ามือเองหรือไม่?</h4>
+                            <p style={{ color: 'var(--color-text-muted)', marginBottom: '1rem' }}>
+                                เมื่อยืนยันแล้ว คุณจะสามารถรับเลขจากสมาชิกได้<br/>
+                                และสามารถส่งต่อเลขให้เจ้ามือส่งออกได้
+                            </p>
+                            <div style={{ 
+                                background: 'rgba(212, 175, 55, 0.1)', 
+                                border: '1px solid rgba(212, 175, 55, 0.3)',
+                                borderRadius: 'var(--radius-md)',
+                                padding: '1rem',
+                                marginTop: '1rem'
+                            }}>
+                                <strong style={{ color: 'var(--color-primary)' }}>หมายเหตุ:</strong>
+                                <p style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', margin: '0.5rem 0 0' }}>
+                                    เจ้ามือที่คุณเป็นสมาชิกอยู่จะถูกย้ายไปแสดงใน "เจ้ามือส่งออก"
+                                </p>
+                            </div>
+                        </div>
+                        <div className="modal-footer" style={{ justifyContent: 'center', gap: '1rem' }}>
+                            <button className="btn btn-secondary" onClick={() => setShowDealerConfirmModal(false)}>
+                                ยกเลิก
+                            </button>
+                            <button className="btn btn-primary" onClick={confirmBecomeDealear}>
+                                <FiCheck /> ยืนยัน
                             </button>
                         </div>
                     </div>

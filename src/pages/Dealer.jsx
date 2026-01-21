@@ -4609,7 +4609,8 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
         }, 10000)
         
         try {
-            const { data, error } = await supabase
+            // Fetch manual upstream connections
+            const { data: manualData, error: manualError } = await supabase
                 .from('dealer_upstream_connections')
                 .select(`
                     *,
@@ -4620,15 +4621,54 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
                 .eq('dealer_id', user.id)
                 .order('created_at', { ascending: false })
 
+            // Fetch dealers that user was a member of (excluding self)
+            const { data: membershipData, error: membershipError } = await supabase
+                .from('user_dealer_memberships')
+                .select(`
+                    dealer_id,
+                    status,
+                    created_at,
+                    profiles:dealer_id (
+                        id, full_name, email, phone, role
+                    )
+                `)
+                .eq('user_id', user.id)
+                .eq('status', 'active')
+                .neq('dealer_id', user.id) // Exclude self-membership
+
             clearTimeout(timeoutId)
             
-            if (!error) {
-                setUpstreamDealers(data || [])
-            } else {
-                // Table might not exist yet
-                console.warn('Upstream dealers table may not exist:', error.message)
-                setUpstreamDealers([])
+            let allDealers = []
+            
+            // Add manual upstream connections
+            if (!manualError && manualData) {
+                allDealers = [...manualData]
             }
+            
+            // Add dealers from memberships (convert to upstream format)
+            // Only include profiles with role = 'dealer' (not superadmin or other roles)
+            if (!membershipError && membershipData) {
+                const membershipDealers = membershipData
+                    .filter(m => m.profiles?.id && m.profiles?.role === 'dealer') // Only include dealers
+                    .map(m => ({
+                        id: `membership-${m.dealer_id}`,
+                        dealer_id: user.id,
+                        upstream_dealer_id: m.dealer_id,
+                        upstream_name: m.profiles?.full_name || m.profiles?.email || 'ไม่ระบุชื่อ',
+                        upstream_contact: m.profiles?.phone || m.profiles?.email || '',
+                        upstream_profile: m.profiles,
+                        is_linked: true,
+                        is_from_membership: true, // Mark as from membership
+                        created_at: m.created_at
+                    }))
+                
+                // Merge, avoiding duplicates (by upstream_dealer_id)
+                const existingIds = allDealers.map(d => d.upstream_dealer_id).filter(Boolean)
+                const newDealers = membershipDealers.filter(d => !existingIds.includes(d.upstream_dealer_id))
+                allDealers = [...allDealers, ...newDealers]
+            }
+            
+            setUpstreamDealers(allDealers)
         } catch (error) {
             clearTimeout(timeoutId)
             console.error('Error fetching upstream dealers:', error)
