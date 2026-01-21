@@ -53,10 +53,6 @@ export const BET_TYPES_BY_LOTTERY = {
         '2_run': { label: '2 ตัวลอย', defaultLimit: 1000 },
         '3_top': { label: '3 ตัวบน', defaultLimit: 500 },
         '3_tod': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
-        '3_front': { label: '3 ตัวหน้า', defaultLimit: 500 },
-        '3_back': { label: '3 ตัวหลัง', defaultLimit: 500 },
-        '3_straight': { label: '3 ตัวตรง', defaultLimit: 500 },
-        '3_tod_single': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
         '4_run': { label: '4 ตัวลอย', defaultLimit: 200 },
         '5_run': { label: '5 ตัวลอย', defaultLimit: 100 }
     },
@@ -87,10 +83,6 @@ export const BET_TYPES_BY_LOTTERY = {
         '2_run': { label: '2 ตัวลอย', defaultLimit: 1000 },
         '3_top': { label: '3 ตัวบน', defaultLimit: 500 },
         '3_tod': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
-        '3_front': { label: '3 ตัวหน้า', defaultLimit: 500 },
-        '3_back': { label: '3 ตัวหลัง', defaultLimit: 500 },
-        '3_straight': { label: '3 ตัวตรง', defaultLimit: 500 },
-        '3_tod_single': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
         '4_run': { label: '4 ตัวลอย', defaultLimit: 200 },
         '5_run': { label: '5 ตัวลอย', defaultLimit: 100 }
     },

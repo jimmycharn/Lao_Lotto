@@ -1427,46 +1427,45 @@ export default function Dealer() {
                                     อัตราจ่ายจะใช้ตามที่ตั้งค่าให้แต่ละลูกค้า
                                 </p>
 
-                                <div className="limits-grid">
+                                <div style={{ 
+                                    display: 'grid', 
+                                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
+                                    gap: '0.5rem' 
+                                }}>
                                     {Object.entries(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {}).map(([key, config]) => (
-                                        <div key={key} className="limit-row" style={{
-                                            padding: '0.75rem 1rem',
-                                            background: 'rgba(212, 175, 55, 0.1)',
-                                            borderRadius: 'var(--radius-md)',
-                                            border: '1px solid rgba(212, 175, 55, 0.3)',
-                                            marginBottom: '0.5rem'
+                                        <div key={key} style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            padding: '0.6rem 0.8rem',
+                                            background: 'rgba(212, 175, 55, 0.08)',
+                                            borderRadius: 'var(--radius-sm)',
+                                            border: '1px solid rgba(212, 175, 55, 0.2)'
                                         }}>
-                                            <div className="input-group" style={{ 
-                                                justifyContent: 'space-between', 
-                                                gap: '0.5rem',
-                                                flexWrap: 'nowrap',
-                                                alignItems: 'center'
-                                            }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexShrink: 0 }}>
-                                                    <span style={{ fontWeight: 500, color: 'var(--color-primary)', fontSize: '0.9rem' }}>
-                                                        {config.label}
-                                                    </span>
-                                                    {config.isSet && <span className="set-badge" style={{ fontSize: '0.7rem', padding: '0.1rem 0.3rem' }}>ชุด</span>}
-                                                </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                                    <span className="input-prefix" style={{ fontSize: '0.85rem' }}>อั้น</span>
-                                                    <input
-                                                        type="number"
-                                                        className="form-input small"
-                                                        style={{ width: '70px', textAlign: 'center' }}
-                                                        value={roundForm.type_limits[key] || 0}
-                                                        onChange={e => setRoundForm({
-                                                            ...roundForm,
-                                                            type_limits: {
-                                                                ...roundForm.type_limits,
-                                                                [key]: parseInt(e.target.value) || 0
-                                                            }
-                                                        })}
-                                                        onFocus={handleInputFocus}
-                                                        onKeyDown={handleInputKeyDown}
-                                                    />
-                                                    <span className="input-suffix" style={{ fontSize: '0.85rem' }}>{config.isSet ? 'ชุด' : roundForm.currency_name}</span>
-                                                </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                <span style={{ fontWeight: 500, color: 'var(--color-primary)', fontSize: '0.9rem', minWidth: '65px' }}>
+                                                    {config.label}
+                                                </span>
+                                                {config.isSet && <span className="set-badge" style={{ fontSize: '0.65rem', padding: '0.1rem 0.25rem' }}>ชุด</span>}
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>อั้น</span>
+                                                <input
+                                                    type="number"
+                                                    className="form-input small"
+                                                    style={{ width: '90px', textAlign: 'center', padding: '0.35rem 0.5rem', fontSize: '0.95rem' }}
+                                                    value={roundForm.type_limits[key] || 0}
+                                                    onChange={e => setRoundForm({
+                                                        ...roundForm,
+                                                        type_limits: {
+                                                            ...roundForm.type_limits,
+                                                            [key]: parseInt(e.target.value) || 0
+                                                        }
+                                                    })}
+                                                    onFocus={handleInputFocus}
+                                                    onKeyDown={handleInputKeyDown}
+                                                />
+                                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', minWidth: '25px' }}>{config.isSet ? 'ชุด' : roundForm.currency_name}</span>
                                             </div>
                                         </div>
                                     ))}
@@ -1603,57 +1602,46 @@ export default function Dealer() {
                                 </p>
 
                                 {/* Compact limits display */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                <div style={{ 
+                                    display: 'grid', 
+                                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
+                                    gap: '0.5rem' 
+                                }}>
                                     {Object.entries(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {}).map(([key, config]) => (
                                         <div key={key} style={{
                                             display: 'flex',
                                             alignItems: 'center',
-                                            gap: '0.75rem',
-                                            padding: '0.5rem 0.75rem',
-                                            background: 'rgba(212, 175, 55, 0.05)',
+                                            justifyContent: 'space-between',
+                                            padding: '0.6rem 0.8rem',
+                                            background: 'rgba(212, 175, 55, 0.08)',
                                             borderRadius: 'var(--radius-sm)',
-                                            borderBottom: '1px solid var(--color-border)'
+                                            border: '1px solid rgba(212, 175, 55, 0.2)'
                                         }}>
-                                            <span style={{ 
-                                                minWidth: '70px', 
-                                                fontWeight: 500,
-                                                fontSize: '0.9rem',
-                                                color: 'var(--color-primary)'
-                                            }}>
-                                                {config.label}
-                                                {config.isSet && <span style={{
-                                                    background: 'var(--color-primary)',
-                                                    color: '#000',
-                                                    padding: '0.1rem 0.3rem',
-                                                    borderRadius: '4px',
-                                                    fontSize: '0.65rem',
-                                                    marginLeft: '0.25rem'
-                                                }}>ชุด</span>}
-                                            </span>
-                                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>อั้น</span>
-                                            <input
-                                                type="number"
-                                                className="form-input"
-                                                style={{ 
-                                                    width: '80px', 
-                                                    padding: '0.4rem 0.5rem',
-                                                    textAlign: 'center',
-                                                    fontSize: '0.95rem'
-                                                }}
-                                                value={roundForm.type_limits[key] || 0}
-                                                onChange={e => setRoundForm({
-                                                    ...roundForm,
-                                                    type_limits: {
-                                                        ...roundForm.type_limits,
-                                                        [key]: parseInt(e.target.value) || 0
-                                                    }
-                                                })}
-                                                onFocus={handleInputFocus}
-                                                onKeyDown={handleInputKeyDown}
-                                            />
-                                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
-                                                {config.isSet ? 'ชุด' : roundForm.currency_name}
-                                            </span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                <span style={{ fontWeight: 500, color: 'var(--color-primary)', fontSize: '0.9rem', minWidth: '65px' }}>
+                                                    {config.label}
+                                                </span>
+                                                {config.isSet && <span className="set-badge" style={{ fontSize: '0.65rem', padding: '0.1rem 0.25rem' }}>ชุด</span>}
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>อั้น</span>
+                                                <input
+                                                    type="number"
+                                                    className="form-input small"
+                                                    style={{ width: '90px', textAlign: 'center', padding: '0.35rem 0.5rem', fontSize: '0.95rem' }}
+                                                    value={roundForm.type_limits[key] || 0}
+                                                    onChange={e => setRoundForm({
+                                                        ...roundForm,
+                                                        type_limits: {
+                                                            ...roundForm.type_limits,
+                                                            [key]: parseInt(e.target.value) || 0
+                                                        }
+                                                    })}
+                                                    onFocus={handleInputFocus}
+                                                    onKeyDown={handleInputKeyDown}
+                                                />
+                                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', minWidth: '25px' }}>{config.isSet ? 'ชุด' : roundForm.currency_name}</span>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
