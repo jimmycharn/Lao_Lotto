@@ -276,6 +276,30 @@ export default function UserDashboard() {
                     status: 'active'
                 })
 
+            // Create upstream connections from existing memberships (dealers user was a member of)
+            // This allows the new dealer to transfer bets to their previous dealers
+            if (dealers && dealers.length > 0) {
+                const upstreamConnections = dealers
+                    .filter(d => d.id !== user.id) // Exclude self
+                    .map(dealer => ({
+                        dealer_id: user.id,
+                        upstream_dealer_id: dealer.id,
+                        upstream_name: dealer.full_name || dealer.email || 'ไม่ระบุชื่อ',
+                        upstream_contact: dealer.phone || dealer.email || '',
+                        is_linked: true,
+                        is_blocked: false
+                    }))
+
+                if (upstreamConnections.length > 0) {
+                    await supabase
+                        .from('dealer_upstream_connections')
+                        .upsert(upstreamConnections, { 
+                            onConflict: 'dealer_id,upstream_dealer_id',
+                            ignoreDuplicates: true 
+                        })
+                }
+            }
+
             setShowDealerConfirmModal(false)
             toast.success('สร้างบัญชีเจ้ามือสำเร็จ!')
             

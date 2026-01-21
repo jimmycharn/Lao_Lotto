@@ -1865,6 +1865,7 @@ function SubmissionsModal({ round, onClose }) {
     // Upstream dealers for transfer selection
     const [upstreamDealers, setUpstreamDealers] = useState([])
     const [selectedUpstreamDealer, setSelectedUpstreamDealer] = useState(null) // null = manual, object = linked
+    const [upstreamRoundStatus, setUpstreamRoundStatus] = useState(null) // null = not checked, 'checking', 'available', 'unavailable'
 
     // Transfer modal state
     const [showTransferModal, setShowTransferModal] = useState(false)
@@ -1895,19 +1896,59 @@ function SubmissionsModal({ round, onClose }) {
     async function fetchUpstreamDealers() {
         if (!user?.id) return
         try {
-            const { data, error } = await supabase
+            // Fetch from dealer_upstream_connections (เจ้ามือตีออก tab)
+            const { data: manualData, error: manualError } = await supabase
                 .from('dealer_upstream_connections')
                 .select(`
                     *,
                     upstream_profile:upstream_dealer_id (id, full_name, email, phone)
                 `)
                 .eq('dealer_id', user.id)
+                .eq('is_blocked', false)
                 .order('is_linked', { ascending: false })
                 .order('upstream_name', { ascending: true })
 
-            if (!error) {
-                setUpstreamDealers(data || [])
+            // Also fetch dealers that user was a member of (for users who became dealers before the fix)
+            // Only include dealers with role='dealer' (not superadmin)
+            const { data: membershipData, error: membershipError } = await supabase
+                .from('user_dealer_memberships')
+                .select(`
+                    dealer_id,
+                    status,
+                    profiles:dealer_id (id, full_name, email, phone, role)
+                `)
+                .eq('user_id', user.id)
+                .eq('status', 'active')
+                .neq('dealer_id', user.id)
+
+            let allDealers = []
+            
+            if (!manualError && manualData) {
+                allDealers = [...manualData]
             }
+            
+            // Add dealers from memberships (only role='dealer')
+            if (!membershipError && membershipData) {
+                const membershipDealers = membershipData
+                    .filter(m => m.profiles?.id && m.profiles?.role === 'dealer')
+                    .map(m => ({
+                        id: `membership-${m.dealer_id}`,
+                        dealer_id: user.id,
+                        upstream_dealer_id: m.dealer_id,
+                        upstream_name: m.profiles?.full_name || m.profiles?.email || 'ไม่ระบุชื่อ',
+                        upstream_contact: m.profiles?.phone || m.profiles?.email || '',
+                        upstream_profile: m.profiles,
+                        is_linked: true,
+                        is_from_membership: true
+                    }))
+                
+                // Merge, avoiding duplicates
+                const existingIds = allDealers.map(d => d.upstream_dealer_id).filter(Boolean)
+                const newDealers = membershipDealers.filter(d => !existingIds.includes(d.upstream_dealer_id))
+                allDealers = [...allDealers, ...newDealers]
+            }
+            
+            setUpstreamDealers(allDealers)
         } catch (error) {
             console.error('Error fetching upstream dealers:', error)
         }
@@ -2080,14 +2121,43 @@ function SubmissionsModal({ round, onClose }) {
     }
 
     // Handle upstream dealer selection
-    const handleSelectUpstreamDealer = (dealer) => {
+    const handleSelectUpstreamDealer = async (dealer) => {
         setSelectedUpstreamDealer(dealer)
+        setUpstreamRoundStatus(null)
+        
         if (dealer) {
             setTransferForm({
                 ...transferForm,
                 target_dealer_name: dealer.upstream_name,
                 target_dealer_contact: dealer.upstream_contact || ''
             })
+            
+            // Check if linked dealer has an active round for same lottery type
+            if (dealer.is_linked && dealer.upstream_dealer_id) {
+                setUpstreamRoundStatus('checking')
+                try {
+                    const { data: upstreamRounds, error } = await supabase
+                        .from('lottery_rounds')
+                        .select('id, round_date, close_time, status, lottery_type')
+                        .eq('dealer_id', dealer.upstream_dealer_id)
+                        .eq('lottery_type', round.lottery_type)
+                        .in('status', ['open', 'active'])
+                    
+                    // Filter for rounds that haven't closed yet
+                    const openRounds = upstreamRounds?.filter(r => 
+                        new Date(r.close_time) >= new Date()
+                    )
+                    
+                    if (!error && openRounds && openRounds.length > 0) {
+                        setUpstreamRoundStatus('available')
+                    } else {
+                        setUpstreamRoundStatus('unavailable')
+                    }
+                } catch (err) {
+                    console.error('Error checking upstream round:', err)
+                    setUpstreamRoundStatus('unavailable')
+                }
+            }
         } else {
             setTransferForm({
                 ...transferForm,
@@ -3001,9 +3071,23 @@ function SubmissionsModal({ round, onClose }) {
                                         ))}
                                     </div>
                                     {selectedUpstreamDealer?.is_linked && (
-                                        <p className="form-hint success">
-                                            <FiCheck /> เจ้ามือในระบบ - เลขจะถูกส่งไปยังงวดของเจ้ามือนี้โดยอัตโนมัติ
-                                        </p>
+                                        <>
+                                            {upstreamRoundStatus === 'checking' && (
+                                                <p className="form-hint" style={{ color: 'var(--color-text-muted)' }}>
+                                                    กำลังตรวจสอบงวดหวย...
+                                                </p>
+                                            )}
+                                            {upstreamRoundStatus === 'available' && (
+                                                <p className="form-hint success">
+                                                    <FiCheck /> เจ้ามือมีงวดหวยเปิดรับอยู่ - เลขจะถูกส่งไปโดยอัตโนมัติ
+                                                </p>
+                                            )}
+                                            {upstreamRoundStatus === 'unavailable' && (
+                                                <p className="form-hint" style={{ color: 'var(--color-danger)' }}>
+                                                    <FiX /> เจ้ามือไม่มีงวดหวยประเภทนี้เปิดรับอยู่
+                                                </p>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             )}
@@ -3054,9 +3138,9 @@ function SubmissionsModal({ round, onClose }) {
                             <button
                                 className="btn btn-primary"
                                 onClick={handleSaveTransfer}
-                                disabled={savingTransfer || !transferForm.amount || !transferForm.target_dealer_name}
+                                disabled={savingTransfer || !transferForm.amount || !transferForm.target_dealer_name || (selectedUpstreamDealer?.is_linked && upstreamRoundStatus === 'unavailable') || upstreamRoundStatus === 'checking'}
                             >
-                                {savingTransfer ? 'กำลังบันทึก...' : '✓ บันทึก'}
+                                {savingTransfer ? 'กำลังบันทึก...' : (selectedUpstreamDealer?.is_linked && upstreamRoundStatus === 'unavailable') ? 'ไม่มีงวดหวยตรงกัน' : '✓ บันทึก'}
                             </button>
                         </div>
                     </div>
@@ -3108,7 +3192,7 @@ function SubmissionsModal({ round, onClose }) {
                                                 type="button"
                                                 className={`dealer-select-btn ${selectedUpstreamDealer?.id === dealer.id ? 'active' : ''} ${dealer.is_linked ? 'linked' : ''}`}
                                                 onClick={() => {
-                                                    setSelectedUpstreamDealer(dealer)
+                                                    handleSelectUpstreamDealer(dealer)
                                                     setBulkTransferForm({
                                                         ...bulkTransferForm,
                                                         target_dealer_name: dealer.upstream_name,
@@ -3122,9 +3206,23 @@ function SubmissionsModal({ round, onClose }) {
                                         ))}
                                     </div>
                                     {selectedUpstreamDealer?.is_linked && (
-                                        <p className="form-hint success">
-                                            <FiCheck /> เจ้ามือในระบบ - เลขจะถูกส่งไปยังงวดของเจ้ามือนี้โดยอัตโนมัติ
-                                        </p>
+                                        <>
+                                            {upstreamRoundStatus === 'checking' && (
+                                                <p className="form-hint" style={{ color: 'var(--color-text-muted)' }}>
+                                                    กำลังตรวจสอบงวดหวย...
+                                                </p>
+                                            )}
+                                            {upstreamRoundStatus === 'available' && (
+                                                <p className="form-hint success">
+                                                    <FiCheck /> เจ้ามือมีงวดหวยเปิดรับอยู่ - เลขจะถูกส่งไปโดยอัตโนมัติ
+                                                </p>
+                                            )}
+                                            {upstreamRoundStatus === 'unavailable' && (
+                                                <p className="form-hint" style={{ color: 'var(--color-danger)' }}>
+                                                    <FiX /> เจ้ามือไม่มีงวดหวยประเภทนี้เปิดรับอยู่
+                                                </p>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             )}
@@ -3175,9 +3273,9 @@ function SubmissionsModal({ round, onClose }) {
                             <button
                                 className="btn btn-primary"
                                 onClick={handleSaveBulkTransfer}
-                                disabled={savingTransfer || !bulkTransferForm.target_dealer_name}
+                                disabled={savingTransfer || !bulkTransferForm.target_dealer_name || (selectedUpstreamDealer?.is_linked && upstreamRoundStatus === 'unavailable') || upstreamRoundStatus === 'checking'}
                             >
-                                {savingTransfer ? 'กำลังบันทึก...' : `✓ ตีออก ${selectedCount} รายการ`}
+                                {savingTransfer ? 'กำลังบันทึก...' : (selectedUpstreamDealer?.is_linked && upstreamRoundStatus === 'unavailable') ? 'ไม่มีงวดหวยตรงกัน' : `✓ ตีออก ${selectedCount} รายการ`}
                             </button>
                         </div>
                     </div>
