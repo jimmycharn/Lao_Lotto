@@ -110,22 +110,26 @@ export default function Dealer() {
         }
     }, [searchParams])
 
-    // Helper to check if a round is still open
+    // Helper to check if a round is still open (between open_time and close_time)
     const isRoundOpen = (round) => {
-        if (round.status === 'announced' || round.status === 'closed') return false
+        // If status is announced, it's definitely closed
+        if (round.status === 'announced') return false
+        // Check time-based open status (ignore 'closed' status, use time instead)
         const now = new Date()
+        const openTime = new Date(round.open_time)
         const closeTime = new Date(round.close_time)
-        return now <= closeTime
+        return now >= openTime && now <= closeTime
     }
 
     // Form state for creating round
     const [roundForm, setRoundForm] = useState({
         lottery_type: 'lao',
         lottery_name: '',
-        round_date: new Date().toISOString().split('T')[0],
+        open_date: new Date().toISOString().split('T')[0],
         open_time: '08:00',
-        close_time: '14:00',
-        delete_before_minutes: 30,
+        close_date: new Date().toISOString().split('T')[0],
+        close_time: '20:00',
+        delete_before_minutes: 1,
         currency_symbol: '฿',
         currency_name: 'บาท',
         type_limits: getDefaultLimitsForType('lao'),
@@ -673,9 +677,25 @@ export default function Dealer() {
     // Create new round
     async function handleCreateRound() {
         try {
-            // Combine date and time
-            const openDateTime = new Date(`${roundForm.round_date}T${roundForm.open_time}:00`)
-            const closeDateTime = new Date(`${roundForm.round_date}T${roundForm.close_time}:00`)
+            // Combine date and time - store as ISO string with timezone
+            const openDateTime = new Date(`${roundForm.open_date}T${roundForm.open_time}:00`)
+            const closeDateTime = new Date(`${roundForm.close_date}T${roundForm.close_time}:00`)
+            
+            // Format as ISO string preserving local time intent
+            const formatLocalDateTime = (date) => {
+                const year = date.getFullYear()
+                const month = String(date.getMonth() + 1).padStart(2, '0')
+                const day = String(date.getDate()).padStart(2, '0')
+                const hours = String(date.getHours()).padStart(2, '0')
+                const minutes = String(date.getMinutes()).padStart(2, '0')
+                const seconds = String(date.getSeconds()).padStart(2, '0')
+                // Get timezone offset in hours and minutes
+                const tzOffset = -date.getTimezoneOffset()
+                const tzHours = String(Math.floor(Math.abs(tzOffset) / 60)).padStart(2, '0')
+                const tzMinutes = String(Math.abs(tzOffset) % 60).padStart(2, '0')
+                const tzSign = tzOffset >= 0 ? '+' : '-'
+                return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${tzSign}${tzHours}:${tzMinutes}`
+            }
 
             // Create round
             const { data: round, error: roundError } = await supabase
@@ -684,9 +704,9 @@ export default function Dealer() {
                     dealer_id: user.id,
                     lottery_type: roundForm.lottery_type,
                     lottery_name: roundForm.lottery_name || LOTTERY_TYPES[roundForm.lottery_type],
-                    round_date: roundForm.round_date,
-                    open_time: openDateTime.toISOString(),
-                    close_time: closeDateTime.toISOString(),
+                    round_date: roundForm.open_date,
+                    open_time: formatLocalDateTime(openDateTime),
+                    close_time: formatLocalDateTime(closeDateTime),
                     delete_before_minutes: roundForm.delete_before_minutes,
                     currency_symbol: roundForm.currency_symbol,
                     currency_name: roundForm.currency_name,
@@ -775,21 +795,29 @@ export default function Dealer() {
             })
         }
 
-        // Extract time from ISO string
+        // Extract date and time from ISO string (use local time, not UTC)
         const openTime = new Date(round.open_time)
         const closeTime = new Date(round.close_time)
         const formatTimeForInput = (date) => {
             return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+        }
+        const formatDateForInput = (date) => {
+            // Use local date instead of UTC to avoid timezone issues
+            const year = date.getFullYear()
+            const month = String(date.getMonth() + 1).padStart(2, '0')
+            const day = String(date.getDate()).padStart(2, '0')
+            return `${year}-${month}-${day}`
         }
 
         // Set form with round data
         setRoundForm({
             lottery_type: round.lottery_type,
             lottery_name: round.lottery_name || '',
-            round_date: round.round_date,
+            open_date: formatDateForInput(openTime),
             open_time: formatTimeForInput(openTime),
+            close_date: formatDateForInput(closeTime),
             close_time: formatTimeForInput(closeTime),
-            delete_before_minutes: round.delete_before_minutes || 30,
+            delete_before_minutes: round.delete_before_minutes || 1,
             currency_symbol: round.currency_symbol || '฿',
             currency_name: round.currency_name || 'บาท',
             type_limits: { ...getDefaultLimitsForType(round.lottery_type), ...limitsObj },
@@ -807,8 +835,24 @@ export default function Dealer() {
         setSaving(true)
         try {
             // Combine date and time
-            const openDateTime = new Date(`${roundForm.round_date}T${roundForm.open_time}:00`)
-            const closeDateTime = new Date(`${roundForm.round_date}T${roundForm.close_time}:00`)
+            const openDateTime = new Date(`${roundForm.open_date}T${roundForm.open_time}:00`)
+            const closeDateTime = new Date(`${roundForm.close_date}T${roundForm.close_time}:00`)
+            
+            // Format as ISO string preserving local time intent
+            const formatLocalDateTime = (date) => {
+                const year = date.getFullYear()
+                const month = String(date.getMonth() + 1).padStart(2, '0')
+                const day = String(date.getDate()).padStart(2, '0')
+                const hours = String(date.getHours()).padStart(2, '0')
+                const minutes = String(date.getMinutes()).padStart(2, '0')
+                const seconds = String(date.getSeconds()).padStart(2, '0')
+                // Get timezone offset in hours and minutes
+                const tzOffset = -date.getTimezoneOffset()
+                const tzHours = String(Math.floor(Math.abs(tzOffset) / 60)).padStart(2, '0')
+                const tzMinutes = String(Math.abs(tzOffset) % 60).padStart(2, '0')
+                const tzSign = tzOffset >= 0 ? '+' : '-'
+                return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${tzSign}${tzHours}:${tzMinutes}`
+            }
 
             // Update round
             const { error: roundError } = await supabase
@@ -816,9 +860,9 @@ export default function Dealer() {
                 .update({
                     lottery_type: roundForm.lottery_type,
                     lottery_name: roundForm.lottery_name || LOTTERY_TYPES[roundForm.lottery_type],
-                    round_date: roundForm.round_date,
-                    open_time: openDateTime.toISOString(),
-                    close_time: closeDateTime.toISOString(),
+                    round_date: roundForm.open_date,
+                    open_time: formatLocalDateTime(openDateTime),
+                    close_time: formatLocalDateTime(closeDateTime),
                     delete_before_minutes: roundForm.delete_before_minutes,
                     currency_symbol: roundForm.currency_symbol,
                     currency_name: roundForm.currency_name,
@@ -873,16 +917,84 @@ export default function Dealer() {
         }
     }
 
-    // Get status badge
-    const getStatusBadge = (round) => {
+    // Reopen a closed round by extending close_time
+    const handleReopenRound = async (round, e) => {
+        e.stopPropagation()
+        try {
+            // Extend close_time to end of today (23:59)
+            const now = new Date()
+            const newCloseTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
+            
+            // Format as ISO string with timezone
+            const formatLocalDateTime = (date) => {
+                const year = date.getFullYear()
+                const month = String(date.getMonth() + 1).padStart(2, '0')
+                const day = String(date.getDate()).padStart(2, '0')
+                const hours = String(date.getHours()).padStart(2, '0')
+                const minutes = String(date.getMinutes()).padStart(2, '0')
+                const seconds = String(date.getSeconds()).padStart(2, '0')
+                const tzOffset = -date.getTimezoneOffset()
+                const tzHours = String(Math.floor(Math.abs(tzOffset) / 60)).padStart(2, '0')
+                const tzMinutes = String(Math.abs(tzOffset) % 60).padStart(2, '0')
+                const tzSign = tzOffset >= 0 ? '+' : '-'
+                return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${tzSign}${tzHours}:${tzMinutes}`
+            }
+
+            const { error } = await supabase
+                .from('lottery_rounds')
+                .update({ 
+                    close_time: formatLocalDateTime(newCloseTime),
+                    status: 'open'
+                })
+                .eq('id', round.id)
+
+            if (error) throw error
+            
+            toast.success('เปิดรับงวดหวยใหม่แล้ว (ถึง 23:59 วันนี้)')
+            fetchRounds()
+        } catch (error) {
+            console.error('Error reopening round:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+
+    // Get status badge (based on time, not status field)
+    const getStatusBadge = (round, showReopenButton = false) => {
         const now = new Date()
+        const openTime = new Date(round.open_time)
         const closeTime = new Date(round.close_time)
 
         if (round.status === 'announced') {
             return <span className="status-badge announced"><FiCheck /> ประกาศผลแล้ว</span>
         }
-        if (round.status === 'closed' || now > closeTime) {
-            return <span className="status-badge closed"><FiLock /> ปิดรับแล้ว</span>
+        if (now > closeTime) {
+            return (
+                <span className="status-badge closed" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <FiLock /> ปิดรับแล้ว
+                    {showReopenButton && (
+                        <button 
+                            className="btn-reopen"
+                            onClick={(e) => handleReopenRound(round, e)}
+                            title="เปิดรับใหม่"
+                            style={{
+                                background: 'rgba(0, 210, 106, 0.2)',
+                                border: 'none',
+                                borderRadius: '4px',
+                                padding: '2px 6px',
+                                cursor: 'pointer',
+                                fontSize: '0.7rem',
+                                color: 'var(--color-success)',
+                                marginLeft: '4px'
+                            }}
+                        >
+                            เปิดใหม่
+                        </button>
+                    )}
+                </span>
+            )
+        }
+        if (now < openTime) {
+            return <span className="status-badge pending"><FiClock /> รอเปิดรับ</span>
         }
         return <span className="status-badge open"><FiClock /> เปิดรับอยู่</span>
     }
@@ -1002,7 +1114,7 @@ export default function Dealer() {
                                                 onShowNumberLimits={() => { setSelectedRound(round); setShowNumberLimitsModal(true); }}
                                                 onDeleteRound={() => handleDeleteRound(round.id)}
                                                 onShowResults={() => { setSelectedRound(round); setShowResultsModal(true); }}
-                                                getStatusBadge={getStatusBadge}
+                                                getStatusBadge={(r) => getStatusBadge(r, true)}
                                                 formatDate={formatDate}
                                                 formatTime={formatTime}
                                                 user={user}
@@ -1356,20 +1468,20 @@ export default function Dealer() {
                                 />
                             </div>
 
-                            {/* Date & Time */}
+                            {/* Open Date & Time */}
                             <div className="form-row">
                                 <div className="form-group">
-                                    <label className="form-label">วันที่</label>
+                                    <label className="form-label">วันที่เปิด</label>
                                     <input
                                         type="date"
                                         className="form-input"
-                                        value={roundForm.round_date}
-                                        onChange={e => setRoundForm({ ...roundForm, round_date: e.target.value })}
+                                        value={roundForm.open_date}
+                                        onChange={e => setRoundForm({ ...roundForm, open_date: e.target.value })}
                                         onKeyDown={handleInputKeyDown}
                                     />
                                 </div>
                                 <div className="form-group">
-                                    <label className="form-label">เวลาเปิดรับ</label>
+                                    <label className="form-label">เวลาเปิด</label>
                                     <input
                                         type="time"
                                         className="form-input"
@@ -1378,8 +1490,22 @@ export default function Dealer() {
                                         onKeyDown={handleInputKeyDown}
                                     />
                                 </div>
+                            </div>
+
+                            {/* Close Date & Time */}
+                            <div className="form-row">
                                 <div className="form-group">
-                                    <label className="form-label">เวลาปิดรับ</label>
+                                    <label className="form-label">วันที่ปิด</label>
+                                    <input
+                                        type="date"
+                                        className="form-input"
+                                        value={roundForm.close_date}
+                                        onChange={e => setRoundForm({ ...roundForm, close_date: e.target.value })}
+                                        onKeyDown={handleInputKeyDown}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">เวลาปิด</label>
                                     <input
                                         type="time"
                                         className="form-input"
@@ -1530,20 +1656,20 @@ export default function Dealer() {
                                 />
                             </div>
 
-                            {/* Date & Time */}
+                            {/* Open Date & Time */}
                             <div className="form-row">
                                 <div className="form-group">
-                                    <label className="form-label">วันที่</label>
+                                    <label className="form-label">วันที่เปิด</label>
                                     <input
                                         type="date"
                                         className="form-input"
-                                        value={roundForm.round_date}
-                                        onChange={e => setRoundForm({ ...roundForm, round_date: e.target.value })}
+                                        value={roundForm.open_date}
+                                        onChange={e => setRoundForm({ ...roundForm, open_date: e.target.value })}
                                         onKeyDown={handleInputKeyDown}
                                     />
                                 </div>
                                 <div className="form-group">
-                                    <label className="form-label">เวลาเปิดรับ</label>
+                                    <label className="form-label">เวลาเปิด</label>
                                     <input
                                         type="time"
                                         className="form-input"
@@ -1552,8 +1678,22 @@ export default function Dealer() {
                                         onKeyDown={handleInputKeyDown}
                                     />
                                 </div>
+                            </div>
+
+                            {/* Close Date & Time */}
+                            <div className="form-row">
                                 <div className="form-group">
-                                    <label className="form-label">เวลาปิดรับ</label>
+                                    <label className="form-label">วันที่ปิด</label>
+                                    <input
+                                        type="date"
+                                        className="form-input"
+                                        value={roundForm.close_date}
+                                        onChange={e => setRoundForm({ ...roundForm, close_date: e.target.value })}
+                                        onKeyDown={handleInputKeyDown}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">เวลาปิด</label>
                                     <input
                                         type="time"
                                         className="form-input"
