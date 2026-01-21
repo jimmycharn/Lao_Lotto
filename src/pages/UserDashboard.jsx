@@ -54,6 +54,7 @@ export default function UserDashboard() {
     const [dealers, setDealers] = useState([])
     const [selectedDealer, setSelectedDealer] = useState(null)
     const [dealersLoading, setDealersLoading] = useState(true)
+    const [isOwnDealer, setIsOwnDealer] = useState(false) // Track if selected dealer is the user themselves
 
     // Results tab state
     const [resultsRounds, setResultsRounds] = useState([])
@@ -242,6 +243,40 @@ export default function UserDashboard() {
             console.error('Error fetching dealer memberships:', error)
         } finally {
             setDealersLoading(false)
+        }
+    }
+
+    // Handle switching to dealer dashboard
+    const handleSwitchToDealerDashboard = async () => {
+        try {
+            // Update user role to dealer
+            const { error: updateError } = await supabase
+                .from('profiles')
+                .update({ role: 'dealer' })
+                .eq('id', user.id)
+
+            if (updateError) {
+                console.error('Error updating role:', updateError)
+                toast.error('ไม่สามารถสร้างบัญชีเจ้ามือได้')
+                return
+            }
+
+            // Create membership record for self
+            await supabase
+                .from('user_dealer_memberships')
+                .upsert({
+                    user_id: user.id,
+                    dealer_id: user.id,
+                    status: 'active'
+                })
+
+            toast.success('สร้างบัญชีเจ้ามือสำเร็จ!')
+            
+            // Redirect to dealer dashboard
+            window.location.href = '/dealer'
+        } catch (error) {
+            console.error('Error creating dealer:', error)
+            toast.error('เกิดข้อผิดพลาด กรุณาลองใหม่')
         }
     }
 
@@ -1827,27 +1862,40 @@ export default function UserDashboard() {
                     <p>ส่งเลขหวยให้เจ้ามือของคุณ</p>
                 </div>
 
-                {/* Dealer Selector Pills */}
-                {dealers.length > 0 && (
-                    <div className="dealer-selector-bar">
-                        {dealers.map(dealer => (
-                            <button
-                                key={dealer.id}
-                                className={`dealer-pill ${selectedDealer?.id === dealer.id ? 'active' : ''}`}
-                                onClick={() => {
-                                    setSelectedDealer(dealer)
-                                    setSelectedRound(null) // Reset round selection
-                                    setRounds([])
-                                }}
-                            >
-                                <div className="dealer-info-row">
-                                    <span className="dealer-label">เจ้ามือ</span>
-                                    <span className="dealer-name">{dealer.full_name || dealer.email}</span>
-                                </div>
-                            </button>
-                        ))}
+                {/* Create own dealer button - above dealer selector */}
+                {profile?.role !== 'dealer' && (
+                    <div className="create-dealer-section">
+                        <button
+                            className="create-dealer-btn-standalone"
+                            onClick={handleSwitchToDealerDashboard}
+                        >
+                            <FiPlus />
+                            <span>เป็นเจ้ามือเอง</span>
+                        </button>
                     </div>
                 )}
+
+                {/* Dealer Selector Pills */}
+                <div className="dealer-selector-bar">
+                    {/* Existing dealers */}
+                    {dealers.map(dealer => (
+                        <button
+                            key={dealer.id}
+                            className={`dealer-pill ${selectedDealer?.id === dealer.id ? 'active' : ''}`}
+                            onClick={() => {
+                                setSelectedDealer(dealer)
+                                setSelectedRound(null) // Reset round selection
+                                setRounds([])
+                                setIsOwnDealer(dealer.id === user.id)
+                            }}
+                        >
+                            <div className="dealer-info-row">
+                                <span className="dealer-label">เจ้ามือ</span>
+                                <span className="dealer-name">{dealer.full_name || dealer.email}</span>
+                            </div>
+                        </button>
+                    ))}
+                </div>
 
                 {/* Tabs */}
                 <div className="user-tabs">
@@ -2680,7 +2728,7 @@ export default function UserDashboard() {
                     )}
 
                     {activeTab === 'dealer' && selectedDealer && (
-                        <DealerInfoTab dealer={selectedDealer} userSettings={userSettings} />
+                        <DealerInfoTab dealer={selectedDealer} userSettings={userSettings} isOwnDealer={isOwnDealer} />
                     )}
                 </div>
             </div>
@@ -3411,13 +3459,13 @@ export default function UserDashboard() {
 }
 
 // Dealer Info Tab Component - Shows selected dealer's information
-function DealerInfoTab({ dealer, userSettings }) {
+function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
     const { user } = useAuth()
     const [dealerProfile, setDealerProfile] = useState(null)
     const [dealerBankAccounts, setDealerBankAccounts] = useState([])
     const [assignedBankAccountId, setAssignedBankAccountId] = useState(null)
     const [loading, setLoading] = useState(true)
-    const [subTab, setSubTab] = useState('profile') // 'profile' or 'rates'
+    const [subTab, setSubTab] = useState(isOwnDealer ? 'rounds' : 'profile') // Different default tabs
     const [ratesTab, setRatesTab] = useState('thai') // lottery type tab for rates
 
     useEffect(() => {
@@ -3664,18 +3712,45 @@ function DealerInfoTab({ dealer, userSettings }) {
         <div className="dealer-info-section">
             {/* Sub-tabs */}
             <div className="sub-tabs">
-                <button
-                    className={`sub-tab-btn ${subTab === 'profile' ? 'active' : ''}`}
-                    onClick={() => setSubTab('profile')}
-                >
-                    <FiUser /> โปรไฟล์เจ้ามือ
-                </button>
-                <button
-                    className={`sub-tab-btn ${subTab === 'rates' ? 'active' : ''}`}
-                    onClick={() => setSubTab('rates')}
-                >
-                    <FiDollarSign /> ค่าคอม/อัตราจ่าย
-                </button>
+                {isOwnDealer ? (
+                    // Own dealer tabs: งวดที่เปิด | ผลรางวัล | โปรไฟล์
+                    <>
+                        <button
+                            className={`sub-tab-btn ${subTab === 'rounds' ? 'active' : ''}`}
+                            onClick={() => setSubTab('rounds')}
+                        >
+                            <FiCalendar /> งวดที่เปิด
+                        </button>
+                        <button
+                            className={`sub-tab-btn ${subTab === 'results' ? 'active' : ''}`}
+                            onClick={() => setSubTab('results')}
+                        >
+                            <FiAward /> ผลรางวัล
+                        </button>
+                        <button
+                            className={`sub-tab-btn ${subTab === 'profile' ? 'active' : ''}`}
+                            onClick={() => setSubTab('profile')}
+                        >
+                            <FiUser /> โปรไฟล์
+                        </button>
+                    </>
+                ) : (
+                    // Other dealer tabs: งวดที่เปิด | ผลรางวัล | เจ้ามือ
+                    <>
+                        <button
+                            className={`sub-tab-btn ${subTab === 'profile' ? 'active' : ''}`}
+                            onClick={() => setSubTab('profile')}
+                        >
+                            <FiUser /> โปรไฟล์เจ้ามือ
+                        </button>
+                        <button
+                            className={`sub-tab-btn ${subTab === 'rates' ? 'active' : ''}`}
+                            onClick={() => setSubTab('rates')}
+                        >
+                            <FiDollarSign /> ค่าคอม/อัตราจ่าย
+                        </button>
+                    </>
+                )}
             </div>
 
             {subTab === 'profile' ? (

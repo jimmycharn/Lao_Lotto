@@ -3670,6 +3670,7 @@ function DealerProfileTab({ user, profile, subscription, formatDate }) {
 
 // Member Accordion Item Component
 function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock, onDelete, dealerBankAccounts = [], onUpdateBank, isDealer = false, onCopyCredentials }) {
+    const { user } = useAuth()
     const [activeTab, setActiveTab] = useState('info') // 'info' | 'settings'
 
     return (
@@ -3716,14 +3717,14 @@ function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock
                                 </span>
                                 {isDealer && (
                                     <span style={{
-                                        background: 'var(--color-info)',
+                                        background: member.id === user?.id ? 'var(--color-warning)' : 'var(--color-info)',
                                         color: '#fff',
                                         padding: '0.15rem 0.5rem',
                                         borderRadius: '4px',
                                         fontSize: '0.7rem',
                                         fontWeight: '600'
                                     }}>
-                                        เจ้ามือ
+                                        {member.id === user?.id ? 'เจ้ามือส่งออก' : 'เจ้ามือ'}
                                     </span>
                                 )}
                             </div>
