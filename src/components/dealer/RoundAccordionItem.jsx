@@ -100,11 +100,14 @@ export default function RoundAccordionItem({
         return now <= closeTime
     })()
 
+    // Fetch summary data on mount for announced rounds (to show header stats)
     useEffect(() => {
-        if ((isAnnounced || isOpen) && summaryData.submissions.length === 0 && !summaryData.loading) {
+        console.log('Mount useEffect:', { isAnnounced, roundId: round.id, status: round.status, is_result_announced: round.is_result_announced })
+        if (isAnnounced) {
+            console.log('isAnnounced is true, fetching summary data...')
             fetchSummaryData()
         }
-    }, [isAnnounced, isOpen])
+    }, [round.id, isAnnounced])
 
     // Fetch upstream dealers on mount
     useEffect(() => {
@@ -221,14 +224,17 @@ export default function RoundAccordionItem({
     }
 
     async function fetchSummaryData() {
+        console.log('fetchSummaryData called for round:', round.id, 'isAnnounced:', isAnnounced)
         setSummaryData(prev => ({ ...prev, loading: true }))
         try {
-            const { data: submissionsData } = await supabase
+            const { data: submissionsData, error: submissionsError } = await supabase
                 .from('submissions')
-                .select('*, profiles(id, full_name, email)')
+                .select('*, profiles:user_id(id, full_name, email)')
                 .eq('round_id', round.id)
                 .eq('is_deleted', false)
                 .order('created_at', { ascending: false })
+            
+            console.log('fetchSummaryData submissions:', submissionsData?.length, 'error:', submissionsError)
 
             const userIds = [...new Set((submissionsData || []).map(s => s.user_id))]
             const settingsMap = {}
@@ -900,7 +906,13 @@ export default function RoundAccordionItem({
                             </button>
                             <button
                                 className={`btn btn-sm ${closedRoundTab === 'results' ? 'btn-primary' : 'btn-outline'}`}
-                                onClick={() => setClosedRoundTab('results')}
+                                onClick={() => {
+                                    setClosedRoundTab('results')
+                                    // Fetch summary data when switching to results tab
+                                    if (isAnnounced && summaryData.submissions.length === 0 && !summaryData.loading) {
+                                        fetchSummaryData()
+                                    }
+                                }}
                             >
                                 <FiCheck /> ผลรางวัล
                             </button>
