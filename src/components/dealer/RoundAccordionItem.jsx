@@ -798,14 +798,17 @@ export default function RoundAccordionItem({
     }
 
     const getCommission = (sub) => {
+        // Use commission_amount that was recorded when submission was made
+        // This ensures consistency between dealer and user dashboards
+        if (sub.commission_amount !== undefined && sub.commission_amount !== null) {
+            return sub.commission_amount
+        }
+        // Fallback to calculation if commission_amount not recorded
         const lotteryKey = getLotteryTypeKey(round.lottery_type)
         const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
         const settings = summaryData.userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
         if (settings?.commission !== undefined) {
             return settings.isFixed ? settings.commission : sub.amount * (settings.commission / 100)
-        }
-        if (sub.commission_amount !== undefined && sub.commission_amount !== null) {
-            return sub.commission_amount
         }
         return sub.amount * ((DEFAULT_COMMISSIONS[sub.bet_type] || 15) / 100)
     }
