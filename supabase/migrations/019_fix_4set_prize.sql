@@ -13,6 +13,7 @@ DECLARE
   v_payout_rate DECIMAL;
   v_lottery_type TEXT;
   v_bet_key TEXT;
+  v_settings_key TEXT;  -- Key to lookup in lottery_settings (may differ from bet_type)
   
   v_6_top TEXT;
   v_3_top TEXT;
@@ -271,8 +272,19 @@ BEGIN
     
     -- Update winner for non-4_set bets
     IF v_is_winner THEN
+      -- Map bet_type to settings key (Lao/Hanoi use different keys in settings)
+      v_settings_key := CASE 
+        WHEN v_bet_key IN ('lao', 'hanoi') THEN
+          CASE v_submission.bet_type
+            WHEN '3_top' THEN '3_straight'
+            WHEN '3_tod' THEN '3_tod_single'
+            ELSE v_submission.bet_type
+          END
+        ELSE v_submission.bet_type
+      END;
+      
       v_payout_rate := COALESCE(
-        (v_submission.lottery_settings->v_bet_key->v_submission.bet_type->>'payout')::DECIMAL,
+        (v_submission.lottery_settings->v_bet_key->v_settings_key->>'payout')::DECIMAL,
         (SELECT payout_rate FROM type_limits WHERE round_id = p_round_id AND bet_type = v_submission.bet_type LIMIT 1),
         1
       );

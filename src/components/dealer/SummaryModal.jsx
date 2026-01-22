@@ -43,11 +43,10 @@ export default function SummaryModal({ round, onClose }) {
 
     // Map bet_type to settings key for Lao/Hanoi lottery
     const getSettingsKey = (betType, lotteryKey) => {
-        if (lotteryKey === 'lao') {
+        if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
             const LAO_BET_TYPE_MAP = {
                 '3_top': '3_straight',
-                '3_tod': '3_tod_single',
-                '4_set': '4_top'
+                '3_tod': '3_tod_single'
             }
             return LAO_BET_TYPE_MAP[betType] || betType
         }

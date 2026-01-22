@@ -457,7 +457,16 @@ export default function UserDashboard() {
                             if (s.bet_type === '4_set') {
                                 return sum + (s.prize_amount || 0)
                             }
-                            const settings = userSettings?.lottery_settings?.[lotteryKey]?.[s.bet_type]
+                            // Map bet_type to settings key (Lao/Hanoi use different keys)
+                            let settingsKey = s.bet_type
+                            if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+                                const LAO_BET_TYPE_MAP = {
+                                    '3_top': '3_straight',
+                                    '3_tod': '3_tod_single'
+                                }
+                                settingsKey = LAO_BET_TYPE_MAP[s.bet_type] || s.bet_type
+                            }
+                            const settings = userSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
                             if (settings?.payout !== undefined) {
                                 return sum + (s.amount * settings.payout)
                             }
@@ -1822,7 +1831,18 @@ export default function UserDashboard() {
         }
 
         const lotteryKey = getLotteryTypeKey(round?.lottery_type)
-        const settings = userSettings?.lottery_settings?.[lotteryKey]?.[sub.bet_type]
+        
+        // Map bet_type to settings key (Lao/Hanoi use different keys in settings)
+        let settingsKey = sub.bet_type
+        if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+            const LAO_BET_TYPE_MAP = {
+                '3_top': '3_straight',
+                '3_tod': '3_tod_single'
+            }
+            settingsKey = LAO_BET_TYPE_MAP[sub.bet_type] || sub.bet_type
+        }
+        
+        const settings = userSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
 
         if (settings && settings.payout !== undefined) {
             return sub.amount * settings.payout
