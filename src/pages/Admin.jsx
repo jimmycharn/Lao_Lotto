@@ -220,7 +220,7 @@ export default function Admin() {
                         <FiSettings />
                         แอดมิน
                     </h1>
-                    <p>จัดการระบบหวยลาว</p>
+                    <p>จัดการระบบ Big Lotto</p>
                 </div>
 
                 {/* Tabs */}

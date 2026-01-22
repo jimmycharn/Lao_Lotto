@@ -147,7 +147,7 @@ export default function Register() {
                     {isDealerRegistration ? (
                         <div className="referral-info dealer">
                             <FiUsers />
-                            <span>เริ่มต้นเป็นเจ้ามือในระบบ ลาวหวย</span>
+                            <span>เริ่มต้นเป็นเจ้ามือในระบบ Big Lotto</span>
                         </div>
                     ) : dealerInfo ? (
                         <div className="referral-info">

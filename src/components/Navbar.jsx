@@ -56,8 +56,8 @@ export default function Navbar() {
                     <Link to="/" className="navbar-logo">
                         <FiGift className="logo-icon" />
                         <span className="logo-text">
-                            <span className="logo-lao">ลาว</span>
-                            <span className="logo-lotto">หวย</span>
+                            <span className="logo-lao">Big</span>
+                            <span className="logo-lotto">Lotto</span>
                         </span>
                     </Link>
 

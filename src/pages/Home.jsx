@@ -79,13 +79,13 @@ export default function Home() {
                     <div className="hero-content animate-slideUp">
                         <div className="hero-badge">
                             <FiGift />
-                            <span>หวยลาว ออนไลน์</span>
+                            <span>Big Lotto - ระบบหวยออนไลน์</span>
                         </div>
                         <h1 className="hero-title">
                             <span className="text-gold">โชคดี</span> รอคุณอยู่
                         </h1>
                         <p className="hero-description">
-                            ซื้อหวยลาวออนไลน์ ง่าย สะดวก ปลอดภัย<br />
+                            ซื้อหวยออนไลน์ ง่าย สะดวก ปลอดภัย<br />
                             มีผลหวยทุกงวด จ่ายจริง จ่ายเร็ว
                         </p>
                         <div className="hero-actions">

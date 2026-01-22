@@ -294,7 +294,7 @@ export default function BuyLottery() {
                         <h1>ซื้อหวย</h1>
                         <div className="round-badge">
                             <span className="dot"></span>
-                            {activeRound.lottery_name || 'หวยลาว'} - งวดวันที่ {new Date(activeRound.round_date).toLocaleDateString('th-TH')}
+                            {activeRound.lottery_name || 'Big Lotto'} - งวดวันที่ {new Date(activeRound.round_date).toLocaleDateString('th-TH')}
                         </div>
                     </div>
                     <p>เลือกประเภทหวยและกรอกเลขที่ต้องการ</p>
