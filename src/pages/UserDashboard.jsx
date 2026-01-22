@@ -453,6 +453,10 @@ export default function UserDashboard() {
 
                         const totalPrize = subs.reduce((sum, s) => {
                             if (!s.is_winner) return sum
+                            // For 4_set, use prize_amount from database (FIXED amount)
+                            if (s.bet_type === '4_set') {
+                                return sum + (s.prize_amount || 0)
+                            }
                             const settings = userSettings?.lottery_settings?.[lotteryKey]?.[s.bet_type]
                             if (settings?.payout !== undefined) {
                                 return sum + (s.amount * settings.payout)
@@ -461,7 +465,7 @@ export default function UserDashboard() {
                                 'run_top': 3, 'run_bottom': 4, 'pak_top': 8, 'pak_bottom': 6,
                                 '2_top': 65, '2_front': 65, '2_center': 65, '2_spread': 65, '2_run': 10, '2_bottom': 65,
                                 '3_top': 550, '3_tod': 100, '3_bottom': 135, '3_front': 100, '3_back': 135,
-                                '4_run': 20, '4_tod': 100, '4_set': 100, '4_float': 20, '5_float': 10, '6_top': 1000000
+                                '4_run': 20, '4_tod': 100, '4_float': 20, '5_float': 10, '6_top': 1000000
                             }
                             return sum + (s.amount * (defaultPayouts[s.bet_type] || 1))
                         }, 0)
@@ -1812,6 +1816,11 @@ export default function UserDashboard() {
     const getCalculatedPrize = (sub, round) => {
         if (!sub.is_winner) return 0
 
+        // For 4_set (4 ตัวชุด), use prize_amount from database (FIXED amount, not multiplied)
+        if (sub.bet_type === '4_set') {
+            return sub.prize_amount || 0
+        }
+
         const lotteryKey = getLotteryTypeKey(round?.lottery_type)
         const settings = userSettings?.lottery_settings?.[lotteryKey]?.[sub.bet_type]
 
@@ -2548,6 +2557,7 @@ export default function UserDashboard() {
                                             <div
                                                 className={`round-accordion-header card clickable ${isExpanded ? 'expanded-header' : ''}`}
                                                 onClick={() => setSelectedResultRound(isExpanded ? null : round)}
+                                                style={{ position: 'relative' }}
                                             >
                                                 <div className="round-header-main">
                                                     <div className="round-header-info">
@@ -2572,6 +2582,51 @@ export default function UserDashboard() {
                                                         </span>
                                                         <FiChevronDown className={isExpanded ? 'rotated' : ''} />
                                                     </div>
+                                                    {/* Refresh Button - Top Right Corner */}
+                                                    <button
+                                                        className="btn btn-icon btn-sm"
+                                                        onClick={async (e) => {
+                                                            e.stopPropagation()
+                                                            // Refresh both summary and submissions for this round
+                                                            await fetchResultsRounds()
+                                                            // Also refresh submissions if this round is expanded
+                                                            if (isExpanded) {
+                                                                const { data } = await supabase
+                                                                    .from('submissions')
+                                                                    .select('*')
+                                                                    .eq('round_id', round.id)
+                                                                    .eq('is_deleted', false)
+                                                                    .order('created_at', { ascending: false })
+                                                                if (data) {
+                                                                    setAllResultSubmissions(data)
+                                                                    // Apply current filter (winners only or all)
+                                                                    if (resultViewMode === 'winners') {
+                                                                        setResultSubmissions(data.filter(s => s.is_winner))
+                                                                    } else {
+                                                                        setResultSubmissions(data)
+                                                                    }
+                                                                }
+                                                            }
+                                                        }}
+                                                        title="รีเฟรชข้อมูลงวดนี้"
+                                                        style={{
+                                                            padding: '0.35rem 0.6rem',
+                                                            fontSize: '0.75rem',
+                                                            background: 'var(--color-bg-tertiary)',
+                                                            border: '1px solid var(--color-border)',
+                                                            borderRadius: '6px',
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '0.25rem',
+                                                            color: 'var(--color-text-muted)',
+                                                            position: 'absolute',
+                                                            top: '0.5rem',
+                                                            right: '0.5rem'
+                                                        }}
+                                                    >
+                                                        <FiRefreshCw size={12} />
+                                                    </button>
                                                 </div>
                                                 {/* Summary in Header */}
                                                 {hasSummary && (

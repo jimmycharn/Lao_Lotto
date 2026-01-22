@@ -1,5 +1,10 @@
--- Comprehensive winner calculation function with all lottery rules
--- Supports: Thai, Lao, Hanoi, Stock lottery types
+-- Fix winner calculation function
+-- Main issues fixed:
+-- 1. 4_set uses FIXED prize amount (not multiplied)
+-- 2. Correct extraction of derived numbers from 4_set for Lao/Hanoi
+-- 3. Add debug logging capability
+
+DROP FUNCTION IF EXISTS calculate_round_winners(UUID);
 
 CREATE OR REPLACE FUNCTION calculate_round_winners(p_round_id UUID) 
 RETURNS INTEGER AS $$
@@ -14,8 +19,8 @@ DECLARE
   
   -- Winning numbers
   v_6_top TEXT;        -- Thai: 6 digit main number
-  v_3_top TEXT;        -- 3 digit top (last 3 of 6_top or 4_set)
-  v_2_top TEXT;        -- 2 digit top (last 2 of 3_top)
+  v_3_top TEXT;        -- 3 digit top
+  v_2_top TEXT;        -- 2 digit top
   v_2_bottom TEXT;     -- 2 digit bottom
   v_3_bottom TEXT[];   -- Thai: array of 4 sets of 3 digit bottom
   v_4_set TEXT;        -- Lao/Hanoi: 4 digit set
@@ -32,22 +37,32 @@ BEGIN
     RETURN 0;
   END IF;
   
-  -- Extract winning numbers based on lottery type
   v_lottery_type := v_round.lottery_type;
   
+  -- Extract winning numbers based on lottery type
   IF v_lottery_type = 'thai' THEN
     v_6_top := v_round.winning_numbers->>'6_top';
     v_3_top := v_round.winning_numbers->>'3_top';
     v_2_top := v_round.winning_numbers->>'2_top';
     v_2_bottom := v_round.winning_numbers->>'2_bottom';
-    -- Get 3_bottom array
     SELECT ARRAY(SELECT jsonb_array_elements_text(v_round.winning_numbers->'3_bottom')) INTO v_3_bottom;
     
   ELSIF v_lottery_type IN ('lao', 'hanoi') THEN
     v_4_set := v_round.winning_numbers->>'4_set';
-    v_3_top := v_round.winning_numbers->>'3_top';
-    v_2_top := v_round.winning_numbers->>'2_top';
-    v_2_bottom := v_round.winning_numbers->>'2_bottom';
+    -- Derive numbers from 4_set if not explicitly set
+    -- 3_top = last 3 digits of 4_set
+    v_3_top := COALESCE(v_round.winning_numbers->>'3_top', 
+                        CASE WHEN length(v_4_set) >= 3 THEN substring(v_4_set from 2 for 3) ELSE NULL END);
+    -- 2_top = last 2 digits of 4_set  
+    v_2_top := COALESCE(v_round.winning_numbers->>'2_top',
+                        CASE WHEN length(v_4_set) >= 2 THEN substring(v_4_set from 3 for 2) ELSE NULL END);
+    -- 2_bottom for Lao = first 2 digits of 4_set, for Hanoi = separate field
+    IF v_lottery_type = 'lao' THEN
+      v_2_bottom := COALESCE(v_round.winning_numbers->>'2_bottom',
+                             CASE WHEN length(v_4_set) >= 2 THEN substring(v_4_set from 1 for 2) ELSE NULL END);
+    ELSE
+      v_2_bottom := v_round.winning_numbers->>'2_bottom';
+    END IF;
     
   ELSIF v_lottery_type = 'stock' THEN
     v_2_top := v_round.winning_numbers->>'2_top';
@@ -82,93 +97,66 @@ BEGIN
     -- CHECK WINNING CONDITIONS BASED ON BET TYPE
     -- =====================================================
     
-    -- ----- RUN_TOP (ลอยบน/วิ่งบน) -----
-    -- Win if any digit of submission matches any digit in 3_top
-    IF v_submission.bet_type = 'run_top' AND v_3_top IS NOT NULL THEN
+    -- ----- RUN_TOP (วิ่งบน) -----
+    IF v_submission.bet_type = 'run_top' AND v_3_top IS NOT NULL AND length(v_num) = 1 THEN
       IF position(v_num in v_3_top) > 0 THEN
         v_is_winner := TRUE;
       END IF;
     END IF;
     
-    -- ----- RUN_BOTTOM (ลอยล่าง/วิ่งล่าง) -----
-    -- Win if any digit of submission matches any digit in 2_bottom
-    IF v_submission.bet_type = 'run_bottom' AND v_2_bottom IS NOT NULL THEN
+    -- ----- RUN_BOTTOM (วิ่งล่าง) -----
+    IF v_submission.bet_type = 'run_bottom' AND v_2_bottom IS NOT NULL AND length(v_num) = 1 THEN
       IF position(v_num in v_2_bottom) > 0 THEN
         v_is_winner := TRUE;
       END IF;
     END IF;
     
     -- ----- PAK_TOP (ปักบน) -----
-    -- Current system uses single pak_top type, check all 3 positions
-    -- pak_front_top: matches position 1 of 3_top
-    -- pak_center_top: matches position 2 of 3_top  
-    -- pak_back_top: matches position 3 of 3_top
-    IF v_submission.bet_type = 'pak_top' AND v_3_top IS NOT NULL AND length(v_3_top) = 3 THEN
-      IF length(v_num) = 1 THEN
-        -- Check all 3 positions - win if matches any
-        IF v_num = substring(v_3_top from 1 for 1) OR
-           v_num = substring(v_3_top from 2 for 1) OR
-           v_num = substring(v_3_top from 3 for 1) THEN
-          v_is_winner := TRUE;
-        END IF;
+    IF v_submission.bet_type = 'pak_top' AND v_3_top IS NOT NULL AND length(v_3_top) = 3 AND length(v_num) = 1 THEN
+      IF v_num = substring(v_3_top from 1 for 1) OR
+         v_num = substring(v_3_top from 2 for 1) OR
+         v_num = substring(v_3_top from 3 for 1) THEN
+        v_is_winner := TRUE;
       END IF;
     END IF;
     
     -- ----- PAK_BOTTOM (ปักล่าง) -----
-    -- Current system uses single pak_bottom type, check both positions
-    -- pak_front_bottom: matches position 1 of 2_bottom
-    -- pak_back_bottom: matches position 2 of 2_bottom
-    IF v_submission.bet_type = 'pak_bottom' AND v_2_bottom IS NOT NULL AND length(v_2_bottom) = 2 THEN
-      IF length(v_num) = 1 THEN
-        -- Check both positions - win if matches any
-        IF v_num = substring(v_2_bottom from 1 for 1) OR
-           v_num = substring(v_2_bottom from 2 for 1) THEN
-          v_is_winner := TRUE;
-        END IF;
+    IF v_submission.bet_type = 'pak_bottom' AND v_2_bottom IS NOT NULL AND length(v_2_bottom) = 2 AND length(v_num) = 1 THEN
+      IF v_num = substring(v_2_bottom from 1 for 1) OR
+         v_num = substring(v_2_bottom from 2 for 1) THEN
+        v_is_winner := TRUE;
       END IF;
     END IF;
     
     -- ----- 2_BOTTOM (2 ตัวล่าง) -----
-    -- Exact match with 2_bottom
-    IF v_submission.bet_type = '2_bottom' AND v_2_bottom IS NOT NULL THEN
+    IF v_submission.bet_type = '2_bottom' AND v_2_bottom IS NOT NULL AND length(v_num) = 2 THEN
       IF v_num = v_2_bottom THEN
         v_is_winner := TRUE;
       END IF;
     END IF;
     
     -- ----- 2_TOP (2 ตัวบน) -----
-    -- For Thai: matches last 2 digits of 3_top (positions 2-3)
-    -- For Lao/Hanoi: matches 2_top (last 2 of 4_set)
-    IF v_submission.bet_type = '2_top' THEN
-      IF v_lottery_type = 'thai' AND v_3_top IS NOT NULL AND length(v_3_top) = 3 THEN
-        IF v_num = substring(v_3_top from 2 for 2) THEN
-          v_is_winner := TRUE;
-        END IF;
-      ELSIF v_2_top IS NOT NULL THEN
-        IF v_num = v_2_top THEN
-          v_is_winner := TRUE;
-        END IF;
+    IF v_submission.bet_type = '2_top' AND v_2_top IS NOT NULL AND length(v_num) = 2 THEN
+      IF v_num = v_2_top THEN
+        v_is_winner := TRUE;
       END IF;
     END IF;
     
     -- ----- 2_FRONT (2 ตัวหน้า) -----
-    -- Matches first 2 digits of 3_top (positions 1-2)
-    IF v_submission.bet_type = '2_front' AND v_3_top IS NOT NULL AND length(v_3_top) = 3 THEN
+    IF v_submission.bet_type = '2_front' AND v_3_top IS NOT NULL AND length(v_3_top) = 3 AND length(v_num) = 2 THEN
       IF v_num = substring(v_3_top from 1 for 2) THEN
         v_is_winner := TRUE;
       END IF;
     END IF;
     
     -- ----- 2_CENTER (2 ตัวถ่าง) -----
-    -- Matches positions 1 and 3 of 3_top
-    IF v_submission.bet_type = '2_center' AND v_3_top IS NOT NULL AND length(v_3_top) = 3 THEN
+    IF v_submission.bet_type = '2_center' AND v_3_top IS NOT NULL AND length(v_3_top) = 3 AND length(v_num) = 2 THEN
       IF v_num = (substring(v_3_top from 1 for 1) || substring(v_3_top from 3 for 1)) THEN
         v_is_winner := TRUE;
       END IF;
     END IF;
     
-    -- ----- 2_RUN (2 ตัวลอย/2 ตัวมี) -----
-    -- Both digits exist in 3_top (any position)
+    -- ----- 2_RUN (2 ตัวลอย) -----
     IF v_submission.bet_type = '2_run' AND v_3_top IS NOT NULL AND length(v_num) = 2 THEN
       IF position(substring(v_num from 1 for 1) in v_3_top) > 0 AND
          position(substring(v_num from 2 for 1) in v_3_top) > 0 THEN
@@ -176,37 +164,32 @@ BEGIN
       END IF;
     END IF;
     
-    -- ----- 3_TOP (3 ตัวบน/3 ตัวตรง) -----
-    -- Exact match with 3_top
-    IF v_submission.bet_type = '3_top' AND v_3_top IS NOT NULL THEN
+    -- ----- 3_TOP (3 ตัวตรง) -----
+    IF v_submission.bet_type = '3_top' AND v_3_top IS NOT NULL AND length(v_num) = 3 THEN
       IF v_num = v_3_top THEN
         v_is_winner := TRUE;
       END IF;
     END IF;
     
     -- ----- 3_TOD (3 ตัวโต๊ด) -----
-    -- Same digits as 3_top but DIFFERENT order (NOT exact match)
-    -- If user wants both 3_top and 3_tod, they buy "เต็ง-โต๊ด" which creates 2 submissions
+    -- Win only if same digits but NOT exact match
     IF v_submission.bet_type = '3_tod' AND v_3_top IS NOT NULL AND length(v_num) = 3 THEN
       SELECT string_agg(ch, '' ORDER BY ch) INTO v_num_sorted 
       FROM unnest(string_to_array(v_num, NULL)) AS ch;
       
-      -- Win only if same digits but NOT exact match (โต๊ด = permutation only)
       IF v_num_sorted = v_3_top_sorted AND v_num != v_3_top THEN
         v_is_winner := TRUE;
       END IF;
     END IF;
     
     -- ----- 3_BOTTOM (3 ตัวล่าง) - Thai only -----
-    -- Matches any of the 4 sets in 3_bottom array
-    IF v_submission.bet_type = '3_bottom' AND v_lottery_type = 'thai' AND v_3_bottom IS NOT NULL THEN
+    IF v_submission.bet_type = '3_bottom' AND v_lottery_type = 'thai' AND v_3_bottom IS NOT NULL AND length(v_num) = 3 THEN
       IF v_num = ANY(v_3_bottom) THEN
         v_is_winner := TRUE;
       END IF;
     END IF;
     
     -- ----- 4_RUN (4 ตัวลอย) -----
-    -- 3_top exists anywhere in the 4-digit number
     IF v_submission.bet_type = '4_run' AND v_3_top IS NOT NULL AND length(v_num) = 4 THEN
       IF position(v_3_top in v_num) > 0 THEN
         v_is_winner := TRUE;
@@ -214,7 +197,6 @@ BEGIN
     END IF;
     
     -- ----- 5_RUN (5 ตัวลอย) -----
-    -- 3_top exists anywhere in the 5-digit number
     IF v_submission.bet_type = '5_run' AND v_3_top IS NOT NULL AND length(v_num) = 5 THEN
       IF position(v_3_top in v_num) > 0 THEN
         v_is_winner := TRUE;
@@ -223,7 +205,6 @@ BEGIN
     
     -- ----- 4_SET (4 ตัวชุด) - Lao/Hanoi only -----
     -- Prize is FIXED AMOUNT (not multiplied by bet amount)
-    -- Default prizes: 4ตรง=100000, 3ตรง=30000, 4โต๊ด=4000, 3โต๊ด=3000, 2หน้า=1000, 2หลัง=1000
     IF v_submission.bet_type = '4_set' AND v_4_set IS NOT NULL AND length(v_num) = 4 THEN
       DECLARE
         v_bet_last3 TEXT;
@@ -259,24 +240,29 @@ BEGIN
         -- Get prize settings from user's lottery_settings or use defaults
         v_prize_settings := v_submission.lottery_settings->v_bet_key->'4_set'->'prizes';
         
-        -- Check 6 prize conditions and find the HIGHEST prize only
-        -- Priority order: 4ตรง > 3ตรง > 4โต๊ด > 3โต๊ด > 2หน้า/2หลัง
-        -- Prize is FIXED AMOUNT per set (not multiplied)
-        IF v_num = v_4_set THEN                                  -- 4 ตัวตรงชุด (exact match) - highest
+        -- Check 6 prize conditions - find HIGHEST prize only
+        -- Priority: 4ตรง(100000) > 3ตรง(30000) > 4โต๊ด(4000) > 3โต๊ด(3000) > 2หน้า(1000) = 2หลัง(1000)
+        IF v_num = v_4_set THEN
+          -- 4 ตัวตรงชุด (exact match)
           v_4set_prize := COALESCE((v_prize_settings->>'4_straight_set')::DECIMAL, 100000);
-        ELSIF v_bet_last3 = v_win_last3 THEN                     -- 3 ตัวตรงชุด (last 3 exact)
+        ELSIF v_bet_last3 = v_win_last3 THEN
+          -- 3 ตัวตรงชุด (last 3 exact)
           v_4set_prize := COALESCE((v_prize_settings->>'3_straight_set')::DECIMAL, 30000);
-        ELSIF v_bet_sorted = v_win_sorted AND v_num != v_4_set THEN -- 4 ตัวโต๊ดชุด (permutation only, not exact)
+        ELSIF v_bet_sorted = v_win_sorted AND v_num != v_4_set THEN
+          -- 4 ตัวโต๊ดชุด (permutation, not exact)
           v_4set_prize := COALESCE((v_prize_settings->>'4_tod_set')::DECIMAL, 4000);
-        ELSIF v_bet_last3_sorted = v_win_last3_sorted AND v_bet_last3 != v_win_last3 THEN -- 3 ตัวโต๊ดชุด (permutation only)
+        ELSIF v_bet_last3_sorted = v_win_last3_sorted AND v_bet_last3 != v_win_last3 THEN
+          -- 3 ตัวโต๊ดชุด (last 3 permutation, not exact)
           v_4set_prize := COALESCE((v_prize_settings->>'3_tod_set')::DECIMAL, 3000);
-        ELSIF v_bet_first2 = v_win_first2 THEN                   -- 2 ตัวหน้าชุด (first 2 exact)
+        ELSIF v_bet_first2 = v_win_first2 THEN
+          -- 2 ตัวหน้าชุด (first 2 exact)
           v_4set_prize := COALESCE((v_prize_settings->>'2_front_set')::DECIMAL, 1000);
-        ELSIF v_bet_last2 = v_win_last2 THEN                     -- 2 ตัวหลังชุด (last 2 exact)
+        ELSIF v_bet_last2 = v_win_last2 THEN
+          -- 2 ตัวหลังชุด (last 2 exact)
           v_4set_prize := COALESCE((v_prize_settings->>'2_back_set')::DECIMAL, 1000);
         END IF;
         
-        -- If won, update with FIXED prize amount (not multiplied)
+        -- If won, update with FIXED prize amount
         IF v_4set_prize > 0 THEN
           UPDATE submissions SET 
             is_winner = TRUE,
@@ -289,15 +275,15 @@ BEGIN
     END IF;
     
     -- =====================================================
-    -- UPDATE WINNER STATUS AND CALCULATE PRIZE
-    -- (Skip 4_set as it's already handled above with FIXED prize)
+    -- UPDATE WINNER STATUS FOR NON-4_SET BETS
+    -- (4_set is handled above with FIXED prize)
     -- =====================================================
     
     IF v_is_winner AND v_submission.bet_type != '4_set' THEN
-      -- Get payout rate from user's lottery_settings first, then fallback to type_limits
+      -- Get payout rate from user's lottery_settings first, then type_limits, then default
       v_payout_rate := COALESCE(
         (v_submission.lottery_settings->v_bet_key->v_submission.bet_type->>'payout')::DECIMAL,
-        (SELECT payout_rate FROM type_limits WHERE round_id = p_round_id AND bet_type = v_submission.bet_type),
+        (SELECT payout_rate FROM type_limits WHERE round_id = p_round_id AND bet_type = v_submission.bet_type LIMIT 1),
         1
       );
       
