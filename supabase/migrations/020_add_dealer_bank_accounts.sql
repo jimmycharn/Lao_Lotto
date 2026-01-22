@@ -21,6 +21,13 @@ CREATE INDEX IF NOT EXISTS idx_dealer_bank_accounts_dealer_id ON dealer_bank_acc
 -- Enable RLS
 ALTER TABLE dealer_bank_accounts ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Dealers can view own bank accounts" ON dealer_bank_accounts;
+DROP POLICY IF EXISTS "Dealers can insert own bank accounts" ON dealer_bank_accounts;
+DROP POLICY IF EXISTS "Dealers can update own bank accounts" ON dealer_bank_accounts;
+DROP POLICY IF EXISTS "Dealers can delete own bank accounts" ON dealer_bank_accounts;
+DROP POLICY IF EXISTS "Superadmins can view all bank accounts" ON dealer_bank_accounts;
+
 -- Policy: Dealers can view their own bank accounts
 CREATE POLICY "Dealers can view own bank accounts" ON dealer_bank_accounts
   FOR SELECT USING (auth.uid() = dealer_id);
@@ -46,6 +53,10 @@ CREATE POLICY "Superadmins can view all bank accounts" ON dealer_bank_accounts
       AND role = 'superadmin'
     )
   );
+
+-- Drop existing triggers if they exist
+DROP TRIGGER IF EXISTS update_dealer_bank_accounts_updated_at ON dealer_bank_accounts;
+DROP TRIGGER IF EXISTS ensure_single_default_trigger ON dealer_bank_accounts;
 
 -- Add trigger for updated_at
 CREATE TRIGGER update_dealer_bank_accounts_updated_at

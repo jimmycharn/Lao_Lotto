@@ -99,6 +99,10 @@ export default function Dealer() {
     const [addMemberForm, setAddMemberForm] = useState({ email: '', full_name: '', phone: '' })
     const [addingMember, setAddingMember] = useState(false)
     const [newMemberCredentials, setNewMemberCredentials] = useState(null) // { email, password, url }
+    
+    // Credit system states
+    const [dealerCredit, setDealerCredit] = useState(null)
+    const [creditLoading, setCreditLoading] = useState(false)
 
     // Read tab from URL params
     useEffect(() => {
@@ -381,6 +385,45 @@ export default function Dealer() {
         } finally {
             clearTimeout(timeoutId)
             setLoading(false)
+        }
+        
+        // Fetch dealer credit
+        fetchDealerCredit()
+    }
+    
+    // Fetch dealer credit balance
+    async function fetchDealerCredit() {
+        if (!user?.id) return
+        setCreditLoading(true)
+        try {
+            const { data, error } = await supabase
+                .rpc('check_dealer_credit', { p_dealer_id: user.id, p_estimated_fee: 0 })
+            
+            if (!error && data) {
+                setDealerCredit(data)
+            } else {
+                // If function doesn't exist yet, try direct query
+                const { data: creditData } = await supabase
+                    .from('dealer_credits')
+                    .select('*')
+                    .eq('dealer_id', user.id)
+                    .maybeSingle()
+                
+                if (creditData) {
+                    setDealerCredit({
+                        balance: creditData.balance,
+                        is_blocked: creditData.is_blocked,
+                        blocked_reason: creditData.blocked_reason,
+                        warning_threshold: creditData.warning_threshold,
+                        has_sufficient_credit: creditData.balance > 0 && !creditData.is_blocked,
+                        is_low_credit: creditData.balance <= creditData.warning_threshold
+                    })
+                }
+            }
+        } catch (err) {
+            console.log('Credit system not available yet:', err)
+        } finally {
+            setCreditLoading(false)
         }
     }
 
@@ -1018,10 +1061,92 @@ export default function Dealer() {
     return (
         <div className="dealer-page">
             <div className="container">
-                <div className="page-header">
-                    <h1><FiFileText /> แดชบอร์ดเจ้ามือ</h1>
-                    <p>จัดการงวดหวยและดูรายการที่ส่งเข้ามา</p>
+                <div className="page-header" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                        <div>
+                            <h1><FiFileText /> แดชบอร์ดเจ้ามือ</h1>
+                            <p>จัดการงวดหวยและดูรายการที่ส่งเข้ามา</p>
+                        </div>
+                    </div>
+                    
+                    {/* Credit Display - Full width on mobile */}
+                    <div className="credit-display card" style={{
+                        padding: '0.75rem 1.25rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.75rem',
+                        width: '100%',
+                        background: dealerCredit?.is_blocked ? 'rgba(239, 68, 68, 0.15)' : 
+                                    dealerCredit?.is_low_credit ? 'rgba(245, 158, 11, 0.15)' : 
+                                    'rgba(16, 185, 129, 0.15)',
+                        border: `1px solid ${dealerCredit?.is_blocked ? 'var(--color-danger)' : 
+                                             dealerCredit?.is_low_credit ? 'var(--color-warning)' : 
+                                             'var(--color-success)'}`,
+                        borderRadius: '8px'
+                    }}>
+                        <div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>เครดิตคงเหลือ</div>
+                            <div style={{ 
+                                fontSize: '1.25rem', 
+                                fontWeight: 'bold',
+                                color: dealerCredit?.is_blocked ? 'var(--color-danger)' : 
+                                       dealerCredit?.is_low_credit ? 'var(--color-warning)' : 
+                                       'var(--color-success)'
+                            }}>
+                                {(dealerCredit?.balance || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                            </div>
+                        </div>
+                        {dealerCredit?.is_blocked && (
+                            <div style={{ 
+                                background: 'var(--color-danger)', 
+                                color: 'white', 
+                                padding: '0.25rem 0.5rem', 
+                                borderRadius: '4px',
+                                fontSize: '0.7rem',
+                                fontWeight: 'bold'
+                            }}>
+                                <FiAlertTriangle style={{ marginRight: '0.25rem' }} />
+                                บล็อค
+                            </div>
+                        )}
+                        {!dealerCredit?.is_blocked && dealerCredit?.is_low_credit && (
+                            <div style={{ 
+                                background: 'var(--color-warning)', 
+                                color: 'black', 
+                                padding: '0.25rem 0.5rem', 
+                                borderRadius: '4px',
+                                fontSize: '0.7rem',
+                                fontWeight: 'bold'
+                            }}>
+                                <FiAlertCircle style={{ marginRight: '0.25rem' }} />
+                                เครดิตต่ำ
+                            </div>
+                        )}
+                    </div>
                 </div>
+
+                {/* Credit Blocked Warning */}
+                {dealerCredit?.is_blocked && (
+                    <div className="alert alert-danger" style={{ 
+                        marginBottom: '1rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        padding: '1rem',
+                        background: 'rgba(239, 68, 68, 0.15)',
+                        border: '1px solid var(--color-danger)',
+                        borderRadius: '8px'
+                    }}>
+                        <FiAlertTriangle style={{ fontSize: '1.5rem', color: 'var(--color-danger)' }} />
+                        <div>
+                            <strong style={{ color: 'var(--color-danger)' }}>เครดิตไม่เพียงพอ!</strong>
+                            <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+                                ระบบถูกบล็อคเนื่องจากเครดิตหมด กรุณาเติมเครดิตเพื่อใช้งานต่อ
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 {/* Tabs */}
                 <div className="dealer-tabs">

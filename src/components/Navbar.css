@@ -15,7 +15,13 @@
     height: 70px;
 }
 
-/* Logo */
+/* Logo and Brand */
+.navbar-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
 .navbar-logo {
     display: flex;
     align-items: center;
@@ -23,6 +29,45 @@
     text-decoration: none;
     font-size: 1.5rem;
     font-weight: 700;
+}
+
+.brand-user-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: 2.5rem;
+    margin-top: -0.25rem;
+}
+
+.brand-user-name {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.brand-role-badge {
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 600;
+}
+
+.brand-role-badge.role-superadmin {
+    background: rgba(233, 69, 96, 0.2);
+    color: var(--color-accent);
+}
+
+.brand-role-badge.role-dealer {
+    background: rgba(212, 175, 55, 0.2);
+    color: var(--color-primary);
+}
+
+.brand-role-badge.role-user {
+    background: rgba(0, 210, 106, 0.2);
+    color: var(--color-success);
 }
 
 .logo-icon {
@@ -87,7 +132,17 @@
     gap: 1rem;
 }
 
-font-weight: 600;
+.user-menu {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.role-badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.7rem;
+    font-weight: 600;
 }
 
 .role-superadmin {

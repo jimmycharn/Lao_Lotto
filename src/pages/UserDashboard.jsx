@@ -1903,7 +1903,7 @@ export default function UserDashboard() {
             <div className="container">
                 {/* Header */}
                 <div className="page-header">
-                    <h1><FiSend /> ส่งเลข</h1>
+                    <h1><FiUser /> แดชบอร์ดสมาชิก</h1>
                     <p>ส่งเลขหวยให้เจ้ามือของคุณ</p>
                 </div>
 

@@ -52,14 +52,29 @@ export default function Navbar() {
         <>
             <nav className="navbar">
                 <div className="container navbar-container">
-                    {/* Logo */}
-                    <Link to="/" className="navbar-logo">
-                        <FiGift className="logo-icon" />
-                        <span className="logo-text">
-                            <span className="logo-lao">Big</span>
-                            <span className="logo-lotto">Lotto</span>
-                        </span>
-                    </Link>
+                    {/* Logo with User Name and Role Badge */}
+                    <div className="navbar-brand">
+                        <Link to="/" className="navbar-logo">
+                            <FiGift className="logo-icon" />
+                            <span className="logo-text">
+                                <span className="logo-lao">Big</span>
+                                <span className="logo-lotto">Lotto</span>
+                            </span>
+                        </Link>
+                        {user && (
+                            <div className="brand-user-info">
+                                <span className="brand-user-name">
+                                    {profile?.full_name || user.email}
+                                </span>
+                                {profile?.role && (
+                                    <span className={`brand-role-badge role-${profile.role}`}>
+                                        {profile.role === 'superadmin' ? 'Admin' :
+                                            profile.role === 'dealer' ? 'เจ้ามือ' : 'สมาชิก'}
+                                    </span>
+                                )}
+                            </div>
+                        )}
+                    </div>
 
                     {/* Desktop Nav */}
                     <div className="navbar-links desktop-only">
@@ -102,16 +117,6 @@ export default function Navbar() {
                     <div className="navbar-auth desktop-only">
                         {user ? (
                             <div className="user-menu">
-                                <div className="user-info">
-                                    <FiUser />
-                                    <span>{profile?.full_name || user.email}</span>
-                                    {profile?.role && (
-                                        <span className={`role-badge role-${profile.role}`}>
-                                            {profile.role === 'superadmin' ? 'Admin' :
-                                                profile.role === 'dealer' ? 'เจ้ามือ' : 'สมาชิก'}
-                                        </span>
-                                    )}
-                                </div>
                                 <button onClick={handleSignOut} className="btn btn-outline btn-sm">
                                     <FiLogOut />
                                     ออกจากระบบ

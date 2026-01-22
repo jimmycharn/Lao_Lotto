@@ -58,6 +58,8 @@ export default function SuperAdmin() {
     const [invoices, setInvoices] = useState([])
     const [payments, setPayments] = useState([])
     const [settings, setSettings] = useState({})
+    const [dealerCredits, setDealerCredits] = useState([])
+    const [creditTransactions, setCreditTransactions] = useState([])
 
     // UI States
     const [isLoading, setIsLoading] = useState(true)
@@ -78,6 +80,11 @@ export default function SuperAdmin() {
         is_trial: false,
         trial_days: 30
     })
+    
+    // Credit Modal States
+    const [showTopupModal, setShowTopupModal] = useState(false)
+    const [topupForm, setTopupForm] = useState({ dealer_id: '', amount: '', description: '' })
+    const [topupLoading, setTopupLoading] = useState(false)
 
     // Form States
     const [packageForm, setPackageForm] = useState({
@@ -109,12 +116,146 @@ export default function SuperAdmin() {
                 fetchPackages(),
                 fetchInvoices(),
                 fetchPayments(),
-                fetchSettings()
+                fetchSettings(),
+                fetchDealerCredits()
             ])
         } catch (error) {
             console.error('Error fetching data:', error)
         } finally {
             setIsLoading(false)
+        }
+    }
+    
+    const fetchDealerCredits = async () => {
+        try {
+            // Fetch dealer credits with dealer info
+            const { data: creditsData, error: creditsError } = await supabase
+                .from('dealer_credits')
+                .select(`
+                    *,
+                    dealer:dealer_id (
+                        id, full_name, email, phone
+                    ),
+                    package:package_id (
+                        id, name, fee_percentage
+                    )
+                `)
+                .order('updated_at', { ascending: false })
+            
+            if (!creditsError && creditsData) {
+                setDealerCredits(creditsData)
+            }
+            
+            // Fetch recent credit transactions
+            const { data: transData, error: transError } = await supabase
+                .from('credit_transactions')
+                .select(`
+                    *,
+                    dealer:dealer_id (
+                        id, full_name, email
+                    ),
+                    performer:performed_by (
+                        id, full_name, email
+                    )
+                `)
+                .order('created_at', { ascending: false })
+                .limit(100)
+            
+            if (!transError && transData) {
+                setCreditTransactions(transData)
+            }
+        } catch (error) {
+            console.log('Credit tables not available yet:', error)
+        }
+    }
+    
+    const handleTopupCredit = async () => {
+        if (!topupForm.dealer_id || !topupForm.amount) {
+            toast.error('กรุณากรอกข้อมูลให้ครบ')
+            return
+        }
+        
+        setTopupLoading(true)
+        try {
+            const amount = parseFloat(topupForm.amount)
+            
+            // Try RPC first, fallback to direct insert
+            let success = false
+            try {
+                const { data, error } = await supabase.rpc('add_dealer_credit', {
+                    p_dealer_id: topupForm.dealer_id,
+                    p_amount: amount,
+                    p_transaction_type: 'topup',
+                    p_reference_type: 'admin_topup',
+                    p_performed_by: user.id,
+                    p_description: topupForm.description || 'เติมเครดิตโดย Admin'
+                })
+                if (!error) success = true
+            } catch (rpcError) {
+                console.log('RPC not available, using direct insert')
+            }
+            
+            // Fallback: Direct database operations
+            if (!success) {
+                // Get or create dealer credit record
+                let { data: creditData } = await supabase
+                    .from('dealer_credits')
+                    .select('*')
+                    .eq('dealer_id', topupForm.dealer_id)
+                    .maybeSingle()
+                
+                let newBalance = amount
+                
+                if (creditData) {
+                    // Update existing record
+                    newBalance = (creditData.balance || 0) + amount
+                    const { error: updateError } = await supabase
+                        .from('dealer_credits')
+                        .update({ 
+                            balance: newBalance,
+                            is_blocked: false,
+                            blocked_reason: null,
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('dealer_id', topupForm.dealer_id)
+                    
+                    if (updateError) throw updateError
+                } else {
+                    // Insert new record
+                    const { error: insertError } = await supabase
+                        .from('dealer_credits')
+                        .insert({
+                            dealer_id: topupForm.dealer_id,
+                            balance: amount,
+                            warning_threshold: 1000
+                        })
+                    
+                    if (insertError) throw insertError
+                }
+                
+                // Record transaction
+                await supabase
+                    .from('credit_transactions')
+                    .insert({
+                        dealer_id: topupForm.dealer_id,
+                        transaction_type: 'topup',
+                        amount: amount,
+                        balance_after: newBalance,
+                        reference_type: 'admin_topup',
+                        performed_by: user.id,
+                        description: topupForm.description || 'เติมเครดิตโดย Admin'
+                    })
+            }
+            
+            toast.success(`เติมเครดิต ฿${amount.toLocaleString()} สำเร็จ`)
+            setShowTopupModal(false)
+            setTopupForm({ dealer_id: '', amount: '', description: '' })
+            fetchDealerCredits()
+        } catch (error) {
+            console.error('Error topping up credit:', error)
+            toast.error('เกิดข้อผิดพลาดในการเติมเครดิต: ' + (error.message || 'Unknown error'))
+        } finally {
+            setTopupLoading(false)
         }
     }
 
@@ -1204,6 +1345,166 @@ export default function SuperAdmin() {
         </div>
     )
 
+    const renderCredits = () => (
+        <div className="credits-tab">
+            {/* Header Actions */}
+            <div className="tab-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <div>
+                    <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>
+                        จัดการเครดิตเจ้ามือ - เติมเครดิต, ดูประวัติการทำรายการ
+                    </p>
+                </div>
+                <button className="btn btn-primary" onClick={() => setShowTopupModal(true)}>
+                    <FiPlus /> เติมเครดิต
+                </button>
+            </div>
+
+            {/* Dealer Credits List */}
+            <div className="card" style={{ marginBottom: '1.5rem' }}>
+                <div className="card-header">
+                    <h3><FiCreditCard /> ยอดเครดิตเจ้ามือ</h3>
+                </div>
+                <div className="table-container">
+                    <table className="data-table">
+                        <thead>
+                            <tr>
+                                <th>เจ้ามือ</th>
+                                <th>เครดิตคงเหลือ</th>
+                                <th>แพ็คเกจ</th>
+                                <th>สถานะ</th>
+                                <th>อัพเดทล่าสุด</th>
+                                <th>จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {dealerCredits.length === 0 ? (
+                                <tr>
+                                    <td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
+                                        ยังไม่มีข้อมูลเครดิต
+                                    </td>
+                                </tr>
+                            ) : (
+                                dealerCredits.map(credit => (
+                                    <tr key={credit.id}>
+                                        <td>
+                                            <div>
+                                                <strong>{credit.dealer?.full_name || 'ไม่ระบุชื่อ'}</strong>
+                                                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                    {credit.dealer?.email}
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span style={{ 
+                                                fontWeight: 'bold', 
+                                                fontSize: '1.1rem',
+                                                color: credit.balance <= 0 ? 'var(--color-danger)' : 
+                                                       credit.balance <= credit.warning_threshold ? 'var(--color-warning)' : 
+                                                       'var(--color-success)'
+                                            }}>
+                                                ฿{(credit.balance || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                            </span>
+                                        </td>
+                                        <td>{credit.package?.name || 'Standard'}</td>
+                                        <td>
+                                            {credit.is_blocked ? (
+                                                <span className="badge badge-danger">บล็อค</span>
+                                            ) : credit.balance <= credit.warning_threshold ? (
+                                                <span className="badge badge-warning">เครดิตต่ำ</span>
+                                            ) : (
+                                                <span className="badge badge-success">ปกติ</span>
+                                            )}
+                                        </td>
+                                        <td style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                                            {new Date(credit.updated_at).toLocaleString('th-TH')}
+                                        </td>
+                                        <td>
+                                            <button 
+                                                className="btn btn-sm btn-primary"
+                                                onClick={() => {
+                                                    setTopupForm({ dealer_id: credit.dealer_id, amount: '', description: '' })
+                                                    setShowTopupModal(true)
+                                                }}
+                                            >
+                                                <FiPlus /> เติม
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Recent Transactions */}
+            <div className="card">
+                <div className="card-header">
+                    <h3><FiFileText /> ประวัติการทำรายการ (ล่าสุด 100 รายการ)</h3>
+                </div>
+                <div className="table-container">
+                    <table className="data-table">
+                        <thead>
+                            <tr>
+                                <th>วันที่</th>
+                                <th>เจ้ามือ</th>
+                                <th>ประเภท</th>
+                                <th>จำนวน</th>
+                                <th>ยอดคงเหลือ</th>
+                                <th>รายละเอียด</th>
+                                <th>ดำเนินการโดย</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {creditTransactions.length === 0 ? (
+                                <tr>
+                                    <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
+                                        ยังไม่มีประวัติการทำรายการ
+                                    </td>
+                                </tr>
+                            ) : (
+                                creditTransactions.map(trans => (
+                                    <tr key={trans.id}>
+                                        <td style={{ fontSize: '0.85rem' }}>
+                                            {new Date(trans.created_at).toLocaleString('th-TH')}
+                                        </td>
+                                        <td>
+                                            <div>
+                                                <strong>{trans.dealer?.full_name || 'ไม่ระบุ'}</strong>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span className={`badge ${trans.transaction_type === 'topup' ? 'badge-success' : 'badge-danger'}`}>
+                                                {trans.transaction_type === 'topup' ? 'เติมเครดิต' : 
+                                                 trans.transaction_type === 'deduction' ? 'หักเครดิต' : 
+                                                 trans.transaction_type}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span style={{ 
+                                                fontWeight: 'bold',
+                                                color: trans.amount >= 0 ? 'var(--color-success)' : 'var(--color-danger)'
+                                            }}>
+                                                {trans.amount >= 0 ? '+' : ''}฿{trans.amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                            </span>
+                                        </td>
+                                        <td>฿{(trans.balance_after || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
+                                        <td style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                                            {trans.description || '-'}
+                                        </td>
+                                        <td style={{ fontSize: '0.85rem' }}>
+                                            {trans.performer?.full_name || 'ระบบ'}
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    )
+
     const renderSettings = () => (
         <div className="settings-tab">
             <div className="settings-section">
@@ -1278,6 +1579,7 @@ export default function SuperAdmin() {
                     {[
                         { id: 'dashboard', label: 'Dashboard', icon: <FiHome /> },
                         { id: 'dealers', label: 'เจ้ามือ', icon: <FiUsers /> },
+                        { id: 'credits', label: 'เครดิต', icon: <FiCreditCard /> },
                         { id: 'packages', label: 'แพ็คเกจ', icon: <FiPackage /> },
                         { id: 'invoices', label: 'ใบแจ้งหนี้', icon: <FiFileText /> },
                         { id: 'payments', label: 'การชำระเงิน', icon: <FiDollarSign />, badge: stats.pendingPayments },
@@ -1302,6 +1604,7 @@ export default function SuperAdmin() {
                     <h1>
                         {activeTab === 'dashboard' && 'Dashboard'}
                         {activeTab === 'dealers' && 'จัดการเจ้ามือ'}
+                        {activeTab === 'credits' && 'จัดการเครดิต'}
                         {activeTab === 'packages' && 'จัดการแพ็คเกจ'}
                         {activeTab === 'invoices' && 'ใบแจ้งหนี้'}
                         {activeTab === 'payments' && 'การชำระเงิน'}
@@ -1322,6 +1625,7 @@ export default function SuperAdmin() {
                         <>
                             {activeTab === 'dashboard' && renderDashboard()}
                             {activeTab === 'dealers' && renderDealers()}
+                            {activeTab === 'credits' && renderCredits()}
                             {activeTab === 'packages' && renderPackages()}
                             {activeTab === 'invoices' && renderInvoices()}
                             {activeTab === 'payments' && renderPayments()}
@@ -1526,6 +1830,70 @@ export default function SuperAdmin() {
                             </button>
                             <button className="btn btn-primary" onClick={handleAssignPackage}>
                                 <FiCheck /> กำหนดแพ็คเกจ
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Topup Credit Modal */}
+            {showTopupModal && (
+                <div className="modal-overlay" onClick={() => setShowTopupModal(false)}>
+                    <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+                        <div className="modal-header">
+                            <h2><FiCreditCard /> เติมเครดิต</h2>
+                            <button className="close-btn" onClick={() => setShowTopupModal(false)}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="form-group">
+                                <label>เลือกเจ้ามือ</label>
+                                <select
+                                    value={topupForm.dealer_id}
+                                    onChange={(e) => setTopupForm({ ...topupForm, dealer_id: e.target.value })}
+                                >
+                                    <option value="">-- เลือกเจ้ามือ --</option>
+                                    {dealers.map(dealer => (
+                                        <option key={dealer.id} value={dealer.id}>
+                                            {dealer.full_name || dealer.email}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="form-group">
+                                <label>จำนวนเงิน (บาท)</label>
+                                <input
+                                    type="number"
+                                    value={topupForm.amount}
+                                    onChange={(e) => setTopupForm({ ...topupForm, amount: e.target.value })}
+                                    placeholder="0.00"
+                                    min="0"
+                                    step="0.01"
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label>หมายเหตุ (ไม่บังคับ)</label>
+                                <input
+                                    type="text"
+                                    value={topupForm.description}
+                                    onChange={(e) => setTopupForm({ ...topupForm, description: e.target.value })}
+                                    placeholder="เช่น เติมเครดิตครั้งแรก, โอนเงินวันที่..."
+                                />
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowTopupModal(false)}>
+                                ยกเลิก
+                            </button>
+                            <button 
+                                className="btn btn-primary" 
+                                onClick={handleTopupCredit}
+                                disabled={topupLoading || !topupForm.dealer_id || !topupForm.amount}
+                            >
+                                {topupLoading ? 'กำลังดำเนินการ...' : <><FiCheck /> เติมเครดิต</>}
                             </button>
                         </div>
                     </div>
