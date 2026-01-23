@@ -11,6 +11,7 @@ import {
     FiDollarSign,
     FiSettings,
     FiPlus,
+    FiMinus,
     FiEdit2,
     FiTrash2,
     FiCheck,
@@ -88,6 +89,11 @@ export default function SuperAdmin() {
     const [showTopupModal, setShowTopupModal] = useState(false)
     const [topupForm, setTopupForm] = useState({ dealer_id: '', amount: '', description: '' })
     const [topupLoading, setTopupLoading] = useState(false)
+    
+    // Deduct Credit Modal States
+    const [showDeductModal, setShowDeductModal] = useState(false)
+    const [deductForm, setDeductForm] = useState({ dealer_id: '', dealer_name: '', amount: '', reason: '' })
+    const [deductLoading, setDeductLoading] = useState(false)
     
     // Bank Account Modal States
     const [showBankAccountModal, setShowBankAccountModal] = useState(false)
@@ -452,6 +458,79 @@ export default function SuperAdmin() {
         } catch (error) {
             console.error('Reject topup error:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+    
+    // Deduct credit from dealer
+    const handleDeductCredit = async () => {
+        if (!deductForm.dealer_id || !deductForm.amount || !deductForm.reason) {
+            toast.error('กรุณากรอกจำนวนเงินและเหตุผลให้ครบ')
+            return
+        }
+        
+        const amount = parseFloat(deductForm.amount)
+        if (amount <= 0) {
+            toast.error('จำนวนเงินต้องมากกว่า 0')
+            return
+        }
+        
+        setDeductLoading(true)
+        try {
+            // Get current credit
+            const { data: creditData, error: fetchError } = await supabase
+                .from('dealer_credits')
+                .select('*')
+                .eq('dealer_id', deductForm.dealer_id)
+                .single()
+            
+            if (fetchError || !creditData) {
+                toast.error('ไม่พบข้อมูลเครดิตของเจ้ามือ')
+                setDeductLoading(false)
+                return
+            }
+            
+            const newBalance = (creditData.balance || 0) - amount
+            
+            // Update credit balance
+            const { error: updateError } = await supabase
+                .from('dealer_credits')
+                .update({ 
+                    balance: newBalance,
+                    is_blocked: newBalance <= 0,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('dealer_id', deductForm.dealer_id)
+            
+            if (updateError) {
+                console.error('Update credit error:', updateError)
+                throw updateError
+            }
+            
+            // Record transaction
+            const { error: transError } = await supabase
+                .from('credit_transactions')
+                .insert({
+                    dealer_id: deductForm.dealer_id,
+                    transaction_type: 'deduction',
+                    amount: -amount,
+                    balance_after: newBalance,
+                    description: deductForm.reason,
+                    performed_by: user.id
+                })
+            
+            if (transError) {
+                console.error('Transaction record error:', transError)
+            }
+            
+            toast.success(`หักเครดิต ฿${amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} สำเร็จ`)
+            setShowDeductModal(false)
+            setDeductForm({ dealer_id: '', dealer_name: '', amount: '', reason: '' })
+            fetchDealerCredits()
+        } catch (error) {
+            console.error('Deduct credit error:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setDeductLoading(false)
         }
     }
     
@@ -1940,15 +2019,31 @@ export default function SuperAdmin() {
                                             {new Date(credit.updated_at).toLocaleString('th-TH')}
                                         </td>
                                         <td>
-                                            <button 
-                                                className="btn btn-sm btn-primary"
-                                                onClick={() => {
-                                                    setTopupForm({ dealer_id: credit.dealer_id, amount: '', description: '' })
-                                                    setShowTopupModal(true)
-                                                }}
-                                            >
-                                                <FiPlus /> เติม
-                                            </button>
+                                            <div className="action-buttons">
+                                                <button 
+                                                    className="btn btn-sm btn-primary"
+                                                    onClick={() => {
+                                                        setTopupForm({ dealer_id: credit.dealer_id, amount: '', description: '' })
+                                                        setShowTopupModal(true)
+                                                    }}
+                                                >
+                                                    <FiPlus /> <span className="btn-text">เติม</span>
+                                                </button>
+                                                <button 
+                                                    className="btn btn-sm btn-danger"
+                                                    onClick={() => {
+                                                        setDeductForm({ 
+                                                            dealer_id: credit.dealer_id, 
+                                                            dealer_name: credit.dealer?.full_name || 'ไม่ระบุ',
+                                                            amount: '', 
+                                                            reason: '' 
+                                                        })
+                                                        setShowDeductModal(true)
+                                                    }}
+                                                >
+                                                    <FiMinus /> <span className="btn-text">ลด</span>
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))
@@ -2626,6 +2721,83 @@ export default function SuperAdmin() {
                                 disabled={!assignBankForm.dealer_id || !assignBankForm.bank_account_id}
                             >
                                 <FiCheck /> ผูกบัญชี
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Deduct Credit Modal */}
+            {showDeductModal && (
+                <div className="modal-overlay" onClick={() => setShowDeductModal(false)}>
+                    <div className="modal" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h2><FiMinus /> หักเครดิต</h2>
+                            <button className="close-btn" onClick={() => setShowDeductModal(false)}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="alert alert-warning" style={{ marginBottom: '1rem' }}>
+                                <FiAlertCircle />
+                                <span>การหักเครดิตจะบันทึกในประวัติการทำรายการ กรุณาระบุเหตุผลให้ชัดเจน</span>
+                            </div>
+                            
+                            <div className="form-group">
+                                <label>เจ้ามือ</label>
+                                <input
+                                    type="text"
+                                    value={deductForm.dealer_name}
+                                    disabled
+                                    style={{ backgroundColor: 'rgba(255,255,255,0.05)' }}
+                                />
+                            </div>
+                            
+                            <div className="form-group">
+                                <label>จำนวนเงินที่ต้องการหัก (฿) <span style={{ color: 'var(--color-danger)' }}>*</span></label>
+                                <input
+                                    type="number"
+                                    placeholder="0.00"
+                                    value={deductForm.amount}
+                                    onChange={(e) => setDeductForm({ ...deductForm, amount: e.target.value })}
+                                    min="0"
+                                    step="0.01"
+                                />
+                            </div>
+                            
+                            <div className="form-group">
+                                <label>เหตุผลในการหักเครดิต <span style={{ color: 'var(--color-danger)' }}>*</span></label>
+                                <textarea
+                                    placeholder="ระบุเหตุผล เช่น เติมผิด, ตรวจสอบพบการทุจริต, ยกเลิกรายการ ฯลฯ"
+                                    value={deductForm.reason}
+                                    onChange={(e) => setDeductForm({ ...deductForm, reason: e.target.value })}
+                                    rows={3}
+                                    style={{ 
+                                        width: '100%', 
+                                        padding: '0.75rem',
+                                        borderRadius: '8px',
+                                        border: '1px solid rgba(255,255,255,0.1)',
+                                        backgroundColor: 'rgba(255,255,255,0.05)',
+                                        color: 'inherit',
+                                        resize: 'vertical'
+                                    }}
+                                />
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowDeductModal(false)}>
+                                ยกเลิก
+                            </button>
+                            <button 
+                                className="btn btn-danger" 
+                                onClick={handleDeductCredit}
+                                disabled={deductLoading || !deductForm.amount || !deductForm.reason}
+                            >
+                                {deductLoading ? (
+                                    <><FiRefreshCw className="spin" /> กำลังดำเนินการ...</>
+                                ) : (
+                                    <><FiMinus /> หักเครดิต</>
+                                )}
                             </button>
                         </div>
                     </div>
