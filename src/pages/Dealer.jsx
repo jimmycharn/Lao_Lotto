@@ -103,6 +103,14 @@ export default function Dealer() {
     // Credit system states
     const [dealerCredit, setDealerCredit] = useState(null)
     const [creditLoading, setCreditLoading] = useState(false)
+    
+    // Topup Modal states
+    const [showTopupModal, setShowTopupModal] = useState(false)
+    const [assignedBankAccount, setAssignedBankAccount] = useState(null)
+    const [topupForm, setTopupForm] = useState({ amount: '', slip_file: null })
+    const [topupLoading, setTopupLoading] = useState(false)
+    const [slipPreview, setSlipPreview] = useState(null)
+    const [topupHistory, setTopupHistory] = useState([])
 
     // Read tab from URL params
     useEffect(() => {
@@ -387,8 +395,10 @@ export default function Dealer() {
             setLoading(false)
         }
         
-        // Fetch dealer credit
+        // Fetch dealer credit and bank account
         fetchDealerCredit()
+        fetchAssignedBankAccount()
+        fetchTopupHistory()
     }
     
     // Fetch dealer credit balance
@@ -424,6 +434,130 @@ export default function Dealer() {
             console.log('Credit system not available yet:', err)
         } finally {
             setCreditLoading(false)
+        }
+    }
+    
+    // Fetch assigned bank account for topup
+    async function fetchAssignedBankAccount() {
+        if (!user?.id) return
+        try {
+            const { data, error } = await supabase
+                .from('dealer_bank_assignments')
+                .select(`
+                    *,
+                    bank_account:bank_account_id (
+                        id, bank_code, bank_name, account_number, account_name, is_active
+                    )
+                `)
+                .eq('dealer_id', user.id)
+                .eq('is_active', true)
+                .maybeSingle()
+            
+            if (!error && data?.bank_account) {
+                setAssignedBankAccount(data.bank_account)
+            }
+        } catch (err) {
+            console.log('Bank assignment not available yet:', err)
+        }
+    }
+    
+    // Fetch topup history
+    async function fetchTopupHistory() {
+        if (!user?.id) return
+        try {
+            const { data, error } = await supabase
+                .from('credit_topup_requests')
+                .select('*')
+                .eq('dealer_id', user.id)
+                .order('created_at', { ascending: false })
+                .limit(10)
+            
+            if (!error && data) {
+                setTopupHistory(data)
+            }
+        } catch (err) {
+            console.log('Topup history not available yet:', err)
+        }
+    }
+    
+    // Handle slip file selection
+    const handleSlipFileChange = (e) => {
+        const file = e.target.files[0]
+        if (file) {
+            // Validate file type
+            const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+            if (!validTypes.includes(file.type)) {
+                toast.error('รองรับเฉพาะไฟล์ JPG, PNG, WEBP เท่านั้น')
+                return
+            }
+            // Validate file size (max 5MB)
+            if (file.size > 5 * 1024 * 1024) {
+                toast.error('ไฟล์ต้องมีขนาดไม่เกิน 5MB')
+                return
+            }
+            setTopupForm({ ...topupForm, slip_file: file })
+            // Create preview
+            const reader = new FileReader()
+            reader.onloadend = () => {
+                setSlipPreview(reader.result)
+            }
+            reader.readAsDataURL(file)
+        }
+    }
+    
+    // Handle topup submission - Upload slip image and create pending request
+    const handleTopupSubmit = async () => {
+        if (!topupForm.amount || !topupForm.slip_file || !assignedBankAccount) {
+            toast.error('กรุณากรอกจำนวนเงินและแนบสลิป')
+            return
+        }
+        
+        setTopupLoading(true)
+        try {
+            const amount = parseFloat(topupForm.amount)
+            
+            // Step 1: Upload slip image to Supabase Storage
+            const fileExt = topupForm.slip_file.name.split('.').pop()
+            const fileName = `${user.id}/${Date.now()}.${fileExt}`
+            
+            const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('slips')
+                .upload(fileName, topupForm.slip_file)
+            
+            let slipImageUrl = null
+            if (!uploadError && uploadData) {
+                const { data: urlData } = supabase.storage
+                    .from('slips')
+                    .getPublicUrl(fileName)
+                slipImageUrl = urlData?.publicUrl
+            }
+            
+            // Step 2: Create topup request with pending status
+            const { data: topupRequest, error: topupError } = await supabase
+                .from('credit_topup_requests')
+                .insert({
+                    dealer_id: user.id,
+                    bank_account_id: assignedBankAccount.id,
+                    amount: amount,
+                    slip_image_url: slipImageUrl,
+                    status: 'pending'
+                })
+                .select()
+                .single()
+            
+            if (topupError) throw topupError
+            
+            toast.success('ส่งคำขอเติมเครดิตสำเร็จ รอ Admin อนุมัติ')
+            setShowTopupModal(false)
+            setTopupForm({ amount: '', slip_file: null })
+            setSlipPreview(null)
+            fetchTopupHistory()
+            
+        } catch (error) {
+            console.error('Topup error:', error)
+            toast.error(error.message || 'เกิดข้อผิดพลาดในการส่งคำขอเติมเครดิต')
+        } finally {
+            setTopupLoading(false)
         }
     }
 
@@ -1069,24 +1203,38 @@ export default function Dealer() {
                         </div>
                     </div>
                     
-                    {/* Credit Display - Full width on mobile */}
-                    <div className="credit-display card" style={{
-                        padding: '0.75rem 1.25rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.75rem',
-                        width: '100%',
-                        background: dealerCredit?.is_blocked ? 'rgba(239, 68, 68, 0.15)' : 
-                                    dealerCredit?.is_low_credit ? 'rgba(245, 158, 11, 0.15)' : 
-                                    'rgba(16, 185, 129, 0.15)',
-                        border: `1px solid ${dealerCredit?.is_blocked ? 'var(--color-danger)' : 
-                                             dealerCredit?.is_low_credit ? 'var(--color-warning)' : 
-                                             'var(--color-success)'}`,
-                        borderRadius: '8px'
-                    }}>
+                    {/* Credit Display - Full width on mobile, clickable to open topup modal */}
+                    <div 
+                        className="credit-display card" 
+                        onClick={() => setShowTopupModal(true)}
+                        style={{
+                            padding: '0.75rem 1.25rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.75rem',
+                            width: '100%',
+                            background: dealerCredit?.is_blocked ? 'rgba(239, 68, 68, 0.15)' : 
+                                        dealerCredit?.is_low_credit ? 'rgba(245, 158, 11, 0.15)' : 
+                                        'rgba(16, 185, 129, 0.15)',
+                            border: `1px solid ${dealerCredit?.is_blocked ? 'var(--color-danger)' : 
+                                                 dealerCredit?.is_low_credit ? 'var(--color-warning)' : 
+                                                 'var(--color-success)'}`,
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            transition: 'transform 0.2s, box-shadow 0.2s'
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'scale(1.02)'
+                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'scale(1)'
+                            e.currentTarget.style.boxShadow = 'none'
+                        }}
+                    >
                         <div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>เครดิตคงเหลือ</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>เครดิตคงเหลือ (คลิกเพื่อเติม)</div>
                             <div style={{ 
                                 fontSize: '1.25rem', 
                                 fontWeight: 'bold',
@@ -1123,6 +1271,19 @@ export default function Dealer() {
                                 เครดิตต่ำ
                             </div>
                         )}
+                        <div style={{ 
+                            background: 'var(--color-primary)', 
+                            color: 'black', 
+                            padding: '0.35rem 0.75rem', 
+                            borderRadius: '4px',
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.25rem'
+                        }}>
+                            <FiDollarSign /> เติมเครดิต
+                        </div>
                     </div>
                 </div>
 
@@ -1950,6 +2111,198 @@ export default function Dealer() {
                     round={selectedRound}
                     onClose={() => setShowNumberLimitsModal(false)}
                 />
+            )}
+
+            {/* Topup Credit Modal */}
+            {showTopupModal && (
+                <div className="modal-overlay" onClick={() => { setShowTopupModal(false); setSlipPreview(null); setTopupForm({ amount: '', slip_file: null }); }}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+                        <div className="modal-header">
+                            <h3><FiDollarSign /> เติมเครดิต</h3>
+                            <button className="modal-close" onClick={() => { setShowTopupModal(false); setSlipPreview(null); setTopupForm({ amount: '', slip_file: null }); }}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            {/* Current Balance */}
+                            <div style={{ 
+                                background: 'var(--color-bg-secondary)', 
+                                padding: '1rem', 
+                                borderRadius: '8px', 
+                                marginBottom: '1rem',
+                                textAlign: 'center'
+                            }}>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>เครดิตคงเหลือ</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--color-success)' }}>
+                                    {(dealerCredit?.balance || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                </div>
+                            </div>
+
+                            {/* Bank Account Info */}
+                            {assignedBankAccount ? (
+                                <div style={{ 
+                                    background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)', 
+                                    padding: '1rem', 
+                                    borderRadius: '8px', 
+                                    marginBottom: '1rem',
+                                    border: '1px solid var(--color-primary)'
+                                }}>
+                                    <div style={{ fontSize: '0.85rem', color: 'var(--color-primary)', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+                                        โอนเงินเข้าบัญชีนี้
+                                    </div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: 'white' }}>
+                                        {assignedBankAccount.bank_name}
+                                    </div>
+                                    <div style={{ fontSize: '1.25rem', fontFamily: 'monospace', color: 'var(--color-primary)', margin: '0.5rem 0' }}>
+                                        {assignedBankAccount.account_number}
+                                    </div>
+                                    <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+                                        {assignedBankAccount.account_name}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{ 
+                                    background: 'rgba(239, 68, 68, 0.15)', 
+                                    padding: '1rem', 
+                                    borderRadius: '8px', 
+                                    marginBottom: '1rem',
+                                    border: '1px solid var(--color-danger)',
+                                    textAlign: 'center'
+                                }}>
+                                    <FiAlertTriangle style={{ fontSize: '1.5rem', color: 'var(--color-danger)', marginBottom: '0.5rem' }} />
+                                    <div style={{ color: 'var(--color-danger)', fontWeight: 'bold' }}>
+                                        ยังไม่มีบัญชีธนาคารที่ผูกไว้
+                                    </div>
+                                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                                        กรุณาติดต่อ Admin เพื่อผูกบัญชีธนาคาร
+                                    </div>
+                                </div>
+                            )}
+
+                            {assignedBankAccount && (
+                                <>
+                                    {/* Amount Input */}
+                                    <div className="form-group">
+                                        <label>จำนวนเงินที่โอน (บาท)</label>
+                                        <input
+                                            type="number"
+                                            value={topupForm.amount}
+                                            onChange={(e) => setTopupForm({ ...topupForm, amount: e.target.value })}
+                                            placeholder="0.00"
+                                            min="1"
+                                            step="0.01"
+                                            style={{ fontSize: '1.25rem', textAlign: 'center' }}
+                                        />
+                                    </div>
+
+                                    {/* Slip Upload */}
+                                    <div className="form-group">
+                                        <label>แนบสลิปการโอนเงิน</label>
+                                        <div style={{ 
+                                            border: '2px dashed var(--color-border)', 
+                                            borderRadius: '8px', 
+                                            padding: '1rem',
+                                            textAlign: 'center',
+                                            cursor: 'pointer',
+                                            background: slipPreview ? 'transparent' : 'var(--color-bg-secondary)'
+                                        }}
+                                        onClick={() => document.getElementById('slip-file-input').click()}
+                                        >
+                                            {slipPreview ? (
+                                                <div>
+                                                    <img 
+                                                        src={slipPreview} 
+                                                        alt="Slip Preview" 
+                                                        style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '4px' }}
+                                                    />
+                                                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
+                                                        คลิกเพื่อเปลี่ยนรูป
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div>
+                                                    <FiPackage style={{ fontSize: '2rem', color: 'var(--color-text-muted)', marginBottom: '0.5rem' }} />
+                                                    <div style={{ color: 'var(--color-text-muted)' }}>คลิกเพื่อเลือกไฟล์สลิป</div>
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                        รองรับ JPG, PNG, WEBP (ไม่เกิน 5MB)
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <input
+                                            id="slip-file-input"
+                                            type="file"
+                                            accept="image/jpeg,image/jpg,image/png,image/webp"
+                                            onChange={handleSlipFileChange}
+                                            style={{ display: 'none' }}
+                                        />
+                                    </div>
+
+                                    {/* Info */}
+                                    <div style={{ 
+                                        background: 'rgba(59, 130, 246, 0.1)', 
+                                        padding: '0.75rem', 
+                                        borderRadius: '8px',
+                                        fontSize: '0.8rem',
+                                        color: 'var(--color-text-muted)'
+                                    }}>
+                                        <FiInfo style={{ marginRight: '0.5rem' }} />
+                                        หลังจากส่งคำขอ Admin จะตรวจสอบและอนุมัติเครดิตให้ภายใน 5-10 นาที
+                                    </div>
+                                </>
+                            )}
+
+                            {/* Topup History */}
+                            {topupHistory.length > 0 && (
+                                <div style={{ marginTop: '1rem' }}>
+                                    <div style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                                        ประวัติการเติมเครดิตล่าสุด
+                                    </div>
+                                    <div style={{ maxHeight: '150px', overflowY: 'auto' }}>
+                                        {topupHistory.slice(0, 5).map(item => (
+                                            <div key={item.id} style={{ 
+                                                display: 'flex', 
+                                                justifyContent: 'space-between', 
+                                                padding: '0.5rem',
+                                                borderBottom: '1px solid var(--color-border)',
+                                                fontSize: '0.85rem'
+                                            }}>
+                                                <span style={{ color: 'var(--color-text-muted)' }}>
+                                                    {new Date(item.created_at).toLocaleDateString('th-TH')}
+                                                </span>
+                                                <span style={{ 
+                                                    color: item.status === 'approved' ? 'var(--color-success)' : 
+                                                           item.status === 'rejected' ? 'var(--color-danger)' : 
+                                                           'var(--color-warning)',
+                                                    fontWeight: 'bold'
+                                                }}>
+                                                    +{item.amount?.toLocaleString()} ฿
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div className="modal-footer">
+                            <button 
+                                className="btn btn-secondary" 
+                                onClick={() => { setShowTopupModal(false); setSlipPreview(null); setTopupForm({ amount: '', slip_file: null }); }}
+                            >
+                                ยกเลิก
+                            </button>
+                            {assignedBankAccount && (
+                                <button 
+                                    className="btn btn-primary" 
+                                    onClick={handleTopupSubmit}
+                                    disabled={topupLoading || !topupForm.amount || !topupForm.slip_file}
+                                >
+                                    {topupLoading ? 'กำลังตรวจสอบ...' : <><FiCheck /> ยืนยันเติมเครดิต</>}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* Add Member Modal */}

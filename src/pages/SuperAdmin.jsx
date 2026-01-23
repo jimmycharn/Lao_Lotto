@@ -60,6 +60,9 @@ export default function SuperAdmin() {
     const [settings, setSettings] = useState({})
     const [dealerCredits, setDealerCredits] = useState([])
     const [creditTransactions, setCreditTransactions] = useState([])
+    const [bankAccounts, setBankAccounts] = useState([])
+    const [dealerBankAssignments, setDealerBankAssignments] = useState([])
+    const [topupRequests, setTopupRequests] = useState([])
 
     // UI States
     const [isLoading, setIsLoading] = useState(true)
@@ -85,6 +88,19 @@ export default function SuperAdmin() {
     const [showTopupModal, setShowTopupModal] = useState(false)
     const [topupForm, setTopupForm] = useState({ dealer_id: '', amount: '', description: '' })
     const [topupLoading, setTopupLoading] = useState(false)
+    
+    // Bank Account Modal States
+    const [showBankAccountModal, setShowBankAccountModal] = useState(false)
+    const [editingBankAccount, setEditingBankAccount] = useState(null)
+    const [bankAccountForm, setBankAccountForm] = useState({
+        bank_code: '',
+        bank_name: '',
+        account_number: '',
+        account_name: '',
+        is_active: true
+    })
+    const [showAssignBankModal, setShowAssignBankModal] = useState(false)
+    const [assignBankForm, setAssignBankForm] = useState({ dealer_id: '', bank_account_id: '' })
 
     // Form States
     const [packageForm, setPackageForm] = useState({
@@ -117,7 +133,9 @@ export default function SuperAdmin() {
                 fetchInvoices(),
                 fetchPayments(),
                 fetchSettings(),
-                fetchDealerCredits()
+                fetchDealerCredits(),
+                fetchBankAccounts(),
+                fetchTopupRequests()
             ])
         } catch (error) {
             console.error('Error fetching data:', error)
@@ -166,6 +184,250 @@ export default function SuperAdmin() {
             }
         } catch (error) {
             console.log('Credit tables not available yet:', error)
+        }
+    }
+    
+    const fetchBankAccounts = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('admin_bank_accounts')
+                .select('*')
+                .order('created_at', { ascending: false })
+            
+            if (!error && data) {
+                setBankAccounts(data)
+            }
+            
+            // Fetch dealer bank assignments
+            const { data: assignData, error: assignError } = await supabase
+                .from('dealer_bank_assignments')
+                .select(`
+                    *,
+                    dealer:dealer_id (id, full_name, email),
+                    bank_account:bank_account_id (id, bank_name, account_number, account_name)
+                `)
+                .order('assigned_at', { ascending: false })
+            
+            if (!assignError && assignData) {
+                setDealerBankAssignments(assignData)
+            }
+        } catch (error) {
+            console.log('Bank accounts tables not available yet:', error)
+        }
+    }
+    
+    const fetchTopupRequests = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('credit_topup_requests')
+                .select(`
+                    *,
+                    dealer:dealer_id (id, full_name, email),
+                    bank_account:bank_account_id (id, bank_name, account_number, account_name)
+                `)
+                .order('created_at', { ascending: false })
+                .limit(100)
+            
+            if (!error && data) {
+                setTopupRequests(data)
+            }
+        } catch (error) {
+            console.log('Topup requests table not available yet:', error)
+        }
+    }
+    
+    const handleSaveBankAccount = async () => {
+        if (!bankAccountForm.bank_name || !bankAccountForm.account_number || !bankAccountForm.account_name) {
+            toast.error('กรุณากรอกข้อมูลให้ครบ')
+            return
+        }
+        
+        try {
+            if (editingBankAccount) {
+                const { error } = await supabase
+                    .from('admin_bank_accounts')
+                    .update({
+                        ...bankAccountForm,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', editingBankAccount.id)
+                
+                if (error) throw error
+                toast.success('แก้ไขบัญชีธนาคารสำเร็จ')
+            } else {
+                const { error } = await supabase
+                    .from('admin_bank_accounts')
+                    .insert({
+                        ...bankAccountForm,
+                        created_by: user.id
+                    })
+                
+                if (error) throw error
+                toast.success('เพิ่มบัญชีธนาคารสำเร็จ')
+            }
+            
+            setShowBankAccountModal(false)
+            setEditingBankAccount(null)
+            setBankAccountForm({ bank_code: '', bank_name: '', account_number: '', account_name: '', is_active: true })
+            fetchBankAccounts()
+        } catch (error) {
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+    
+    const handleDeleteBankAccount = async (id) => {
+        if (!confirm('ต้องการลบบัญชีธนาคารนี้?')) return
+        
+        try {
+            const { error } = await supabase
+                .from('admin_bank_accounts')
+                .delete()
+                .eq('id', id)
+            
+            if (error) throw error
+            toast.success('ลบบัญชีธนาคารสำเร็จ')
+            fetchBankAccounts()
+        } catch (error) {
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+    
+    const handleAssignBankToDealer = async () => {
+        if (!assignBankForm.dealer_id || !assignBankForm.bank_account_id) {
+            toast.error('กรุณาเลือกข้อมูลให้ครบ')
+            return
+        }
+        
+        try {
+            const { error } = await supabase
+                .from('dealer_bank_assignments')
+                .insert({
+                    dealer_id: assignBankForm.dealer_id,
+                    bank_account_id: assignBankForm.bank_account_id,
+                    assigned_by: user.id,
+                    is_active: true
+                })
+            
+            if (error) throw error
+            toast.success('ผูกบัญชีธนาคารกับ Dealer สำเร็จ')
+            setShowAssignBankModal(false)
+            setAssignBankForm({ dealer_id: '', bank_account_id: '' })
+            fetchBankAccounts()
+        } catch (error) {
+            if (error.code === '23505') {
+                toast.error('Dealer นี้ผูกกับบัญชีนี้อยู่แล้ว')
+            } else {
+                toast.error('เกิดข้อผิดพลาด: ' + error.message)
+            }
+        }
+    }
+    
+    const handleRemoveBankAssignment = async (id) => {
+        if (!confirm('ต้องการยกเลิกการผูกบัญชีนี้?')) return
+        
+        try {
+            const { error } = await supabase
+                .from('dealer_bank_assignments')
+                .delete()
+                .eq('id', id)
+            
+            if (error) throw error
+            toast.success('ยกเลิกการผูกบัญชีสำเร็จ')
+            fetchBankAccounts()
+        } catch (error) {
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+    
+    // Approve topup request
+    const handleApproveTopup = async (requestId) => {
+        if (!confirm('ต้องการอนุมัติคำขอเติมเครดิตนี้?')) return
+        
+        try {
+            // Try RPC first
+            const { data, error } = await supabase.rpc('approve_topup_request', {
+                p_request_id: requestId,
+                p_approved_by: user.id
+            })
+            
+            if (error) {
+                // Fallback: Manual update
+                const { data: request } = await supabase
+                    .from('credit_topup_requests')
+                    .select('*')
+                    .eq('id', requestId)
+                    .single()
+                
+                if (request) {
+                    // Update request status
+                    await supabase
+                        .from('credit_topup_requests')
+                        .update({ status: 'approved', verified_at: new Date().toISOString(), verified_by: user.id })
+                        .eq('id', requestId)
+                    
+                    // Update dealer credit
+                    const { data: creditData } = await supabase
+                        .from('dealer_credits')
+                        .select('*')
+                        .eq('dealer_id', request.dealer_id)
+                        .maybeSingle()
+                    
+                    if (creditData) {
+                        await supabase
+                            .from('dealer_credits')
+                            .update({ 
+                                balance: (creditData.balance || 0) + request.amount,
+                                is_blocked: false,
+                                updated_at: new Date().toISOString()
+                            })
+                            .eq('dealer_id', request.dealer_id)
+                    } else {
+                        await supabase
+                            .from('dealer_credits')
+                            .insert({
+                                dealer_id: request.dealer_id,
+                                balance: request.amount
+                            })
+                    }
+                }
+            }
+            
+            toast.success('อนุมัติคำขอเติมเครดิตสำเร็จ')
+            fetchTopupRequests()
+            fetchDealerCredits()
+        } catch (error) {
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+    
+    // Reject topup request
+    const handleRejectTopup = async (requestId) => {
+        const reason = prompt('ระบุเหตุผลที่ปฏิเสธ (ไม่บังคับ):')
+        
+        try {
+            const { error } = await supabase.rpc('reject_topup_request', {
+                p_request_id: requestId,
+                p_rejected_by: user.id,
+                p_reason: reason || 'ไม่ผ่านการตรวจสอบ'
+            })
+            
+            if (error) {
+                // Fallback: Manual update
+                await supabase
+                    .from('credit_topup_requests')
+                    .update({ 
+                        status: 'rejected', 
+                        reject_reason: reason || 'ไม่ผ่านการตรวจสอบ',
+                        verified_at: new Date().toISOString(),
+                        verified_by: user.id
+                    })
+                    .eq('id', requestId)
+            }
+            
+            toast.success('ปฏิเสธคำขอเติมเครดิตแล้ว')
+            fetchTopupRequests()
+        } catch (error) {
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         }
     }
     
@@ -1345,19 +1607,254 @@ export default function SuperAdmin() {
         </div>
     )
 
+    // Thai Bank List
+    const THAI_BANKS = [
+        { code: '002', name: 'ธนาคารกรุงเทพ (BBL)' },
+        { code: '004', name: 'ธนาคารกสิกรไทย (KBANK)' },
+        { code: '006', name: 'ธนาคารกรุงไทย (KTB)' },
+        { code: '011', name: 'ธนาคารทหารไทยธนชาต (TTB)' },
+        { code: '014', name: 'ธนาคารไทยพาณิชย์ (SCB)' },
+        { code: '025', name: 'ธนาคารกรุงศรีอยุธยา (BAY)' },
+        { code: '030', name: 'ธนาคารออมสิน (GSB)' },
+        { code: '069', name: 'ธนาคารเกียรตินาคินภัทร (KKP)' },
+        { code: '034', name: 'ธนาคารธ.ก.ส. (BAAC)' },
+        { code: '024', name: 'ธนาคารยูโอบี (UOB)' }
+    ]
+
+    const renderBankAccounts = () => (
+        <div className="bank-accounts-tab">
+            {/* Header Actions */}
+            <div className="tab-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                <div>
+                    <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>
+                        จัดการบัญชีธนาคารสำหรับรับเงินเติมเครดิต และผูกบัญชีกับ Dealer
+                    </p>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button className="btn btn-secondary" onClick={() => setShowAssignBankModal(true)}>
+                        <FiShare2 /> ผูกบัญชีกับ Dealer
+                    </button>
+                    <button className="btn btn-primary" onClick={() => {
+                        setEditingBankAccount(null)
+                        setBankAccountForm({ bank_code: '', bank_name: '', account_number: '', account_name: '', is_active: true })
+                        setShowBankAccountModal(true)
+                    }}>
+                        <FiPlus /> เพิ่มบัญชีธนาคาร
+                    </button>
+                </div>
+            </div>
+
+            {/* Bank Accounts List */}
+            <div className="card" style={{ marginBottom: '1.5rem' }}>
+                <div className="card-header">
+                    <h3><FiCreditCard /> บัญชีธนาคารทั้งหมด</h3>
+                </div>
+                <div className="table-container">
+                    <table className="data-table">
+                        <thead>
+                            <tr>
+                                <th>ธนาคาร</th>
+                                <th>เลขบัญชี</th>
+                                <th>ชื่อบัญชี</th>
+                                <th>สถานะ</th>
+                                <th>จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {bankAccounts.length === 0 ? (
+                                <tr>
+                                    <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
+                                        ยังไม่มีบัญชีธนาคาร
+                                    </td>
+                                </tr>
+                            ) : (
+                                bankAccounts.map(account => (
+                                    <tr key={account.id}>
+                                        <td>
+                                            <strong>{account.bank_name}</strong>
+                                            {account.bank_code && (
+                                                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                    รหัส: {account.bank_code}
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td style={{ fontFamily: 'monospace', fontSize: '1rem' }}>{account.account_number}</td>
+                                        <td>{account.account_name}</td>
+                                        <td>
+                                            <span className={`status-badge ${account.is_active ? 'status-active' : 'status-inactive'}`}>
+                                                {account.is_active ? 'ใช้งาน' : 'ปิดใช้งาน'}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                <button 
+                                                    className="btn btn-sm btn-secondary"
+                                                    onClick={() => {
+                                                        setEditingBankAccount(account)
+                                                        setBankAccountForm({
+                                                            bank_code: account.bank_code || '',
+                                                            bank_name: account.bank_name,
+                                                            account_number: account.account_number,
+                                                            account_name: account.account_name,
+                                                            is_active: account.is_active
+                                                        })
+                                                        setShowBankAccountModal(true)
+                                                    }}
+                                                >
+                                                    <FiEdit2 />
+                                                </button>
+                                                <button 
+                                                    className="btn btn-sm btn-danger"
+                                                    onClick={() => handleDeleteBankAccount(account.id)}
+                                                >
+                                                    <FiTrash2 />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Dealer Bank Assignments */}
+            <div className="card">
+                <div className="card-header">
+                    <h3><FiShare2 /> การผูกบัญชีกับ Dealer</h3>
+                </div>
+                <div className="table-container">
+                    <table className="data-table">
+                        <thead>
+                            <tr>
+                                <th>Dealer</th>
+                                <th>บัญชีธนาคาร</th>
+                                <th>วันที่ผูก</th>
+                                <th>จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {dealerBankAssignments.length === 0 ? (
+                                <tr>
+                                    <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
+                                        ยังไม่มีการผูกบัญชี
+                                    </td>
+                                </tr>
+                            ) : (
+                                dealerBankAssignments.map(assign => (
+                                    <tr key={assign.id}>
+                                        <td>
+                                            <strong>{assign.dealer?.full_name || 'ไม่ระบุ'}</strong>
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                {assign.dealer?.email}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <strong>{assign.bank_account?.bank_name}</strong>
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                {assign.bank_account?.account_number} - {assign.bank_account?.account_name}
+                                            </div>
+                                        </td>
+                                        <td>{new Date(assign.assigned_at).toLocaleDateString('th-TH')}</td>
+                                        <td>
+                                            <button 
+                                                className="btn btn-sm btn-danger"
+                                                onClick={() => handleRemoveBankAssignment(assign.id)}
+                                            >
+                                                <FiTrash2 /> ยกเลิก
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    )
+
     const renderCredits = () => (
         <div className="credits-tab">
             {/* Header Actions */}
             <div className="tab-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                 <div>
                     <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>
-                        จัดการเครดิตเจ้ามือ - เติมเครดิต, ดูประวัติการทำรายการ
+                        จัดการเครดิตเจ้ามือ - เติมเครดิต, อนุมัติคำขอ, ดูประวัติการทำรายการ
                     </p>
                 </div>
                 <button className="btn btn-primary" onClick={() => setShowTopupModal(true)}>
                     <FiPlus /> เติมเครดิต
                 </button>
             </div>
+
+            {/* Pending Topup Requests */}
+            {topupRequests.filter(r => r.status === 'pending').length > 0 && (
+                <div className="card" style={{ marginBottom: '1.5rem', border: '2px solid var(--color-warning)' }}>
+                    <div className="card-header" style={{ background: 'rgba(245, 158, 11, 0.1)' }}>
+                        <h3><FiClock /> คำขอเติมเครดิตรอดำเนินการ ({topupRequests.filter(r => r.status === 'pending').length})</h3>
+                    </div>
+                    <div className="table-container">
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th>วันที่</th>
+                                    <th>Dealer</th>
+                                    <th>จำนวนเงิน</th>
+                                    <th>สลิป</th>
+                                    <th>สถานะ</th>
+                                    <th>จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {topupRequests.filter(r => r.status === 'pending').map(request => (
+                                    <tr key={request.id}>
+                                        <td>{new Date(request.created_at).toLocaleString('th-TH')}</td>
+                                        <td>
+                                            <strong>{request.dealer?.full_name || 'ไม่ระบุ'}</strong>
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                {request.dealer?.email}
+                                            </div>
+                                        </td>
+                                        <td style={{ fontWeight: 'bold', color: 'var(--color-success)', fontSize: '1.1rem' }}>
+                                            {request.amount?.toLocaleString('th-TH', { minimumFractionDigits: 2 })} ฿
+                                        </td>
+                                        <td>
+                                            {request.slip_image_url ? (
+                                                <a href={request.slip_image_url} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-secondary">
+                                                    <FiEye /> ดูสลิป
+                                                </a>
+                                            ) : (
+                                                <span style={{ color: 'var(--color-text-muted)' }}>ไม่มีสลิป</span>
+                                            )}
+                                        </td>
+                                        <td>
+                                            <span className="status-badge status-warning">รอตรวจสอบ</span>
+                                        </td>
+                                        <td>
+                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                <button 
+                                                    className="btn btn-sm btn-success"
+                                                    onClick={() => handleApproveTopup(request.id)}
+                                                >
+                                                    <FiCheck /> อนุมัติ
+                                                </button>
+                                                <button 
+                                                    className="btn btn-sm btn-danger"
+                                                    onClick={() => handleRejectTopup(request.id)}
+                                                >
+                                                    <FiX /> ปฏิเสธ
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
 
             {/* Dealer Credits List */}
             <div className="card" style={{ marginBottom: '1.5rem' }}>
@@ -1580,6 +2077,7 @@ export default function SuperAdmin() {
                         { id: 'dashboard', label: 'Dashboard', icon: <FiHome /> },
                         { id: 'dealers', label: 'เจ้ามือ', icon: <FiUsers /> },
                         { id: 'credits', label: 'เครดิต', icon: <FiCreditCard /> },
+                        { id: 'bankAccounts', label: 'บัญชีธนาคาร', icon: <FiDollarSign /> },
                         { id: 'packages', label: 'แพ็คเกจ', icon: <FiPackage /> },
                         { id: 'invoices', label: 'ใบแจ้งหนี้', icon: <FiFileText /> },
                         { id: 'payments', label: 'การชำระเงิน', icon: <FiDollarSign />, badge: stats.pendingPayments },
@@ -1605,6 +2103,7 @@ export default function SuperAdmin() {
                         {activeTab === 'dashboard' && 'Dashboard'}
                         {activeTab === 'dealers' && 'จัดการเจ้ามือ'}
                         {activeTab === 'credits' && 'จัดการเครดิต'}
+                        {activeTab === 'bankAccounts' && 'บัญชีธนาคาร'}
                         {activeTab === 'packages' && 'จัดการแพ็คเกจ'}
                         {activeTab === 'invoices' && 'ใบแจ้งหนี้'}
                         {activeTab === 'payments' && 'การชำระเงิน'}
@@ -1626,6 +2125,7 @@ export default function SuperAdmin() {
                             {activeTab === 'dashboard' && renderDashboard()}
                             {activeTab === 'dealers' && renderDealers()}
                             {activeTab === 'credits' && renderCredits()}
+                            {activeTab === 'bankAccounts' && renderBankAccounts()}
                             {activeTab === 'packages' && renderPackages()}
                             {activeTab === 'invoices' && renderInvoices()}
                             {activeTab === 'payments' && renderPayments()}
@@ -1894,6 +2394,143 @@ export default function SuperAdmin() {
                                 disabled={topupLoading || !topupForm.dealer_id || !topupForm.amount}
                             >
                                 {topupLoading ? 'กำลังดำเนินการ...' : <><FiCheck /> เติมเครดิต</>}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Bank Account Modal */}
+            {showBankAccountModal && (
+                <div className="modal-overlay" onClick={() => setShowBankAccountModal(false)}>
+                    <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+                        <div className="modal-header">
+                            <h2><FiCreditCard /> {editingBankAccount ? 'แก้ไขบัญชีธนาคาร' : 'เพิ่มบัญชีธนาคาร'}</h2>
+                            <button className="close-btn" onClick={() => setShowBankAccountModal(false)}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="form-group">
+                                <label>ธนาคาร</label>
+                                <select
+                                    value={bankAccountForm.bank_code}
+                                    onChange={(e) => {
+                                        const bank = THAI_BANKS.find(b => b.code === e.target.value)
+                                        setBankAccountForm({ 
+                                            ...bankAccountForm, 
+                                            bank_code: e.target.value,
+                                            bank_name: bank ? bank.name : ''
+                                        })
+                                    }}
+                                >
+                                    <option value="">-- เลือกธนาคาร --</option>
+                                    {THAI_BANKS.map(bank => (
+                                        <option key={bank.code} value={bank.code}>
+                                            {bank.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="form-group">
+                                <label>เลขบัญชี</label>
+                                <input
+                                    type="text"
+                                    value={bankAccountForm.account_number}
+                                    onChange={(e) => setBankAccountForm({ ...bankAccountForm, account_number: e.target.value })}
+                                    placeholder="xxx-x-xxxxx-x"
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label>ชื่อบัญชี</label>
+                                <input
+                                    type="text"
+                                    value={bankAccountForm.account_name}
+                                    onChange={(e) => setBankAccountForm({ ...bankAccountForm, account_name: e.target.value })}
+                                    placeholder="ชื่อ-นามสกุล"
+                                />
+                            </div>
+
+                            <div className="form-row checkboxes">
+                                <label className="checkbox-label">
+                                    <input
+                                        type="checkbox"
+                                        checked={bankAccountForm.is_active}
+                                        onChange={(e) => setBankAccountForm({ ...bankAccountForm, is_active: e.target.checked })}
+                                    />
+                                    เปิดใช้งาน
+                                </label>
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowBankAccountModal(false)}>
+                                ยกเลิก
+                            </button>
+                            <button 
+                                className="btn btn-primary" 
+                                onClick={handleSaveBankAccount}
+                                disabled={!bankAccountForm.bank_name || !bankAccountForm.account_number || !bankAccountForm.account_name}
+                            >
+                                <FiCheck /> {editingBankAccount ? 'บันทึก' : 'เพิ่มบัญชี'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Assign Bank to Dealer Modal */}
+            {showAssignBankModal && (
+                <div className="modal-overlay" onClick={() => setShowAssignBankModal(false)}>
+                    <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+                        <div className="modal-header">
+                            <h2><FiShare2 /> ผูกบัญชีธนาคารกับ Dealer</h2>
+                            <button className="close-btn" onClick={() => setShowAssignBankModal(false)}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="form-group">
+                                <label>เลือก Dealer</label>
+                                <select
+                                    value={assignBankForm.dealer_id}
+                                    onChange={(e) => setAssignBankForm({ ...assignBankForm, dealer_id: e.target.value })}
+                                >
+                                    <option value="">-- เลือก Dealer --</option>
+                                    {dealers.map(dealer => (
+                                        <option key={dealer.id} value={dealer.id}>
+                                            {dealer.full_name || dealer.email}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="form-group">
+                                <label>เลือกบัญชีธนาคาร</label>
+                                <select
+                                    value={assignBankForm.bank_account_id}
+                                    onChange={(e) => setAssignBankForm({ ...assignBankForm, bank_account_id: e.target.value })}
+                                >
+                                    <option value="">-- เลือกบัญชี --</option>
+                                    {bankAccounts.filter(a => a.is_active).map(account => (
+                                        <option key={account.id} value={account.id}>
+                                            {account.bank_name} - {account.account_number} ({account.account_name})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowAssignBankModal(false)}>
+                                ยกเลิก
+                            </button>
+                            <button 
+                                className="btn btn-primary" 
+                                onClick={handleAssignBankToDealer}
+                                disabled={!assignBankForm.dealer_id || !assignBankForm.bank_account_id}
+                            >
+                                <FiCheck /> ผูกบัญชี
                             </button>
                         </div>
                     </div>
