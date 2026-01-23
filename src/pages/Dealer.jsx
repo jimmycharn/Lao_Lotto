@@ -406,29 +406,24 @@ export default function Dealer() {
         if (!user?.id) return
         setCreditLoading(true)
         try {
-            const { data, error } = await supabase
-                .rpc('check_dealer_credit', { p_dealer_id: user.id, p_estimated_fee: 0 })
+            // Always use direct query for most up-to-date data
+            const { data: creditData, error: creditError } = await supabase
+                .from('dealer_credits')
+                .select('*')
+                .eq('dealer_id', user.id)
+                .maybeSingle()
             
-            if (!error && data) {
-                setDealerCredit(data)
-            } else {
-                // If function doesn't exist yet, try direct query
-                const { data: creditData } = await supabase
-                    .from('dealer_credits')
-                    .select('*')
-                    .eq('dealer_id', user.id)
-                    .maybeSingle()
-                
-                if (creditData) {
-                    setDealerCredit({
-                        balance: creditData.balance,
-                        is_blocked: creditData.is_blocked,
-                        blocked_reason: creditData.blocked_reason,
-                        warning_threshold: creditData.warning_threshold,
-                        has_sufficient_credit: creditData.balance > 0 && !creditData.is_blocked,
-                        is_low_credit: creditData.balance <= creditData.warning_threshold
-                    })
-                }
+            console.log('fetchDealerCredit - data:', creditData, 'error:', creditError)
+            
+            if (creditData) {
+                setDealerCredit({
+                    balance: creditData.balance,
+                    is_blocked: creditData.is_blocked,
+                    blocked_reason: creditData.blocked_reason,
+                    warning_threshold: creditData.warning_threshold,
+                    has_sufficient_credit: creditData.balance > 0 && !creditData.is_blocked,
+                    is_low_credit: creditData.balance <= creditData.warning_threshold
+                })
             }
         } catch (err) {
             console.log('Credit system not available yet:', err)
@@ -543,18 +538,27 @@ export default function Dealer() {
             
             // Step 3: If auto mode, verify slip with SlipOK via Edge Function
             if (approvalMode === 'auto') {
+                console.log('Auto mode enabled, calling Edge Function...')
                 const formData = new FormData()
                 formData.append('files', topupForm.slip_file)
                 
-                const response = await fetch(
-                    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-slip`,
-                    {
-                        method: 'POST',
-                        body: formData,
-                    }
-                )
+                const edgeFunctionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-slip`
+                console.log('Edge Function URL:', edgeFunctionUrl)
                 
+                // Get current session for authorization
+                const { data: { session } } = await supabase.auth.getSession()
+                
+                const response = await fetch(edgeFunctionUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${session?.access_token}`,
+                    },
+                    body: formData,
+                })
+                
+                console.log('Edge Function response status:', response.status)
                 const slipData = await response.json()
+                console.log('SlipOK response:', slipData)
                 
                 if (slipData.success && slipData.data) {
                     const verifiedAmount = parseFloat(slipData.data.amount) || amount
@@ -602,39 +606,60 @@ export default function Dealer() {
                     })
                     
                     // Update dealer credit
-                    const { data: creditData } = await supabase
+                    const { data: creditData, error: creditFetchError } = await supabase
                         .from('dealer_credits')
                         .select('*')
                         .eq('dealer_id', user.id)
                         .maybeSingle()
                     
+                    console.log('Current credit data:', creditData, 'Error:', creditFetchError)
+                    console.log('Verified amount to add:', verifiedAmount)
+                    
                     if (creditData) {
-                        await supabase
+                        const newBalance = (creditData.balance || 0) + verifiedAmount
+                        console.log('Updating balance from', creditData.balance, 'to', newBalance)
+                        
+                        const { error: updateError } = await supabase
                             .from('dealer_credits')
                             .update({ 
-                                balance: (creditData.balance || 0) + verifiedAmount,
+                                balance: newBalance,
                                 is_blocked: false,
                                 updated_at: new Date().toISOString()
                             })
                             .eq('dealer_id', user.id)
+                        
+                        if (updateError) {
+                            console.error('Error updating credit:', updateError)
+                        } else {
+                            console.log('Credit updated successfully to:', newBalance)
+                        }
                     } else {
-                        await supabase
+                        console.log('No existing credit, creating new record with balance:', verifiedAmount)
+                        const { error: insertError } = await supabase
                             .from('dealer_credits')
                             .insert({
                                 dealer_id: user.id,
                                 balance: verifiedAmount
                             })
+                        
+                        if (insertError) {
+                            console.error('Error inserting credit:', insertError)
+                        }
                     }
                     
                     // Record transaction
                     const newBalance = (creditData?.balance || 0) + verifiedAmount
-                    await supabase.from('credit_transactions').insert({
+                    const { error: transError } = await supabase.from('credit_transactions').insert({
                         dealer_id: user.id,
                         transaction_type: 'topup',
                         amount: verifiedAmount,
                         balance_after: newBalance,
                         description: 'เติมเครดิตจากสลิป (อัตโนมัติ)'
                     })
+                    
+                    if (transError) {
+                        console.error('Error recording transaction:', transError)
+                    }
                     
                     toast.success(`เติมเครดิต ฿${verifiedAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} สำเร็จ!`)
                     fetchDealerCredit()

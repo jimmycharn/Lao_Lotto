@@ -190,7 +190,12 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('slips', 'slips', true)
 ON CONFLICT (id) DO NOTHING;
 
--- Storage policies for slips bucket
+-- Storage policies for slips bucket (drop if exists first)
+DROP POLICY IF EXISTS "Anyone can view slips" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated users can upload slips" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update own slips" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete own slips" ON storage.objects;
+
 CREATE POLICY "Anyone can view slips" ON storage.objects
     FOR SELECT USING (bucket_id = 'slips');
 

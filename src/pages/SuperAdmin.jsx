@@ -828,7 +828,13 @@ export default function SuperAdmin() {
 
             const settingsObj = {}
             data?.forEach(s => {
-                settingsObj[s.key] = typeof s.value === 'string' ? JSON.parse(s.value) : s.value
+                try {
+                    // Try to parse as JSON, if fails use raw value
+                    settingsObj[s.key] = typeof s.value === 'string' ? JSON.parse(s.value) : s.value
+                } catch (parseError) {
+                    // If JSON parse fails, use the raw value
+                    settingsObj[s.key] = s.value
+                }
             })
             setSettings(settingsObj)
         } catch (error) {
@@ -1114,13 +1120,14 @@ export default function SuperAdmin() {
     // === SETTINGS MANAGEMENT ===
     const handleUpdateSetting = async (key, value) => {
         try {
+            // Use upsert to create if not exists, or update if exists
             const { error } = await supabase
                 .from('system_settings')
-                .update({
+                .upsert({
+                    key: key,
                     value: JSON.stringify(value),
                     updated_by: user.id
-                })
-                .eq('key', key)
+                }, { onConflict: 'key' })
 
             if (error) throw error
             fetchSettings()
