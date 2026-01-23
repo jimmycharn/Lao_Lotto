@@ -2793,7 +2793,7 @@ export default function UserDashboard() {
                                                                             {items.map(sub => (
                                                                                 <div key={sub.id} className="result-item">
                                                                                     <div className="result-number">
-                                                                                        <span className="number-value">{sub.display_numbers || sub.numbers}</span>
+                                                                                        <span className="number-value">{sub.numbers}</span>
                                                                                         <span className="bet-type">{BET_TYPES[sub.bet_type]?.label || sub.bet_type}</span>
                                                                                     </div>
                                                                                     <div className="result-amounts">
