@@ -505,7 +505,7 @@ export default function Dealer() {
         }
     }
     
-    // Handle topup submission - Upload slip image and create pending request
+    // Handle topup submission - Check approval mode and process accordingly
     const handleTopupSubmit = async () => {
         if (!topupForm.amount || !topupForm.slip_file || !assignedBankAccount) {
             toast.error('กรุณากรอกจำนวนเงินและแนบสลิป')
@@ -516,7 +516,16 @@ export default function Dealer() {
         try {
             const amount = parseFloat(topupForm.amount)
             
-            // Step 1: Upload slip image to Supabase Storage
+            // Step 1: Check approval mode from system settings
+            const { data: settingsData } = await supabase
+                .from('system_settings')
+                .select('value')
+                .eq('key', 'slip_approval_mode')
+                .single()
+            
+            const approvalMode = settingsData?.value ? JSON.parse(settingsData.value) : 'manual'
+            
+            // Step 2: Upload slip image to Supabase Storage
             const fileExt = topupForm.slip_file.name.split('.').pop()
             const fileName = `${user.id}/${Date.now()}.${fileExt}`
             
@@ -532,22 +541,134 @@ export default function Dealer() {
                 slipImageUrl = urlData?.publicUrl
             }
             
-            // Step 2: Create topup request with pending status
-            const { data: topupRequest, error: topupError } = await supabase
-                .from('credit_topup_requests')
-                .insert({
-                    dealer_id: user.id,
-                    bank_account_id: assignedBankAccount.id,
-                    amount: amount,
-                    slip_image_url: slipImageUrl,
-                    status: 'pending'
-                })
-                .select()
-                .single()
+            // Step 3: If auto mode, verify slip with SlipOK via Edge Function
+            if (approvalMode === 'auto') {
+                const formData = new FormData()
+                formData.append('files', topupForm.slip_file)
+                
+                const response = await fetch(
+                    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-slip`,
+                    {
+                        method: 'POST',
+                        body: formData,
+                    }
+                )
+                
+                const slipData = await response.json()
+                
+                if (slipData.success && slipData.data) {
+                    const verifiedAmount = parseFloat(slipData.data.amount) || amount
+                    const transRef = slipData.data.transRef
+                    
+                    // Check if slip already used
+                    const { data: existingSlip } = await supabase
+                        .from('used_slips')
+                        .select('id')
+                        .eq('trans_ref', transRef)
+                        .single()
+                    
+                    if (existingSlip) {
+                        toast.error('สลิปนี้ถูกใช้งานแล้ว')
+                        setTopupLoading(false)
+                        return
+                    }
+                    
+                    // Create approved topup request
+                    const { data: topupRequest, error: topupError } = await supabase
+                        .from('credit_topup_requests')
+                        .insert({
+                            dealer_id: user.id,
+                            bank_account_id: assignedBankAccount.id,
+                            amount: verifiedAmount,
+                            slip_image_url: slipImageUrl,
+                            slip_data: slipData.data,
+                            trans_ref: transRef,
+                            sender_name: slipData.data.sender?.displayName,
+                            receiver_name: slipData.data.receiver?.displayName,
+                            status: 'approved',
+                            verified_at: new Date().toISOString()
+                        })
+                        .select()
+                        .single()
+                    
+                    if (topupError) throw topupError
+                    
+                    // Record used slip
+                    await supabase.from('used_slips').insert({
+                        trans_ref: transRef,
+                        topup_request_id: topupRequest.id,
+                        dealer_id: user.id,
+                        amount: verifiedAmount
+                    })
+                    
+                    // Update dealer credit
+                    const { data: creditData } = await supabase
+                        .from('dealer_credits')
+                        .select('*')
+                        .eq('dealer_id', user.id)
+                        .maybeSingle()
+                    
+                    if (creditData) {
+                        await supabase
+                            .from('dealer_credits')
+                            .update({ 
+                                balance: (creditData.balance || 0) + verifiedAmount,
+                                is_blocked: false,
+                                updated_at: new Date().toISOString()
+                            })
+                            .eq('dealer_id', user.id)
+                    } else {
+                        await supabase
+                            .from('dealer_credits')
+                            .insert({
+                                dealer_id: user.id,
+                                balance: verifiedAmount
+                            })
+                    }
+                    
+                    // Record transaction
+                    const newBalance = (creditData?.balance || 0) + verifiedAmount
+                    await supabase.from('credit_transactions').insert({
+                        dealer_id: user.id,
+                        transaction_type: 'topup',
+                        amount: verifiedAmount,
+                        balance_after: newBalance,
+                        description: 'เติมเครดิตจากสลิป (อัตโนมัติ)'
+                    })
+                    
+                    toast.success(`เติมเครดิต ฿${verifiedAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} สำเร็จ!`)
+                    fetchDealerCredit()
+                } else {
+                    // SlipOK verification failed - create pending request
+                    await supabase
+                        .from('credit_topup_requests')
+                        .insert({
+                            dealer_id: user.id,
+                            bank_account_id: assignedBankAccount.id,
+                            amount: amount,
+                            slip_image_url: slipImageUrl,
+                            status: 'pending'
+                        })
+                    
+                    toast.warning('ไม่สามารถตรวจสอบสลิปอัตโนมัติได้ รอ Admin ตรวจสอบ')
+                }
+            } else {
+                // Manual mode - Create pending request
+                const { error: topupError } = await supabase
+                    .from('credit_topup_requests')
+                    .insert({
+                        dealer_id: user.id,
+                        bank_account_id: assignedBankAccount.id,
+                        amount: amount,
+                        slip_image_url: slipImageUrl,
+                        status: 'pending'
+                    })
+                
+                if (topupError) throw topupError
+                
+                toast.success('ส่งคำขอเติมเครดิตสำเร็จ รอ Admin อนุมัติ')
+            }
             
-            if (topupError) throw topupError
-            
-            toast.success('ส่งคำขอเติมเครดิตสำเร็จ รอ Admin อนุมัติ')
             setShowTopupModal(false)
             setTopupForm({ amount: '', slip_file: null })
             setSlipPreview(null)

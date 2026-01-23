@@ -272,3 +272,8 @@ BEGIN
     RETURN jsonb_build_object('success', true);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 12. ADD SLIP APPROVAL MODE SETTING
+INSERT INTO system_settings (key, value, description)
+VALUES ('slip_approval_mode', '"manual"', 'โหมดอนุมัติสลิป: auto = ตรวจสอบอัตโนมัติผ่าน SlipOK, manual = Admin อนุมัติด้วยตนเอง')
+ON CONFLICT (key) DO NOTHING;

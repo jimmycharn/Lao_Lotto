@@ -1881,7 +1881,7 @@ export default function SuperAdmin() {
     const renderCredits = () => (
         <div className="credits-tab">
             {/* Header Actions */}
-            <div className="tab-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+            <div className="tab-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
                 <div>
                     <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>
                         จัดการเครดิตเจ้ามือ - เติมเครดิต, อนุมัติคำขอ, ดูประวัติการทำรายการ
@@ -1890,6 +1890,45 @@ export default function SuperAdmin() {
                 <button className="btn btn-primary" onClick={() => setShowTopupModal(true)}>
                     <FiPlus /> เติมเครดิต
                 </button>
+            </div>
+
+            {/* Approval Mode Setting */}
+            <div className="card" style={{ marginBottom: '1.5rem', padding: '1rem 1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                    <div>
+                        <h4 style={{ margin: 0, marginBottom: '0.25rem' }}>
+                            <FiSettings style={{ marginRight: '0.5rem' }} />
+                            โหมดอนุมัติคำขอเติมเครดิต
+                        </h4>
+                        <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                            {settings.slip_approval_mode === 'auto' 
+                                ? 'ระบบจะตรวจสอบสลิปผ่าน SlipOK และอนุมัติเครดิตอัตโนมัติ' 
+                                : 'Admin ต้องตรวจสอบสลิปและอนุมัติด้วยตนเอง'}
+                        </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button 
+                            className={`btn btn-sm ${settings.slip_approval_mode === 'auto' ? 'btn-success' : 'btn-secondary'}`}
+                            onClick={() => {
+                                setSettings({ ...settings, slip_approval_mode: 'auto' })
+                                handleUpdateSetting('slip_approval_mode', 'auto')
+                                toast.success('เปลี่ยนเป็นโหมดอนุมัติอัตโนมัติ')
+                            }}
+                        >
+                            <FiCheck /> อัตโนมัติ (SlipOK)
+                        </button>
+                        <button 
+                            className={`btn btn-sm ${settings.slip_approval_mode !== 'auto' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => {
+                                setSettings({ ...settings, slip_approval_mode: 'manual' })
+                                handleUpdateSetting('slip_approval_mode', 'manual')
+                                toast.success('เปลี่ยนเป็นโหมดอนุมัติโดย Admin')
+                            }}
+                        >
+                            <FiUsers /> อนุมัติโดย Admin
+                        </button>
+                    </div>
+                </div>
             </div>
 
             {/* Pending Topup Requests */}
