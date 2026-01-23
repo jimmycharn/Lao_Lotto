@@ -223,7 +223,8 @@ export default function SuperAdmin() {
                 .select(`
                     *,
                     dealer:dealer_id (id, full_name, email),
-                    bank_account:bank_account_id (id, bank_name, account_number, account_name)
+                    bank_account:bank_account_id (id, bank_name, account_number, account_name),
+                    verifier:verified_by (id, full_name)
                 `)
                 .order('created_at', { ascending: false })
                 .limit(100)
@@ -344,51 +345,65 @@ export default function SuperAdmin() {
         if (!confirm('ต้องการอนุมัติคำขอเติมเครดิตนี้?')) return
         
         try {
-            // Try RPC first
-            const { data, error } = await supabase.rpc('approve_topup_request', {
-                p_request_id: requestId,
-                p_approved_by: user.id
-            })
+            // Get request details first
+            const { data: request, error: fetchError } = await supabase
+                .from('credit_topup_requests')
+                .select('*')
+                .eq('id', requestId)
+                .eq('status', 'pending')
+                .single()
             
-            if (error) {
-                // Fallback: Manual update
-                const { data: request } = await supabase
-                    .from('credit_topup_requests')
-                    .select('*')
-                    .eq('id', requestId)
-                    .single()
+            if (fetchError || !request) {
+                toast.error('ไม่พบคำขอหรือคำขอถูกดำเนินการแล้ว')
+                fetchTopupRequests()
+                return
+            }
+            
+            // Update request status to approved
+            const { error: updateError } = await supabase
+                .from('credit_topup_requests')
+                .update({ 
+                    status: 'approved', 
+                    verified_at: new Date().toISOString(), 
+                    verified_by: user.id 
+                })
+                .eq('id', requestId)
+            
+            if (updateError) {
+                console.error('Update request error:', updateError)
+                throw updateError
+            }
+            
+            // Update dealer credit
+            const { data: creditData } = await supabase
+                .from('dealer_credits')
+                .select('*')
+                .eq('dealer_id', request.dealer_id)
+                .maybeSingle()
+            
+            if (creditData) {
+                const { error: creditError } = await supabase
+                    .from('dealer_credits')
+                    .update({ 
+                        balance: (creditData.balance || 0) + parseFloat(request.amount),
+                        is_blocked: false,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('dealer_id', request.dealer_id)
                 
-                if (request) {
-                    // Update request status
-                    await supabase
-                        .from('credit_topup_requests')
-                        .update({ status: 'approved', verified_at: new Date().toISOString(), verified_by: user.id })
-                        .eq('id', requestId)
-                    
-                    // Update dealer credit
-                    const { data: creditData } = await supabase
-                        .from('dealer_credits')
-                        .select('*')
-                        .eq('dealer_id', request.dealer_id)
-                        .maybeSingle()
-                    
-                    if (creditData) {
-                        await supabase
-                            .from('dealer_credits')
-                            .update({ 
-                                balance: (creditData.balance || 0) + request.amount,
-                                is_blocked: false,
-                                updated_at: new Date().toISOString()
-                            })
-                            .eq('dealer_id', request.dealer_id)
-                    } else {
-                        await supabase
-                            .from('dealer_credits')
-                            .insert({
-                                dealer_id: request.dealer_id,
-                                balance: request.amount
-                            })
-                    }
+                if (creditError) {
+                    console.error('Update credit error:', creditError)
+                }
+            } else {
+                const { error: insertError } = await supabase
+                    .from('dealer_credits')
+                    .insert({
+                        dealer_id: request.dealer_id,
+                        balance: parseFloat(request.amount)
+                    })
+                
+                if (insertError) {
+                    console.error('Insert credit error:', insertError)
                 }
             }
             
@@ -396,37 +411,46 @@ export default function SuperAdmin() {
             fetchTopupRequests()
             fetchDealerCredits()
         } catch (error) {
+            console.error('Approve topup error:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
         }
     }
     
     // Reject topup request
     const handleRejectTopup = async (requestId) => {
-        const reason = prompt('ระบุเหตุผลที่ปฏิเสธ (ไม่บังคับ):')
+        if (!confirm('ต้องการปฏิเสธคำขอเติมเครดิตนี้?')) return
+        
+        const reason = prompt('ระบุเหตุผลที่ปฏิเสธ (ไม่บังคับ):') || 'ไม่ผ่านการตรวจสอบ'
         
         try {
-            const { error } = await supabase.rpc('reject_topup_request', {
-                p_request_id: requestId,
-                p_rejected_by: user.id,
-                p_reason: reason || 'ไม่ผ่านการตรวจสอบ'
-            })
+            // Direct update - use rejection_reason (correct column name)
+            const { data, error } = await supabase
+                .from('credit_topup_requests')
+                .update({ 
+                    status: 'rejected', 
+                    rejection_reason: reason,
+                    verified_at: new Date().toISOString(),
+                    verified_by: user.id
+                })
+                .eq('id', requestId)
+                .eq('status', 'pending')
+                .select()
             
             if (error) {
-                // Fallback: Manual update
-                await supabase
-                    .from('credit_topup_requests')
-                    .update({ 
-                        status: 'rejected', 
-                        reject_reason: reason || 'ไม่ผ่านการตรวจสอบ',
-                        verified_at: new Date().toISOString(),
-                        verified_by: user.id
-                    })
-                    .eq('id', requestId)
+                console.error('Reject error:', error)
+                throw error
+            }
+            
+            if (!data || data.length === 0) {
+                toast.error('ไม่พบคำขอหรือคำขอถูกดำเนินการแล้ว')
+                fetchTopupRequests()
+                return
             }
             
             toast.success('ปฏิเสธคำขอเติมเครดิตแล้ว')
             fetchTopupRequests()
         } catch (error) {
+            console.error('Reject topup error:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
         }
     }
@@ -1833,18 +1857,18 @@ export default function SuperAdmin() {
                                             <span className="status-badge status-warning">รอตรวจสอบ</span>
                                         </td>
                                         <td>
-                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            <div className="action-buttons">
                                                 <button 
                                                     className="btn btn-sm btn-success"
                                                     onClick={() => handleApproveTopup(request.id)}
                                                 >
-                                                    <FiCheck /> อนุมัติ
+                                                    <FiCheck /> <span className="btn-text">อนุมัติ</span>
                                                 </button>
                                                 <button 
                                                     className="btn btn-sm btn-danger"
                                                     onClick={() => handleRejectTopup(request.id)}
                                                 >
-                                                    <FiX /> ปฏิเสธ
+                                                    <FiX /> <span className="btn-text">ปฏิเสธ</span>
                                                 </button>
                                             </div>
                                         </td>
@@ -1934,10 +1958,81 @@ export default function SuperAdmin() {
                 </div>
             </div>
 
+            {/* Processed Topup Requests */}
+            {topupRequests.filter(r => r.status !== 'pending').length > 0 && (
+                <div className="card" style={{ marginBottom: '1.5rem' }}>
+                    <div className="card-header">
+                        <h3><FiFileText /> คำขอเติมเครดิตที่ดำเนินการแล้ว</h3>
+                    </div>
+                    <div className="table-container">
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th>วันที่ขอ</th>
+                                    <th>Dealer</th>
+                                    <th>จำนวนเงิน</th>
+                                    <th>สลิป</th>
+                                    <th>สถานะ</th>
+                                    <th>ดำเนินการโดย</th>
+                                    <th>วันที่ดำเนินการ</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {topupRequests.filter(r => r.status !== 'pending').slice(0, 20).map(request => (
+                                    <tr key={request.id}>
+                                        <td style={{ fontSize: '0.85rem' }}>
+                                            {new Date(request.created_at).toLocaleString('th-TH')}
+                                        </td>
+                                        <td>
+                                            <strong>{request.dealer?.full_name || 'ไม่ระบุ'}</strong>
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                {request.dealer?.email}
+                                            </div>
+                                        </td>
+                                        <td style={{ fontWeight: 'bold', color: request.status === 'approved' ? 'var(--color-success)' : 'var(--color-text-muted)' }}>
+                                            {request.amount?.toLocaleString('th-TH', { minimumFractionDigits: 2 })} ฿
+                                        </td>
+                                        <td>
+                                            {request.slip_image_url ? (
+                                                <a href={request.slip_image_url} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-secondary">
+                                                    <FiEye /> <span className="btn-text">ดูสลิป</span>
+                                                </a>
+                                            ) : (
+                                                <span style={{ color: 'var(--color-text-muted)' }}>-</span>
+                                            )}
+                                        </td>
+                                        <td>
+                                            {request.status === 'approved' ? (
+                                                <span className="badge badge-success"><FiCheck /> อนุมัติ</span>
+                                            ) : request.status === 'rejected' ? (
+                                                <span className="badge badge-danger"><FiX /> ปฏิเสธ</span>
+                                            ) : (
+                                                <span className="badge badge-secondary">{request.status}</span>
+                                            )}
+                                            {request.rejection_reason && (
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--color-danger)', marginTop: '0.25rem' }}>
+                                                    {request.rejection_reason}
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td style={{ fontSize: '0.85rem' }}>
+                                            {request.verifier?.full_name || '-'}
+                                        </td>
+                                        <td style={{ fontSize: '0.85rem' }}>
+                                            {request.verified_at ? new Date(request.verified_at).toLocaleString('th-TH') : '-'}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
             {/* Recent Transactions */}
             <div className="card">
                 <div className="card-header">
-                    <h3><FiFileText /> ประวัติการทำรายการ (ล่าสุด 100 รายการ)</h3>
+                    <h3><FiClock /> ประวัติการทำรายการเครดิต (ล่าสุด 100 รายการ)</h3>
                 </div>
                 <div className="table-container">
                     <table className="data-table">
