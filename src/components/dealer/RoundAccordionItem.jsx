@@ -522,9 +522,22 @@ export default function RoundAccordionItem({
 
             // Update pending deduction for upstream dealer's credit (if linked)
             if (canSendToUpstream && selectedUpstreamDealer?.upstream_dealer_id) {
-                updatePendingDeduction(selectedUpstreamDealer.upstream_dealer_id).catch(err => 
+                try {
+                    await updatePendingDeduction(selectedUpstreamDealer.upstream_dealer_id)
+                    console.log('Upstream dealer pending deduction updated')
+                } catch (err) {
                     console.log('Error updating upstream pending deduction:', err)
-                )
+                }
+            }
+            
+            // Also update current dealer's pending deduction (their credit is affected by transfers)
+            if (user?.id) {
+                try {
+                    await updatePendingDeduction(user.id)
+                    if (onCreditUpdate) onCreditUpdate()
+                } catch (err) {
+                    console.log('Error updating dealer pending deduction:', err)
+                }
             }
 
             await fetchInlineSubmissions(true)

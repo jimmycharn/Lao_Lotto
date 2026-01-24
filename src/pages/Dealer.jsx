@@ -1400,95 +1400,102 @@ export default function Dealer() {
                         </div>
                     </div>
                     
-                    {/* Credit Display - Full width on mobile, clickable to open topup modal */}
-                    <div 
-                        className="credit-display card" 
-                        onClick={() => setShowTopupModal(true)}
-                        style={{
-                            padding: '0.75rem 1.25rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '0.75rem',
-                            width: '100%',
-                            background: dealerCredit?.is_blocked ? 'rgba(239, 68, 68, 0.15)' : 
-                                        dealerCredit?.is_low_credit ? 'rgba(245, 158, 11, 0.15)' : 
-                                        'rgba(16, 185, 129, 0.15)',
-                            border: `1px solid ${dealerCredit?.is_blocked ? 'var(--color-danger)' : 
-                                                 dealerCredit?.is_low_credit ? 'var(--color-warning)' : 
-                                                 'var(--color-success)'}`,
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            transition: 'transform 0.2s, box-shadow 0.2s'
-                        }}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.transform = 'scale(1.02)'
-                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.transform = 'scale(1)'
-                            e.currentTarget.style.boxShadow = 'none'
-                        }}
-                    >
-                        <div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                เครดิตคงเหลือ {dealerCredit?.pendingDeduction > 0 && '(รอตัด)'}
-                            </div>
-                            <div style={{ 
-                                fontSize: '1.25rem', 
-                                fontWeight: 'bold',
-                                color: dealerCredit?.is_blocked ? 'var(--color-danger)' : 
-                                       dealerCredit?.is_low_credit ? 'var(--color-warning)' : 
-                                       'var(--color-success)'
-                            }}>
-                                ฿{(dealerCredit?.availableCredit || dealerCredit?.balance || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-                            </div>
-                            {dealerCredit?.pendingDeduction > 0 && (
-                                <div style={{ fontSize: '0.7rem', color: 'var(--color-warning)' }}>
-                                    รอตัด: ฿{dealerCredit.pendingDeduction.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                    {/* Credit Display - Full width, clickable to open topup modal */}
+                    {(() => {
+                        // Calculate credit level for color coding
+                        const availableCredit = dealerCredit?.availableCredit || dealerCredit?.balance || 0
+                        const warningThreshold = dealerCredit?.warning_threshold || 1000
+                        const isBlocked = dealerCredit?.is_blocked
+                        const isCritical = availableCredit <= 0 || isBlocked
+                        const isLow = availableCredit > 0 && availableCredit <= warningThreshold
+                        const isMedium = availableCredit > warningThreshold && availableCredit <= warningThreshold * 3
+                        
+                        const bgColor = isCritical ? 'rgba(239, 68, 68, 0.15)' : 
+                                       isLow ? 'rgba(245, 158, 11, 0.15)' : 
+                                       isMedium ? 'rgba(251, 191, 36, 0.1)' :
+                                       'rgba(16, 185, 129, 0.15)'
+                        const borderColor = isCritical ? 'var(--color-danger)' : 
+                                           isLow ? 'var(--color-warning)' : 
+                                           isMedium ? '#f59e0b' :
+                                           'var(--color-success)'
+                        const textColor = isCritical ? 'var(--color-danger)' : 
+                                         isLow ? 'var(--color-warning)' : 
+                                         isMedium ? '#f59e0b' :
+                                         'var(--color-success)'
+                        
+                        return (
+                            <div 
+                                className="credit-display card" 
+                                onClick={() => setShowTopupModal(true)}
+                                style={{
+                                    padding: '0.75rem 1rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: '0.5rem',
+                                    width: '100%',
+                                    background: bgColor,
+                                    border: `1px solid ${borderColor}`,
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    transition: 'transform 0.2s, box-shadow 0.2s'
+                                }}
+                                onMouseEnter={(e) => {
+                                    e.currentTarget.style.transform = 'scale(1.01)'
+                                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.currentTarget.style.transform = 'scale(1)'
+                                    e.currentTarget.style.boxShadow = 'none'
+                                }}
+                            >
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginBottom: '0.15rem' }}>
+                                        เครดิตคงเหลือ
+                                    </div>
+                                    <div style={{ 
+                                        fontSize: '1.35rem', 
+                                        fontWeight: 'bold',
+                                        color: textColor
+                                    }}>
+                                        ฿{availableCredit.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                    </div>
+                                    {dealerCredit?.pendingDeduction > 0 && (
+                                        <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginTop: '0.1rem' }}>
+                                            รอตัด: ฿{dealerCredit.pendingDeduction.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                        </div>
+                                    )}
                                 </div>
-                            )}
-                        </div>
-                        {dealerCredit?.is_blocked && (
-                            <div style={{ 
-                                background: 'var(--color-danger)', 
-                                color: 'white', 
-                                padding: '0.25rem 0.5rem', 
-                                borderRadius: '4px',
-                                fontSize: '0.7rem',
-                                fontWeight: 'bold'
-                            }}>
-                                <FiAlertTriangle style={{ marginRight: '0.25rem' }} />
-                                บล็อค
+                                {isBlocked && (
+                                    <div style={{ 
+                                        background: 'var(--color-danger)', 
+                                        color: 'white', 
+                                        padding: '0.25rem 0.5rem', 
+                                        borderRadius: '4px',
+                                        fontSize: '0.65rem',
+                                        fontWeight: 'bold'
+                                    }}>
+                                        <FiAlertTriangle style={{ marginRight: '0.25rem' }} />
+                                        บล็อค
+                                    </div>
+                                )}
+                                <div style={{ 
+                                    background: 'var(--color-primary)', 
+                                    color: 'black', 
+                                    padding: '0.4rem 0.75rem', 
+                                    borderRadius: '6px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 'bold',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.25rem',
+                                    whiteSpace: 'nowrap'
+                                }}>
+                                    <FiDollarSign /> เติมเครดิต
+                                </div>
                             </div>
-                        )}
-                        {!dealerCredit?.is_blocked && dealerCredit?.is_low_credit && (
-                            <div style={{ 
-                                background: 'var(--color-warning)', 
-                                color: 'black', 
-                                padding: '0.25rem 0.5rem', 
-                                borderRadius: '4px',
-                                fontSize: '0.7rem',
-                                fontWeight: 'bold'
-                            }}>
-                                <FiAlertCircle style={{ marginRight: '0.25rem' }} />
-                                เครดิตต่ำ
-                            </div>
-                        )}
-                        <div style={{ 
-                            background: 'var(--color-primary)', 
-                            color: 'black', 
-                            padding: '0.35rem 0.75rem', 
-                            borderRadius: '4px',
-                            fontSize: '0.75rem',
-                            fontWeight: 'bold',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.25rem'
-                        }}>
-                            <FiDollarSign /> เติมเครดิต
-                        </div>
-                    </div>
+                        )
+                    })()}
                 </div>
 
                 {/* Credit Blocked Warning */}
@@ -3086,9 +3093,22 @@ function SubmissionsModal({ round, onClose }) {
 
             // Update pending deduction for upstream dealer's credit (if linked)
             if (targetSubmissionId && selectedUpstreamDealer?.upstream_dealer_id) {
-                updatePendingDeduction(selectedUpstreamDealer.upstream_dealer_id).catch(err => 
+                try {
+                    await updatePendingDeduction(selectedUpstreamDealer.upstream_dealer_id)
+                    console.log('Upstream dealer pending deduction updated')
+                } catch (err) {
                     console.log('Error updating upstream pending deduction:', err)
-                )
+                }
+            }
+            
+            // Also update current dealer's pending deduction
+            if (user?.id) {
+                try {
+                    await updatePendingDeduction(user.id)
+                    await fetchDealerCredit()
+                } catch (err) {
+                    console.log('Error updating dealer pending deduction:', err)
+                }
             }
 
             // Show success message
