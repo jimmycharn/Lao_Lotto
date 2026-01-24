@@ -681,6 +681,23 @@
     border-radius: 20px;
 }
 
+.default-badge {
+    position: absolute;
+    top: -10px;
+    right: 1.5rem;
+    background: linear-gradient(135deg, #00d26a 0%, #00a854 100%);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.3rem 0.75rem;
+    border-radius: 20px;
+}
+
+.package-card.default {
+    border-color: rgba(0, 210, 106, 0.3);
+    background: linear-gradient(135deg, rgba(0, 210, 106, 0.05) 0%, rgba(0, 168, 84, 0.05) 100%);
+}
+
 .inactive-overlay {
     position: absolute;
     top: 50%;

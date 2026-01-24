@@ -22,11 +22,15 @@ export default function Login() {
 
     // If user is already logged in and profile is loaded, redirect based on role
     if (user && profile && !authLoading) {
-        // Only dealers go to dealer dashboard
+        // Super Admin goes to Super Admin dashboard
+        if (isSuperAdmin) {
+            return <Navigate to="/superadmin" replace />
+        }
+        // Dealers go to dealer dashboard
         if (isDealer) {
             return <Navigate to="/dealer" replace />
         }
-        // Regular users and superadmin go to user dashboard
+        // Regular users go to user dashboard
         return <Navigate to="/dashboard" replace />
     }
 

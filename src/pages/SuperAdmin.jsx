@@ -103,7 +103,8 @@ export default function SuperAdmin() {
         bank_name: '',
         account_number: '',
         account_name: '',
-        is_active: true
+        is_active: true,
+        is_default: false
     })
     const [showAssignBankModal, setShowAssignBankModal] = useState(false)
     const [assignBankForm, setAssignBankForm] = useState({ dealer_id: '', bank_account_id: '' })
@@ -120,7 +121,8 @@ export default function SuperAdmin() {
         extra_user_price: '',
         features: [],
         is_featured: false,
-        is_active: true
+        is_active: true,
+        is_default: false
     })
 
     useEffect(() => {
@@ -250,6 +252,14 @@ export default function SuperAdmin() {
         }
         
         try {
+            // If setting as default, first clear other defaults
+            if (bankAccountForm.is_default) {
+                await supabase
+                    .from('admin_bank_accounts')
+                    .update({ is_default: false })
+                    .neq('id', editingBankAccount?.id || '')
+            }
+
             if (editingBankAccount) {
                 const { error } = await supabase
                     .from('admin_bank_accounts')
@@ -275,10 +285,33 @@ export default function SuperAdmin() {
             
             setShowBankAccountModal(false)
             setEditingBankAccount(null)
-            setBankAccountForm({ bank_code: '', bank_name: '', account_number: '', account_name: '', is_active: true })
+            setBankAccountForm({ bank_code: '', bank_name: '', account_number: '', account_name: '', is_active: true, is_default: false })
             fetchBankAccounts()
         } catch (error) {
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+
+    const setBankAccountAsDefault = async (account) => {
+        try {
+            // Clear all defaults first
+            await supabase
+                .from('admin_bank_accounts')
+                .update({ is_default: false })
+                .neq('id', account.id)
+
+            // Set this account as default
+            const { error } = await supabase
+                .from('admin_bank_accounts')
+                .update({ is_default: true })
+                .eq('id', account.id)
+
+            if (error) throw error
+            toast.success(`ตั้ง "${account.bank_name}" เป็นบัญชีเริ่มต้นสำเร็จ`)
+            fetchBankAccounts()
+        } catch (error) {
+            console.error('Error setting default bank account:', error)
+            toast.error('เกิดข้อผิดพลาด')
         }
     }
     
@@ -890,7 +923,8 @@ export default function SuperAdmin() {
                 extra_user_price: pkg.extra_user_price || '',
                 features: pkg.features || [],
                 is_featured: pkg.is_featured || false,
-                is_active: pkg.is_active ?? true
+                is_active: pkg.is_active ?? true,
+                is_default: pkg.is_default || false
             })
         } else {
             setEditingPackage(null)
@@ -905,7 +939,8 @@ export default function SuperAdmin() {
                 extra_user_price: '',
                 features: [],
                 is_featured: false,
-                is_active: true
+                is_active: true,
+                is_default: false
             })
         }
         setShowPackageModal(true)
@@ -913,6 +948,14 @@ export default function SuperAdmin() {
 
     const handleSavePackage = async () => {
         try {
+            // If setting as default, first clear other defaults
+            if (packageForm.is_default) {
+                await supabase
+                    .from('subscription_packages')
+                    .update({ is_default: false })
+                    .neq('id', editingPackage?.id || '')
+            }
+
             const packageData = {
                 name: packageForm.name,
                 description: packageForm.description,
@@ -924,7 +967,8 @@ export default function SuperAdmin() {
                 extra_user_price: parseFloat(packageForm.extra_user_price) || 0,
                 features: packageForm.features,
                 is_featured: packageForm.is_featured,
-                is_active: packageForm.is_active
+                is_active: packageForm.is_active,
+                is_default: packageForm.is_default
             }
 
             if (editingPackage) {
@@ -944,9 +988,35 @@ export default function SuperAdmin() {
 
             setShowPackageModal(false)
             fetchPackages()
+            if (packageForm.is_default) {
+                toast.success('ตั้งเป็นแพ็คเกจเริ่มต้นสำเร็จ')
+            }
         } catch (error) {
             console.error('Error saving package:', error)
             toast.error('เกิดข้อผิดพลาดในการบันทึกแพ็คเกจ')
+        }
+    }
+
+    const setPackageAsDefault = async (pkg) => {
+        try {
+            // Clear all defaults first
+            await supabase
+                .from('subscription_packages')
+                .update({ is_default: false })
+                .neq('id', pkg.id)
+
+            // Set this package as default
+            const { error } = await supabase
+                .from('subscription_packages')
+                .update({ is_default: true })
+                .eq('id', pkg.id)
+
+            if (error) throw error
+            toast.success(`ตั้ง "${pkg.name}" เป็นแพ็คเกจเริ่มต้นสำเร็จ`)
+            fetchPackages()
+        } catch (error) {
+            console.error('Error setting default package:', error)
+            toast.error('เกิดข้อผิดพลาด')
         }
     }
 
@@ -1513,8 +1583,9 @@ export default function SuperAdmin() {
 
             <div className="packages-grid">
                 {packages.map(pkg => (
-                    <div key={pkg.id} className={`package-card ${pkg.is_featured ? 'featured' : ''} ${!pkg.is_active ? 'inactive' : ''}`}>
-                        {pkg.is_featured && <div className="featured-badge">แนะนำ</div>}
+                    <div key={pkg.id} className={`package-card ${pkg.is_featured ? 'featured' : ''} ${pkg.is_default ? 'default' : ''} ${!pkg.is_active ? 'inactive' : ''}`}>
+                        {pkg.is_default && <div className="default-badge">เริ่มต้น</div>}
+                        {pkg.is_featured && !pkg.is_default && <div className="featured-badge">แนะนำ</div>}
                         {!pkg.is_active && <div className="inactive-overlay">ปิดใช้งาน</div>}
 
                         <div className="package-header">
@@ -1563,6 +1634,11 @@ export default function SuperAdmin() {
                             <button className="btn btn-sm" onClick={() => openPackageModal(pkg)}>
                                 <FiEdit2 /> แก้ไข
                             </button>
+                            {!pkg.is_default && (
+                                <button className="btn btn-sm btn-success" onClick={() => setPackageAsDefault(pkg)} title="ตั้งเป็นแพ็คเกจเริ่มต้น">
+                                    <FiCheck /> ตั้งเป็นเริ่มต้น
+                                </button>
+                            )}
                             <button className="btn btn-sm btn-danger" onClick={() => deletePackage(pkg)}>
                                 <FiTrash2 /> ลบ
                             </button>
@@ -1773,7 +1849,7 @@ export default function SuperAdmin() {
                         <tbody>
                             {bankAccounts.length === 0 ? (
                                 <tr>
-                                    <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
+                                    <td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
                                         ยังไม่มีบัญชีธนาคาร
                                     </td>
                                 </tr>
@@ -1791,9 +1867,16 @@ export default function SuperAdmin() {
                                         <td style={{ fontFamily: 'monospace', fontSize: '1rem' }}>{account.account_number}</td>
                                         <td>{account.account_name}</td>
                                         <td>
-                                            <span className={`status-badge ${account.is_active ? 'status-active' : 'status-inactive'}`}>
-                                                {account.is_active ? 'ใช้งาน' : 'ปิดใช้งาน'}
-                                            </span>
+                                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                                <span className={`status-badge ${account.is_active ? 'status-active' : 'status-inactive'}`}>
+                                                    {account.is_active ? 'ใช้งาน' : 'ปิดใช้งาน'}
+                                                </span>
+                                                {account.is_default && (
+                                                    <span className="status-badge" style={{ background: 'var(--color-success)', color: 'white' }}>
+                                                        เริ่มต้น
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td>
                                             <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -1806,13 +1889,23 @@ export default function SuperAdmin() {
                                                             bank_name: account.bank_name,
                                                             account_number: account.account_number,
                                                             account_name: account.account_name,
-                                                            is_active: account.is_active
+                                                            is_active: account.is_active,
+                                                            is_default: account.is_default || false
                                                         })
                                                         setShowBankAccountModal(true)
                                                     }}
                                                 >
                                                     <FiEdit2 />
                                                 </button>
+                                                {!account.is_default && (
+                                                    <button 
+                                                        className="btn btn-sm btn-success"
+                                                        onClick={() => setBankAccountAsDefault(account)}
+                                                        title="ตั้งเป็นบัญชีเริ่มต้น"
+                                                    >
+                                                        <FiCheck />
+                                                    </button>
+                                                )}
                                                 <button 
                                                     className="btn btn-sm btn-danger"
                                                     onClick={() => handleDeleteBankAccount(account.id)}
@@ -2844,6 +2937,76 @@ export default function SuperAdmin() {
                                 ) : (
                                     <><FiMinus /> หักเครดิต</>
                                 )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Dealer Detail Modal */}
+            {showDealerModal && selectedDealer && (
+                <div className="modal-overlay" onClick={() => setShowDealerModal(false)}>
+                    <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+                        <div className="modal-header">
+                            <h2><FiEye /> รายละเอียดเจ้ามือ</h2>
+                            <button className="close-btn" onClick={() => setShowDealerModal(false)}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="dealer-detail-grid" style={{ display: 'grid', gap: '1rem' }}>
+                                <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
+                                    <span style={{ color: 'var(--color-text-muted)' }}>ชื่อ</span>
+                                    <strong>{selectedDealer.full_name || '-'}</strong>
+                                </div>
+                                <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
+                                    <span style={{ color: 'var(--color-text-muted)' }}>อีเมล</span>
+                                    <strong>{selectedDealer.email || '-'}</strong>
+                                </div>
+                                <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
+                                    <span style={{ color: 'var(--color-text-muted)' }}>เบอร์โทร</span>
+                                    <strong>{selectedDealer.phone || '-'}</strong>
+                                </div>
+                                <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
+                                    <span style={{ color: 'var(--color-text-muted)' }}>สถานะ</span>
+                                    <span className={`status-badge ${selectedDealer.is_active ? 'status-active' : 'status-inactive'}`}>
+                                        {selectedDealer.is_active ? 'ใช้งาน' : 'ปิดใช้งาน'}
+                                    </span>
+                                </div>
+                                <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
+                                    <span style={{ color: 'var(--color-text-muted)' }}>แพ็คเกจ</span>
+                                    <strong>{selectedDealer.subscription?.subscription_packages?.name || 'ไม่มีแพ็คเกจ'}</strong>
+                                </div>
+                                <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
+                                    <span style={{ color: 'var(--color-text-muted)' }}>เครดิตคงเหลือ</span>
+                                    <strong style={{ color: 'var(--color-success)' }}>
+                                        ฿{(dealerCredits.find(c => c.dealer_id === selectedDealer.id)?.balance || 0).toLocaleString()}
+                                    </strong>
+                                </div>
+                                <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
+                                    <span style={{ color: 'var(--color-text-muted)' }}>วันที่สมัคร</span>
+                                    <strong>{selectedDealer.created_at ? formatDate(selectedDealer.created_at) : '-'}</strong>
+                                </div>
+                                {selectedDealer.deactivated_at && (
+                                    <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'rgba(255,0,0,0.1)', borderRadius: '8px' }}>
+                                        <span style={{ color: 'var(--color-danger)' }}>ปิดใช้งานเมื่อ</span>
+                                        <strong style={{ color: 'var(--color-danger)' }}>{formatDate(selectedDealer.deactivated_at)}</strong>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowDealerModal(false)}>
+                                ปิด
+                            </button>
+                            <button 
+                                className={`btn ${selectedDealer.is_active ? 'btn-danger' : 'btn-success'}`}
+                                onClick={() => {
+                                    toggleDealerStatus(selectedDealer, !selectedDealer.is_active)
+                                    setShowDealerModal(false)
+                                }}
+                            >
+                                <FiPower /> {selectedDealer.is_active ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}
                             </button>
                         </div>
                     </div>

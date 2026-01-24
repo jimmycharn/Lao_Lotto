@@ -3553,3 +3553,101 @@
         padding: 0 0.25rem;
     }
 }
+
+/* =============================================
+   ROUND SUMMARY STATS - Responsive Layout
+   ============================================= */
+
+.round-summary-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.round-summary-stats .summary-row {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.round-summary-stats .stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 60px;
+}
+
+.round-summary-stats .stat-label {
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.round-summary-stats .stat-value {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.round-summary-stats .stat-value.warning {
+    color: var(--color-warning);
+}
+
+.round-summary-stats .stat-value.danger {
+    color: var(--color-danger);
+}
+
+.round-summary-stats .stat-item.profit-positive .stat-value {
+    color: var(--color-success);
+}
+
+.round-summary-stats .stat-item.profit-negative .stat-value {
+    color: var(--color-danger);
+}
+
+/* Desktop: All stats in one row */
+@media (min-width: 769px) {
+    .round-summary-stats {
+        flex-direction: row;
+        gap: 2rem;
+        align-items: flex-start;
+    }
+    
+    .round-summary-stats .summary-row {
+        gap: 2rem;
+    }
+    
+    .round-summary-stats .stat-item {
+        min-width: 80px;
+    }
+    
+    .round-summary-stats .stat-value {
+        font-size: 1rem;
+    }
+}
+
+/* Mobile: 2 rows layout */
+@media (max-width: 768px) {
+    .round-summary-stats {
+        gap: 0.75rem;
+    }
+    
+    .round-summary-stats .summary-row {
+        gap: 1rem;
+        justify-content: flex-start;
+    }
+    
+    .round-summary-stats .stat-item {
+        min-width: 50px;
+    }
+    
+    .round-summary-stats .stat-label {
+        font-size: 0.65rem;
+    }
+    
+    .round-summary-stats .stat-value {
+        font-size: 0.85rem;
+    }
+}

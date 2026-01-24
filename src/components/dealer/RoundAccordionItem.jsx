@@ -16,7 +16,8 @@ import {
     FiRotateCcw,
     FiSearch,
     FiCopy,
-    FiFileText
+    FiFileText,
+    FiRefreshCw
 } from 'react-icons/fi'
 import {
     LOTTERY_TYPES,
@@ -100,14 +101,14 @@ export default function RoundAccordionItem({
         return now <= closeTime
     })()
 
-    // Fetch summary data on mount for announced rounds (to show header stats)
+    // Fetch summary data on mount for announced rounds and open rounds (to show header stats)
     useEffect(() => {
-        console.log('Mount useEffect:', { isAnnounced, roundId: round.id, status: round.status, is_result_announced: round.is_result_announced })
-        if (isAnnounced) {
-            console.log('isAnnounced is true, fetching summary data...')
+        console.log('Mount useEffect:', { isAnnounced, isOpen, roundId: round.id, status: round.status, is_result_announced: round.is_result_announced })
+        if (isAnnounced || isOpen) {
+            console.log('Fetching summary data for round...')
             fetchSummaryData()
         }
-    }, [round.id, isAnnounced])
+    }, [round.id, isAnnounced, isOpen])
 
     // Fetch upstream dealers on mount
     useEffect(() => {
@@ -861,24 +862,39 @@ export default function RoundAccordionItem({
                 <div className="round-header-center">
                     <h3>{round.lottery_name || LOTTERY_TYPES[round.lottery_type]}</h3>
                     <div className="round-meta">
-                        <span><FiCalendar /> {formatDate(round.round_date)}</span>
-                        <span><FiClock /> {formatTime(round.open_time)} - {formatTime(round.close_time)}</span>
-                        <span>{round.submissions?.length || 0} รายการ</span>
+                        <span><FiCalendar /> {formatDate(round.open_time)} {formatTime(round.open_time)} - {formatDate(round.close_time)} {formatTime(round.close_time)}</span>
                     </div>
-                    {isAnnounced && !summaryData.loading && (
-                        <div className="header-summary">
-                            <span className="summary-item"><span className="label">แทง</span> {round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
-                            <span className="summary-item"><span className="label">จ่าย</span> <span className="text-danger">{round.currency_symbol}{grandTotalWin.toLocaleString()}</span></span>
-                            <span className="summary-item"><span className="label">คอม</span> <span style={{ color: 'var(--color-warning)' }}>{round.currency_symbol}{grandTotalCommission.toLocaleString()}</span></span>
-                            <span className={`summary-item profit ${dealerProfit >= 0 ? 'positive' : 'negative'}`}>
-                                <span className="label">กำไร</span> {dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}
-                            </span>
-                        </div>
-                    )}
-                    {isOpen && !summaryData.loading && grandTotalBet > 0 && (
-                        <div className="header-summary">
-                            <span className="summary-item"><span className="label">ยอดรวม</span> {round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
-                            <span className="summary-item"><span className="label">คอม</span> <span style={{ color: 'var(--color-warning)' }}>{round.currency_symbol}{grandTotalCommission.toLocaleString()}</span></span>
+                    {/* Summary stats - responsive layout */}
+                    {!summaryData.loading && (
+                        <div className="round-summary-stats">
+                            {/* Row 1: รายการ, ยอดรวม, ค่าคอม */}
+                            <div className="summary-row">
+                                <span className="stat-item">
+                                    <span className="stat-label">รายการ</span>
+                                    <span className="stat-value">{round.submissions?.length || 0}</span>
+                                </span>
+                                <span className="stat-item">
+                                    <span className="stat-label">ยอดรวม</span>
+                                    <span className="stat-value">{round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
+                                </span>
+                                <span className="stat-item">
+                                    <span className="stat-label">ค่าคอม</span>
+                                    <span className="stat-value warning">{round.currency_symbol}{grandTotalCommission.toLocaleString()}</span>
+                                </span>
+                            </div>
+                            {/* Row 2: จ่าย, กำไร (only for announced rounds) */}
+                            {isAnnounced && (
+                                <div className="summary-row">
+                                    <span className="stat-item">
+                                        <span className="stat-label">จ่าย</span>
+                                        <span className="stat-value danger">{round.currency_symbol}{grandTotalWin.toLocaleString()}</span>
+                                    </span>
+                                    <span className={`stat-item ${dealerProfit >= 0 ? 'profit-positive' : 'profit-negative'}`}>
+                                        <span className="stat-label">กำไร</span>
+                                        <span className="stat-value">{dealerProfit >= 0 ? '+' : ''}{round.currency_symbol}{dealerProfit.toLocaleString()}</span>
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -888,6 +904,7 @@ export default function RoundAccordionItem({
                         {round.status === 'open' && <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onCloseRound(); }} title="ปิดงวด"><FiLock /></button>}
                         <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onShowNumberLimits(); }} title="ตั้งค่าเลขอั้น"><FiAlertTriangle /></button>
                         <button className="icon-btn danger" onClick={(e) => { e.stopPropagation(); onDeleteRound(); }} title="ลบ"><FiTrash2 /></button>
+                        <button className="icon-btn" onClick={(e) => { e.stopPropagation(); fetchSummaryData(); }} title="รีเฟรช"><FiRefreshCw /></button>
                     </div>
                     <svg className={`chevron ${isExpanded ? 'rotated' : ''}`} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <polyline points="6 9 12 15 18 9"></polyline>
