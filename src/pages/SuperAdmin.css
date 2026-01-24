@@ -58,9 +58,10 @@
     font-size: 0.95rem;
     border-radius: 10px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease;
     text-align: left;
     width: 100%;
+    box-sizing: border-box;
 }
 
 .nav-item:hover {
@@ -71,7 +72,6 @@
 .nav-item.active {
     background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
     color: #fff;
-    font-weight: 500;
 }
 
 .nav-item svg {
@@ -1334,4 +1334,47 @@
 .dealer-assign-info strong {
     color: rgba(255, 255, 255, 0.7);
     margin-right: 0.5rem;
+}
+
+/* Clickable Dealer Rows */
+.data-table tbody tr.clickable-row {
+    transition: background-color 0.2s ease;
+}
+
+.data-table tbody tr.clickable-row:hover {
+    background: rgba(102, 126, 234, 0.15);
+}
+
+.data-table tbody tr.inactive-dealer {
+    background: rgba(245, 87, 108, 0.08);
+    opacity: 0.7;
+}
+
+.data-table tbody tr.inactive-dealer:hover {
+    background: rgba(245, 87, 108, 0.15);
+}
+
+.data-table tbody tr.inactive-dealer .dealer-name {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* Action Button Colors */
+.btn-icon.btn-success {
+    background: rgba(0, 210, 106, 0.15);
+    color: #00d26a;
+    border: 1px solid rgba(0, 210, 106, 0.3);
+}
+
+.btn-icon.btn-success:hover {
+    background: rgba(0, 210, 106, 0.25);
+}
+
+.btn-icon.btn-danger {
+    background: rgba(245, 87, 108, 0.15);
+    color: #f5576c;
+    border: 1px solid rgba(245, 87, 108, 0.3);
+}
+
+.btn-icon.btn-danger:hover {
+    background: rgba(245, 87, 108, 0.25);
 }

@@ -878,33 +878,43 @@ export default function SuperAdmin() {
     // === DEALER MANAGEMENT ===
     const toggleDealerStatus = async (dealer, activate) => {
         try {
-            const { error } = await supabase
+            console.log('toggleDealerStatus called:', dealer.id, 'current is_active:', dealer.is_active, 'new activate:', activate)
+            
+            const { data, error } = await supabase
                 .from('profiles')
                 .update({
-                    is_active: activate,
-                    deactivated_at: activate ? null : new Date().toISOString(),
-                    deactivated_by: activate ? null : user.id,
-                    deactivation_reason: activate ? null : 'Manual deactivation by Super Admin'
+                    is_active: activate
                 })
                 .eq('id', dealer.id)
+                .select()
 
-            if (error) throw error
+            console.log('Update result:', data, error)
 
-            // Log activity
-            await supabase
-                .from('dealer_activity_log')
-                .insert({
-                    dealer_id: dealer.id,
-                    action: activate ? 'manual_activation' : 'manual_deactivation',
-                    description: activate ? 'เปิดใช้งานโดย Super Admin' : 'ปิดใช้งานโดย Super Admin',
-                    performed_by: user.id
-                })
+            if (error) {
+                console.error('Supabase error:', error)
+                throw error
+            }
 
-            fetchDealers()
+            // Log activity (ignore errors here)
+            try {
+                await supabase
+                    .from('dealer_activity_log')
+                    .insert({
+                        dealer_id: dealer.id,
+                        action: activate ? 'manual_activation' : 'manual_deactivation',
+                        description: activate ? 'เปิดใช้งานโดย Super Admin' : 'ปิดใช้งานโดย Super Admin',
+                        performed_by: user.id
+                    })
+            } catch (logError) {
+                console.log('Activity log error (ignored):', logError)
+            }
+
+            toast.success(activate ? 'เปิดใช้งานเจ้ามือสำเร็จ' : 'ปิดใช้งานเจ้ามือสำเร็จ')
+            await fetchDealers()
             fetchStats()
         } catch (error) {
             console.error('Error toggling dealer status:', error)
-            toast.error('เกิดข้อผิดพลาดในการเปลี่ยนสถานะ')
+            toast.error('เกิดข้อผิดพลาดในการเปลี่ยนสถานะ: ' + error.message)
         }
     }
 
@@ -1138,21 +1148,41 @@ export default function SuperAdmin() {
                 endDate.setMonth(endDate.getMonth() + 1)
             }
 
-            // Create subscription
-            const { error: subError } = await supabase
+            const subscriptionData = {
+                dealer_id: selectedDealer.id,
+                package_id: assignPackageForm.package_id,
+                billing_model: selectedPackage.billing_model,
+                billing_cycle: assignPackageForm.billing_cycle,
+                start_date: startDate.toISOString().split('T')[0],
+                end_date: endDate.toISOString().split('T')[0],
+                status: assignPackageForm.is_trial ? 'trial' : 'active',
+                is_trial: assignPackageForm.is_trial,
+                trial_days: assignPackageForm.is_trial ? assignPackageForm.trial_days : null,
+                package_snapshot: selectedPackage
+            }
+
+            // Check if dealer already has a subscription
+            const { data: existingSub } = await supabase
                 .from('dealer_subscriptions')
-                .insert({
-                    dealer_id: selectedDealer.id,
-                    package_id: assignPackageForm.package_id,
-                    billing_model: selectedPackage.billing_model,
-                    billing_cycle: assignPackageForm.billing_cycle,
-                    start_date: startDate.toISOString().split('T')[0],
-                    end_date: endDate.toISOString().split('T')[0],
-                    status: assignPackageForm.is_trial ? 'trial' : 'active',
-                    is_trial: assignPackageForm.is_trial,
-                    trial_days: assignPackageForm.is_trial ? assignPackageForm.trial_days : null,
-                    package_snapshot: selectedPackage // Store package info at time of assignment
-                })
+                .select('id')
+                .eq('dealer_id', selectedDealer.id)
+                .single()
+
+            let subError
+            if (existingSub) {
+                // Update existing subscription
+                const { error } = await supabase
+                    .from('dealer_subscriptions')
+                    .update(subscriptionData)
+                    .eq('dealer_id', selectedDealer.id)
+                subError = error
+            } else {
+                // Create new subscription
+                const { error } = await supabase
+                    .from('dealer_subscriptions')
+                    .insert(subscriptionData)
+                subError = error
+            }
 
             if (subError) throw subError
 
@@ -1492,7 +1522,15 @@ export default function SuperAdmin() {
                         {filteredDealers.map(dealer => {
                             const subscription = dealer.dealer_subscriptions?.[0]
                             return (
-                                <tr key={dealer.id} className={!dealer.is_active ? 'inactive' : ''}>
+                                <tr 
+                                    key={dealer.id} 
+                                    className={`clickable-row ${dealer.is_active === false ? 'inactive-dealer' : ''}`}
+                                    onClick={() => {
+                                        setSelectedDealer({...dealer, subscription})
+                                        setShowDealerModal(true)
+                                    }}
+                                    style={{ cursor: 'pointer' }}
+                                >
                                     <td>
                                         <div className="dealer-info">
                                             <span className="dealer-name">{dealer.full_name || 'ไม่มีชื่อ'}</span>
@@ -1502,7 +1540,7 @@ export default function SuperAdmin() {
                                     <td>
                                         {subscription ? (
                                             <>
-                                                <div>{subscription.subscription_packages?.name || 'ไม่มีแพ็คเกจ'}</div>
+                                                <div>{subscription.subscription_packages?.name || 'ยอดดีมิลด์'}</div>
                                                 <small className="text-muted">
                                                     {getBillingModelLabel(subscription.billing_model)}
                                                 </small>
@@ -1512,10 +1550,9 @@ export default function SuperAdmin() {
                                         )}
                                     </td>
                                     <td>
-                                        {getStatusBadge(dealer.subscription_status || 'inactive')}
-                                        {!dealer.is_active && (
-                                            <span className="status-badge badge-danger ml-1">ปิดใช้งาน</span>
-                                        )}
+                                        <span className={`status-badge ${dealer.is_active === false ? 'badge-danger' : 'badge-success'}`}>
+                                            {dealer.is_active === false ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}
+                                        </span>
                                     </td>
                                     <td>
                                         {subscription?.end_date ? (
@@ -1531,19 +1568,10 @@ export default function SuperAdmin() {
                                     <td>
                                         <div className="action-buttons">
                                             <button
-                                                className="btn btn-icon btn-sm"
-                                                title="ดูรายละเอียด"
-                                                onClick={() => {
-                                                    setSelectedDealer(dealer)
-                                                    setShowDealerModal(true)
-                                                }}
-                                            >
-                                                <FiEye />
-                                            </button>
-                                            <button
                                                 className="btn btn-icon btn-sm btn-primary"
                                                 title="กำหนดแพ็คเกจ"
-                                                onClick={() => {
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
                                                     setSelectedDealer(dealer)
                                                     setShowAssignPackageModal(true)
                                                 }}
@@ -1551,9 +1579,13 @@ export default function SuperAdmin() {
                                                 <FiPackage />
                                             </button>
                                             <button
-                                                className={`btn btn-icon btn-sm ${dealer.is_active ? 'btn-danger' : 'btn-success'}`}
-                                                title={dealer.is_active ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}
-                                                onClick={() => toggleDealerStatus(dealer, !dealer.is_active)}
+                                                className={`btn btn-icon btn-sm ${dealer.is_active === false ? 'btn-success' : 'btn-danger'}`}
+                                                title={dealer.is_active === false ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    const newStatus = dealer.is_active === false ? true : false
+                                                    toggleDealerStatus(dealer, newStatus)
+                                                }}
                                             >
                                                 <FiPower />
                                             </button>
@@ -2969,8 +3001,8 @@ export default function SuperAdmin() {
                                 </div>
                                 <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
                                     <span style={{ color: 'var(--color-text-muted)' }}>สถานะ</span>
-                                    <span className={`status-badge ${selectedDealer.is_active ? 'status-active' : 'status-inactive'}`}>
-                                        {selectedDealer.is_active ? 'ใช้งาน' : 'ปิดใช้งาน'}
+                                    <span className={`status-badge ${selectedDealer.is_active === false ? 'status-inactive' : 'status-active'}`}>
+                                        {selectedDealer.is_active === false ? 'ปิดใช้งาน' : 'ใช้งาน'}
                                     </span>
                                 </div>
                                 <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
@@ -3000,13 +3032,14 @@ export default function SuperAdmin() {
                                 ปิด
                             </button>
                             <button 
-                                className={`btn ${selectedDealer.is_active ? 'btn-danger' : 'btn-success'}`}
+                                className={`btn ${selectedDealer.is_active === false ? 'btn-success' : 'btn-danger'}`}
                                 onClick={() => {
-                                    toggleDealerStatus(selectedDealer, !selectedDealer.is_active)
+                                    const newStatus = selectedDealer.is_active === false ? true : false
+                                    toggleDealerStatus(selectedDealer, newStatus)
                                     setShowDealerModal(false)
                                 }}
                             >
-                                <FiPower /> {selectedDealer.is_active ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}
+                                <FiPower /> {selectedDealer.is_active === false ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
                             </button>
                         </div>
                     </div>
