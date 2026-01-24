@@ -1162,6 +1162,11 @@ export default function SuperAdmin() {
             const selectedPackage = packages.find(p => p.id === assignPackageForm.package_id)
             if (!selectedPackage) throw new Error('Package not found')
 
+            console.log('=== handleAssignPackage DEBUG ===')
+            console.log('Selected package:', selectedPackage)
+            console.log('Package billing_model:', selectedPackage.billing_model)
+            console.log('Package percentage_rate:', selectedPackage.percentage_rate)
+
             // Calculate dates
             const startDate = new Date()
             let endDate = new Date()
@@ -1195,18 +1200,25 @@ export default function SuperAdmin() {
                 .single()
 
             let subError
+            console.log('Existing subscription:', existingSub)
+            console.log('Subscription data to save:', subscriptionData)
+            
             if (existingSub) {
                 // Update existing subscription
-                const { error } = await supabase
+                const { data: updateResult, error } = await supabase
                     .from('dealer_subscriptions')
                     .update(subscriptionData)
                     .eq('dealer_id', selectedDealer.id)
+                    .select()
+                console.log('Update result:', updateResult, 'Error:', error)
                 subError = error
             } else {
                 // Create new subscription
-                const { error } = await supabase
+                const { data: insertResult, error } = await supabase
                     .from('dealer_subscriptions')
                     .insert(subscriptionData)
+                    .select()
+                console.log('Insert result:', insertResult, 'Error:', error)
                 subError = error
             }
 

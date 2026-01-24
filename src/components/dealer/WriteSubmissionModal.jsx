@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useToast } from '../../contexts/ToastContext'
+import { updatePendingDeduction } from '../../utils/creditCheck'
 import {
     FiPlus,
     FiTrash2,
@@ -530,6 +531,16 @@ export default function WriteSubmissionModal({
 
             const { error } = await supabase.from('submissions').insert(inserts)
             if (error) throw error
+
+            // Update pending deduction for dealer's credit
+            if (dealerId) {
+                console.log('=== WriteSubmissionModal Credit Update ===')
+                console.log('dealerId (dealer who is logged in):', dealerId)
+                console.log('targetUser.id (user we are writing for):', targetUser?.id)
+                console.log('Calling updatePendingDeduction for dealer:', dealerId)
+                await updatePendingDeduction(dealerId)
+                console.log('WriteSubmissionModal: updatePendingDeduction completed')
+            }
 
             toast.success(`บันทึกโพยให้ ${targetUser.full_name || targetUser.email} สำเร็จ!`)
             setDrafts([])

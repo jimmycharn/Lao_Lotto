@@ -3,7 +3,7 @@ import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { supabase } from '../lib/supabase'
-import { checkDealerCreditForBet, checkUpstreamDealerCredit, getDealerCreditSummary } from '../utils/creditCheck'
+import { checkDealerCreditForBet, checkUpstreamDealerCredit, getDealerCreditSummary, updatePendingDeduction } from '../utils/creditCheck'
 import QRCode from 'react-qr-code'
 import { jsPDF } from 'jspdf'
 import { addThaiFont } from '../utils/thaiFontLoader'
@@ -420,6 +420,10 @@ export default function Dealer() {
             if (creditData) {
                 const pendingDeduction = creditData.pending_deduction || 0
                 const availableCredit = creditData.balance - pendingDeduction
+                console.log('=== Dealer Credit Display ===')
+                console.log('balance:', creditData.balance)
+                console.log('pending_deduction:', pendingDeduction)
+                console.log('availableCredit:', availableCredit)
                 setDealerCredit({
                     balance: creditData.balance,
                     pendingDeduction: pendingDeduction,
@@ -1605,6 +1609,7 @@ export default function Dealer() {
                                                 formatTime={formatTime}
                                                 user={user}
                                                 allMembers={members}
+                                                onCreditUpdate={fetchDealerCredit}
                                             />
                                         ))}
                                     </div>
@@ -3078,6 +3083,13 @@ function SubmissionsModal({ round, onClose }) {
                 })
 
             if (error) throw error
+
+            // Update pending deduction for upstream dealer's credit (if linked)
+            if (targetSubmissionId && selectedUpstreamDealer?.upstream_dealer_id) {
+                updatePendingDeduction(selectedUpstreamDealer.upstream_dealer_id).catch(err => 
+                    console.log('Error updating upstream pending deduction:', err)
+                )
+            }
 
             // Show success message
             if (targetSubmissionId) {

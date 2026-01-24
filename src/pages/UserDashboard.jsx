@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { supabase } from '../lib/supabase'
-import { checkDealerCreditForBet } from '../utils/creditCheck'
+import { checkDealerCreditForBet, updatePendingDeduction } from '../utils/creditCheck'
 import {
     FiClock,
     FiCalendar,
@@ -1106,6 +1106,26 @@ export default function UserDashboard() {
             const { error } = await supabase.from('submissions').insert(inserts)
             if (error) throw error
 
+            // Update pending deduction for dealer's credit
+            // Always use selectedDealer.id - this is the dealer whose credit should be updated
+            // Whether user is entering their own bets or dealer is entering for themselves
+            const dealerIdForCredit = selectedDealer?.id
+            console.log('=== Credit Update Debug ===')
+            console.log('isOwnDealer:', isOwnDealer)
+            console.log('user.id:', user.id)
+            console.log('selectedDealer?.id:', selectedDealer?.id)
+            console.log('dealerIdForCredit:', dealerIdForCredit)
+            
+            if (dealerIdForCredit) {
+                console.log('Calling updatePendingDeduction for dealer:', dealerIdForCredit)
+                try {
+                    await updatePendingDeduction(dealerIdForCredit)
+                    console.log('updatePendingDeduction completed')
+                } catch (err) {
+                    console.log('Error updating pending deduction:', err)
+                }
+            }
+
             setDrafts([])
             setCurrentBillId(null)
             setBillNote('')
@@ -1151,6 +1171,13 @@ export default function UserDashboard() {
             const { error } = await query
             if (error) throw error
 
+            // Update pending deduction for dealer's credit
+            if (selectedDealer?.id) {
+                updatePendingDeduction(selectedDealer.id).catch(err => 
+                    console.log('Error updating pending deduction:', err)
+                )
+            }
+
             fetchSubmissions()
             toast.success('ลบรายการสำเร็จ')
         } catch (error) {
@@ -1171,6 +1198,13 @@ export default function UserDashboard() {
                 .eq('round_id', selectedRound.id)
 
             if (error) throw error
+
+            // Update pending deduction for dealer's credit
+            if (selectedDealer?.id) {
+                updatePendingDeduction(selectedDealer.id).catch(err => 
+                    console.log('Error updating pending deduction:', err)
+                )
+            }
 
             fetchSubmissions()
             toast.success(`ลบโพยใบ ${billId} สำเร็จ`)
@@ -1481,6 +1515,13 @@ export default function UserDashboard() {
                     .eq('id', editingSubmission.id)
 
                 if (error) throw error
+            }
+
+            // Update pending deduction for dealer's credit
+            if (selectedDealer?.id) {
+                updatePendingDeduction(selectedDealer.id).catch(err => 
+                    console.log('Error updating pending deduction:', err)
+                )
             }
 
             setEditingSubmission(null)
@@ -1794,6 +1835,13 @@ export default function UserDashboard() {
                     .insert(newSubmissions)
 
                 if (insertError) throw insertError
+            }
+
+            // Update pending deduction for dealer's credit
+            if (selectedDealer?.id) {
+                updatePendingDeduction(selectedDealer.id).catch(err => 
+                    console.log('Error updating pending deduction:', err)
+                )
             }
 
             setEditingSubmission(null)

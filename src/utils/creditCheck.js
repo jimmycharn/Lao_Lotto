@@ -9,8 +9,8 @@ import { supabase } from '../lib/supabase'
  */
 export async function checkDealerCreditForBet(dealerId, roundId, newBetAmount) {
     try {
-        // Get dealer's subscription with package info
-        const { data: subscription, error: subError } = await supabase
+        // Get dealer's subscription with package info (include both active and trial status)
+        const { data: subscriptions, error: subError } = await supabase
             .from('dealer_subscriptions')
             .select(`
                 *,
@@ -22,8 +22,11 @@ export async function checkDealerCreditForBet(dealerId, roundId, newBetAmount) {
                 )
             `)
             .eq('dealer_id', dealerId)
-            .eq('status', 'active')
-            .single()
+            .in('status', ['active', 'trial'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+        
+        const subscription = subscriptions?.[0] || null
 
         if (subError || !subscription) {
             // No active subscription, allow the bet
@@ -32,13 +35,16 @@ export async function checkDealerCreditForBet(dealerId, roundId, newBetAmount) {
 
         const pkg = subscription.subscription_packages
         
+        // Use billing_model from dealer_subscriptions (updated when package is assigned)
+        const billingModel = subscription.billing_model || pkg?.billing_model
+        
         // Only check for percentage billing model
-        if (pkg?.billing_model !== 'percentage') {
+        if (billingModel !== 'percentage') {
             return { allowed: true, message: 'Not percentage billing', details: {} }
         }
 
-        const percentageRate = pkg.percentage_rate || 0
-        const minAmount = pkg.min_amount_before_charge || 0
+        const percentageRate = pkg?.percentage_rate || 0
+        const minAmount = pkg?.min_amount_before_charge || 0
 
         // Get dealer's current credit
         const { data: creditData } = await supabase
@@ -111,8 +117,8 @@ export async function checkDealerCreditForBet(dealerId, roundId, newBetAmount) {
  */
 export async function checkUpstreamDealerCredit(upstreamDealerId, roundId, betAmount) {
     try {
-        // Get upstream dealer's subscription with package info
-        const { data: subscription } = await supabase
+        // Get upstream dealer's subscription with package info (include both active and trial status)
+        const { data: subscriptions } = await supabase
             .from('dealer_subscriptions')
             .select(`
                 *,
@@ -124,8 +130,11 @@ export async function checkUpstreamDealerCredit(upstreamDealerId, roundId, betAm
                 )
             `)
             .eq('dealer_id', upstreamDealerId)
-            .eq('status', 'active')
-            .single()
+            .in('status', ['active', 'trial'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+        
+        const subscription = subscriptions?.[0] || null
 
         if (!subscription) {
             return { allowed: true, message: 'No active subscription', details: {} }
@@ -133,11 +142,14 @@ export async function checkUpstreamDealerCredit(upstreamDealerId, roundId, betAm
 
         const pkg = subscription.subscription_packages
         
-        if (pkg?.billing_model !== 'percentage') {
+        // Use billing_model from dealer_subscriptions (updated when package is assigned)
+        const billingModel = subscription.billing_model || pkg?.billing_model
+        
+        if (billingModel !== 'percentage') {
             return { allowed: true, message: 'Not percentage billing', details: {} }
         }
 
-        const percentageRate = pkg.percentage_rate || 0
+        const percentageRate = pkg?.percentage_rate || 0
 
         // Get upstream dealer's current credit
         const { data: creditData } = await supabase
@@ -184,15 +196,19 @@ export async function checkUpstreamDealerCredit(upstreamDealerId, roundId, betAm
  */
 export async function getDealerCreditSummary(dealerId) {
     try {
+        console.log('getDealerCreditSummary called for dealer:', dealerId)
+        
         // Get credit balance
-        const { data: creditData } = await supabase
+        const { data: creditData, error: creditError } = await supabase
             .from('dealer_credits')
             .select('balance, pending_deduction, warning_threshold, is_blocked')
             .eq('dealer_id', dealerId)
             .single()
 
-        // Get subscription info
-        const { data: subscription } = await supabase
+        console.log('Credit data:', creditData, 'Error:', creditError)
+
+        // Get subscription info (include both active and trial status)
+        const { data: subscriptions, error: subError } = await supabase
             .from('dealer_subscriptions')
             .select(`
                 *,
@@ -205,8 +221,13 @@ export async function getDealerCreditSummary(dealerId) {
                 )
             `)
             .eq('dealer_id', dealerId)
-            .eq('status', 'active')
-            .single()
+            .in('status', ['active', 'trial'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+        
+        const subscription = subscriptions?.[0] || null
+        
+        console.log('Subscription data:', subscription, 'Error:', subError)
 
         const balance = creditData?.balance || 0
         const pendingDeduction = creditData?.pending_deduction || 0
@@ -214,6 +235,9 @@ export async function getDealerCreditSummary(dealerId) {
         const warningThreshold = creditData?.warning_threshold || 1000
         const isBlocked = creditData?.is_blocked || false
         const isLowCredit = availableCredit <= warningThreshold
+
+        // Use billing_model from dealer_subscriptions (updated when package is assigned)
+        const billingModel = subscription?.billing_model || subscription?.subscription_packages?.billing_model
 
         return {
             balance,
@@ -224,7 +248,7 @@ export async function getDealerCreditSummary(dealerId) {
             isLowCredit,
             subscription: subscription ? {
                 packageName: subscription.subscription_packages?.name,
-                billingModel: subscription.subscription_packages?.billing_model,
+                billingModel: billingModel,
                 percentageRate: subscription.subscription_packages?.percentage_rate,
                 minAmountBeforeCharge: subscription.subscription_packages?.min_amount_before_charge
             } : null
@@ -250,26 +274,63 @@ export async function getDealerCreditSummary(dealerId) {
  */
 export async function updatePendingDeduction(dealerId) {
     try {
-        // Get dealer's subscription
-        const { data: subscription } = await supabase
+        console.log('updatePendingDeduction called for dealer:', dealerId)
+        
+        // First, debug: get ALL subscriptions for this dealer to see what's there
+        const { data: allSubs } = await supabase
+            .from('dealer_subscriptions')
+            .select('id, dealer_id, status, billing_model, package_id')
+            .eq('dealer_id', dealerId)
+        console.log('ALL subscriptions for dealer:', allSubs)
+
+        // Get dealer's subscription (include both active and trial status)
+        // Use order by created_at desc and limit 1 to get the latest subscription
+        const { data: subscriptions, error: subError } = await supabase
             .from('dealer_subscriptions')
             .select(`
+                id,
+                package_id,
+                billing_model,
+                status,
                 subscription_packages (
+                    id,
+                    name,
                     billing_model,
                     percentage_rate,
                     min_amount_before_charge
                 )
             `)
             .eq('dealer_id', dealerId)
-            .eq('status', 'active')
-            .single()
+            .in('status', ['active', 'trial'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+        
+        console.log('Filtered subscriptions (active/trial):', subscriptions, 'Count:', subscriptions?.length)
+        const subscription = subscriptions?.[0] || null
 
-        if (!subscription || subscription.subscription_packages?.billing_model !== 'percentage') {
+        console.log('=== updatePendingDeduction DEBUG ===')
+        console.log('dealer_subscriptions.billing_model:', subscription?.billing_model)
+        console.log('subscription_packages.billing_model:', subscription?.subscription_packages?.billing_model)
+        console.log('subscription_packages.name:', subscription?.subscription_packages?.name)
+        console.log('subscription_packages.percentage_rate:', subscription?.subscription_packages?.percentage_rate)
+        console.log('subscription_packages.min_amount_before_charge:', subscription?.subscription_packages?.min_amount_before_charge)
+        console.log('Full subscription data:', JSON.stringify(subscription, null, 2))
+        console.log('Error:', subError)
+
+        // Use billing_model from dealer_subscriptions (updated when package is assigned)
+        // Fall back to subscription_packages if not set
+        const billingModel = subscription?.billing_model || subscription?.subscription_packages?.billing_model
+        
+        if (!subscription || billingModel !== 'percentage') {
+            console.log('No percentage subscription, skipping. billing_model:', billingModel)
             return
         }
 
-        const percentageRate = subscription.subscription_packages.percentage_rate || 0
-        const minAmount = subscription.subscription_packages.min_amount_before_charge || 0
+        // Get percentage_rate and min_amount from subscription_packages
+        const percentageRate = subscription.subscription_packages?.percentage_rate || 0
+        const minAmount = subscription.subscription_packages?.min_amount_before_charge || 0
+
+        console.log('Percentage rate:', percentageRate, 'Min amount:', minAmount)
 
         // Get all open rounds for this dealer
         const { data: rounds } = await supabase
@@ -278,6 +339,8 @@ export async function updatePendingDeduction(dealerId) {
             .eq('dealer_id', dealerId)
             .in('status', ['open', 'closed'])
             .eq('is_result_announced', false)
+
+        console.log('Open rounds:', rounds?.length || 0)
 
         if (!rounds || rounds.length === 0) {
             // No open rounds, clear pending deduction
@@ -288,41 +351,46 @@ export async function updatePendingDeduction(dealerId) {
             return
         }
 
+        // Get all members of this dealer
+        const { data: memberships } = await supabase
+            .from('user_dealer_memberships')
+            .select('user_id')
+            .eq('dealer_id', dealerId)
+            .eq('status', 'active')
+
+        const memberIds = new Set((memberships || []).map(m => m.user_id))
+        console.log('Member count:', memberIds.size)
+
         // Calculate total pending for all open rounds
         let totalPending = 0
 
         for (const round of rounds) {
-            // Get dealer's own volume
-            const { data: dealerSubs } = await supabase
-                .from('submissions')
-                .select('amount')
-                .eq('round_id', round.id)
-                .eq('user_id', dealerId)
-                .eq('is_deleted', false)
-
-            const dealerVolume = (dealerSubs || []).reduce((sum, s) => sum + (s.amount || 0), 0)
-
-            // Get member volume
-            const { data: memberSubs } = await supabase
+            // Get all submissions for this round
+            const { data: allSubs, error: subError } = await supabase
                 .from('submissions')
                 .select('amount, user_id')
                 .eq('round_id', round.id)
                 .eq('is_deleted', false)
-                .neq('user_id', dealerId)
 
-            // Filter to only members of this dealer
-            const { data: memberships } = await supabase
-                .from('user_dealer_memberships')
-                .select('user_id')
-                .eq('dealer_id', dealerId)
-                .eq('status', 'active')
+            console.log(`Round ${round.id}: fetched ${allSubs?.length || 0} submissions, error:`, subError)
 
-            const memberIds = new Set((memberships || []).map(m => m.user_id))
-            const memberVolume = (memberSubs || [])
-                .filter(s => memberIds.has(s.user_id))
-                .reduce((sum, s) => sum + (s.amount || 0), 0)
+            // Separate dealer's own volume and member volume
+            let dealerVolume = 0
+            let memberVolume = 0
+
+            for (const sub of (allSubs || [])) {
+                if (sub.user_id === dealerId) {
+                    dealerVolume += (sub.amount || 0)
+                } else if (memberIds.has(sub.user_id)) {
+                    memberVolume += (sub.amount || 0)
+                }
+            }
+
+            console.log(`Round ${round.id}: dealerVolume=${dealerVolume}, memberVolume=${memberVolume}`)
 
             // Calculate chargeable volume
+            // Member volume is always charged
+            // Dealer volume is charged only for amount exceeding minAmount
             let chargeableVolume = memberVolume
             if (dealerVolume > minAmount) {
                 chargeableVolume += (dealerVolume - minAmount)
@@ -331,16 +399,40 @@ export async function updatePendingDeduction(dealerId) {
             // Calculate pending fee for this round
             const roundPending = chargeableVolume * (percentageRate / 100)
             totalPending += roundPending
+            
+            console.log(`Round ${round.id}: chargeableVolume=${chargeableVolume}, roundPending=${roundPending}`)
         }
 
-        // Update pending deduction
-        await supabase
+        console.log('Total pending deduction:', totalPending)
+
+        // Update pending deduction (upsert to handle case where record doesn't exist)
+        const { data: existingCredit } = await supabase
             .from('dealer_credits')
-            .update({ 
-                pending_deduction: totalPending, 
-                updated_at: new Date().toISOString() 
-            })
+            .select('id')
             .eq('dealer_id', dealerId)
+            .single()
+
+        if (existingCredit) {
+            await supabase
+                .from('dealer_credits')
+                .update({ 
+                    pending_deduction: totalPending, 
+                    updated_at: new Date().toISOString() 
+                })
+                .eq('dealer_id', dealerId)
+        } else {
+            // Create new record if doesn't exist
+            await supabase
+                .from('dealer_credits')
+                .insert({
+                    dealer_id: dealerId,
+                    balance: 0,
+                    pending_deduction: totalPending,
+                    warning_threshold: 1000
+                })
+        }
+        
+        console.log('Pending deduction updated successfully')
 
     } catch (error) {
         console.error('Error updating pending deduction:', error)

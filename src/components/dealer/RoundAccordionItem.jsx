@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useToast } from '../../contexts/ToastContext'
+import { updatePendingDeduction } from '../../utils/creditCheck'
 import {
     FiCalendar,
     FiClock,
@@ -46,7 +47,8 @@ export default function RoundAccordionItem({
     formatDate, 
     formatTime, 
     user,
-    allMembers = [] // All members of the dealer
+    allMembers = [], // All members of the dealer
+    onCreditUpdate // Callback to refresh dealer credit after bet submission
 }) {
     const { toast } = useToast()
     const [isExpanded, setIsExpanded] = useState(false)
@@ -517,6 +519,13 @@ export default function RoundAccordionItem({
 
             const { error } = await supabase.from('bet_transfers').insert(inserts)
             if (error) throw error
+
+            // Update pending deduction for upstream dealer's credit (if linked)
+            if (canSendToUpstream && selectedUpstreamDealer?.upstream_dealer_id) {
+                updatePendingDeduction(selectedUpstreamDealer.upstream_dealer_id).catch(err => 
+                    console.log('Error updating upstream pending deduction:', err)
+                )
+            }
 
             await fetchInlineSubmissions(true)
             setShowTransferModal(false)
@@ -1787,7 +1796,10 @@ export default function RoundAccordionItem({
                         setShowWriteBetModal(false)
                         setSelectedMemberForBet(null)
                     }}
-                    onSuccess={() => fetchInlineSubmissions(true)}
+                    onSuccess={() => {
+                        fetchInlineSubmissions(true)
+                        if (onCreditUpdate) onCreditUpdate()
+                    }}
                 />
             )}
         </div>
