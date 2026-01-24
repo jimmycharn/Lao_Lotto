@@ -93,6 +93,7 @@ export default function RoundAccordionItem({
     const [returningIncoming, setReturningIncoming] = useState(false)
 
     const isAnnounced = round.status === 'announced' && round.is_result_announced
+    const isClosed = round.status === 'closed' || (round.status !== 'announced' && new Date() > new Date(round.close_time))
 
     const isOpen = (() => {
         if (round.status === 'announced' || round.status === 'closed') return false
@@ -101,14 +102,12 @@ export default function RoundAccordionItem({
         return now <= closeTime
     })()
 
-    // Fetch summary data on mount for announced rounds and open rounds (to show header stats)
+    // Fetch summary data on mount for all rounds (announced, open, or closed)
     useEffect(() => {
-        console.log('Mount useEffect:', { isAnnounced, isOpen, roundId: round.id, status: round.status, is_result_announced: round.is_result_announced })
-        if (isAnnounced || isOpen) {
-            console.log('Fetching summary data for round...')
-            fetchSummaryData()
-        }
-    }, [round.id, isAnnounced, isOpen])
+        console.log('Mount useEffect:', { isAnnounced, isOpen, isClosed, roundId: round.id, status: round.status, is_result_announced: round.is_result_announced })
+        // Always fetch summary data to show stats in header
+        fetchSummaryData()
+    }, [round.id])
 
     // Fetch upstream dealers on mount
     useEffect(() => {
@@ -829,7 +828,7 @@ export default function RoundAccordionItem({
         return sub.amount * (DEFAULT_PAYOUTS[sub.bet_type] || 1)
     }
 
-    const userSummaries = (isAnnounced || isOpen) && !summaryData.loading ? Object.values(
+    const userSummaries = !summaryData.loading && summaryData.submissions.length > 0 ? Object.values(
         summaryData.submissions.reduce((acc, sub) => {
             const userId = sub.user_id
             if (!acc[userId]) {
@@ -871,7 +870,7 @@ export default function RoundAccordionItem({
                             <div className="summary-row">
                                 <span className="stat-item">
                                     <span className="stat-label">รายการ</span>
-                                    <span className="stat-value">{round.submissions?.length || 0}</span>
+                                    <span className="stat-value">{summaryData.submissions?.length || 0}</span>
                                 </span>
                                 <span className="stat-item">
                                     <span className="stat-label">ยอดรวม</span>

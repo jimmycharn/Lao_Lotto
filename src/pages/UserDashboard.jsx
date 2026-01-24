@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { supabase } from '../lib/supabase'
+import { checkDealerCreditForBet } from '../utils/creditCheck'
 import {
     FiClock,
     FiCalendar,
@@ -1042,6 +1043,29 @@ export default function UserDashboard() {
     // Save all drafts to database
     async function handleSaveBill() {
         if (drafts.length === 0) return
+
+        // Check if dealer is active before submitting
+        if (selectedDealer) {
+            const { data: dealerProfile } = await supabase
+                .from('profiles')
+                .select('is_active')
+                .eq('id', selectedDealer.id)
+                .single()
+            
+            if (dealerProfile?.is_active === false) {
+                toast.error('เจ้ามือถูกระงับการใช้งาน ไม่สามารถส่งเลขได้')
+                return
+            }
+
+            // Check dealer's credit for percentage billing
+            const totalBetAmount = drafts.reduce((sum, d) => sum + (d.amount || 0), 0)
+            const creditCheck = await checkDealerCreditForBet(selectedDealer.id, selectedRound.id, totalBetAmount)
+            
+            if (!creditCheck.allowed) {
+                toast.error(`ไม่สามารถบันทึกได้: ${creditCheck.message}`)
+                return
+            }
+        }
 
         setSubmitting(true)
         try {

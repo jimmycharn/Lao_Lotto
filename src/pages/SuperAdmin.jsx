@@ -61,6 +61,7 @@ export default function SuperAdmin() {
     const [settings, setSettings] = useState({})
     const [dealerCredits, setDealerCredits] = useState([])
     const [creditTransactions, setCreditTransactions] = useState([])
+    const [creditDeductions, setCreditDeductions] = useState([]) // รายได้จากการตัดเครดิต
     const [bankAccounts, setBankAccounts] = useState([])
     const [dealerBankAssignments, setDealerBankAssignments] = useState([])
     const [topupRequests, setTopupRequests] = useState([])
@@ -117,6 +118,7 @@ export default function SuperAdmin() {
         monthly_price: '',
         yearly_price: '',
         percentage_rate: '',
+        min_amount_before_charge: '',
         max_users: '',
         extra_user_price: '',
         features: [],
@@ -143,12 +145,33 @@ export default function SuperAdmin() {
                 fetchSettings(),
                 fetchDealerCredits(),
                 fetchBankAccounts(),
-                fetchTopupRequests()
+                fetchTopupRequests(),
+                fetchCreditDeductions()
             ])
         } catch (error) {
             console.error('Error fetching data:', error)
         } finally {
             setIsLoading(false)
+        }
+    }
+    
+    const fetchCreditDeductions = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('credit_transactions')
+                .select(`
+                    *,
+                    dealer:dealer_id (id, full_name, email)
+                `)
+                .eq('transaction_type', 'deduction')
+                .order('created_at', { ascending: false })
+                .limit(100)
+            
+            if (!error && data) {
+                setCreditDeductions(data)
+            }
+        } catch (err) {
+            console.log('Credit deductions not available:', err)
         }
     }
     
@@ -934,7 +957,8 @@ export default function SuperAdmin() {
                 features: pkg.features || [],
                 is_featured: pkg.is_featured || false,
                 is_active: pkg.is_active ?? true,
-                is_default: pkg.is_default || false
+                is_default: pkg.is_default || false,
+                min_amount_before_charge: pkg.min_amount_before_charge || ''
             })
         } else {
             setEditingPackage(null)
@@ -945,6 +969,7 @@ export default function SuperAdmin() {
                 monthly_price: '',
                 yearly_price: '',
                 percentage_rate: '',
+                min_amount_before_charge: '',
                 max_users: '',
                 extra_user_price: '',
                 features: [],
@@ -973,6 +998,7 @@ export default function SuperAdmin() {
                 monthly_price: parseFloat(packageForm.monthly_price) || 0,
                 yearly_price: parseFloat(packageForm.yearly_price) || 0,
                 percentage_rate: parseFloat(packageForm.percentage_rate) || 0,
+                min_amount_before_charge: parseFloat(packageForm.min_amount_before_charge) || 0,
                 max_users: parseInt(packageForm.max_users) || 0,
                 extra_user_price: parseFloat(packageForm.extra_user_price) || 0,
                 features: packageForm.features,
@@ -1729,8 +1755,53 @@ export default function SuperAdmin() {
         </div>
     )
 
-    const renderPayments = () => (
+    const renderPayments = () => {
+        // Calculate total revenue from credit deductions
+        const totalCreditRevenue = creditDeductions.reduce((sum, d) => sum + Math.abs(d.amount || 0), 0)
+        const thisMonthDeductions = creditDeductions.filter(d => {
+            const date = new Date(d.created_at)
+            const now = new Date()
+            return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
+        })
+        const thisMonthRevenue = thisMonthDeductions.reduce((sum, d) => sum + Math.abs(d.amount || 0), 0)
+        
+        return (
         <div className="payments-tab">
+            {/* Revenue Summary Cards */}
+            <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
+                <div className="stat-card">
+                    <div className="stat-icon" style={{ background: 'rgba(16, 185, 129, 0.2)' }}>
+                        <FiDollarSign style={{ color: 'var(--color-success)' }} />
+                    </div>
+                    <div className="stat-info">
+                        <span className="stat-label">รายได้จากเครดิต (เดือนนี้)</span>
+                        <span className="stat-value" style={{ color: 'var(--color-success)' }}>
+                            ฿{thisMonthRevenue.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                        </span>
+                    </div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-icon" style={{ background: 'rgba(59, 130, 246, 0.2)' }}>
+                        <FiDollarSign style={{ color: 'var(--color-info)' }} />
+                    </div>
+                    <div className="stat-info">
+                        <span className="stat-label">รายได้จากเครดิต (ทั้งหมด)</span>
+                        <span className="stat-value" style={{ color: 'var(--color-info)' }}>
+                            ฿{totalCreditRevenue.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                        </span>
+                    </div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-icon" style={{ background: 'rgba(245, 158, 11, 0.2)' }}>
+                        <FiFileText style={{ color: 'var(--color-warning)' }} />
+                    </div>
+                    <div className="stat-info">
+                        <span className="stat-label">จำนวนรายการตัดเครดิต</span>
+                        <span className="stat-value">{creditDeductions.length}</span>
+                    </div>
+                </div>
+            </div>
+
             <div className="toolbar">
                 <div className="filter-buttons">
                     {[
@@ -1823,7 +1894,7 @@ export default function SuperAdmin() {
                 )}
             </div>
         </div>
-    )
+    )}
 
     // Thai Bank List
     const THAI_BANKS = [
@@ -2558,15 +2629,28 @@ export default function SuperAdmin() {
                                     </div>
                                 </div>
                             ) : (
-                                <div className="form-group">
-                                    <label>อัตราเปอร์เซ็นต์ (%)</label>
-                                    <input
-                                        type="number"
-                                        step="0.1"
-                                        value={packageForm.percentage_rate}
-                                        onChange={(e) => setPackageForm({ ...packageForm, percentage_rate: e.target.value })}
-                                    />
-                                </div>
+                                <>
+                                    <div className="form-group">
+                                        <label>อัตราเปอร์เซ็นต์ (%)</label>
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            value={packageForm.percentage_rate}
+                                            onChange={(e) => setPackageForm({ ...packageForm, percentage_rate: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label>จำนวนเงินขั้นต่ำก่อนตัดเครดิต (฿)</label>
+                                        <input
+                                            type="number"
+                                            step="1000"
+                                            value={packageForm.min_amount_before_charge}
+                                            onChange={(e) => setPackageForm({ ...packageForm, min_amount_before_charge: e.target.value })}
+                                            placeholder="0 = ตัดเครดิตตั้งแต่บาทแรก"
+                                        />
+                                        <small className="form-hint">ยอดที่ dealer ป้อนเองต่ำกว่านี้จะไม่ถูกคิดค่าบริการ</small>
+                                    </div>
+                                </>
                             )}
 
                             <div className="form-row">

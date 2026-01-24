@@ -3651,3 +3651,71 @@
         font-size: 0.85rem;
     }
 }
+
+/* =============================================
+   SUSPENDED ACCOUNT PAGE
+   ============================================= */
+
+.suspended-account-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+}
+
+.suspended-content {
+    text-align: center;
+    max-width: 500px;
+    padding: 3rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(245, 87, 108, 0.3);
+    border-radius: 16px;
+    backdrop-filter: blur(10px);
+}
+
+.suspended-icon {
+    color: var(--color-danger);
+    margin-bottom: 1.5rem;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.suspended-content h1 {
+    color: var(--color-danger);
+    font-size: 1.75rem;
+    margin-bottom: 1rem;
+}
+
+.suspended-content > p {
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 0.5rem;
+    line-height: 1.6;
+}
+
+.suspended-info {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    text-align: left;
+}
+
+.suspended-info p {
+    color: rgba(255, 255, 255, 0.8);
+    margin-bottom: 0.5rem;
+}
+
+.suspended-info p:last-child {
+    margin-bottom: 0;
+}
+
+.suspended-info strong {
+    color: rgba(255, 255, 255, 0.5);
+    margin-right: 0.5rem;
+}

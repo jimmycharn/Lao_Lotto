@@ -193,7 +193,9 @@ export function AuthProvider({ children }) {
         isSuperAdmin: profile?.role === ROLES.SUPERADMIN,
         isDealer: profile?.role === ROLES.DEALER,
         isUser: profile?.role === ROLES.USER,
-        isConfigured: !!supabase
+        isConfigured: !!supabase,
+        isDealerActive: profile?.role === ROLES.DEALER ? profile?.is_active !== false : true,
+        isAccountSuspended: profile?.is_active === false
     }
 
     return (

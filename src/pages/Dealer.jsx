@@ -3,6 +3,7 @@ import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { supabase } from '../lib/supabase'
+import { checkDealerCreditForBet, checkUpstreamDealerCredit, getDealerCreditSummary } from '../utils/creditCheck'
 import QRCode from 'react-qr-code'
 import { jsPDF } from 'jspdf'
 import { addThaiFont } from '../utils/thaiFontLoader'
@@ -63,7 +64,7 @@ import RoundAccordionItem from '../components/dealer/RoundAccordionItem'
 // RoundAccordionItem is now imported from separate file
 
 export default function Dealer() {
-    const { user, profile, isDealer, isSuperAdmin } = useAuth()
+    const { user, profile, isDealer, isSuperAdmin, isAccountSuspended } = useAuth()
     const { toast } = useToast()
     const [searchParams] = useSearchParams()
     const [activeTab, setActiveTab] = useState('rounds')
@@ -103,6 +104,7 @@ export default function Dealer() {
     // Credit system states
     const [dealerCredit, setDealerCredit] = useState(null)
     const [creditLoading, setCreditLoading] = useState(false)
+    const [creditSummary, setCreditSummary] = useState(null)
     
     // Topup Modal states
     const [showTopupModal, setShowTopupModal] = useState(false)
@@ -416,15 +418,23 @@ export default function Dealer() {
             console.log('fetchDealerCredit - data:', creditData, 'error:', creditError)
             
             if (creditData) {
+                const pendingDeduction = creditData.pending_deduction || 0
+                const availableCredit = creditData.balance - pendingDeduction
                 setDealerCredit({
                     balance: creditData.balance,
+                    pendingDeduction: pendingDeduction,
+                    availableCredit: availableCredit,
                     is_blocked: creditData.is_blocked,
                     blocked_reason: creditData.blocked_reason,
                     warning_threshold: creditData.warning_threshold,
-                    has_sufficient_credit: creditData.balance > 0 && !creditData.is_blocked,
-                    is_low_credit: creditData.balance <= creditData.warning_threshold
+                    has_sufficient_credit: availableCredit > 0 && !creditData.is_blocked,
+                    is_low_credit: availableCredit <= creditData.warning_threshold
                 })
             }
+            
+            // Also fetch credit summary with subscription info
+            const summary = await getDealerCreditSummary(user.id)
+            setCreditSummary(summary)
         } catch (err) {
             console.log('Credit system not available yet:', err)
         } finally {
@@ -997,6 +1007,26 @@ export default function Dealer() {
         return <Navigate to="/" replace />
     }
 
+    // Show suspended account message for dealers
+    if (isDealer && isAccountSuspended) {
+        return (
+            <div className="suspended-account-page">
+                <div className="suspended-content">
+                    <div className="suspended-icon">
+                        <FiAlertCircle size={64} />
+                    </div>
+                    <h1>บัญชีถูกระงับการใช้งาน</h1>
+                    <p>บัญชีเจ้ามือของคุณถูกระงับการใช้งานชั่วคราว</p>
+                    <p>กรุณาติดต่อผู้ดูแลระบบเพื่อขอข้อมูลเพิ่มเติม</p>
+                    <div className="suspended-info">
+                        <p><strong>อีเมล:</strong> {profile?.email}</p>
+                        <p><strong>ชื่อ:</strong> {profile?.full_name}</p>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
     // Create new round
     async function handleCreateRound() {
         try {
@@ -1076,7 +1106,24 @@ export default function Dealer() {
                 .update({ status: 'closed' })
                 .eq('id', roundId)
 
-            if (!error) fetchData()
+            if (!error) {
+                // Finalize credit deduction for percentage billing
+                try {
+                    const { data: result, error: creditError } = await supabase
+                        .rpc('finalize_round_credit', { p_round_id: roundId })
+                    
+                    if (creditError) {
+                        console.log('Credit finalization not available:', creditError)
+                    } else if (result?.total_deducted > 0) {
+                        toast.info(`ตัดเครดิต ฿${result.total_deducted.toLocaleString()} สำเร็จ`)
+                    }
+                } catch (creditErr) {
+                    console.log('Credit system not configured:', creditErr)
+                }
+                
+                fetchData()
+                fetchDealerCredit() // Refresh credit balance
+            }
         } catch (error) {
             console.error('Error:', error)
         }
@@ -1380,7 +1427,9 @@ export default function Dealer() {
                         }}
                     >
                         <div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>เครดิตคงเหลือ (คลิกเพื่อเติม)</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                เครดิตคงเหลือ {dealerCredit?.pendingDeduction > 0 && '(รอตัด)'}
+                            </div>
                             <div style={{ 
                                 fontSize: '1.25rem', 
                                 fontWeight: 'bold',
@@ -1388,8 +1437,13 @@ export default function Dealer() {
                                        dealerCredit?.is_low_credit ? 'var(--color-warning)' : 
                                        'var(--color-success)'
                             }}>
-                                {(dealerCredit?.balance || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                ฿{(dealerCredit?.availableCredit || dealerCredit?.balance || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                             </div>
+                            {dealerCredit?.pendingDeduction > 0 && (
+                                <div style={{ fontSize: '0.7rem', color: 'var(--color-warning)' }}>
+                                    รอตัด: ฿{dealerCredit.pendingDeduction.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                </div>
+                            )}
                         </div>
                         {dealerCredit?.is_blocked && (
                             <div style={{ 
@@ -2955,6 +3009,23 @@ function SubmissionsModal({ round, onClose }) {
 
         setSavingTransfer(true)
         try {
+            // Check upstream dealer's credit if linked
+            if (selectedUpstreamDealer?.is_linked && selectedUpstreamDealer?.upstream_dealer_id) {
+                const upstreamRound = await findUpstreamRound(selectedUpstreamDealer.upstream_dealer_id)
+                if (upstreamRound) {
+                    const creditCheck = await checkUpstreamDealerCredit(
+                        selectedUpstreamDealer.upstream_dealer_id,
+                        upstreamRound.id,
+                        transferForm.amount
+                    )
+                    if (!creditCheck.allowed) {
+                        toast.error(`ไม่สามารถตีออกได้: ${creditCheck.message}`)
+                        setSavingTransfer(false)
+                        return
+                    }
+                }
+            }
+
             const batchId = generateBatchId()
             let targetRoundId = null
             let targetSubmissionId = null
