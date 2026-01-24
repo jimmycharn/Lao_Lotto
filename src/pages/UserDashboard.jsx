@@ -24,7 +24,8 @@ import {
     FiSearch,
     FiCopy,
     FiClipboard,
-    FiRefreshCw
+    FiRefreshCw,
+    FiFileText
 } from 'react-icons/fi'
 import './UserDashboard.css'
 import './ViewToggle.css'
@@ -2779,33 +2780,134 @@ export default function UserDashboard() {
                                                         <div className="result-winners-list">
                                                             {Object.entries(billGroups).map(([billId, items]) => {
                                                                 const billTotal = items.reduce((sum, s) => sum + (s.is_winner ? getCalculatedPrize(s, round) : 0), 0)
-                                                                return (
-                                                                    <div key={billId} className="result-bill-group card">
-                                                                        <div className="result-bill-header">
-                                                                            <span className="bill-label">
-                                                                                <FiGift /> โพย {billId === 'no-bill' ? '-' : billId.slice(-6).toUpperCase()}
-                                                                            </span>
-                                                                            <span className="bill-prize">
-                                                                                +{round.currency_symbol || '฿'}{billTotal.toLocaleString()}
-                                                                            </span>
-                                                                        </div>
-                                                                        <div className="result-bill-items">
-                                                                            {items.map(sub => (
-                                                                                <div key={sub.id} className="result-item">
-                                                                                    <div className="result-number">
-                                                                                        <span className="number-value">{sub.numbers}</span>
-                                                                                        <span className="bet-type">{BET_TYPES[sub.bet_type]?.label || sub.bet_type}</span>
-                                                                                    </div>
-                                                                                    <div className="result-amounts">
-                                                                                        <span className="bet-amount">{round.currency_symbol || '฿'}{sub.amount}</span>
-                                                                                        <span className="arrow">→</span>
-                                                                                        <span className="prize-amount">{round.currency_symbol || '฿'}{(sub.is_winner ? getCalculatedPrize(sub, round) : 0).toLocaleString()}</span>
-                                                                                    </div>
+                                                                const billAmount = items.reduce((sum, s) => sum + (s.amount || 0), 0)
+                                                                const billNote = items[0]?.bill_note
+                                                                const billCreatedAt = items[0]?.created_at
+                                                                const isResultBillExpanded = expandedBills.includes(`result-${billId}`)
+                                                                
+                                                                // For 'all' mode: collapsible bills, default collapsed
+                                                                // For 'winners' mode: always show items with note and time
+                                                                if (resultViewMode === 'all') {
+                                                                    return (
+                                                                        <div key={billId} className={`result-bill-group card ${isResultBillExpanded ? 'expanded' : ''}`}>
+                                                                            <div 
+                                                                                className="result-bill-header clickable"
+                                                                                onClick={() => toggleBill(`result-${billId}`)}
+                                                                                style={{ cursor: 'pointer' }}
+                                                                            >
+                                                                                <div className="bill-header-left">
+                                                                                    <span className="bill-label">
+                                                                                        <FiGift /> โพย {billId === 'no-bill' ? '-' : billId.slice(-6).toUpperCase()}
+                                                                                    </span>
+                                                                                    <span className="bill-item-count" style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
+                                                                                        ({items.length} รายการ)
+                                                                                    </span>
                                                                                 </div>
-                                                                            ))}
+                                                                                <div className="bill-header-right" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                                    <span className="bill-amount" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                                                                                        {round.currency_symbol || '฿'}{billAmount.toLocaleString()}
+                                                                                    </span>
+                                                                                    <span style={{ marginLeft: '0.5rem' }}>
+                                                                                        {isResultBillExpanded ? <FiChevronUp /> : <FiChevronDown />}
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+                                                                            {/* Note, Prize, and Time on same line */}
+                                                                            <div className="bill-info-row" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                                                {billNote && (
+                                                                                    <span style={{ display: 'flex', alignItems: 'center' }}>
+                                                                                        <FiFileText style={{ marginRight: '0.25rem' }} />
+                                                                                        {billNote}
+                                                                                    </span>
+                                                                                )}
+                                                                                {billTotal > 0 && (
+                                                                                    <span style={{ color: 'var(--success)', fontWeight: 600 }}>
+                                                                                        +{round.currency_symbol || '฿'}{billTotal.toLocaleString()}
+                                                                                    </span>
+                                                                                )}
+                                                                                {billCreatedAt && (
+                                                                                    <span style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto' }}>
+                                                                                        <FiClock style={{ marginRight: '0.25rem' }} />
+                                                                                        {new Date(billCreatedAt).toLocaleString('th-TH', {
+                                                                                            day: 'numeric',
+                                                                                            month: 'short',
+                                                                                            hour: '2-digit',
+                                                                                            minute: '2-digit'
+                                                                                        })}
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                            {isResultBillExpanded && (
+                                                                                <div className="result-bill-items">
+                                                                                    {items.map(sub => (
+                                                                                        <div key={sub.id} className={`result-item ${sub.is_winner ? 'winner' : ''}`}>
+                                                                                            <div className="result-number">
+                                                                                                <span className="number-value">{sub.numbers}</span>
+                                                                                                <span className="bet-type">{BET_TYPES[sub.bet_type]?.label || sub.bet_type}</span>
+                                                                                            </div>
+                                                                                            <div className="result-amounts">
+                                                                                                <span className="bet-amount">{round.currency_symbol || '฿'}{sub.amount}</span>
+                                                                                                <span className="arrow">→</span>
+                                                                                                <span className={`prize-amount ${sub.is_winner ? 'winner' : ''}`}>
+                                                                                                    {round.currency_symbol || '฿'}{(sub.is_winner ? getCalculatedPrize(sub, round) : 0).toLocaleString()}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+                                                                            )}
                                                                         </div>
-                                                                    </div>
-                                                                )
+                                                                    )
+                                                                } else {
+                                                                    // Winners mode: show items with note and time
+                                                                    return (
+                                                                        <div key={billId} className="result-bill-group card">
+                                                                            <div className="result-bill-header">
+                                                                                <div className="bill-header-left">
+                                                                                    <span className="bill-label">
+                                                                                        <FiGift /> โพย {billId === 'no-bill' ? '-' : billId.slice(-6).toUpperCase()}
+                                                                                    </span>
+                                                                                </div>
+                                                                                <span className="bill-prize" style={{ color: 'var(--success)', fontWeight: 600 }}>
+                                                                                    +{round.currency_symbol || '฿'}{billTotal.toLocaleString()}
+                                                                                </span>
+                                                                            </div>
+                                                                            {billNote && (
+                                                                                <div className="bill-note-display" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)' }}>
+                                                                                    <FiFileText style={{ marginRight: '0.5rem' }} />
+                                                                                    {billNote}
+                                                                                </div>
+                                                                            )}
+                                                                            {billCreatedAt && (
+                                                                                <div className="bill-time-display" style={{ padding: '0.25rem 1rem 0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                                                                    <FiClock style={{ marginRight: '0.5rem' }} />
+                                                                                    {new Date(billCreatedAt).toLocaleString('th-TH', {
+                                                                                        day: 'numeric',
+                                                                                        month: 'short',
+                                                                                        year: 'numeric',
+                                                                                        hour: '2-digit',
+                                                                                        minute: '2-digit'
+                                                                                    })}
+                                                                                </div>
+                                                                            )}
+                                                                            <div className="result-bill-items">
+                                                                                {items.map(sub => (
+                                                                                    <div key={sub.id} className="result-item winner">
+                                                                                        <div className="result-number">
+                                                                                            <span className="number-value">{sub.numbers}</span>
+                                                                                            <span className="bet-type">{BET_TYPES[sub.bet_type]?.label || sub.bet_type}</span>
+                                                                                        </div>
+                                                                                        <div className="result-amounts">
+                                                                                            <span className="bet-amount">{round.currency_symbol || '฿'}{sub.amount}</span>
+                                                                                            <span className="arrow">→</span>
+                                                                                            <span className="prize-amount winner">{round.currency_symbol || '฿'}{getCalculatedPrize(sub, round).toLocaleString()}</span>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                        </div>
+                                                                    )
+                                                                }
                                                             })}
                                                         </div>
                                                     )}
