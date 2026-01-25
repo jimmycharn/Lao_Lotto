@@ -367,7 +367,7 @@ export default function Dealer() {
                         phone: d.dealer_profile?.phone,
                         created_at: d.dealer_profile?.created_at,
                         membership_id: d.id,
-                        membership_status: d.is_blocked ? 'blocked' : 'active',
+                        membership_status: d.status || (d.is_blocked ? 'blocked' : 'active'),
                         membership_created_at: d.created_at,
                         is_dealer: true,
                         is_linked: d.is_linked,
@@ -408,7 +408,11 @@ export default function Dealer() {
         if (!user?.id) return
         setCreditLoading(true)
         try {
-            // Always use direct query for most up-to-date data
+            // First, recalculate pending_deduction to ensure it's up-to-date
+            console.log('fetchDealerCredit: Recalculating pending_deduction...')
+            await updatePendingDeduction(user.id)
+            
+            // Then fetch the updated credit data
             const { data: creditData, error: creditError } = await supabase
                 .from('dealer_credits')
                 .select('*')
@@ -938,6 +942,62 @@ export default function Dealer() {
         }
     }
 
+    // Approve downstream dealer connection request
+    async function handleApproveDownstreamDealer(dealer) {
+        try {
+            const { error } = await supabase
+                .from('dealer_upstream_connections')
+                .update({ 
+                    status: 'active',
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', dealer.connection_id)
+
+            if (error) throw error
+            
+            // Update local state
+            setDownstreamDealers(prev => prev.map(d => 
+                d.connection_id === dealer.connection_id 
+                    ? { ...d, membership_status: 'active' } 
+                    : d
+            ))
+            
+            toast.success(`ยืนยัน "${dealer.full_name || dealer.email}" เป็นเจ้ามือตีเข้าสำเร็จ`)
+        } catch (error) {
+            console.error('Error approving downstream dealer:', error)
+            toast.error('เกิดข้อผิดพลาด')
+        }
+    }
+
+    // Reject downstream dealer connection request
+    async function handleRejectDownstreamDealer(dealer) {
+        if (!confirm(`ต้องการปฏิเสธคำขอจาก "${dealer.full_name || dealer.email}" หรือไม่?`)) return
+
+        try {
+            const { error } = await supabase
+                .from('dealer_upstream_connections')
+                .update({ 
+                    status: 'rejected',
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', dealer.connection_id)
+
+            if (error) throw error
+            
+            // Update local state
+            setDownstreamDealers(prev => prev.map(d => 
+                d.connection_id === dealer.connection_id 
+                    ? { ...d, membership_status: 'rejected' } 
+                    : d
+            ))
+            
+            toast.success('ปฏิเสธคำขอสำเร็จ')
+        } catch (error) {
+            console.error('Error rejecting downstream dealer:', error)
+            toast.error('เกิดข้อผิดพลาด')
+        }
+    }
+
     // Block/Unblock downstream dealer (dealer who sends bets to us)
     async function handleBlockDownstreamDealer(dealer) {
         const newBlockedState = dealer.membership_status !== 'blocked'
@@ -947,6 +1007,7 @@ export default function Dealer() {
             const { error } = await supabase
                 .from('dealer_upstream_connections')
                 .update({ 
+                    status: newBlockedState ? 'blocked' : 'active',
                     is_blocked: newBlockedState,
                     updated_at: new Date().toISOString()
                 })
@@ -1786,6 +1847,63 @@ export default function Dealer() {
                                 </div>
                             </div>
 
+                            {/* Pending Downstream Dealers Section */}
+                            {(() => {
+                                const pendingDownstreamDealers = downstreamDealers.filter(d => d.membership_status === 'pending')
+                                if (pendingDownstreamDealers.length === 0) return null
+                                
+                                return (
+                                    <div className="pending-dealers-section" style={{ marginBottom: '1.5rem' }}>
+                                        <div className="section-header" style={{ marginBottom: '0.75rem' }}>
+                                            <h3 style={{ fontSize: '1rem', color: 'var(--color-warning)' }}>
+                                                <FiSend /> คำขอเชื่อมต่อจากเจ้ามือ
+                                            </h3>
+                                            <span className="badge" style={{ background: 'var(--color-warning)', color: 'black' }}>
+                                                {pendingDownstreamDealers.length} รายการ
+                                            </span>
+                                        </div>
+                                        <div className="pending-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                            {pendingDownstreamDealers.map(dealer => (
+                                                <div key={`pending-dealer-${dealer.id}`} className="pending-dealer-item card" style={{
+                                                    padding: '1rem',
+                                                    border: '1px solid var(--color-warning)',
+                                                    background: 'rgba(245, 158, 11, 0.1)'
+                                                }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                                                        <div>
+                                                            <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                <FiSend style={{ color: 'var(--color-info)' }} />
+                                                                {dealer.full_name || 'ไม่มีชื่อ'}
+                                                            </div>
+                                                            <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{dealer.email}</div>
+                                                            <div style={{ fontSize: '0.75rem', opacity: 0.5, marginTop: '0.25rem' }}>
+                                                                ขอเชื่อมต่อเพื่อตีออกยอดมาให้คุณ
+                                                            </div>
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                            <button
+                                                                className="btn btn-success btn-sm"
+                                                                onClick={() => handleApproveDownstreamDealer(dealer)}
+                                                                style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                                                            >
+                                                                <FiCheck /> ยืนยัน
+                                                            </button>
+                                                            <button
+                                                                className="btn btn-danger btn-sm"
+                                                                onClick={() => handleRejectDownstreamDealer(dealer)}
+                                                                style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                                                            >
+                                                                <FiX /> ปฏิเสธ
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )
+                            })()}
+
                             {(() => {
                                 const activeDownstreamDealers = downstreamDealers.filter(d => d.membership_status === 'active')
                                 const filteredMembers = memberTypeFilter === 'all' 
@@ -1794,7 +1912,9 @@ export default function Dealer() {
                                         ? members.map(m => ({ ...m, is_dealer: false }))
                                         : activeDownstreamDealers
                                 
-                                if (filteredMembers.length === 0 && pendingMembers.length === 0) {
+                                const pendingDownstreamDealers = downstreamDealers.filter(d => d.membership_status === 'pending')
+                                
+                                if (filteredMembers.length === 0 && pendingMembers.length === 0 && pendingDownstreamDealers.length === 0) {
                                     return (
                                         <div className="empty-state card">
                                             <FiUsers className="empty-icon" />
@@ -3101,15 +3221,10 @@ function SubmissionsModal({ round, onClose }) {
                 }
             }
             
-            // Also update current dealer's pending deduction
-            if (user?.id) {
-                try {
-                    await updatePendingDeduction(user.id)
-                    await fetchDealerCredit()
-                } catch (err) {
-                    console.log('Error updating dealer pending deduction:', err)
-                }
-            }
+            // NOTE: Do NOT update current dealer's pending deduction when transferring OUT
+            // The dealer who transfers OUT does not get charged - only the RECEIVING dealer does
+            // Just refresh the credit display
+            await fetchDealerCredit()
 
             // Show success message
             if (targetSubmissionId) {
@@ -3440,6 +3555,22 @@ function SubmissionsModal({ round, onClose }) {
                 .insert(transferRecords)
 
             if (error) throw error
+
+            // Update pending deduction for upstream dealer's credit (if linked)
+            // Only the RECEIVING dealer (upstream) should have their credit affected
+            if (createdSubmissionIds.length > 0 && selectedUpstreamDealer?.upstream_dealer_id) {
+                try {
+                    await updatePendingDeduction(selectedUpstreamDealer.upstream_dealer_id)
+                    console.log('Upstream dealer pending deduction updated')
+                } catch (err) {
+                    console.log('Error updating upstream pending deduction:', err)
+                }
+            }
+            
+            // NOTE: Do NOT update current dealer's pending deduction when transferring OUT
+            // The dealer who transfers OUT does not get charged - only the RECEIVING dealer does
+            // Just refresh the credit display
+            await fetchDealerCredit()
 
             // Refresh data and reset selection
             await fetchAllData()

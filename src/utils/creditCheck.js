@@ -54,51 +54,42 @@ export async function checkDealerCreditForBet(dealerId, roundId, newBetAmount) {
             .single()
 
         const currentBalance = creditData?.balance || 0
-        const pendingDeduction = creditData?.pending_deduction || 0
+        const currentPendingDeduction = creditData?.pending_deduction || 0
 
-        // Calculate current volume in this round
-        const { data: currentVolume } = await supabase
-            .from('submissions')
-            .select('amount')
-            .eq('round_id', roundId)
-            .eq('user_id', dealerId)
-            .eq('is_deleted', false)
-
-        const dealerVolume = (currentVolume || []).reduce((sum, s) => sum + (s.amount || 0), 0)
-        
-        // Calculate new total volume
-        const newTotalVolume = dealerVolume + newBetAmount
-        
-        // Calculate chargeable volume (apply min threshold)
-        let chargeableVolume = 0
-        if (newTotalVolume > minAmount) {
-            chargeableVolume = newTotalVolume - minAmount
-        }
-        
-        // Calculate pending fee
-        const pendingFee = chargeableVolume * (percentageRate / 100)
+        // Calculate new pending fee after adding this bet
+        // We need to estimate what the new pending_deduction will be
+        const newPendingFee = newBetAmount * (percentageRate / 100)
+        const estimatedTotalPending = currentPendingDeduction + newPendingFee
         
         // Check if credit is sufficient
-        const availableCredit = currentBalance - pendingDeduction
-        const hasEnoughCredit = availableCredit >= pendingFee
+        const availableCredit = currentBalance - currentPendingDeduction
+        const hasEnoughCredit = availableCredit >= newPendingFee
+
+        console.log('checkDealerCreditForBet:', {
+            currentBalance,
+            currentPendingDeduction,
+            availableCredit,
+            newBetAmount,
+            percentageRate,
+            newPendingFee,
+            hasEnoughCredit
+        })
 
         return {
             allowed: hasEnoughCredit,
             message: hasEnoughCredit 
                 ? 'เครดิตเพียงพอ' 
-                : `เครดิตไม่เพียงพอ ต้องการ ฿${pendingFee.toLocaleString()} แต่มี ฿${availableCredit.toLocaleString()}`,
+                : `เครดิตไม่เพียงพอ ต้องการ ฿${newPendingFee.toLocaleString('th-TH', {minimumFractionDigits: 2})} แต่มีเครดิตคงเหลือ ฿${availableCredit.toLocaleString('th-TH', {minimumFractionDigits: 2})}`,
             details: {
                 currentBalance,
-                pendingDeduction,
+                currentPendingDeduction,
                 availableCredit,
-                dealerVolume,
                 newBetAmount,
-                newTotalVolume,
                 minAmount,
-                chargeableVolume,
                 percentageRate,
-                pendingFee,
-                shortfall: hasEnoughCredit ? 0 : pendingFee - availableCredit
+                newPendingFee,
+                estimatedTotalPending,
+                shortfall: hasEnoughCredit ? 0 : newPendingFee - availableCredit
             }
         }
     } catch (error) {
@@ -330,7 +321,7 @@ export async function updatePendingDeduction(dealerId) {
         const percentageRate = subscription.subscription_packages?.percentage_rate || 0
         const minAmount = subscription.subscription_packages?.min_amount_before_charge || 0
 
-        console.log('Percentage rate:', percentageRate, 'Min amount:', minAmount)
+        console.log('[NEW v2] Percentage rate:', percentageRate, 'Min amount:', minAmount)
 
         // Get all open rounds for this dealer
         const { data: rounds } = await supabase
@@ -361,46 +352,110 @@ export async function updatePendingDeduction(dealerId) {
         const memberIds = new Set((memberships || []).map(m => m.user_id))
         console.log('Member count:', memberIds.size)
 
+        // Get downstream dealers (dealers who send bets TO this dealer)
+        // Include both active status and records without status (backward compatibility)
+        const { data: downstreamConnections, error: downstreamError } = await supabase
+            .from('dealer_upstream_connections')
+            .select('dealer_id, status, is_blocked')
+            .eq('upstream_dealer_id', dealerId)
+        
+        // Filter to active connections (status = 'active' OR status is null/undefined AND not blocked)
+        const activeDownstream = (downstreamConnections || []).filter(d => 
+            (d.status === 'active' || !d.status) && !d.is_blocked
+        )
+        const downstreamDealerIds = new Set(activeDownstream.map(d => d.dealer_id))
+        console.log('Downstream dealer count:', downstreamDealerIds.size, 'All connections:', downstreamConnections?.length, 'Error:', downstreamError)
+
         // Calculate total pending for all open rounds
         let totalPending = 0
 
         for (const round of rounds) {
+            console.log(`\n=== Processing Round ${round.id} ===`)
+            
             // Get all submissions for this round
             const { data: allSubs, error: subError } = await supabase
                 .from('submissions')
-                .select('amount, user_id')
+                .select('id, amount, user_id, source')
                 .eq('round_id', round.id)
                 .eq('is_deleted', false)
 
             console.log(`Round ${round.id}: fetched ${allSubs?.length || 0} submissions, error:`, subError)
 
-            // Separate dealer's own volume and member volume
+            // Get bet_transfers FROM this round (outgoing transfers - these amounts should NOT be charged)
+            const { data: outgoingTransfers, error: outTransferError } = await supabase
+                .from('bet_transfers')
+                .select('numbers, bet_type, amount, status')
+                .eq('round_id', round.id)
+            
+            // Filter out returned transfers (status !== 'returned')
+            const activeTransfers = (outgoingTransfers || []).filter(t => t.status !== 'returned')
+
+            // Calculate total amount that was transferred OUT (should not be charged)
+            const transferredOutAmount = activeTransfers.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0)
+            
+            console.log(`[NEW v2] Round ${round.id}: TRANSFERS - total=${outgoingTransfers?.length || 0}, active=${activeTransfers.length}, transferredOutAmount=${transferredOutAmount}, error=${outTransferError}`)
+            if (activeTransfers.length > 0) {
+                console.log(`[NEW v2] Round ${round.id}: transfer details:`, activeTransfers.map(t => ({ numbers: t.numbers, amount: t.amount, status: t.status })))
+            }
+
+            // Separate dealer's own volume, member volume, and downstream dealer volume
             let dealerVolume = 0
             let memberVolume = 0
+            let downstreamVolume = 0
 
             for (const sub of (allSubs || [])) {
-                if (sub.user_id === dealerId) {
-                    dealerVolume += (sub.amount || 0)
+                const amount = parseFloat(sub.amount || 0)
+                // Skip submissions that came from transfers (source = 'transfer') - these are incoming, counted separately
+                if (sub.source === 'transfer') {
+                    // This is an incoming transfer from downstream dealer
+                    downstreamVolume += amount
+                    console.log(`  Sub ${sub.id}: source=transfer, amount=${amount} -> downstreamVolume`)
+                } else if (sub.user_id === dealerId) {
+                    dealerVolume += amount
+                    console.log(`  Sub ${sub.id}: user_id=dealer, amount=${amount} -> dealerVolume`)
                 } else if (memberIds.has(sub.user_id)) {
-                    memberVolume += (sub.amount || 0)
+                    memberVolume += amount
+                    console.log(`  Sub ${sub.id}: user_id=member, amount=${amount} -> memberVolume`)
+                } else if (downstreamDealerIds.has(sub.user_id)) {
+                    // This is a submission from a downstream dealer (not marked as transfer)
+                    downstreamVolume += amount
+                    console.log(`  Sub ${sub.id}: user_id=downstream, amount=${amount} -> downstreamVolume`)
+                } else {
+                    console.log(`  Sub ${sub.id}: user_id=${sub.user_id} NOT COUNTED (not dealer, member, or downstream)`)
                 }
             }
 
-            console.log(`Round ${round.id}: dealerVolume=${dealerVolume}, memberVolume=${memberVolume}`)
+            // Subtract transferred out amount from member/dealer volume
+            // Because those bets were passed to upstream dealer, this dealer shouldn't be charged for them
+            let netMemberVolume = Math.max(0, memberVolume - transferredOutAmount)
+            let remainingTransfer = Math.max(0, transferredOutAmount - memberVolume)
+            let netDealerVolume = Math.max(0, dealerVolume - remainingTransfer)
 
-            // Calculate chargeable volume
-            // Member volume is always charged
-            // Dealer volume is charged only for amount exceeding minAmount
-            let chargeableVolume = memberVolume
-            if (dealerVolume > minAmount) {
-                chargeableVolume += (dealerVolume - minAmount)
+            console.log(`[NEW v2] Round ${round.id}: VOLUMES - dealerVolume=${dealerVolume}, memberVolume=${memberVolume}, downstreamVolume=${downstreamVolume}`)
+            console.log(`[NEW v2] Round ${round.id}: NET VOLUMES - netMemberVolume=${netMemberVolume}, netDealerVolume=${netDealerVolume}`)
+
+            // Calculate chargeable volume - NEW CODE v2
+            // Total volume from dealer's own bets + member bets is subject to minAmount threshold
+            // Only the amount EXCEEDING minAmount is charged
+            // Downstream dealer volume is always charged (they send bets to us)
+            const totalOwnVolume = netDealerVolume + netMemberVolume
+            let chargeableVolume = downstreamVolume
+            
+            console.log(`[NEW v2] Round ${round.id}: totalOwnVolume=${totalOwnVolume}, minAmount=${minAmount}, downstreamVolume=${downstreamVolume}`)
+            
+            if (totalOwnVolume > minAmount) {
+                const excessAmount = totalOwnVolume - minAmount
+                chargeableVolume += excessAmount
+                console.log(`[NEW v2] Round ${round.id}: CHARGING excess ${excessAmount} (totalOwnVolume ${totalOwnVolume} > minAmount ${minAmount})`)
+            } else {
+                console.log(`[NEW v2] Round ${round.id}: NOT CHARGING own volume (totalOwnVolume ${totalOwnVolume} <= minAmount ${minAmount})`)
             }
 
             // Calculate pending fee for this round
             const roundPending = chargeableVolume * (percentageRate / 100)
             totalPending += roundPending
             
-            console.log(`Round ${round.id}: chargeableVolume=${chargeableVolume}, roundPending=${roundPending}`)
+            console.log(`[NEW v2] Round ${round.id}: chargeableVolume=${chargeableVolume}, roundPending=${roundPending}`)
         }
 
         console.log('Total pending deduction:', totalPending)

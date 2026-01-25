@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams, Navigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { FiUserPlus, FiCheck, FiX, FiUsers, FiAlertCircle } from 'react-icons/fi'
+import { FiUserPlus, FiCheck, FiX, FiUsers, FiAlertCircle, FiLink } from 'react-icons/fi'
 import './Auth.css'
 
 export default function InvitationAccept() {
-    const { user, loading: authLoading } = useAuth()
+    const { user, profile, loading: authLoading } = useAuth()
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
     const dealerId = searchParams.get('ref')
@@ -17,6 +17,8 @@ export default function InvitationAccept() {
     const [error, setError] = useState('')
     const [success, setSuccess] = useState(false)
     const [existingMembership, setExistingMembership] = useState(null)
+    const [existingUpstreamLink, setExistingUpstreamLink] = useState(null)
+    const [isCurrentUserDealer, setIsCurrentUserDealer] = useState(false)
 
     useEffect(() => {
         if (dealerId && user) {
@@ -25,11 +27,21 @@ export default function InvitationAccept() {
             setLoading(false)
             setError('ไม่พบลิงก์เชิญ')
         }
-    }, [dealerId, user])
+    }, [dealerId, user, profile])
 
     async function fetchDealerAndMembership() {
         try {
-            // Fetch dealer info
+            // Check if current user is a dealer
+            const { data: currentUserProfile } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', user.id)
+                .single()
+            
+            const userIsDealer = currentUserProfile?.role === 'dealer'
+            setIsCurrentUserDealer(userIsDealer)
+
+            // Fetch target dealer info
             const { data: dealer, error: dealerError } = await supabase
                 .from('profiles')
                 .select('id, full_name, email')
@@ -43,18 +55,39 @@ export default function InvitationAccept() {
                 return
             }
 
+            // Check if trying to link to self
+            if (dealerId === user.id) {
+                setError('ไม่สามารถเชื่อมต่อกับตัวเองได้')
+                setLoading(false)
+                return
+            }
+
             setDealerInfo(dealer)
 
-            // Check if membership already exists
-            const { data: membership } = await supabase
-                .from('user_dealer_memberships')
-                .select('*')
-                .eq('user_id', user.id)
-                .eq('dealer_id', dealerId)
-                .single()
+            if (userIsDealer) {
+                // Check if upstream link already exists
+                const { data: upstreamLink } = await supabase
+                    .from('dealer_upstream_connections')
+                    .select('*')
+                    .eq('dealer_id', user.id)
+                    .eq('upstream_dealer_id', dealerId)
+                    .single()
 
-            if (membership) {
-                setExistingMembership(membership)
+                if (upstreamLink) {
+                    setExistingUpstreamLink(upstreamLink)
+                }
+            } else {
+                // Check if membership already exists (for regular users)
+                const { data: membership } = await supabase
+                    .from('user_dealer_memberships')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .eq('dealer_id', dealerId)
+                    .single()
+
+                if (membership) {
+                    setExistingMembership(membership)
+                }
             }
 
             setLoading(false)
@@ -70,22 +103,46 @@ export default function InvitationAccept() {
         setError('')
 
         try {
-            const { error } = await supabase
-                .from('user_dealer_memberships')
-                .insert({
-                    user_id: user.id,
-                    dealer_id: dealerId,
-                    status: 'pending'
-                })
+            if (isCurrentUserDealer) {
+                // Dealer linking to upstream dealer - status pending until approved
+                const { error } = await supabase
+                    .from('dealer_upstream_connections')
+                    .insert({
+                        dealer_id: user.id,
+                        upstream_dealer_id: dealerId,
+                        upstream_name: dealerInfo?.full_name || 'เจ้ามือ',
+                        is_linked: true,
+                        status: 'pending'
+                    })
 
-            if (error) {
-                if (error.code === '23505') {
-                    setError('คุณได้ส่งคำขอเข้าร่วมแล้ว')
+                if (error) {
+                    if (error.code === '23505') {
+                        setError('คุณได้ส่งคำขอเชื่อมต่อแล้ว')
+                    } else {
+                        throw error
+                    }
                 } else {
-                    throw error
+                    setSuccess(true)
                 }
             } else {
-                setSuccess(true)
+                // Regular user joining dealer
+                const { error } = await supabase
+                    .from('user_dealer_memberships')
+                    .insert({
+                        user_id: user.id,
+                        dealer_id: dealerId,
+                        status: 'pending'
+                    })
+
+                if (error) {
+                    if (error.code === '23505') {
+                        setError('คุณได้ส่งคำขอเข้าร่วมแล้ว')
+                    } else {
+                        throw error
+                    }
+                } else {
+                    setSuccess(true)
+                }
             }
         } catch (err) {
             console.error('Error accepting invitation:', err)
@@ -125,17 +182,20 @@ export default function InvitationAccept() {
                         <p>กรุณารอเจ้ามือยืนยัน</p>
                     </div>
                     <div className="invite-dealer-card">
-                        <FiUsers />
-                        <span>เจ้ามือ: <strong>{dealerInfo?.full_name}</strong></span>
+                        {isCurrentUserDealer ? <FiLink /> : <FiUsers />}
+                        <span>{isCurrentUserDealer ? 'เชื่อมต่อกับ' : 'เจ้ามือ'}: <strong>{dealerInfo?.full_name}</strong></span>
                     </div>
                     <p style={{ textAlign: 'center', opacity: 0.7, marginTop: '1rem' }}>
-                        เมื่อเจ้ามือยืนยันแล้ว คุณจะสามารถส่งเลขให้เจ้ามือนี้ได้
+                        {isCurrentUserDealer 
+                            ? 'เมื่อเจ้ามือยืนยันแล้ว คุณจะสามารถตีออกยอดไปให้เจ้ามือนี้ได้'
+                            : 'เมื่อเจ้ามือยืนยันแล้ว คุณจะสามารถส่งเลขให้เจ้ามือนี้ได้'
+                        }
                     </p>
                     <button
                         className="btn btn-primary btn-lg auth-submit"
-                        onClick={() => navigate('/dashboard')}
+                        onClick={() => navigate(isCurrentUserDealer ? '/dealer' : '/dashboard')}
                     >
-                        ไปยังหน้าหลัก
+                        {isCurrentUserDealer ? 'ไปยังหน้าเจ้ามือ' : 'ไปยังหน้าหลัก'}
                     </button>
                 </div>
             </div>
@@ -163,7 +223,79 @@ export default function InvitationAccept() {
         }
     }
 
-    // Already has membership
+    async function handleReapplyUpstream() {
+        setSubmitting(true)
+        setError('')
+
+        try {
+            const { error } = await supabase
+                .from('dealer_upstream_connections')
+                .update({ status: 'pending' })
+                .eq('id', existingUpstreamLink.id)
+
+            if (error) throw error
+
+            setSuccess(true)
+        } catch (err) {
+            console.error('Error reapplying upstream:', err)
+            setError('เกิดข้อผิดพลาด กรุณาลองใหม่')
+        } finally {
+            setSubmitting(false)
+        }
+    }
+
+    // Already has upstream link (for dealers)
+    if (existingUpstreamLink) {
+        const statusMessages = {
+            pending: 'คุณได้ส่งคำขอเชื่อมต่อไปแล้ว รอเจ้ามือยืนยัน',
+            active: 'คุณเชื่อมต่อกับเจ้ามือนี้อยู่แล้ว',
+            blocked: 'คุณถูกบล็อคจากเจ้ามือนี้',
+            rejected: 'คำขอของคุณถูกปฏิเสธ'
+        }
+        const isActive = existingUpstreamLink.status === 'active'
+        const isPending = existingUpstreamLink.status === 'pending'
+        const isRejected = existingUpstreamLink.status === 'rejected'
+
+        return (
+            <div className="auth-page">
+                <div className="auth-container animate-slideUp">
+                    <div className="auth-header">
+                        <FiAlertCircle className="auth-logo" style={{ color: isActive ? 'var(--color-success)' : 'var(--color-warning)' }} />
+                        <h1>{isActive ? 'เชื่อมต่อแล้ว' : isPending ? 'รอการยืนยัน' : 'มีสถานะอยู่แล้ว'}</h1>
+                        <p>{statusMessages[existingUpstreamLink.status] || 'มีการเชื่อมต่ออยู่แล้ว'}</p>
+                    </div>
+                    <div className="invite-dealer-card">
+                        <FiLink />
+                        <span>เชื่อมต่อกับ: <strong>{dealerInfo?.full_name}</strong></span>
+                    </div>
+                    {isActive && (
+                        <p style={{ textAlign: 'center', opacity: 0.7, marginTop: '1rem' }}>
+                            คุณสามารถตีออกยอดไปให้เจ้ามือนี้ได้แล้ว
+                        </p>
+                    )}
+                    {isRejected && (
+                        <button
+                            className="btn btn-primary btn-lg auth-submit"
+                            onClick={handleReapplyUpstream}
+                            disabled={submitting}
+                            style={{ marginTop: '1rem' }}
+                        >
+                            {submitting ? 'กำลังส่ง...' : 'ขอเชื่อมต่ออีกครั้ง'}
+                        </button>
+                    )}
+                    <button
+                        className="btn btn-primary btn-lg auth-submit"
+                        onClick={() => navigate('/dealer')}
+                        style={{ marginTop: isRejected ? '0.5rem' : '1rem' }}
+                    >
+                        ไปยังหน้าเจ้ามือ
+                    </button>
+                </div>
+            </div>
+        )
+    }
+
+    // Already has membership (for regular users)
     if (existingMembership) {
         const statusMessages = {
             pending: 'คุณได้ส่งคำขอไปแล้ว รอเจ้ามือยืนยัน',
@@ -244,14 +376,14 @@ export default function InvitationAccept() {
         <div className="auth-page">
             <div className="auth-container animate-slideUp">
                 <div className="auth-header">
-                    <FiUserPlus className="auth-logo" />
-                    <h1>คำเชิญเข้าร่วม</h1>
-                    <p>คุณได้รับคำเชิญจากเจ้ามือ</p>
+                    {isCurrentUserDealer ? <FiLink className="auth-logo" /> : <FiUserPlus className="auth-logo" />}
+                    <h1>{isCurrentUserDealer ? 'เชื่อมต่อเจ้ามือ' : 'คำเชิญเข้าร่วม'}</h1>
+                    <p>{isCurrentUserDealer ? 'คุณต้องการเชื่อมต่อกับเจ้ามือนี้เพื่อตีออกยอด' : 'คุณได้รับคำเชิญจากเจ้ามือ'}</p>
                 </div>
 
                 <div className="invite-dealer-card">
-                    <FiUsers />
-                    <span>เจ้ามือ: <strong>{dealerInfo?.full_name}</strong></span>
+                    {isCurrentUserDealer ? <FiLink /> : <FiUsers />}
+                    <span>{isCurrentUserDealer ? 'เชื่อมต่อกับ' : 'เจ้ามือ'}: <strong>{dealerInfo?.full_name}</strong></span>
                 </div>
 
                 {error && (
@@ -261,7 +393,10 @@ export default function InvitationAccept() {
                 )}
 
                 <p style={{ textAlign: 'center', opacity: 0.7 }}>
-                    หากตอบรับ คุณจะสามารถส่งเลขให้เจ้ามือนี้ได้หลังจากที่เจ้ามือยืนยันสมาชิก
+                    {isCurrentUserDealer 
+                        ? 'หากตอบรับ คุณจะสามารถตีออกยอดไปให้เจ้ามือนี้ได้หลังจากที่เจ้ามือยืนยัน'
+                        : 'หากตอบรับ คุณจะสามารถส่งเลขให้เจ้ามือนี้ได้หลังจากที่เจ้ามือยืนยันสมาชิก'
+                    }
                 </p>
 
                 <div className="invite-actions">
@@ -281,7 +416,7 @@ export default function InvitationAccept() {
                     </button>
                     <button
                         className="btn btn-secondary btn-lg"
-                        onClick={() => navigate('/dashboard')}
+                        onClick={() => navigate(isCurrentUserDealer ? '/dealer' : '/dashboard')}
                         disabled={submitting}
                         style={{ flex: 1 }}
                     >

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useToast } from '../../contexts/ToastContext'
-import { updatePendingDeduction } from '../../utils/creditCheck'
+import { updatePendingDeduction, checkDealerCreditForBet } from '../../utils/creditCheck'
 import {
     FiPlus,
     FiTrash2,
@@ -511,6 +511,19 @@ export default function WriteSubmissionModal({
 
         setSubmitting(true)
         try {
+            // Calculate total amount of new bets
+            const totalNewAmount = drafts.reduce((sum, d) => sum + (d.amount || 0), 0)
+            
+            // Check dealer credit before saving
+            const creditCheck = await checkDealerCreditForBet(dealerId, round.id, totalNewAmount)
+            console.log('Credit check result:', creditCheck)
+            
+            if (!creditCheck.allowed) {
+                toast.error(creditCheck.message)
+                setSubmitting(false)
+                return
+            }
+
             const billId = generateUUID()
             const timestamp = new Date().toISOString()
 

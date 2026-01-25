@@ -521,6 +521,7 @@ export default function RoundAccordionItem({
             if (error) throw error
 
             // Update pending deduction for upstream dealer's credit (if linked)
+            // Only the RECEIVING dealer (upstream) should have their credit affected
             if (canSendToUpstream && selectedUpstreamDealer?.upstream_dealer_id) {
                 try {
                     await updatePendingDeduction(selectedUpstreamDealer.upstream_dealer_id)
@@ -530,15 +531,10 @@ export default function RoundAccordionItem({
                 }
             }
             
-            // Also update current dealer's pending deduction (their credit is affected by transfers)
-            if (user?.id) {
-                try {
-                    await updatePendingDeduction(user.id)
-                    if (onCreditUpdate) onCreditUpdate()
-                } catch (err) {
-                    console.log('Error updating dealer pending deduction:', err)
-                }
-            }
+            // NOTE: Do NOT update current dealer's pending deduction when transferring OUT
+            // The dealer who transfers OUT does not get charged - only the RECEIVING dealer does
+            // Just refresh the credit display to show updated values
+            if (onCreditUpdate) onCreditUpdate()
 
             await fetchInlineSubmissions(true)
             setShowTransferModal(false)
