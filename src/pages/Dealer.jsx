@@ -1172,7 +1172,25 @@ export default function Dealer() {
                 .eq('id', roundId)
 
             if (!error) {
-                // Finalize credit deduction for percentage billing
+                // Create immediate billing record if dealer has immediate billing cycle
+                try {
+                    const { data: billingResult, error: billingError } = await supabase
+                        .rpc('create_immediate_billing_record', { 
+                            p_round_id: roundId,
+                            p_dealer_id: user.id
+                        })
+                    
+                    if (billingError) {
+                        console.log('Immediate billing not available:', billingError)
+                    } else if (billingResult) {
+                        console.log('Created immediate billing record:', billingResult)
+                        toast.info('สร้างรายการชำระค่าธรรมเนียมแล้ว')
+                    }
+                } catch (billingErr) {
+                    console.log('Immediate billing not configured:', billingErr)
+                }
+
+                // Finalize credit deduction for percentage billing (for non-immediate)
                 try {
                     const { data: result, error: creditError } = await supabase
                         .rpc('finalize_round_credit', { p_round_id: roundId })

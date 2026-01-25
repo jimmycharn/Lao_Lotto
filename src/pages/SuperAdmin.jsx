@@ -65,6 +65,7 @@ export default function SuperAdmin() {
     const [bankAccounts, setBankAccounts] = useState([])
     const [dealerBankAssignments, setDealerBankAssignments] = useState([])
     const [topupRequests, setTopupRequests] = useState([])
+    const [billingRecords, setBillingRecords] = useState([])
 
     // UI States
     const [isLoading, setIsLoading] = useState(true)
@@ -146,7 +147,8 @@ export default function SuperAdmin() {
                 fetchDealerCredits(),
                 fetchBankAccounts(),
                 fetchTopupRequests(),
-                fetchCreditDeductions()
+                fetchCreditDeductions(),
+                fetchBillingRecords()
             ])
         } catch (error) {
             console.error('Error fetching data:', error)
@@ -172,6 +174,26 @@ export default function SuperAdmin() {
             }
         } catch (err) {
             console.log('Credit deductions not available:', err)
+        }
+    }
+    
+    const fetchBillingRecords = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('dealer_billing_records')
+                .select(`
+                    *,
+                    dealer:dealer_id (id, full_name, email),
+                    round:round_id (id, lottery_type, draw_date)
+                `)
+                .order('created_at', { ascending: false })
+                .limit(100)
+            
+            if (!error && data) {
+                setBillingRecords(data)
+            }
+        } catch (err) {
+            console.log('Billing records not available:', err)
         }
     }
     
@@ -1908,6 +1930,107 @@ export default function SuperAdmin() {
         </div>
     )}
 
+    const renderBillingRecords = () => {
+        // Calculate totals
+        const totalBillingAmount = billingRecords.reduce((sum, r) => sum + (r.amount || 0), 0)
+        const pendingBilling = billingRecords.filter(r => r.status === 'pending')
+        const deductedBilling = billingRecords.filter(r => r.status === 'deducted')
+        
+        return (
+            <div className="billing-records-tab">
+                {/* Summary Cards */}
+                <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
+                    <div className="stat-card">
+                        <div className="stat-icon" style={{ background: 'rgba(16, 185, 129, 0.2)' }}>
+                            <FiDollarSign style={{ color: 'var(--color-success)' }} />
+                        </div>
+                        <div className="stat-info">
+                            <span className="stat-label">รายได้ค่าธรรมเนียมทั้งหมด</span>
+                            <span className="stat-value" style={{ color: 'var(--color-success)' }}>
+                                ฿{totalBillingAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="stat-card">
+                        <div className="stat-icon" style={{ background: 'rgba(59, 130, 246, 0.2)' }}>
+                            <FiCheck style={{ color: 'var(--color-info)' }} />
+                        </div>
+                        <div className="stat-info">
+                            <span className="stat-label">หักเครดิตแล้ว</span>
+                            <span className="stat-value">{deductedBilling.length} รายการ</span>
+                        </div>
+                    </div>
+                    <div className="stat-card">
+                        <div className="stat-icon" style={{ background: 'rgba(245, 158, 11, 0.2)' }}>
+                            <FiClock style={{ color: 'var(--color-warning)' }} />
+                        </div>
+                        <div className="stat-info">
+                            <span className="stat-label">รอชำระ</span>
+                            <span className="stat-value">{pendingBilling.length} รายการ</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="data-table-container">
+                    <table className="data-table">
+                        <thead>
+                            <tr>
+                                <th>เจ้ามือ</th>
+                                <th>งวด</th>
+                                <th>ยอดขาย</th>
+                                <th>ยอดคิดค่าธรรมเนียม</th>
+                                <th>อัตรา</th>
+                                <th>ค่าธรรมเนียม</th>
+                                <th>สถานะ</th>
+                                <th>วันที่</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {billingRecords.map(record => (
+                                <tr key={record.id}>
+                                    <td>
+                                        <div>{record.dealer?.full_name || 'ไม่ทราบชื่อ'}</div>
+                                        <small className="text-muted">{record.dealer?.email}</small>
+                                    </td>
+                                    <td>
+                                        {record.round ? (
+                                            <div>
+                                                <div>{record.round.lottery_type}</div>
+                                                <small className="text-muted">
+                                                    {record.round.draw_date ? new Date(record.round.draw_date).toLocaleDateString('th-TH') : '-'}
+                                                </small>
+                                            </div>
+                                        ) : '-'}
+                                    </td>
+                                    <td>฿{(record.total_volume || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
+                                    <td>฿{(record.chargeable_volume || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
+                                    <td>{record.percentage_rate}%</td>
+                                    <td><strong style={{ color: 'var(--color-success)' }}>฿{(record.amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</strong></td>
+                                    <td>
+                                        <span className={`status-badge ${record.status}`}>
+                                            {record.status === 'pending' && 'รอชำระ'}
+                                            {record.status === 'paid' && 'ชำระแล้ว'}
+                                            {record.status === 'deducted' && 'หักเครดิตแล้ว'}
+                                            {record.status === 'cancelled' && 'ยกเลิก'}
+                                            {record.status === 'overdue' && 'เกินกำหนด'}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div>{new Date(record.created_at).toLocaleDateString('th-TH')}</div>
+                                        <small className="text-muted">{new Date(record.created_at).toLocaleTimeString('th-TH')}</small>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {billingRecords.length === 0 && (
+                        <div className="empty-state">ยังไม่มีรายการค่าธรรมเนียม</div>
+                    )}
+                </div>
+            </div>
+        )
+    }
+
     // Thai Bank List
     const THAI_BANKS = [
         { code: '002', name: 'ธนาคารกรุงเทพ (BBL)' },
@@ -2503,6 +2626,43 @@ export default function SuperAdmin() {
                             </select>
                         </div>
                     </div>
+
+                    <div className="setting-item">
+                        <label>แพ็คเกจเริ่มต้นสำหรับ Dealer ใหม่</label>
+                        <div className="setting-input">
+                            <select
+                                value={settings.default_dealer_package || ''}
+                                onChange={(e) => {
+                                    setSettings({ ...settings, default_dealer_package: e.target.value })
+                                    handleUpdateSetting('default_dealer_package', e.target.value)
+                                }}
+                            >
+                                <option value="">ไม่กำหนด (ต้องกำหนดเอง)</option>
+                                {packages.map(pkg => (
+                                    <option key={pkg.id} value={pkg.id}>
+                                        {pkg.name} ({pkg.billing_model === 'percentage' ? `${pkg.percentage_rate}%` : `฿${pkg.price}`})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="setting-item">
+                        <label>รอบการเรียกเก็บเริ่มต้น</label>
+                        <div className="setting-input">
+                            <select
+                                value={settings.default_billing_cycle || 'monthly'}
+                                onChange={(e) => {
+                                    setSettings({ ...settings, default_billing_cycle: e.target.value })
+                                    handleUpdateSetting('default_billing_cycle', e.target.value)
+                                }}
+                            >
+                                <option value="monthly">รายเดือน</option>
+                                <option value="yearly">รายปี</option>
+                                <option value="immediate">เก็บทันทีหลังปิดงวด</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2525,6 +2685,7 @@ export default function SuperAdmin() {
                         { id: 'packages', label: 'แพ็คเกจ', icon: <FiPackage /> },
                         { id: 'invoices', label: 'ใบแจ้งหนี้', icon: <FiFileText /> },
                         { id: 'payments', label: 'การชำระเงิน', icon: <FiDollarSign />, badge: stats.pendingPayments },
+                        { id: 'billingRecords', label: 'ค่าธรรมเนียม', icon: <FiFileText /> },
                         { id: 'settings', label: 'ตั้งค่า', icon: <FiSettings /> }
                     ].map(tab => (
                         <button
@@ -2551,6 +2712,7 @@ export default function SuperAdmin() {
                         {activeTab === 'packages' && 'จัดการแพ็คเกจ'}
                         {activeTab === 'invoices' && 'ใบแจ้งหนี้'}
                         {activeTab === 'payments' && 'การชำระเงิน'}
+                        {activeTab === 'billingRecords' && 'ค่าธรรมเนียม'}
                         {activeTab === 'settings' && 'ตั้งค่าระบบ'}
                     </h1>
                     <button className="btn btn-icon" onClick={fetchAllData} title="รีเฟรช">
@@ -2573,6 +2735,7 @@ export default function SuperAdmin() {
                             {activeTab === 'packages' && renderPackages()}
                             {activeTab === 'invoices' && renderInvoices()}
                             {activeTab === 'payments' && renderPayments()}
+                            {activeTab === 'billingRecords' && renderBillingRecords()}
                             {activeTab === 'settings' && renderSettings()}
                         </>
                     )}
@@ -2754,6 +2917,7 @@ export default function SuperAdmin() {
                                 >
                                     <option value="monthly">รายเดือน</option>
                                     <option value="yearly">รายปี</option>
+                                    <option value="immediate">เก็บทันทีหลังปิดงวด</option>
                                 </select>
                             </div>
 
