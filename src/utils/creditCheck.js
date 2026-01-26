@@ -323,15 +323,15 @@ export async function updatePendingDeduction(dealerId) {
 
         console.log('[NEW v2] Percentage rate:', percentageRate, 'Min amount:', minAmount)
 
-        // Get all open rounds for this dealer
+        // Get all open rounds for this dealer (only status = 'open', not 'closed')
+        // Closed rounds have already been charged, so don't include them in pending
         const { data: rounds } = await supabase
             .from('lottery_rounds')
             .select('id')
             .eq('dealer_id', dealerId)
-            .in('status', ['open', 'closed'])
-            .eq('is_result_announced', false)
+            .eq('status', 'open') // Only open rounds, closed rounds are already charged
 
-        console.log('Open rounds:', rounds?.length || 0)
+        console.log('Open rounds (status=open only):', rounds?.length || 0)
 
         if (!rounds || rounds.length === 0) {
             // No open rounds, clear pending deduction

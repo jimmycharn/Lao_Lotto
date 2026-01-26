@@ -29,7 +29,7 @@ export const BET_TYPES_BY_LOTTERY = {
     lao: {
         '4_set': { 
             label: '4 ตัวชุด', 
-            defaultLimit: 200, 
+            defaultLimit: 1, 
             isSet: true, 
             defaultSetPrice: 120,
             defaultCommission: 25,
@@ -41,6 +41,12 @@ export const BET_TYPES_BY_LOTTERY = {
                 '2_front_set': { label: '2 ตัวหน้าชุด', defaultPayout: 1000 },
                 '2_back_set': { label: '2 ตัวหลังชุด', defaultPayout: 1000 }
             }
+        },
+        '3_set': { 
+            label: '3 ตัวตรงชุด', 
+            defaultLimit: 2, 
+            isSet: true,
+            isLinkedTo4Set: true
         },
         'run_top': { label: 'ลอยบน', defaultLimit: 5000 },
         'run_bottom': { label: 'ลอยล่าง', defaultLimit: 5000 },
@@ -59,7 +65,7 @@ export const BET_TYPES_BY_LOTTERY = {
     hanoi: {
         '4_set': { 
             label: '4 ตัวชุด', 
-            defaultLimit: 200, 
+            defaultLimit: 1, 
             isSet: true, 
             defaultSetPrice: 120,
             defaultCommission: 25,
@@ -71,6 +77,12 @@ export const BET_TYPES_BY_LOTTERY = {
                 '2_front_set': { label: '2 ตัวหน้าชุด', defaultPayout: 1000 },
                 '2_back_set': { label: '2 ตัวหลังชุด', defaultPayout: 1000 }
             }
+        },
+        '3_set': { 
+            label: '3 ตัวตรงชุด', 
+            defaultLimit: 2, 
+            isSet: true,
+            isLinkedTo4Set: true
         },
         'run_top': { label: 'ลอยบน', defaultLimit: 5000 },
         'run_bottom': { label: 'ลอยล่าง', defaultLimit: 5000 },
@@ -130,6 +142,11 @@ export const BET_TYPES = {
     '3_bottom': '3 ตัวล่าง',
     '3_straight': '3 ตัวตรง',
     '3_tod_single': '3 ตัวโต๊ด',
+
+    // 3 Digits Set (for Lao/Hanoi)
+    '3_set': '3 ตัวตรงชุด',
+    '3_straight_set': '3 ตัวตรงชุด',
+    '3_tod_set': '3 ตัวโต๊ดชุด',
 
     // 4 Digits
     '4_set': '4 ตัวชุด',

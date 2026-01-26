@@ -369,7 +369,158 @@ export default function RoundAccordionItem({
         })
 
         const excessItems = []
+        
+        // For Lao/Hanoi: Calculate 3_set excess (3 ตัวตรงชุด - last 3 digits match)
+        if (isSetBasedLottery) {
+            const limit3Set = inlineTypeLimits['3_set'] ?? 999999999
+            const limit4Set = inlineTypeLimits['4_set'] ?? inlineTypeLimits['4_top'] ?? 999999999
+            
+            // Group 4-digit submissions by their last 3 digits
+            const groupedByLast3 = {}
+            Object.values(grouped).forEach(group => {
+                if ((group.bet_type === '4_set' || group.bet_type === '4_top') && group.numbers?.length === 4) {
+                    const last3 = group.numbers.slice(-3)
+                    if (!groupedByLast3[last3]) {
+                        groupedByLast3[last3] = {
+                            last3Digits: last3,
+                            exactMatches: {},
+                            totalSets: 0,
+                            submissions: []
+                        }
+                    }
+                    
+                    if (!groupedByLast3[last3].exactMatches[group.numbers]) {
+                        groupedByLast3[last3].exactMatches[group.numbers] = {
+                            numbers: group.numbers,
+                            setCount: 0,
+                            submissions: []
+                        }
+                    }
+                    groupedByLast3[last3].exactMatches[group.numbers].setCount += group.setCount
+                    groupedByLast3[last3].exactMatches[group.numbers].submissions.push(...group.submissions)
+                    groupedByLast3[last3].totalSets += group.setCount
+                    groupedByLast3[last3].submissions.push(...group.submissions)
+                }
+            })
+            
+            // Process each last-3-digit group
+            Object.values(groupedByLast3).forEach(group3 => {
+                const exactMatchGroups = Object.values(group3.exactMatches)
+                
+                // Sort by earliest submission (FIFO)
+                exactMatchGroups.sort((a, b) => {
+                    const aTime = Math.min(...a.submissions.map(s => new Date(s.created_at).getTime()))
+                    const bTime = Math.min(...b.submissions.map(s => new Date(s.created_at).getTime()))
+                    return aTime - bTime
+                })
+                
+                // Calculate transferred sets
+                const transferred4Set = inlineTransfers
+                    .filter(t => (t.bet_type === '4_set' || t.bet_type === '4_top'))
+                    .reduce((sum, t) => {
+                        if (t.numbers?.slice(-3) === group3.last3Digits) {
+                            return sum + Math.floor((t.amount || 0) / setPrice)
+                        }
+                        return sum
+                    }, 0)
+                
+                const transferred3Set = inlineTransfers
+                    .filter(t => t.bet_type === '3_set' && t.numbers === group3.last3Digits)
+                    .reduce((sum, t) => sum + Math.floor((t.amount || 0) / setPrice), 0)
+                
+                // Process 4_set excess first
+                exactMatchGroups.forEach(exactGroup => {
+                    exactGroup.submissions.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+                    
+                    const exactTransferred = inlineTransfers
+                        .filter(t => (t.bet_type === '4_set' || t.bet_type === '4_top') && t.numbers === exactGroup.numbers)
+                        .reduce((sum, t) => sum + Math.floor((t.amount || 0) / setPrice), 0)
+                    
+                    const effectiveLimit = limit4Set + exactTransferred
+                    
+                    if (exactGroup.setCount > effectiveLimit) {
+                        const excess4 = exactGroup.setCount - effectiveLimit
+                        excessItems.push({
+                            bet_type: '4_set',
+                            numbers: exactGroup.numbers,
+                            total: exactGroup.setCount * setPrice,
+                            setCount: exactGroup.setCount,
+                            submissions: exactGroup.submissions,
+                            limit: limit4Set,
+                            excess: excess4,
+                            transferredSets: exactTransferred,
+                            isSetBased: true,
+                            excessType: '4_set'
+                        })
+                    }
+                })
+                
+                // Calculate 3_set excess
+                const uniqueNumbers = Object.keys(group3.exactMatches)
+                
+                if (uniqueNumbers.length > 1) {
+                    const sortedNumbers = uniqueNumbers.sort((a, b) => {
+                        const aTime = Math.min(...group3.exactMatches[a].submissions.map(s => new Date(s.created_at).getTime()))
+                        const bTime = Math.min(...group3.exactMatches[b].submissions.map(s => new Date(s.created_at).getTime()))
+                        return aTime - bTime
+                    })
+                    
+                    let remaining3SetLimit = limit3Set + transferred3Set
+                    
+                    sortedNumbers.forEach((num, idx) => {
+                        const exactGroup = group3.exactMatches[num]
+                        
+                        if (idx === 0) return // First number handled by 4_set
+                        
+                        if (remaining3SetLimit > 0) {
+                            const setsToKeep = Math.min(exactGroup.setCount, remaining3SetLimit)
+                            remaining3SetLimit -= setsToKeep
+                            
+                            const excess3 = exactGroup.setCount - setsToKeep
+                            if (excess3 > 0) {
+                                excessItems.push({
+                                    bet_type: '3_set',
+                                    numbers: num,
+                                    displayNumbers: `${num} (3ตัวหลัง: ${group3.last3Digits})`,
+                                    total: excess3 * setPrice,
+                                    setCount: exactGroup.setCount,
+                                    submissions: exactGroup.submissions.slice(-excess3),
+                                    limit: limit3Set,
+                                    excess: excess3,
+                                    transferredSets: transferred3Set,
+                                    isSetBased: true,
+                                    excessType: '3_set',
+                                    last3Digits: group3.last3Digits
+                                })
+                            }
+                        } else {
+                            excessItems.push({
+                                bet_type: '3_set',
+                                numbers: num,
+                                displayNumbers: `${num} (3ตัวหลัง: ${group3.last3Digits})`,
+                                total: exactGroup.setCount * setPrice,
+                                setCount: exactGroup.setCount,
+                                submissions: exactGroup.submissions,
+                                limit: limit3Set,
+                                excess: exactGroup.setCount,
+                                transferredSets: transferred3Set,
+                                isSetBased: true,
+                                excessType: '3_set',
+                                last3Digits: group3.last3Digits
+                            })
+                        }
+                    })
+                }
+            })
+        }
+        
+        // Process non-4_set bets normally
         Object.values(grouped).forEach(item => {
+            // Skip 4_set for Lao/Hanoi - already handled above
+            if (isSetBasedLottery && (item.bet_type === '4_set' || item.bet_type === '4_top')) {
+                return
+            }
+            
             // For 4-digit sets, check both 4_set and 4_top for limit lookup
             const isSet4Digit = item.bet_type === '4_set' || item.bet_type === '4_top'
             let typeLimit = inlineTypeLimits[item.bet_type]
@@ -395,21 +546,6 @@ export default function RoundAccordionItem({
             }).reduce((sum, t) => sum + (t.amount || 0), 0)
 
             const transferredSets = isSetBased ? Math.floor(transferredForThis / setPrice) : 0
-
-            // Debug log for 4-digit sets
-            if (item.bet_type === '4_top' || item.bet_type === '4_set') {
-                console.log('Excess calc for 4-digit:', {
-                    bet_type: item.bet_type,
-                    numbers: item.numbers,
-                    setCount: item.setCount,
-                    total: item.total,
-                    typeLimit,
-                    effectiveLimit,
-                    isSetBased,
-                    transferredSets,
-                    inlineTypeLimits
-                })
-            }
 
             // Check if limit exists (including 0)
             if (effectiveLimit !== undefined && effectiveLimit !== null) {
@@ -1480,7 +1616,7 @@ export default function RoundAccordionItem({
                                                                         <div style={{ flex: 1 }}>
                                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
                                                                                 <span className="type-badge">{BET_TYPES[item.bet_type] || item.bet_type}</span>
-                                                                                <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '1.1rem' }}>{item.numbers}</span>
+                                                                                <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '1.1rem' }}>{item.displayNumbers || item.numbers}</span>
                                                                             </div>
                                                                             <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
                                                                                 <span>ยอด: {round.currency_symbol}{item.total.toLocaleString()}{item.isSetBased && ` (${item.setCount} ชุด)`}</span>

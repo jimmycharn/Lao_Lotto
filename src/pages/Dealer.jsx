@@ -1214,9 +1214,37 @@ export default function Dealer() {
 
     // Delete round
     async function handleDeleteRound(roundId) {
-        if (!confirm('ต้องการลบงวดนี้? (จะลบข้อมูลทั้งหมด)')) return
+        if (!confirm('ต้องการลบงวดนี้? (จะลบข้อมูลทั้งหมด และหักค่าธรรมเนียมที่ค้างอยู่)')) return
 
         try {
+            // First, finalize credit deduction before deleting
+            // This ensures dealer pays for any bets in this round
+            try {
+                // Try immediate billing first
+                const { data: immediateBillingResult, error: immediateBillingError } = await supabase
+                    .rpc('create_immediate_billing_record', { 
+                        p_round_id: roundId,
+                        p_dealer_id: user.id
+                    })
+                
+                if (!immediateBillingError && immediateBillingResult?.success) {
+                    console.log('Immediate billing before delete:', immediateBillingResult)
+                    toast.info(`หักค่าธรรมเนียม ฿${immediateBillingResult.amount_deducted?.toLocaleString() || 0} ก่อนลบงวด`)
+                }
+                
+                // Then try regular finalization (for non-immediate billing)
+                const { data: creditResult, error: creditError } = await supabase
+                    .rpc('finalize_round_credit', { p_round_id: roundId })
+                
+                if (!creditError && creditResult?.total_deducted > 0) {
+                    console.log('Credit finalized before delete:', creditResult)
+                    toast.info(`หักค่าธรรมเนียม ฿${creditResult.total_deducted.toLocaleString()} ก่อนลบงวด`)
+                }
+            } catch (billingErr) {
+                console.log('Billing before delete not configured:', billingErr)
+            }
+
+            // Now delete the round
             const { error } = await supabase
                 .from('lottery_rounds')
                 .delete()
@@ -1225,9 +1253,12 @@ export default function Dealer() {
             if (!error) {
                 setSelectedRound(null)
                 fetchData()
+                fetchDealerCredit() // Refresh credit balance after deletion
+                toast.success('ลบงวดสำเร็จ')
             }
         } catch (error) {
             console.error('Error:', error)
+            toast.error('เกิดข้อผิดพลาดในการลบงวด')
         }
     }
 
@@ -1411,7 +1442,7 @@ export default function Dealer() {
         }
     }
 
-    // Get status badge (based on time, not status field)
+    // Get status badge (based on time AND status field)
     const getStatusBadge = (round, showReopenButton = false) => {
         const now = new Date()
         const openTime = new Date(round.open_time)
@@ -1420,7 +1451,8 @@ export default function Dealer() {
         if (round.status === 'announced') {
             return <span className="status-badge announced"><FiCheck /> ประกาศผลแล้ว</span>
         }
-        if (now > closeTime) {
+        // Check if round is closed by dealer (status = 'closed') OR by time
+        if (round.status === 'closed' || now > closeTime) {
             return (
                 <span className="status-badge closed" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
                     <FiLock /> ปิดรับแล้ว
@@ -2990,7 +3022,183 @@ function SubmissionsModal({ round, onClose }) {
 
         // Calculate excess for each group
         const excessItems = []
+        
+        // For Lao/Hanoi: Calculate 3_set excess (3 ตัวตรงชุด - last 3 digits match)
+        if (isSetBasedLottery) {
+            // Get 3_set limit
+            const limit3Set = typeLimits['3_set'] || 999999999
+            const limit4Set = typeLimits['4_set'] || typeLimits['4_top'] || 999999999
+            
+            // Group 4-digit submissions by their last 3 digits
+            const groupedByLast3 = {}
+            Object.values(grouped).forEach(group => {
+                if ((group.bet_type === '4_set' || group.bet_type === '4_top') && group.numbers?.length === 4) {
+                    const last3 = group.numbers.slice(-3) // Get last 3 digits
+                    if (!groupedByLast3[last3]) {
+                        groupedByLast3[last3] = {
+                            last3Digits: last3,
+                            exactMatches: {}, // Groups with exact 4-digit match
+                            totalSets: 0,
+                            submissions: []
+                        }
+                    }
+                    
+                    // Add to exact matches by full 4-digit number
+                    if (!groupedByLast3[last3].exactMatches[group.numbers]) {
+                        groupedByLast3[last3].exactMatches[group.numbers] = {
+                            numbers: group.numbers,
+                            setCount: 0,
+                            submissions: []
+                        }
+                    }
+                    groupedByLast3[last3].exactMatches[group.numbers].setCount += group.setCount
+                    groupedByLast3[last3].exactMatches[group.numbers].submissions.push(...group.submissions)
+                    groupedByLast3[last3].totalSets += group.setCount
+                    groupedByLast3[last3].submissions.push(...group.submissions)
+                }
+            })
+            
+            // Process each last-3-digit group
+            Object.values(groupedByLast3).forEach(group3 => {
+                const exactMatchGroups = Object.values(group3.exactMatches)
+                
+                // Sort by earliest submission (FIFO - first in, first out)
+                exactMatchGroups.sort((a, b) => {
+                    const aTime = Math.min(...a.submissions.map(s => new Date(s.created_at).getTime()))
+                    const bTime = Math.min(...b.submissions.map(s => new Date(s.created_at).getTime()))
+                    return aTime - bTime
+                })
+                
+                // Calculate transferred sets for 4_set
+                const transferred4Set = transfers
+                    .filter(t => (t.bet_type === '4_set' || t.bet_type === '4_top'))
+                    .reduce((sum, t) => {
+                        // Count transfers for any 4-digit number with matching last 3 digits
+                        if (t.numbers?.slice(-3) === group3.last3Digits) {
+                            return sum + Math.floor((t.amount || 0) / setPrice)
+                        }
+                        return sum
+                    }, 0)
+                
+                // Calculate transferred sets for 3_set
+                const transferred3Set = transfers
+                    .filter(t => t.bet_type === '3_set' && t.numbers === group3.last3Digits)
+                    .reduce((sum, t) => sum + Math.floor((t.amount || 0) / setPrice), 0)
+                
+                // Process 4_set excess first (exact 4-digit match)
+                let remaining4SetLimit = limit4Set + transferred4Set
+                let setsUsedFor4Set = 0
+                
+                exactMatchGroups.forEach(exactGroup => {
+                    // Sort submissions within group by created_at (FIFO)
+                    exactGroup.submissions.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+                    
+                    // Check if this exact 4-digit number exceeds 4_set limit
+                    const exactTransferred = transfers
+                        .filter(t => (t.bet_type === '4_set' || t.bet_type === '4_top') && t.numbers === exactGroup.numbers)
+                        .reduce((sum, t) => sum + Math.floor((t.amount || 0) / setPrice), 0)
+                    
+                    const effectiveLimit = limit4Set + exactTransferred
+                    
+                    if (exactGroup.setCount > effectiveLimit) {
+                        const excess4 = exactGroup.setCount - effectiveLimit
+                        excessItems.push({
+                            bet_type: '4_set',
+                            numbers: exactGroup.numbers,
+                            total: exactGroup.setCount * setPrice,
+                            setCount: exactGroup.setCount,
+                            submissions: exactGroup.submissions,
+                            limit: limit4Set,
+                            excess: excess4,
+                            transferredAmount: exactTransferred,
+                            isSetBased: true,
+                            excessType: '4_set'
+                        })
+                        setsUsedFor4Set += effectiveLimit // Only count sets within limit
+                    } else {
+                        setsUsedFor4Set += exactGroup.setCount
+                    }
+                })
+                
+                // Now calculate 3_set excess (different 4-digit numbers with same last 3 digits)
+                // Count unique 4-digit numbers with same last 3 digits
+                const uniqueNumbers = Object.keys(group3.exactMatches)
+                
+                if (uniqueNumbers.length > 1) {
+                    // There are multiple different 4-digit numbers with same last 3 digits
+                    // These count toward 3_set limit (excluding the first one that matches 4_set)
+                    
+                    // Sort unique numbers by their earliest submission time
+                    const sortedNumbers = uniqueNumbers.sort((a, b) => {
+                        const aTime = Math.min(...group3.exactMatches[a].submissions.map(s => new Date(s.created_at).getTime()))
+                        const bTime = Math.min(...group3.exactMatches[b].submissions.map(s => new Date(s.created_at).getTime()))
+                        return aTime - bTime
+                    })
+                    
+                    // The first number's sets (up to 4_set limit) don't count toward 3_set
+                    // Remaining different numbers count toward 3_set limit
+                    let remaining3SetLimit = limit3Set + transferred3Set
+                    
+                    sortedNumbers.forEach((num, idx) => {
+                        const exactGroup = group3.exactMatches[num]
+                        
+                        if (idx === 0) {
+                            // First number - already handled by 4_set limit
+                            return
+                        }
+                        
+                        // This is a different 4-digit number with same last 3 digits
+                        // It counts toward 3_set limit
+                        if (remaining3SetLimit > 0) {
+                            const setsToKeep = Math.min(exactGroup.setCount, remaining3SetLimit)
+                            remaining3SetLimit -= setsToKeep
+                            
+                            const excess3 = exactGroup.setCount - setsToKeep
+                            if (excess3 > 0) {
+                                excessItems.push({
+                                    bet_type: '3_set',
+                                    numbers: num,
+                                    displayNumbers: `${num} (3ตัวหลัง: ${group3.last3Digits})`,
+                                    total: excess3 * setPrice,
+                                    setCount: exactGroup.setCount,
+                                    submissions: exactGroup.submissions.slice(-excess3),
+                                    limit: limit3Set,
+                                    excess: excess3,
+                                    transferredAmount: transferred3Set,
+                                    isSetBased: true,
+                                    excessType: '3_set',
+                                    last3Digits: group3.last3Digits
+                                })
+                            }
+                        } else {
+                            // All remaining sets are excess
+                            excessItems.push({
+                                bet_type: '3_set',
+                                numbers: num,
+                                displayNumbers: `${num} (3ตัวหลัง: ${group3.last3Digits})`,
+                                total: exactGroup.setCount * setPrice,
+                                setCount: exactGroup.setCount,
+                                submissions: exactGroup.submissions,
+                                limit: limit3Set,
+                                excess: exactGroup.setCount,
+                                transferredAmount: transferred3Set,
+                                isSetBased: true,
+                                excessType: '3_set',
+                                last3Digits: group3.last3Digits
+                            })
+                        }
+                    })
+                }
+            })
+        }
+        
+        // Process non-4_set bets normally
         Object.values(grouped).forEach(group => {
+            // Skip 4_set for Lao/Hanoi - already handled above
+            if (isSetBasedLottery && (group.bet_type === '4_set' || group.bet_type === '4_top')) {
+                return
+            }
+            
             // For 4_set, map to 4_top for limit lookup (the underlying limit type)
             const limitLookupBetType = group.bet_type === '4_set' ? '4_top' : group.bet_type
 

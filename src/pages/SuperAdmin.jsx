@@ -1836,6 +1836,41 @@ export default function SuperAdmin() {
                 </div>
             </div>
 
+            {/* Credit Deductions Table */}
+            <h3 style={{ marginBottom: '1rem', marginTop: '1rem' }}>รายการตัดเครดิต (ค่าธรรมเนียม)</h3>
+            <div className="data-table-container" style={{ marginBottom: '2rem' }}>
+                <table className="data-table">
+                    <thead>
+                        <tr>
+                            <th>เจ้ามือ</th>
+                            <th>รายละเอียด</th>
+                            <th>ยอดเงิน</th>
+                            <th>ยอดคงเหลือ</th>
+                            <th>วันที่</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {creditDeductions.map(deduction => (
+                            <tr key={deduction.id}>
+                                <td>
+                                    <div>{deduction.dealer?.full_name || 'ไม่ทราบชื่อ'}</div>
+                                    <small className="text-muted">{deduction.dealer?.email}</small>
+                                </td>
+                                <td>{deduction.description || '-'}</td>
+                                <td><strong style={{ color: 'var(--color-success)' }}>฿{Math.abs(deduction.amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</strong></td>
+                                <td>฿{(deduction.balance_after || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
+                                <td>{formatDate(deduction.created_at)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+                {creditDeductions.length === 0 && (
+                    <div className="empty-state">ยังไม่มีรายการตัดเครดิต</div>
+                )}
+            </div>
+
+            {/* Manual Payments Table */}
+            <h3 style={{ marginBottom: '1rem' }}>การชำระเงินด้วยตนเอง</h3>
             <div className="toolbar">
                 <div className="filter-buttons">
                     {[
@@ -1857,7 +1892,6 @@ export default function SuperAdmin() {
                     ))}
                 </div>
             </div>
-
             <div className="data-table-container">
                 <table className="data-table">
                     <thead>
@@ -1924,7 +1958,7 @@ export default function SuperAdmin() {
                     </tbody>
                 </table>
                 {payments.length === 0 && (
-                    <div className="empty-state">ยังไม่มีการชำระเงิน</div>
+                    <div className="empty-state">ยังไม่มีการชำระเงินด้วยตนเอง</div>
                 )}
             </div>
         </div>

@@ -179,6 +179,25 @@ BEGIN
     
     v_credit_after := COALESCE(v_credit_after, 0);
     
+    -- Create credit transaction record
+    INSERT INTO credit_transactions (
+        dealer_id,
+        transaction_type,
+        amount,
+        balance_after,
+        reference_type,
+        reference_id,
+        description
+    ) VALUES (
+        p_dealer_id,
+        'deduction',
+        -v_amount,
+        v_credit_after,
+        'round',
+        p_round_id,
+        'ค่าธรรมเนียมทันที (' || v_percentage_rate || '%) - งวด ' || p_round_id::TEXT
+    );
+    
     -- Create billing record
     INSERT INTO dealer_billing_records (
         dealer_id,

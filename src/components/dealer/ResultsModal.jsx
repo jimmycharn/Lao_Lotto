@@ -146,6 +146,9 @@ export default function ResultsModal({ round, onClose }) {
                 console.warn('RPC function not available:', rpcError)
             }
 
+            // Credit deduction is now handled in handleCloseRound (when closing the round)
+            // No need to deduct again when announcing results
+
             const message = isEditing
                 ? `อัปเดตผลรางวัลสำเร็จ! มีผู้ถูกรางวัล ${winCount} รายการ`
                 : `ประกาศผลสำเร็จ! มีผู้ถูกรางวัล ${winCount} รายการ`
