@@ -317,11 +317,13 @@ export async function updatePendingDeduction(dealerId) {
             return
         }
 
-        // Get percentage_rate and min_amount from subscription_packages
+        // Get percentage_rate, min_amount, min_deduction, max_deduction from subscription_packages
         const percentageRate = subscription.subscription_packages?.percentage_rate || 0
         const minAmount = subscription.subscription_packages?.min_amount_before_charge || 0
+        const minDeduction = subscription.subscription_packages?.min_deduction || 0
+        const maxDeduction = subscription.subscription_packages?.max_deduction || 100000
 
-        console.log('[NEW v2] Percentage rate:', percentageRate, 'Min amount:', minAmount)
+        console.log('[NEW v2] Percentage rate:', percentageRate, 'Min amount:', minAmount, 'Min deduction:', minDeduction, 'Max deduction:', maxDeduction)
 
         // Get all open rounds for this dealer (only status = 'open', not 'closed')
         // Closed rounds have already been charged, so don't include them in pending
@@ -458,7 +460,18 @@ export async function updatePendingDeduction(dealerId) {
             console.log(`[NEW v2] Round ${round.id}: chargeableVolume=${chargeableVolume}, roundPending=${roundPending}`)
         }
 
-        console.log('Total pending deduction:', totalPending)
+        // Apply min/max deduction limits
+        let finalPending = totalPending
+        if (finalPending > 0 && finalPending < minDeduction) {
+            console.log(`[NEW v2] Applying min deduction: ${totalPending} -> ${minDeduction}`)
+            finalPending = minDeduction
+        }
+        if (finalPending > maxDeduction) {
+            console.log(`[NEW v2] Applying max deduction: ${totalPending} -> ${maxDeduction}`)
+            finalPending = maxDeduction
+        }
+
+        console.log('Total pending deduction:', totalPending, '-> Final (with min/max):', finalPending)
 
         // Update pending deduction (upsert to handle case where record doesn't exist)
         const { data: existingCredit } = await supabase
@@ -471,7 +484,7 @@ export async function updatePendingDeduction(dealerId) {
             await supabase
                 .from('dealer_credits')
                 .update({ 
-                    pending_deduction: totalPending, 
+                    pending_deduction: finalPending, 
                     updated_at: new Date().toISOString() 
                 })
                 .eq('dealer_id', dealerId)
@@ -482,7 +495,7 @@ export async function updatePendingDeduction(dealerId) {
                 .insert({
                     dealer_id: dealerId,
                     balance: 0,
-                    pending_deduction: totalPending,
+                    pending_deduction: finalPending,
                     warning_threshold: 1000
                 })
         }

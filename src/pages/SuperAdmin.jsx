@@ -84,7 +84,9 @@ export default function SuperAdmin() {
         package_id: '',
         billing_cycle: 'monthly',
         is_trial: false,
-        trial_days: 30
+        trial_days: 30,
+        has_expiry: false,
+        expires_at: ''
     })
     
     // Credit Modal States
@@ -120,6 +122,8 @@ export default function SuperAdmin() {
         yearly_price: '',
         percentage_rate: '',
         min_amount_before_charge: '',
+        min_deduction: '0',
+        max_deduction: '100000',
         max_users: '',
         extra_user_price: '',
         features: [],
@@ -980,7 +984,9 @@ export default function SuperAdmin() {
                 is_featured: pkg.is_featured || false,
                 is_active: pkg.is_active ?? true,
                 is_default: pkg.is_default || false,
-                min_amount_before_charge: pkg.min_amount_before_charge || ''
+                min_amount_before_charge: pkg.min_amount_before_charge || '',
+                min_deduction: pkg.min_deduction ?? '0',
+                max_deduction: pkg.max_deduction ?? '100000'
             })
         } else {
             setEditingPackage(null)
@@ -992,6 +998,8 @@ export default function SuperAdmin() {
                 yearly_price: '',
                 percentage_rate: '',
                 min_amount_before_charge: '',
+                min_deduction: '0',
+                max_deduction: '100000',
                 max_users: '',
                 extra_user_price: '',
                 features: [],
@@ -1021,6 +1029,8 @@ export default function SuperAdmin() {
                 yearly_price: parseFloat(packageForm.yearly_price) || 0,
                 percentage_rate: parseFloat(packageForm.percentage_rate) || 0,
                 min_amount_before_charge: parseFloat(packageForm.min_amount_before_charge) || 0,
+                min_deduction: parseFloat(packageForm.min_deduction) || 0,
+                max_deduction: parseFloat(packageForm.max_deduction) || 100000,
                 max_users: parseInt(packageForm.max_users) || 0,
                 extra_user_price: parseFloat(packageForm.extra_user_price) || 0,
                 features: packageForm.features,
@@ -1211,7 +1221,10 @@ export default function SuperAdmin() {
                 status: assignPackageForm.is_trial ? 'trial' : 'active',
                 is_trial: assignPackageForm.is_trial,
                 trial_days: assignPackageForm.is_trial ? assignPackageForm.trial_days : null,
-                package_snapshot: selectedPackage
+                package_snapshot: selectedPackage,
+                expires_at: assignPackageForm.has_expiry && assignPackageForm.expires_at 
+                    ? new Date(assignPackageForm.expires_at + 'T23:59:59').toISOString() 
+                    : null
             }
 
             // Check if dealer already has a subscription
@@ -1267,7 +1280,7 @@ export default function SuperAdmin() {
                 })
 
             setShowAssignPackageModal(false)
-            setAssignPackageForm({ package_id: '', billing_cycle: 'monthly', is_trial: false, trial_days: 30 })
+            setAssignPackageForm({ package_id: '', billing_cycle: 'monthly', is_trial: false, trial_days: 30, has_expiry: false, expires_at: '' })
             fetchDealers()
             fetchStats()
             toast.success('กำหนดแพ็คเกจสำเร็จ!')
@@ -1615,15 +1628,17 @@ export default function SuperAdmin() {
                                         </span>
                                     </td>
                                     <td>
-                                        {subscription?.end_date ? (
+                                        {subscription?.expires_at ? (
                                             <span className={
-                                                new Date(subscription.end_date) < new Date() ? 'text-danger' :
-                                                    new Date(subscription.end_date) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) ? 'text-warning' :
+                                                new Date(subscription.expires_at) < new Date() ? 'text-danger' :
+                                                    new Date(subscription.expires_at) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) ? 'text-warning' :
                                                         ''
                                             }>
-                                                {formatDate(subscription.end_date)}
+                                                {formatDate(subscription.expires_at)}
                                             </span>
-                                        ) : '-'}
+                                        ) : (
+                                            <span className="text-muted" style={{ fontSize: '0.85rem' }}>ไม่กำหนด</span>
+                                        )}
                                     </td>
                                     <td>
                                         <div className="action-buttons">
@@ -2859,6 +2874,30 @@ export default function SuperAdmin() {
                                         />
                                         <small className="form-hint">ยอดที่ dealer ป้อนเองต่ำกว่านี้จะไม่ถูกคิดค่าบริการ</small>
                                     </div>
+                                    <div className="form-row">
+                                        <div className="form-group">
+                                            <label>ตัดเครดิตขั้นต่ำ (฿)</label>
+                                            <input
+                                                type="number"
+                                                step="1"
+                                                value={packageForm.min_deduction}
+                                                onChange={(e) => setPackageForm({ ...packageForm, min_deduction: e.target.value })}
+                                                placeholder="0"
+                                            />
+                                            <small className="form-hint">ถ้าคำนวณได้น้อยกว่านี้ จะตัดตามค่านี้</small>
+                                        </div>
+                                        <div className="form-group">
+                                            <label>ตัดเครดิตสูงสุด (฿)</label>
+                                            <input
+                                                type="number"
+                                                step="1000"
+                                                value={packageForm.max_deduction}
+                                                onChange={(e) => setPackageForm({ ...packageForm, max_deduction: e.target.value })}
+                                                placeholder="100000"
+                                            />
+                                            <small className="form-hint">ไม่ว่าคำนวณได้เท่าไร จะตัดไม่เกินค่านี้</small>
+                                        </div>
+                                    </div>
                                 </>
                             )}
 
@@ -2978,6 +3017,41 @@ export default function SuperAdmin() {
                                     />
                                 </div>
                             )}
+
+                            <div className="form-group" style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
+                                <label style={{ fontWeight: 'bold', marginBottom: '0.5rem', display: 'block' }}>วันหมดอายุแพ็คเกจ</label>
+                                <div className="form-row" style={{ gap: '1rem' }}>
+                                    <label className="radio-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                        <input
+                                            type="radio"
+                                            name="expiry_type"
+                                            checked={!assignPackageForm.has_expiry}
+                                            onChange={() => setAssignPackageForm({ ...assignPackageForm, has_expiry: false, expires_at: '' })}
+                                        />
+                                        ไม่กำหนดเวลา (ใช้ได้เรื่อยๆ)
+                                    </label>
+                                    <label className="radio-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                        <input
+                                            type="radio"
+                                            name="expiry_type"
+                                            checked={assignPackageForm.has_expiry}
+                                            onChange={() => setAssignPackageForm({ ...assignPackageForm, has_expiry: true })}
+                                        />
+                                        กำหนดวันหมดอายุ
+                                    </label>
+                                </div>
+                                {assignPackageForm.has_expiry && (
+                                    <div style={{ marginTop: '0.75rem' }}>
+                                        <input
+                                            type="date"
+                                            value={assignPackageForm.expires_at}
+                                            onChange={(e) => setAssignPackageForm({ ...assignPackageForm, expires_at: e.target.value })}
+                                            min={new Date().toISOString().split('T')[0]}
+                                            style={{ width: '100%' }}
+                                        />
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         <div className="modal-footer">
                             <button className="btn" onClick={() => setShowAssignPackageModal(false)}>
