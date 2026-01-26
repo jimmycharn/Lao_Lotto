@@ -18,7 +18,8 @@ import {
     FiSearch,
     FiCopy,
     FiFileText,
-    FiRefreshCw
+    FiRefreshCw,
+    FiChevronRight
 } from 'react-icons/fi'
 import {
     LOTTERY_TYPES,
@@ -75,6 +76,8 @@ export default function RoundAccordionItem({
     // Selected items for bulk delete
     const [selectedItems, setSelectedItems] = useState({})
     const [deletingItems, setDeletingItems] = useState(false)
+    // Expanded bills for collapsible view
+    const [expandedBills, setExpandedBills] = useState([])
 
     // Write bet on behalf of user states
     const [showWriteBetModal, setShowWriteBetModal] = useState(false)
@@ -917,6 +920,40 @@ export default function RoundAccordionItem({
         return Object.values(bills).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     }
 
+    // Toggle bill expansion
+    const toggleBillExpand = (billKey) => {
+        setExpandedBills(prev => 
+            prev.includes(billKey) 
+                ? prev.filter(k => k !== billKey)
+                : [...prev, billKey]
+        )
+    }
+
+    // Delete entire bill
+    const handleDeleteBill = async (billItems) => {
+        if (!confirm(`ต้องการลบใบโพยนี้ (${billItems.length} รายการ)?`)) return
+
+        setDeletingItems(true)
+        try {
+            const ids = billItems.map(i => i.id)
+            const { error } = await supabase
+                .from('submissions')
+                .update({ is_deleted: true })
+                .in('id', ids)
+
+            if (error) throw error
+
+            toast.success(`ลบใบโพย ${billItems.length} รายการสำเร็จ`)
+            await fetchInlineSubmissions(true)
+            if (onCreditUpdate) onCreditUpdate()
+        } catch (error) {
+            console.error('Error deleting bill:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setDeletingItems(false)
+        }
+    }
+
     // Reclaim returned transfers back into the system (for sending dealer)
     const handleReclaimReturnedTransfers = async (transferItems) => {
         if (transferItems.length === 0) {
@@ -1325,76 +1362,81 @@ export default function RoundAccordionItem({
                                 <>
                                     {inlineTab === 'total' && (
                                         <div className="inline-tab-content">
-                                            {/* Member filter buttons */}
-                                            <div className="member-filter-buttons" style={{
-                                                display: 'flex',
-                                                gap: '0.5rem',
-                                                marginBottom: '0.75rem'
-                                            }}>
-                                                <button
-                                                    className={`filter-btn ${memberFilterMode === 'all' ? 'active' : ''}`}
-                                                    onClick={() => { setMemberFilterMode('all'); setInlineUserFilter('all'); }}
-                                                    style={{
-                                                        padding: '0.4rem 0.75rem',
-                                                        borderRadius: '20px',
-                                                        border: memberFilterMode === 'all' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                                        background: memberFilterMode === 'all' ? 'var(--color-primary)' : 'transparent',
-                                                        color: memberFilterMode === 'all' ? '#000' : 'var(--color-text)',
-                                                        fontSize: '0.85rem',
-                                                        cursor: 'pointer',
-                                                        transition: 'all 0.2s ease'
-                                                    }}
-                                                >
-                                                    สมาชิกทั้งหมด ({allMembers.length})
-                                                </button>
-                                                <button
-                                                    className={`filter-btn ${memberFilterMode === 'submitted' ? 'active' : ''}`}
-                                                    onClick={() => { setMemberFilterMode('submitted'); setInlineUserFilter('all'); }}
-                                                    style={{
-                                                        padding: '0.4rem 0.75rem',
-                                                        borderRadius: '20px',
-                                                        border: memberFilterMode === 'submitted' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                                        background: memberFilterMode === 'submitted' ? 'var(--color-primary)' : 'transparent',
-                                                        color: memberFilterMode === 'submitted' ? '#000' : 'var(--color-text)',
-                                                        fontSize: '0.85rem',
-                                                        cursor: 'pointer',
-                                                        transition: 'all 0.2s ease'
-                                                    }}
-                                                >
-                                                    สมาชิกที่ส่งเลข ({[...new Set(inlineSubmissions.map(s => s.user_id))].length})
-                                                </button>
-                                                {/* View mode toggle */}
-                                                <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.25rem', background: 'var(--color-surface)', borderRadius: '20px', padding: '2px' }}>
+                                            {/* Member filter and view mode - responsive layout */}
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                                                {/* Row 1: Member filter buttons */}
+                                                <div className="member-filter-buttons" style={{
+                                                    display: 'flex',
+                                                    gap: '0.5rem',
+                                                    flexWrap: 'wrap'
+                                                }}>
                                                     <button
-                                                        onClick={() => setTotalViewMode('all')}
+                                                        className={`filter-btn ${memberFilterMode === 'all' ? 'active' : ''}`}
+                                                        onClick={() => { setMemberFilterMode('all'); setInlineUserFilter('all'); }}
                                                         style={{
-                                                            padding: '0.35rem 0.65rem',
-                                                            borderRadius: '18px',
-                                                            border: 'none',
-                                                            background: totalViewMode === 'all' ? 'var(--color-primary)' : 'transparent',
-                                                            color: totalViewMode === 'all' ? '#000' : 'var(--color-text-muted)',
+                                                            padding: '0.35rem 0.6rem',
+                                                            borderRadius: '20px',
+                                                            border: memberFilterMode === 'all' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                                            background: memberFilterMode === 'all' ? 'var(--color-primary)' : 'transparent',
+                                                            color: memberFilterMode === 'all' ? '#000' : 'var(--color-text)',
                                                             fontSize: '0.8rem',
                                                             cursor: 'pointer',
-                                                            transition: 'all 0.2s ease'
+                                                            transition: 'all 0.2s ease',
+                                                            whiteSpace: 'nowrap'
                                                         }}
                                                     >
-                                                        ทั้งหมด
+                                                        ทั้งหมด ({allMembers.length})
                                                     </button>
                                                     <button
-                                                        onClick={() => setTotalViewMode('bills')}
+                                                        className={`filter-btn ${memberFilterMode === 'submitted' ? 'active' : ''}`}
+                                                        onClick={() => { setMemberFilterMode('submitted'); setInlineUserFilter('all'); }}
                                                         style={{
-                                                            padding: '0.35rem 0.65rem',
-                                                            borderRadius: '18px',
-                                                            border: 'none',
-                                                            background: totalViewMode === 'bills' ? 'var(--color-primary)' : 'transparent',
-                                                            color: totalViewMode === 'bills' ? '#000' : 'var(--color-text-muted)',
+                                                            padding: '0.35rem 0.6rem',
+                                                            borderRadius: '20px',
+                                                            border: memberFilterMode === 'submitted' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                                            background: memberFilterMode === 'submitted' ? 'var(--color-primary)' : 'transparent',
+                                                            color: memberFilterMode === 'submitted' ? '#000' : 'var(--color-text)',
                                                             fontSize: '0.8rem',
                                                             cursor: 'pointer',
-                                                            transition: 'all 0.2s ease'
+                                                            transition: 'all 0.2s ease',
+                                                            whiteSpace: 'nowrap'
                                                         }}
                                                     >
-                                                        แยกใบโพย
+                                                        ส่งเลข ({[...new Set(inlineSubmissions.map(s => s.user_id))].length})
                                                     </button>
+                                                    {/* View mode toggle - same row but will wrap on mobile */}
+                                                    <div style={{ display: 'flex', gap: '0.25rem', background: 'var(--color-surface)', borderRadius: '20px', padding: '2px', marginLeft: 'auto' }}>
+                                                        <button
+                                                            onClick={() => setTotalViewMode('all')}
+                                                            style={{
+                                                                padding: '0.3rem 0.5rem',
+                                                                borderRadius: '18px',
+                                                                border: 'none',
+                                                                background: totalViewMode === 'all' ? 'var(--color-primary)' : 'transparent',
+                                                                color: totalViewMode === 'all' ? '#000' : 'var(--color-text-muted)',
+                                                                fontSize: '0.75rem',
+                                                                cursor: 'pointer',
+                                                                transition: 'all 0.2s ease'
+                                                            }}
+                                                        >
+                                                            รวม
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setTotalViewMode('bills')}
+                                                            style={{
+                                                                padding: '0.3rem 0.5rem',
+                                                                borderRadius: '18px',
+                                                                border: 'none',
+                                                                background: totalViewMode === 'bills' ? 'var(--color-primary)' : 'transparent',
+                                                                color: totalViewMode === 'bills' ? '#000' : 'var(--color-text-muted)',
+                                                                fontSize: '0.75rem',
+                                                                cursor: 'pointer',
+                                                                transition: 'all 0.2s ease'
+                                                            }}
+                                                        >
+                                                            ใบโพย
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
 
@@ -1611,7 +1653,7 @@ export default function RoundAccordionItem({
 
                                             {/* View Mode: แยกใบโพย */}
                                             {totalViewMode === 'bills' && (
-                                                <div className="bills-view">
+                                                <div className="bills-view" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                                     {(() => {
                                                         const bills = getSubmissionsByBills()
                                                         // Filter by user if selected
@@ -1634,7 +1676,7 @@ export default function RoundAccordionItem({
                                                         }
 
                                                         return Object.values(billsByUser).map(userGroup => (
-                                                            <div key={userGroup.user_id || userGroup.user_name} style={{ marginBottom: '1rem' }}>
+                                                            <div key={userGroup.user_id || userGroup.user_name} style={{ marginBottom: '0.5rem' }}>
                                                                 {/* User header */}
                                                                 <div style={{ 
                                                                     display: 'flex', 
@@ -1650,88 +1692,108 @@ export default function RoundAccordionItem({
                                                                     <span>{round.currency_symbol}{userGroup.total.toLocaleString()}</span>
                                                                 </div>
                                                                 
-                                                                {/* Bills for this user */}
-                                                                {userGroup.bills.map((bill, billIdx) => (
-                                                                    <div key={bill.bill_id} style={{ 
-                                                                        border: '1px solid var(--color-border)',
-                                                                        borderTop: billIdx === 0 ? 'none' : '1px solid var(--color-border)',
-                                                                        background: 'var(--color-surface)'
-                                                                    }}>
-                                                                        {/* Bill header */}
-                                                                        <div style={{ 
-                                                                            display: 'flex', 
-                                                                            justifyContent: 'space-between', 
-                                                                            alignItems: 'center',
-                                                                            padding: '0.5rem 0.75rem',
-                                                                            background: 'rgba(255,255,255,0.03)',
-                                                                            borderBottom: '1px solid var(--color-border)'
-                                                                        }}>
-                                                                            <div>
-                                                                                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-                                                                                    📝 ใบโพย {billIdx + 1} • {bill.items.length} รายการ
-                                                                                </span>
-                                                                                {bill.bill_note && (
-                                                                                    <span style={{ marginLeft: '0.5rem', fontSize: '0.8rem', color: 'var(--color-warning)' }}>
-                                                                                        ({bill.bill_note})
-                                                                                    </span>
-                                                                                )}
-                                                                            </div>
-                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                                <span style={{ fontWeight: '600' }}>{round.currency_symbol}{bill.total.toLocaleString()}</span>
-                                                                                {isOpen && (
-                                                                                    <button 
-                                                                                        className="btn btn-icon btn-sm btn-danger"
-                                                                                        onClick={() => {
-                                                                                            if (confirm(`ต้องการลบใบโพยนี้ (${bill.items.length} รายการ)?`)) {
-                                                                                                const ids = bill.items.map(i => i.id)
-                                                                                                ids.forEach(id => { selectedItems[id] = true })
-                                                                                                setSelectedItems({...selectedItems})
-                                                                                                handleDeleteSelectedItems(ids)
-                                                                                            }
-                                                                                        }}
-                                                                                        title="ลบใบโพย"
-                                                                                        style={{ padding: '0.2rem 0.4rem' }}
-                                                                                    >
-                                                                                        <FiTrash2 size={14} />
-                                                                                    </button>
-                                                                                )}
-                                                                            </div>
-                                                                        </div>
+                                                                {/* Bills for this user - Collapsible cards */}
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.5rem', background: 'rgba(255,255,255,0.02)', borderRadius: '0 0 8px 8px', border: '1px solid var(--color-border)', borderTop: 'none' }}>
+                                                                    {userGroup.bills.map((bill, billIdx) => {
+                                                                        const billKey = `${bill.user_id}|${bill.bill_id}`
+                                                                        const isExpanded = expandedBills.includes(billKey)
+                                                                        const billTime = new Date(bill.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
                                                                         
-                                                                        {/* Bill items */}
-                                                                        <div style={{ padding: '0.5rem' }}>
-                                                                            {bill.items.map(item => (
-                                                                                <div key={item.id} style={{ 
-                                                                                    display: 'flex', 
-                                                                                    justifyContent: 'space-between', 
-                                                                                    alignItems: 'center',
-                                                                                    padding: '0.35rem 0.5rem',
-                                                                                    borderBottom: '1px dashed var(--color-border)'
-                                                                                }}>
-                                                                                    <div>
-                                                                                        <span style={{ fontWeight: '600', marginRight: '0.5rem' }}>{item.numbers}</span>
-                                                                                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                            {BET_TYPES[item.bet_type] || item.bet_type}
+                                                                        return (
+                                                                            <div key={bill.bill_id} className={`bill-card-new ${isExpanded ? 'expanded' : ''}`} style={{ 
+                                                                                border: '1px solid var(--color-border)',
+                                                                                borderRadius: '8px',
+                                                                                background: 'var(--color-surface)',
+                                                                                overflow: 'hidden'
+                                                                            }}>
+                                                                                {/* Bill header - clickable to expand/collapse */}
+                                                                                <div 
+                                                                                    onClick={() => toggleBillExpand(billKey)}
+                                                                                    style={{ 
+                                                                                        display: 'flex', 
+                                                                                        justifyContent: 'space-between', 
+                                                                                        alignItems: 'center',
+                                                                                        padding: '0.6rem 0.75rem',
+                                                                                        background: isExpanded ? 'rgba(255,193,7,0.1)' : 'rgba(255,255,255,0.03)',
+                                                                                        cursor: 'pointer',
+                                                                                        transition: 'background 0.2s ease'
+                                                                                    }}
+                                                                                >
+                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                                        <span style={{ color: 'var(--color-text-muted)', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+                                                                                            <FiChevronRight size={16} />
                                                                                         </span>
+                                                                                        <div>
+                                                                                            <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>
+                                                                                                {bill.bill_note || `ใบโพย ${billIdx + 1}`}
+                                                                                            </div>
+                                                                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                                {billTime} • {bill.items.length} รายการ
+                                                                                            </div>
+                                                                                        </div>
                                                                                     </div>
                                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                                        <span>{round.currency_symbol}{item.amount.toLocaleString()}</span>
+                                                                                        <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>
+                                                                                            {round.currency_symbol}{bill.total.toLocaleString()}
+                                                                                        </span>
                                                                                         {isOpen && (
                                                                                             <button 
-                                                                                                className="btn btn-icon btn-sm"
-                                                                                                onClick={() => handleDeleteSingleItem(item.id)}
-                                                                                                title="ลบ"
-                                                                                                style={{ padding: '0.15rem', color: 'var(--color-danger)' }}
+                                                                                                className="btn btn-icon btn-sm btn-danger"
+                                                                                                onClick={(e) => {
+                                                                                                    e.stopPropagation()
+                                                                                                    handleDeleteBill(bill.items)
+                                                                                                }}
+                                                                                                title="ลบใบโพย"
+                                                                                                style={{ padding: '0.25rem 0.4rem' }}
                                                                                             >
-                                                                                                <FiTrash2 size={12} />
+                                                                                                <FiTrash2 size={14} />
                                                                                             </button>
                                                                                         )}
                                                                                     </div>
                                                                                 </div>
-                                                                            ))}
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
+                                                                                
+                                                                                {/* Bill items - Collapsible */}
+                                                                                {isExpanded && (
+                                                                                    <div style={{ borderTop: '1px solid var(--color-border)' }}>
+                                                                                        {bill.items.map((item, itemIdx) => (
+                                                                                            <div key={item.id} style={{ 
+                                                                                                display: 'flex', 
+                                                                                                justifyContent: 'space-between', 
+                                                                                                alignItems: 'center',
+                                                                                                padding: '0.5rem 0.75rem',
+                                                                                                borderBottom: itemIdx < bill.items.length - 1 ? '1px dashed var(--color-border)' : 'none',
+                                                                                                background: 'rgba(255,255,255,0.02)'
+                                                                                            }}>
+                                                                                                <div>
+                                                                                                    <span style={{ fontWeight: '600', marginRight: '0.5rem', fontSize: '0.95rem' }}>{item.numbers}</span>
+                                                                                                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                                        {BET_TYPES[item.bet_type] || item.bet_type}
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                                                    <span style={{ fontWeight: '500' }}>{round.currency_symbol}{item.amount.toLocaleString()}</span>
+                                                                                                    {isOpen && (
+                                                                                                        <button 
+                                                                                                            className="btn btn-icon btn-sm"
+                                                                                                            onClick={(e) => {
+                                                                                                                e.stopPropagation()
+                                                                                                                handleDeleteSingleItem(item.id)
+                                                                                                            }}
+                                                                                                            title="ลบ"
+                                                                                                            style={{ padding: '0.15rem', color: 'var(--color-danger)' }}
+                                                                                                        >
+                                                                                                            <FiTrash2 size={12} />
+                                                                                                        </button>
+                                                                                                    )}
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        )
+                                                                    })}
+                                                                </div>
                                                             </div>
                                                         ))
                                                     })()}
