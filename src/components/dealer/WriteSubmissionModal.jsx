@@ -545,17 +545,19 @@ export default function WriteSubmissionModal({
             const { error } = await supabase.from('submissions').insert(inserts)
             if (error) throw error
 
-            // Update pending deduction for dealer's credit
-            if (dealerId) {
-                console.log('=== WriteSubmissionModal Credit Update ===')
-                console.log('dealerId (dealer who is logged in):', dealerId)
-                console.log('targetUser.id (user we are writing for):', targetUser?.id)
-                console.log('Calling updatePendingDeduction for dealer:', dealerId)
-                await updatePendingDeduction(dealerId)
-                console.log('WriteSubmissionModal: updatePendingDeduction completed')
-            }
-
+            // Show success immediately - don't wait for pending deduction update
             toast.success(`บันทึกโพยให้ ${targetUser.full_name || targetUser.email} สำเร็จ!`)
+
+            // Update pending deduction in background (non-blocking)
+            if (dealerId) {
+                console.log('=== WriteSubmissionModal Credit Update (async) ===')
+                // Don't await - let it run in background
+                updatePendingDeduction(dealerId).then(() => {
+                    console.log('WriteSubmissionModal: updatePendingDeduction completed (background)')
+                }).catch(err => {
+                    console.error('Background pending deduction update failed:', err)
+                })
+            }
             setDrafts([])
             setBillNote('')
             if (onSuccess) onSuccess()

@@ -70,6 +70,11 @@ export default function RoundAccordionItem({
     const [inlineSearch, setInlineSearch] = useState('')
     // Member filter: 'all' = all members, 'submitted' = only members who submitted
     const [memberFilterMode, setMemberFilterMode] = useState('submitted')
+    // Total tab view mode: 'all' = ทั้งหมด (รวมเลข), 'bills' = แยกใบโพย
+    const [totalViewMode, setTotalViewMode] = useState('all')
+    // Selected items for bulk delete
+    const [selectedItems, setSelectedItems] = useState({})
+    const [deletingItems, setDeletingItems] = useState(false)
 
     // Write bet on behalf of user states
     const [showWriteBetModal, setShowWriteBetModal] = useState(false)
@@ -817,6 +822,101 @@ export default function RoundAccordionItem({
 
     const getSelectedIncomingCount = (ids) => ids.filter(id => selectedIncomingItems[id]).length
 
+    // Toggle select submission item
+    const toggleSelectItem = (id) => {
+        setSelectedItems(prev => ({ ...prev, [id]: !prev[id] }))
+    }
+
+    // Toggle select all submissions
+    const toggleSelectAllItems = (ids) => {
+        const allSelected = ids.every(id => selectedItems[id])
+        if (allSelected) {
+            setSelectedItems({})
+        } else {
+            const newSelected = {}
+            ids.forEach(id => { newSelected[id] = true })
+            setSelectedItems(newSelected)
+        }
+    }
+
+    const getSelectedItemsCount = (ids) => ids.filter(id => selectedItems[id]).length
+
+    // Delete selected submissions
+    const handleDeleteSelectedItems = async (ids) => {
+        const selectedIds = ids.filter(id => selectedItems[id])
+        if (selectedIds.length === 0) {
+            toast.warning('กรุณาเลือกรายการที่ต้องการลบ')
+            return
+        }
+
+        if (!confirm(`ต้องการลบ ${selectedIds.length} รายการ?`)) return
+
+        setDeletingItems(true)
+        try {
+            const { error } = await supabase
+                .from('submissions')
+                .update({ is_deleted: true })
+                .in('id', selectedIds)
+
+            if (error) throw error
+
+            toast.success(`ลบ ${selectedIds.length} รายการสำเร็จ`)
+            setSelectedItems({})
+            await fetchInlineSubmissions(true)
+            if (onCreditUpdate) onCreditUpdate()
+        } catch (error) {
+            console.error('Error deleting submissions:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setDeletingItems(false)
+        }
+    }
+
+    // Delete single submission
+    const handleDeleteSingleItem = async (id) => {
+        if (!confirm('ต้องการลบรายการนี้?')) return
+
+        try {
+            const { error } = await supabase
+                .from('submissions')
+                .update({ is_deleted: true })
+                .eq('id', id)
+
+            if (error) throw error
+
+            toast.success('ลบรายการสำเร็จ')
+            await fetchInlineSubmissions(true)
+            if (onCreditUpdate) onCreditUpdate()
+        } catch (error) {
+            console.error('Error deleting submission:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+
+    // Group submissions by bill_id and user
+    const getSubmissionsByBills = () => {
+        const bills = {}
+        inlineSubmissions.forEach(sub => {
+            const billId = sub.bill_id || sub.id
+            const userName = sub.profiles?.full_name || sub.profiles?.email || 'ไม่ระบุ'
+            const key = `${billId}|${userName}`
+            if (!bills[key]) {
+                bills[key] = {
+                    bill_id: billId,
+                    user_name: userName,
+                    user_id: sub.user_id,
+                    items: [],
+                    total: 0,
+                    created_at: sub.created_at,
+                    bill_note: sub.bill_note
+                }
+            }
+            bills[key].items.push(sub)
+            bills[key].total += sub.amount
+        })
+        return Object.values(bills).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    }
+
     // Reclaim returned transfers back into the system (for sending dealer)
     const handleReclaimReturnedTransfers = async (transferItems) => {
         if (transferItems.length === 0) {
@@ -1263,6 +1363,39 @@ export default function RoundAccordionItem({
                                                 >
                                                     สมาชิกที่ส่งเลข ({[...new Set(inlineSubmissions.map(s => s.user_id))].length})
                                                 </button>
+                                                {/* View mode toggle */}
+                                                <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.25rem', background: 'var(--color-surface)', borderRadius: '20px', padding: '2px' }}>
+                                                    <button
+                                                        onClick={() => setTotalViewMode('all')}
+                                                        style={{
+                                                            padding: '0.35rem 0.65rem',
+                                                            borderRadius: '18px',
+                                                            border: 'none',
+                                                            background: totalViewMode === 'all' ? 'var(--color-primary)' : 'transparent',
+                                                            color: totalViewMode === 'all' ? '#000' : 'var(--color-text-muted)',
+                                                            fontSize: '0.8rem',
+                                                            cursor: 'pointer',
+                                                            transition: 'all 0.2s ease'
+                                                        }}
+                                                    >
+                                                        ทั้งหมด
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setTotalViewMode('bills')}
+                                                        style={{
+                                                            padding: '0.35rem 0.65rem',
+                                                            borderRadius: '18px',
+                                                            border: 'none',
+                                                            background: totalViewMode === 'bills' ? 'var(--color-primary)' : 'transparent',
+                                                            color: totalViewMode === 'bills' ? '#000' : 'var(--color-text-muted)',
+                                                            fontSize: '0.8rem',
+                                                            cursor: 'pointer',
+                                                            transition: 'all 0.2s ease'
+                                                        }}
+                                                    >
+                                                        แยกใบโพย
+                                                    </button>
+                                                </div>
                                             </div>
 
                                             <div className="inline-filters" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -1349,69 +1482,261 @@ export default function RoundAccordionItem({
                                                 }).reduce((sum, s) => sum + (s.commission_amount || 0), 0).toLocaleString()}</span>
                                             </div>
 
-                                            <div className="inline-table-wrap">
-                                                <table className="inline-table">
-                                                    <thead>
-                                                        <tr>
-                                                            <th>เลข</th>
-                                                            <th>จำนวน</th>
-                                                            {!isGrouped && <th>เวลา</th>}
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {(() => {
-                                                            let filteredData = inlineSubmissions.filter(s => {
-                                                                const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
-                                                                if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
-                                                                if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
-                                                                if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
-                                                                return true
-                                                            })
-
-                                                            if (isGrouped) {
-                                                                const grouped = {}
-                                                                filteredData.forEach(s => {
-                                                                    const normalizedNumbers = normalizeNumber(s.numbers, s.bet_type)
-                                                                    const key = `${normalizedNumbers}|${s.bet_type}`
-                                                                    if (!grouped[key]) {
-                                                                        grouped[key] = { numbers: normalizedNumbers, originalNumbers: [s.numbers], bet_type: s.bet_type, amount: 0, count: 0, id: key }
-                                                                    } else {
-                                                                        if (!grouped[key].originalNumbers.includes(s.numbers)) grouped[key].originalNumbers.push(s.numbers)
-                                                                    }
-                                                                    grouped[key].amount += s.amount
-                                                                    grouped[key].count += 1
+                                            {/* View Mode: ทั้งหมด (รวมเลข) */}
+                                            {totalViewMode === 'all' && (
+                                                <div className="inline-table-wrap">
+                                                    <table className="inline-table">
+                                                        <thead>
+                                                            <tr>
+                                                                {isOpen && <th style={{ width: '30px' }}></th>}
+                                                                <th>เลข</th>
+                                                                <th>จำนวน</th>
+                                                                {!isGrouped && <th>เวลา</th>}
+                                                                {isOpen && <th style={{ width: '40px' }}></th>}
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {(() => {
+                                                                let filteredData = inlineSubmissions.filter(s => {
+                                                                    const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
+                                                                    if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
+                                                                    if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
+                                                                    if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
+                                                                    return true
                                                                 })
-                                                                filteredData = Object.values(grouped).sort((a, b) => b.amount - a.amount)
-                                                            }
 
-                                                            const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
-                                                            const setPrice = round?.set_prices?.['4_top'] || 120
+                                                                if (isGrouped) {
+                                                                    const grouped = {}
+                                                                    filteredData.forEach(s => {
+                                                                        const normalizedNumbers = normalizeNumber(s.numbers, s.bet_type)
+                                                                        const key = `${normalizedNumbers}|${s.bet_type}`
+                                                                        if (!grouped[key]) {
+                                                                            grouped[key] = { numbers: normalizedNumbers, originalNumbers: [s.numbers], bet_type: s.bet_type, amount: 0, count: 0, id: key, ids: [] }
+                                                                        } else {
+                                                                            if (!grouped[key].originalNumbers.includes(s.numbers)) grouped[key].originalNumbers.push(s.numbers)
+                                                                        }
+                                                                        grouped[key].amount += s.amount
+                                                                        grouped[key].count += 1
+                                                                        grouped[key].ids.push(s.id)
+                                                                    })
+                                                                    filteredData = Object.values(grouped).sort((a, b) => b.amount - a.amount)
+                                                                }
 
-                                                            return filteredData.map(sub => {
-                                                                const isSet4Digit = sub.bet_type === '4_set' || sub.bet_type === '4_top'
-                                                                const setCount = isSetBasedLottery && isSet4Digit ? Math.ceil(sub.amount / setPrice) : 0
+                                                                const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
+                                                                const setPrice = round?.set_prices?.['4_top'] || 120
+                                                                const allIds = isGrouped ? filteredData.flatMap(g => g.ids) : filteredData.map(s => s.id)
 
                                                                 return (
-                                                                    <tr key={isGrouped ? sub.id : sub.id}>
-                                                                        <td className="number-cell">
-                                                                            <div className="number-value">{sub.numbers}</div>
-                                                                            <div className="type-sub-label">{BET_TYPES[sub.bet_type] || sub.bet_type}</div>
-                                                                            {isGrouped && sub.count > 1 && <div className="count-sub-label">({sub.count} รายการ)</div>}
-                                                                        </td>
-                                                                        <td>
-                                                                            {round.currency_symbol}{sub.amount.toLocaleString()}
-                                                                            {isSetBasedLottery && isSet4Digit && setCount > 0 && (
-                                                                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>({setCount} ชุด)</div>
-                                                                            )}
-                                                                        </td>
-                                                                        {!isGrouped && <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>}
-                                                                    </tr>
+                                                                    <>
+                                                                        {isOpen && filteredData.length > 0 && (
+                                                                            <tr style={{ background: 'var(--color-surface)' }}>
+                                                                                <td colSpan={isGrouped ? 4 : 5} style={{ padding: '0.5rem' }}>
+                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                                                                            <input 
+                                                                                                type="checkbox" 
+                                                                                                checked={allIds.length > 0 && allIds.every(id => selectedItems[id])}
+                                                                                                onChange={() => toggleSelectAllItems(allIds)}
+                                                                                                style={{ width: '16px', height: '16px' }}
+                                                                                            />
+                                                                                            <span style={{ fontSize: '0.85rem' }}>เลือกทั้งหมด</span>
+                                                                                        </label>
+                                                                                        {getSelectedItemsCount(allIds) > 0 && (
+                                                                                            <button 
+                                                                                                className="btn btn-danger btn-sm"
+                                                                                                onClick={() => handleDeleteSelectedItems(allIds)}
+                                                                                                disabled={deletingItems}
+                                                                                                style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}
+                                                                                            >
+                                                                                                <FiTrash2 /> ลบ ({getSelectedItemsCount(allIds)})
+                                                                                            </button>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </td>
+                                                                            </tr>
+                                                                        )}
+                                                                        {filteredData.map(sub => {
+                                                                            const isSet4Digit = sub.bet_type === '4_set' || sub.bet_type === '4_top'
+                                                                            const setCount = isSetBasedLottery && isSet4Digit ? Math.ceil(sub.amount / setPrice) : 0
+                                                                            const itemIds = isGrouped ? sub.ids : [sub.id]
+                                                                            const isSelected = itemIds.some(id => selectedItems[id])
+
+                                                                            return (
+                                                                                <tr key={isGrouped ? sub.id : sub.id} style={{ background: isSelected ? 'rgba(239, 68, 68, 0.1)' : 'transparent' }}>
+                                                                                    {isOpen && (
+                                                                                        <td>
+                                                                                            <input 
+                                                                                                type="checkbox" 
+                                                                                                checked={itemIds.every(id => selectedItems[id])}
+                                                                                                onChange={() => itemIds.forEach(id => toggleSelectItem(id))}
+                                                                                                style={{ width: '16px', height: '16px' }}
+                                                                                            />
+                                                                                        </td>
+                                                                                    )}
+                                                                                    <td className="number-cell">
+                                                                                        <div className="number-value">{sub.numbers}</div>
+                                                                                        <div className="type-sub-label">{BET_TYPES[sub.bet_type] || sub.bet_type}</div>
+                                                                                        {isGrouped && sub.count > 1 && <div className="count-sub-label">({sub.count} รายการ)</div>}
+                                                                                    </td>
+                                                                                    <td>
+                                                                                        {round.currency_symbol}{sub.amount.toLocaleString()}
+                                                                                        {isSetBasedLottery && isSet4Digit && setCount > 0 && (
+                                                                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>({setCount} ชุด)</div>
+                                                                                        )}
+                                                                                    </td>
+                                                                                    {!isGrouped && <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>}
+                                                                                    {isOpen && !isGrouped && (
+                                                                                        <td>
+                                                                                            <button 
+                                                                                                className="btn btn-icon btn-sm btn-danger"
+                                                                                                onClick={() => handleDeleteSingleItem(sub.id)}
+                                                                                                title="ลบ"
+                                                                                                style={{ padding: '0.2rem' }}
+                                                                                            >
+                                                                                                <FiTrash2 size={14} />
+                                                                                            </button>
+                                                                                        </td>
+                                                                                    )}
+                                                                                    {isOpen && isGrouped && <td></td>}
+                                                                                </tr>
+                                                                            )
+                                                                        })}
+                                                                    </>
                                                                 )
-                                                            })
-                                                        })()}
-                                                    </tbody>
-                                                </table>
-                                            </div>
+                                                            })()}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )}
+
+                                            {/* View Mode: แยกใบโพย */}
+                                            {totalViewMode === 'bills' && (
+                                                <div className="bills-view">
+                                                    {(() => {
+                                                        const bills = getSubmissionsByBills()
+                                                        // Filter by user if selected
+                                                        const filteredBills = inlineUserFilter === 'all' 
+                                                            ? bills 
+                                                            : bills.filter(b => b.user_name === inlineUserFilter)
+                                                        
+                                                        // Group bills by user
+                                                        const billsByUser = {}
+                                                        filteredBills.forEach(bill => {
+                                                            if (!billsByUser[bill.user_name]) {
+                                                                billsByUser[bill.user_name] = { user_name: bill.user_name, user_id: bill.user_id, bills: [], total: 0 }
+                                                            }
+                                                            billsByUser[bill.user_name].bills.push(bill)
+                                                            billsByUser[bill.user_name].total += bill.total
+                                                        })
+
+                                                        if (Object.keys(billsByUser).length === 0) {
+                                                            return <div className="empty-state" style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>ไม่มีข้อมูล</div>
+                                                        }
+
+                                                        return Object.values(billsByUser).map(userGroup => (
+                                                            <div key={userGroup.user_id || userGroup.user_name} style={{ marginBottom: '1rem' }}>
+                                                                {/* User header */}
+                                                                <div style={{ 
+                                                                    display: 'flex', 
+                                                                    justifyContent: 'space-between', 
+                                                                    alignItems: 'center',
+                                                                    padding: '0.5rem 0.75rem',
+                                                                    background: 'var(--color-primary)',
+                                                                    color: '#000',
+                                                                    borderRadius: '8px 8px 0 0',
+                                                                    fontWeight: '600'
+                                                                }}>
+                                                                    <span>👤 {userGroup.user_name}</span>
+                                                                    <span>{round.currency_symbol}{userGroup.total.toLocaleString()}</span>
+                                                                </div>
+                                                                
+                                                                {/* Bills for this user */}
+                                                                {userGroup.bills.map((bill, billIdx) => (
+                                                                    <div key={bill.bill_id} style={{ 
+                                                                        border: '1px solid var(--color-border)',
+                                                                        borderTop: billIdx === 0 ? 'none' : '1px solid var(--color-border)',
+                                                                        background: 'var(--color-surface)'
+                                                                    }}>
+                                                                        {/* Bill header */}
+                                                                        <div style={{ 
+                                                                            display: 'flex', 
+                                                                            justifyContent: 'space-between', 
+                                                                            alignItems: 'center',
+                                                                            padding: '0.5rem 0.75rem',
+                                                                            background: 'rgba(255,255,255,0.03)',
+                                                                            borderBottom: '1px solid var(--color-border)'
+                                                                        }}>
+                                                                            <div>
+                                                                                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                                                                                    📝 ใบโพย {billIdx + 1} • {bill.items.length} รายการ
+                                                                                </span>
+                                                                                {bill.bill_note && (
+                                                                                    <span style={{ marginLeft: '0.5rem', fontSize: '0.8rem', color: 'var(--color-warning)' }}>
+                                                                                        ({bill.bill_note})
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                                <span style={{ fontWeight: '600' }}>{round.currency_symbol}{bill.total.toLocaleString()}</span>
+                                                                                {isOpen && (
+                                                                                    <button 
+                                                                                        className="btn btn-icon btn-sm btn-danger"
+                                                                                        onClick={() => {
+                                                                                            if (confirm(`ต้องการลบใบโพยนี้ (${bill.items.length} รายการ)?`)) {
+                                                                                                const ids = bill.items.map(i => i.id)
+                                                                                                ids.forEach(id => { selectedItems[id] = true })
+                                                                                                setSelectedItems({...selectedItems})
+                                                                                                handleDeleteSelectedItems(ids)
+                                                                                            }
+                                                                                        }}
+                                                                                        title="ลบใบโพย"
+                                                                                        style={{ padding: '0.2rem 0.4rem' }}
+                                                                                    >
+                                                                                        <FiTrash2 size={14} />
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                        
+                                                                        {/* Bill items */}
+                                                                        <div style={{ padding: '0.5rem' }}>
+                                                                            {bill.items.map(item => (
+                                                                                <div key={item.id} style={{ 
+                                                                                    display: 'flex', 
+                                                                                    justifyContent: 'space-between', 
+                                                                                    alignItems: 'center',
+                                                                                    padding: '0.35rem 0.5rem',
+                                                                                    borderBottom: '1px dashed var(--color-border)'
+                                                                                }}>
+                                                                                    <div>
+                                                                                        <span style={{ fontWeight: '600', marginRight: '0.5rem' }}>{item.numbers}</span>
+                                                                                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                            {BET_TYPES[item.bet_type] || item.bet_type}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                                        <span>{round.currency_symbol}{item.amount.toLocaleString()}</span>
+                                                                                        {isOpen && (
+                                                                                            <button 
+                                                                                                className="btn btn-icon btn-sm"
+                                                                                                onClick={() => handleDeleteSingleItem(item.id)}
+                                                                                                title="ลบ"
+                                                                                                style={{ padding: '0.15rem', color: 'var(--color-danger)' }}
+                                                                                            >
+                                                                                                <FiTrash2 size={12} />
+                                                                                            </button>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        ))
+                                                    })()}
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 
