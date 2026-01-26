@@ -1172,36 +1172,32 @@ export default function Dealer() {
                 .eq('id', roundId)
 
             if (!error) {
-                // Create immediate billing record if dealer has immediate billing cycle
+                // Finalize credit deduction - try immediate first, then regular
+                // Only ONE of these will actually deduct (based on billing_cycle)
                 try {
-                    const { data: billingResult, error: billingError } = await supabase
+                    // Try immediate billing first (for immediate billing cycle)
+                    const { data: immediateBillingResult, error: immediateBillingError } = await supabase
                         .rpc('create_immediate_billing_record', { 
                             p_round_id: roundId,
                             p_dealer_id: user.id
                         })
                     
-                    if (billingError) {
-                        console.log('Immediate billing not available:', billingError)
-                    } else if (billingResult) {
-                        console.log('Created immediate billing record:', billingResult)
-                        toast.info('สร้างรายการชำระค่าธรรมเนียมแล้ว')
+                    if (!immediateBillingError && immediateBillingResult?.success && immediateBillingResult?.amount_deducted > 0) {
+                        // Immediate billing succeeded - don't call finalize_round_credit
+                        console.log('Immediate billing success:', immediateBillingResult)
+                        toast.info(`ตัดเครดิต ฿${immediateBillingResult.amount_deducted.toLocaleString()} สำเร็จ`)
+                    } else {
+                        // Immediate billing not applicable - try regular finalization
+                        const { data: result, error: creditError } = await supabase
+                            .rpc('finalize_round_credit', { p_round_id: roundId })
+                        
+                        if (!creditError && result?.total_deducted > 0) {
+                            console.log('Regular finalization success:', result)
+                            toast.info(`ตัดเครดิต ฿${result.total_deducted.toLocaleString()} สำเร็จ`)
+                        }
                     }
                 } catch (billingErr) {
-                    console.log('Immediate billing not configured:', billingErr)
-                }
-
-                // Finalize credit deduction for percentage billing (for non-immediate)
-                try {
-                    const { data: result, error: creditError } = await supabase
-                        .rpc('finalize_round_credit', { p_round_id: roundId })
-                    
-                    if (creditError) {
-                        console.log('Credit finalization not available:', creditError)
-                    } else if (result?.total_deducted > 0) {
-                        toast.info(`ตัดเครดิต ฿${result.total_deducted.toLocaleString()} สำเร็จ`)
-                    }
-                } catch (creditErr) {
-                    console.log('Credit system not configured:', creditErr)
+                    console.log('Credit system not configured:', billingErr)
                 }
                 
                 fetchData()
@@ -1213,35 +1209,39 @@ export default function Dealer() {
     }
 
     // Delete round
-    async function handleDeleteRound(roundId) {
-        if (!confirm('ต้องการลบงวดนี้? (จะลบข้อมูลทั้งหมด และหักค่าธรรมเนียมที่ค้างอยู่)')) return
+    async function handleDeleteRound(roundId, roundStatus) {
+        if (!confirm('ต้องการลบงวดนี้?')) return
 
         try {
-            // First, finalize credit deduction before deleting
-            // This ensures dealer pays for any bets in this round
-            try {
-                // Try immediate billing first
-                const { data: immediateBillingResult, error: immediateBillingError } = await supabase
-                    .rpc('create_immediate_billing_record', { 
-                        p_round_id: roundId,
-                        p_dealer_id: user.id
-                    })
-                
-                if (!immediateBillingError && immediateBillingResult?.success) {
-                    console.log('Immediate billing before delete:', immediateBillingResult)
-                    toast.info(`หักค่าธรรมเนียม ฿${immediateBillingResult.amount_deducted?.toLocaleString() || 0} ก่อนลบงวด`)
+            // Only deduct credit if round is still OPEN (not closed or announced)
+            // If round is closed/announced, credit was already deducted when closing
+            if (roundStatus === 'open') {
+                try {
+                    // Try immediate billing first
+                    const { data: immediateBillingResult, error: immediateBillingError } = await supabase
+                        .rpc('create_immediate_billing_record', { 
+                            p_round_id: roundId,
+                            p_dealer_id: user.id
+                        })
+                    
+                    if (!immediateBillingError && immediateBillingResult?.success && immediateBillingResult?.amount_deducted > 0) {
+                        console.log('Immediate billing before delete:', immediateBillingResult)
+                        toast.info(`หักค่าธรรมเนียม ฿${immediateBillingResult.amount_deducted.toLocaleString()} ก่อนลบงวด`)
+                    } else {
+                        // Immediate billing not applicable - try regular finalization
+                        const { data: creditResult, error: creditError } = await supabase
+                            .rpc('finalize_round_credit', { p_round_id: roundId })
+                        
+                        if (!creditError && creditResult?.total_deducted > 0) {
+                            console.log('Credit finalized before delete:', creditResult)
+                            toast.info(`หักค่าธรรมเนียม ฿${creditResult.total_deducted.toLocaleString()} ก่อนลบงวด`)
+                        }
+                    }
+                } catch (billingErr) {
+                    console.log('Billing before delete not configured:', billingErr)
                 }
-                
-                // Then try regular finalization (for non-immediate billing)
-                const { data: creditResult, error: creditError } = await supabase
-                    .rpc('finalize_round_credit', { p_round_id: roundId })
-                
-                if (!creditError && creditResult?.total_deducted > 0) {
-                    console.log('Credit finalized before delete:', creditResult)
-                    toast.info(`หักค่าธรรมเนียม ฿${creditResult.total_deducted.toLocaleString()} ก่อนลบงวด`)
-                }
-            } catch (billingErr) {
-                console.log('Billing before delete not configured:', billingErr)
+            } else {
+                console.log('Round already closed/announced, credit already deducted - skipping billing')
             }
 
             // Now delete the round
@@ -1720,7 +1720,7 @@ export default function Dealer() {
                                                 onCloseRound={() => handleCloseRound(round.id)}
                                                 onEditRound={() => handleOpenEditModal(round)}
                                                 onShowNumberLimits={() => { setSelectedRound(round); setShowNumberLimitsModal(true); }}
-                                                onDeleteRound={() => handleDeleteRound(round.id)}
+                                                onDeleteRound={() => handleDeleteRound(round.id, round.status)}
                                                 onShowResults={() => { setSelectedRound(round); setShowResultsModal(true); }}
                                                 getStatusBadge={(r) => getStatusBadge(r, true)}
                                                 formatDate={formatDate}
