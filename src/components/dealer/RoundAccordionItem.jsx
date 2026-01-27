@@ -67,12 +67,15 @@ export default function RoundAccordionItem({
     const [inlineLoading, setInlineLoading] = useState(false)
     const [inlineUserFilter, setInlineUserFilter] = useState('all')
     const [inlineBetTypeFilter, setInlineBetTypeFilter] = useState('all')
-    const [isGrouped, setIsGrouped] = useState(true)
     const [inlineSearch, setInlineSearch] = useState('')
     // Member filter: 'all' = all members, 'submitted' = only members who submitted
     const [memberFilterMode, setMemberFilterMode] = useState('submitted')
     // Total tab view mode: 'all' = ทั้งหมด (รวมเลข), 'bills' = แยกใบโพย
     const [totalViewMode, setTotalViewMode] = useState('all')
+    // Display mode for submissions: 'summary' = ย่อ, 'detailed' = เต็มไม่รวม, 'grouped' = เต็มรวมเลข
+    const [displayMode, setDisplayMode] = useState('grouped')
+    // Display mode for bills tab: 'summary' = ย่อ (group by entry_id), 'detailed' = เต็ม (show all items)
+    const [billDisplayMode, setBillDisplayMode] = useState('summary')
     // Selected items for bulk delete
     const [selectedItems, setSelectedItems] = useState({})
     const [deletingItems, setDeletingItems] = useState(false)
@@ -1364,17 +1367,175 @@ export default function RoundAccordionItem({
                                         <div className="inline-tab-content">
                                             {/* Member filter and view mode - responsive layout */}
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                                                {/* Row 1: Member filter buttons */}
+                                                {/* Row 1: View mode toggle (รวม/ใบโพย) + Display mode toggle */}
+                                                <div style={{ 
+                                                    display: 'flex', 
+                                                    justifyContent: 'space-between', 
+                                                    alignItems: 'center',
+                                                    gap: '0.5rem',
+                                                    flexWrap: 'wrap'
+                                                }}>
+                                                    {/* View mode toggle: รวม / ใบโพย */}
+                                                    <div style={{ 
+                                                        display: 'flex', 
+                                                        gap: '2px', 
+                                                        background: 'var(--color-surface)', 
+                                                        borderRadius: '8px', 
+                                                        padding: '3px'
+                                                    }}>
+                                                        <button
+                                                            onClick={() => setTotalViewMode('all')}
+                                                            style={{
+                                                                padding: '0.4rem 0.75rem',
+                                                                borderRadius: '6px',
+                                                                border: 'none',
+                                                                background: totalViewMode === 'all' ? 'var(--color-primary)' : 'transparent',
+                                                                color: totalViewMode === 'all' ? '#000' : 'var(--color-text-muted)',
+                                                                fontSize: '0.8rem',
+                                                                fontWeight: '500',
+                                                                cursor: 'pointer',
+                                                                transition: 'all 0.2s ease',
+                                                                minWidth: '50px'
+                                                            }}
+                                                        >
+                                                            รวม
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setTotalViewMode('bills')}
+                                                            style={{
+                                                                padding: '0.4rem 0.75rem',
+                                                                borderRadius: '6px',
+                                                                border: 'none',
+                                                                background: totalViewMode === 'bills' ? 'var(--color-primary)' : 'transparent',
+                                                                color: totalViewMode === 'bills' ? '#000' : 'var(--color-text-muted)',
+                                                                fontSize: '0.8rem',
+                                                                fontWeight: '500',
+                                                                cursor: 'pointer',
+                                                                transition: 'all 0.2s ease',
+                                                                minWidth: '50px'
+                                                            }}
+                                                        >
+                                                            ใบโพย
+                                                        </button>
+                                                    </div>
+                                                    
+                                                    {/* Display mode toggle - changes based on view mode */}
+                                                    <div style={{ 
+                                                        display: 'flex', 
+                                                        gap: '2px', 
+                                                        background: 'var(--color-surface)', 
+                                                        borderRadius: '8px', 
+                                                        padding: '3px'
+                                                    }}>
+                                                        {totalViewMode === 'all' ? (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => setDisplayMode('summary')}
+                                                                    style={{
+                                                                        padding: '0.4rem 0.6rem',
+                                                                        borderRadius: '6px',
+                                                                        border: 'none',
+                                                                        background: displayMode === 'summary' ? 'var(--color-primary)' : 'transparent',
+                                                                        color: displayMode === 'summary' ? '#000' : 'var(--color-text-muted)',
+                                                                        fontSize: '0.8rem',
+                                                                        fontWeight: '500',
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s ease'
+                                                                    }}
+                                                                    title="แสดงแบบย่อตามที่ป้อน"
+                                                                >
+                                                                    ย่อ
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setDisplayMode('detailed')}
+                                                                    style={{
+                                                                        padding: '0.4rem 0.6rem',
+                                                                        borderRadius: '6px',
+                                                                        border: 'none',
+                                                                        background: displayMode === 'detailed' ? 'var(--color-primary)' : 'transparent',
+                                                                        color: displayMode === 'detailed' ? '#000' : 'var(--color-text-muted)',
+                                                                        fontSize: '0.8rem',
+                                                                        fontWeight: '500',
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s ease'
+                                                                    }}
+                                                                    title="แสดงเต็มทุกรายการ"
+                                                                >
+                                                                    เต็ม
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setDisplayMode('grouped')}
+                                                                    style={{
+                                                                        padding: '0.4rem 0.6rem',
+                                                                        borderRadius: '6px',
+                                                                        border: 'none',
+                                                                        background: displayMode === 'grouped' ? 'var(--color-primary)' : 'transparent',
+                                                                        color: displayMode === 'grouped' ? '#000' : 'var(--color-text-muted)',
+                                                                        fontSize: '0.8rem',
+                                                                        fontWeight: '500',
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s ease'
+                                                                    }}
+                                                                    title="รวมเลขที่เหมือนกัน"
+                                                                >
+                                                                    รวมเลข
+                                                                </button>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => setBillDisplayMode('summary')}
+                                                                    style={{
+                                                                        padding: '0.4rem 0.75rem',
+                                                                        borderRadius: '6px',
+                                                                        border: 'none',
+                                                                        background: billDisplayMode === 'summary' ? 'var(--color-primary)' : 'transparent',
+                                                                        color: billDisplayMode === 'summary' ? '#000' : 'var(--color-text-muted)',
+                                                                        fontSize: '0.8rem',
+                                                                        fontWeight: '500',
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s ease',
+                                                                        minWidth: '50px'
+                                                                    }}
+                                                                    title="แสดงแบบย่อตามที่ป้อน"
+                                                                >
+                                                                    ย่อ
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setBillDisplayMode('detailed')}
+                                                                    style={{
+                                                                        padding: '0.4rem 0.75rem',
+                                                                        borderRadius: '6px',
+                                                                        border: 'none',
+                                                                        background: billDisplayMode === 'detailed' ? 'var(--color-primary)' : 'transparent',
+                                                                        color: billDisplayMode === 'detailed' ? '#000' : 'var(--color-text-muted)',
+                                                                        fontSize: '0.8rem',
+                                                                        fontWeight: '500',
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s ease',
+                                                                        minWidth: '50px'
+                                                                    }}
+                                                                    title="แสดงเต็มทุกรายการ"
+                                                                >
+                                                                    เต็ม
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                
+                                                {/* Row 2: Member filter buttons */}
                                                 <div className="member-filter-buttons" style={{
                                                     display: 'flex',
                                                     gap: '0.5rem',
-                                                    flexWrap: 'wrap'
+                                                    flexWrap: 'wrap',
+                                                    marginTop: '0.5rem'
                                                 }}>
                                                     <button
                                                         className={`filter-btn ${memberFilterMode === 'all' ? 'active' : ''}`}
                                                         onClick={() => { setMemberFilterMode('all'); setInlineUserFilter('all'); }}
                                                         style={{
-                                                            padding: '0.35rem 0.6rem',
+                                                            padding: '0.35rem 0.65rem',
                                                             borderRadius: '20px',
                                                             border: memberFilterMode === 'all' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
                                                             background: memberFilterMode === 'all' ? 'var(--color-primary)' : 'transparent',
@@ -1391,7 +1552,7 @@ export default function RoundAccordionItem({
                                                         className={`filter-btn ${memberFilterMode === 'submitted' ? 'active' : ''}`}
                                                         onClick={() => { setMemberFilterMode('submitted'); setInlineUserFilter('all'); }}
                                                         style={{
-                                                            padding: '0.35rem 0.6rem',
+                                                            padding: '0.35rem 0.65rem',
                                                             borderRadius: '20px',
                                                             border: memberFilterMode === 'submitted' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
                                                             background: memberFilterMode === 'submitted' ? 'var(--color-primary)' : 'transparent',
@@ -1404,44 +1565,12 @@ export default function RoundAccordionItem({
                                                     >
                                                         ส่งเลข ({[...new Set(inlineSubmissions.map(s => s.user_id))].length})
                                                     </button>
-                                                    {/* View mode toggle - same row but will wrap on mobile */}
-                                                    <div style={{ display: 'flex', gap: '0.25rem', background: 'var(--color-surface)', borderRadius: '20px', padding: '2px', marginLeft: 'auto' }}>
-                                                        <button
-                                                            onClick={() => setTotalViewMode('all')}
-                                                            style={{
-                                                                padding: '0.3rem 0.5rem',
-                                                                borderRadius: '18px',
-                                                                border: 'none',
-                                                                background: totalViewMode === 'all' ? 'var(--color-primary)' : 'transparent',
-                                                                color: totalViewMode === 'all' ? '#000' : 'var(--color-text-muted)',
-                                                                fontSize: '0.75rem',
-                                                                cursor: 'pointer',
-                                                                transition: 'all 0.2s ease'
-                                                            }}
-                                                        >
-                                                            รวม
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setTotalViewMode('bills')}
-                                                            style={{
-                                                                padding: '0.3rem 0.5rem',
-                                                                borderRadius: '18px',
-                                                                border: 'none',
-                                                                background: totalViewMode === 'bills' ? 'var(--color-primary)' : 'transparent',
-                                                                color: totalViewMode === 'bills' ? '#000' : 'var(--color-text-muted)',
-                                                                fontSize: '0.75rem',
-                                                                cursor: 'pointer',
-                                                                transition: 'all 0.2s ease'
-                                                            }}
-                                                        >
-                                                            ใบโพย
-                                                        </button>
-                                                    </div>
                                                 </div>
                                             </div>
 
+                                            {/* Row 3: Dropdown + Write bet button */}
                                             <div className="inline-filters" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                                <select value={inlineUserFilter} onChange={(e) => setInlineUserFilter(e.target.value)} className="form-input" style={{ flex: 1 }}>
+                                                <select value={inlineUserFilter} onChange={(e) => setInlineUserFilter(e.target.value)} className="form-input" style={{ flex: 1, minHeight: '40px' }}>
                                                     <option value="all">ทุกคน</option>
                                                     {memberFilterMode === 'all' ? (
                                                         // Show all members
@@ -1466,7 +1595,9 @@ export default function RoundAccordionItem({
                                                             display: 'flex',
                                                             alignItems: 'center',
                                                             gap: '0.35rem',
-                                                            whiteSpace: 'nowrap'
+                                                            whiteSpace: 'nowrap',
+                                                            minHeight: '40px',
+                                                            padding: '0.5rem 0.75rem'
                                                         }}
                                                     >
                                                         <FiFileText /> เขียนโพย
@@ -1497,7 +1628,12 @@ export default function RoundAccordionItem({
                                                         if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
                                                         return true
                                                     })
-                                                    if (isGrouped) {
+                                                    if (displayMode === 'summary') {
+                                                        // Count unique entry_ids
+                                                        const entries = new Set()
+                                                        filtered.forEach(s => entries.add(s.entry_id || s.id))
+                                                        return entries.size
+                                                    } else if (displayMode === 'grouped') {
                                                         const grouped = {}
                                                         filtered.forEach(s => {
                                                             const normalizedNumbers = normalizeNumber(s.numbers, s.bet_type)
@@ -1533,7 +1669,7 @@ export default function RoundAccordionItem({
                                                                 {isOpen && <th style={{ width: '30px' }}></th>}
                                                                 <th>เลข</th>
                                                                 <th>จำนวน</th>
-                                                                {!isGrouped && <th>เวลา</th>}
+                                                                {displayMode === 'detailed' && <th>เวลา</th>}
                                                                 {isOpen && <th style={{ width: '40px' }}></th>}
                                                             </tr>
                                                         </thead>
@@ -1547,7 +1683,36 @@ export default function RoundAccordionItem({
                                                                     return true
                                                                 })
 
-                                                                if (isGrouped) {
+                                                                // Display mode logic:
+                                                                // 'summary' = แสดงแบบย่อตาม entry_id (ตามที่ป้อน)
+                                                                // 'detailed' = แสดงเต็มทุกรายการไม่รวม
+                                                                // 'grouped' = แสดงเต็มรวมเลขที่เหมือนกัน
+                                                                
+                                                                if (displayMode === 'summary') {
+                                                                    // Group by entry_id to show as entered
+                                                                    const byEntry = {}
+                                                                    filteredData.forEach(s => {
+                                                                        const entryId = s.entry_id || s.id
+                                                                        if (!byEntry[entryId]) {
+                                                                            byEntry[entryId] = {
+                                                                                id: entryId,
+                                                                                numbers: s.display_numbers || s.numbers,
+                                                                                bet_type: s.bet_type,
+                                                                                display_bet_type: s.display_bet_type || BET_TYPES[s.bet_type] || s.bet_type,
+                                                                                amount: 0,
+                                                                                display_amount: s.display_amount,
+                                                                                count: 0,
+                                                                                ids: [],
+                                                                                created_at: s.created_at
+                                                                            }
+                                                                        }
+                                                                        byEntry[entryId].amount += s.amount
+                                                                        byEntry[entryId].count += 1
+                                                                        byEntry[entryId].ids.push(s.id)
+                                                                    })
+                                                                    filteredData = Object.values(byEntry).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+                                                                } else if (displayMode === 'grouped') {
+                                                                    // Group by normalized numbers + bet_type
                                                                     const grouped = {}
                                                                     filteredData.forEach(s => {
                                                                         const normalizedNumbers = normalizeNumber(s.numbers, s.bet_type)
@@ -1563,16 +1728,18 @@ export default function RoundAccordionItem({
                                                                     })
                                                                     filteredData = Object.values(grouped).sort((a, b) => b.amount - a.amount)
                                                                 }
+                                                                // 'detailed' mode: keep filteredData as-is (individual submissions)
 
                                                                 const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
                                                                 const setPrice = round?.set_prices?.['4_top'] || 120
-                                                                const allIds = isGrouped ? filteredData.flatMap(g => g.ids) : filteredData.map(s => s.id)
+                                                                const useGroupedIds = displayMode === 'summary' || displayMode === 'grouped'
+                                                                const allIds = useGroupedIds ? filteredData.flatMap(g => g.ids) : filteredData.map(s => s.id)
 
                                                                 return (
                                                                     <>
                                                                         {isOpen && filteredData.length > 0 && (
                                                                             <tr style={{ background: 'var(--color-surface)' }}>
-                                                                                <td colSpan={isGrouped ? 4 : 5} style={{ padding: '0.5rem' }}>
+                                                                                <td colSpan={displayMode === 'detailed' ? 5 : 4} style={{ padding: '0.5rem' }}>
                                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                                                                         <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                                                                                             <input 
@@ -1600,11 +1767,17 @@ export default function RoundAccordionItem({
                                                                         {filteredData.map(sub => {
                                                                             const isSet4Digit = sub.bet_type === '4_set' || sub.bet_type === '4_top'
                                                                             const setCount = isSetBasedLottery && isSet4Digit ? Math.ceil(sub.amount / setPrice) : 0
-                                                                            const itemIds = isGrouped ? sub.ids : [sub.id]
+                                                                            const itemIds = useGroupedIds ? sub.ids : [sub.id]
                                                                             const isSelected = itemIds.some(id => selectedItems[id])
 
+                                                                            // Display label based on mode
+                                                                            let displayLabel = BET_TYPES[sub.bet_type] || sub.bet_type
+                                                                            if (displayMode === 'summary' && sub.display_bet_type) {
+                                                                                displayLabel = sub.display_bet_type
+                                                                            }
+
                                                                             return (
-                                                                                <tr key={isGrouped ? sub.id : sub.id} style={{ background: isSelected ? 'rgba(239, 68, 68, 0.1)' : 'transparent' }}>
+                                                                                <tr key={sub.id} style={{ background: isSelected ? 'rgba(239, 68, 68, 0.1)' : 'transparent' }}>
                                                                                     {isOpen && (
                                                                                         <td>
                                                                                             <input 
@@ -1617,17 +1790,23 @@ export default function RoundAccordionItem({
                                                                                     )}
                                                                                     <td className="number-cell">
                                                                                         <div className="number-value">{sub.numbers}</div>
-                                                                                        <div className="type-sub-label">{BET_TYPES[sub.bet_type] || sub.bet_type}</div>
-                                                                                        {isGrouped && sub.count > 1 && <div className="count-sub-label">({sub.count} รายการ)</div>}
+                                                                                        <div className="type-sub-label">{displayLabel}</div>
+                                                                                        {(displayMode === 'summary' || displayMode === 'grouped') && sub.count > 1 && (
+                                                                                            <div className="count-sub-label">({sub.count} รายการ)</div>
+                                                                                        )}
                                                                                     </td>
                                                                                     <td>
-                                                                                        {round.currency_symbol}{sub.amount.toLocaleString()}
-                                                                                        {isSetBasedLottery && isSet4Digit && setCount > 0 && (
+                                                                                        {displayMode === 'summary' && sub.display_amount ? (
+                                                                                            <>{round.currency_symbol}{sub.display_amount}</>
+                                                                                        ) : (
+                                                                                            <>{round.currency_symbol}{sub.amount.toLocaleString()}</>
+                                                                                        )}
+                                                                                        {isSetBasedLottery && isSet4Digit && setCount > 0 && displayMode !== 'summary' && (
                                                                                             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>({setCount} ชุด)</div>
                                                                                         )}
                                                                                     </td>
-                                                                                    {!isGrouped && <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>}
-                                                                                    {isOpen && !isGrouped && (
+                                                                                    {displayMode === 'detailed' && <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>}
+                                                                                    {isOpen && displayMode === 'detailed' && (
                                                                                         <td>
                                                                                             <button 
                                                                                                 className="btn btn-icon btn-sm btn-danger"
@@ -1639,7 +1818,7 @@ export default function RoundAccordionItem({
                                                                                             </button>
                                                                                         </td>
                                                                                     )}
-                                                                                    {isOpen && isGrouped && <td></td>}
+                                                                                    {isOpen && displayMode !== 'detailed' && <td></td>}
                                                                                 </tr>
                                                                             )
                                                                         })}
@@ -1653,7 +1832,7 @@ export default function RoundAccordionItem({
 
                                             {/* View Mode: แยกใบโพย */}
                                             {totalViewMode === 'bills' && (
-                                                <div className="bills-view" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                                <div className="bills-view" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                                     {(() => {
                                                         const bills = getSubmissionsByBills()
                                                         // Filter by user if selected
@@ -1755,39 +1934,77 @@ export default function RoundAccordionItem({
                                                                                 {/* Bill items - Collapsible */}
                                                                                 {isExpanded && (
                                                                                     <div style={{ borderTop: '1px solid var(--color-border)' }}>
-                                                                                        {bill.items.map((item, itemIdx) => (
-                                                                                            <div key={item.id} style={{ 
-                                                                                                display: 'flex', 
-                                                                                                justifyContent: 'space-between', 
-                                                                                                alignItems: 'center',
-                                                                                                padding: '0.5rem 0.75rem',
-                                                                                                borderBottom: itemIdx < bill.items.length - 1 ? '1px dashed var(--color-border)' : 'none',
-                                                                                                background: 'rgba(255,255,255,0.02)'
-                                                                                            }}>
-                                                                                                <div>
-                                                                                                    <span style={{ fontWeight: '600', marginRight: '0.5rem', fontSize: '0.95rem' }}>{item.numbers}</span>
-                                                                                                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                                        {BET_TYPES[item.bet_type] || item.bet_type}
-                                                                                                    </span>
+                                                                                        {(() => {
+                                                                                            // Group items by entry_id for summary mode
+                                                                                            let displayItems = bill.items
+                                                                                            if (billDisplayMode === 'summary') {
+                                                                                                const byEntry = {}
+                                                                                                bill.items.forEach(item => {
+                                                                                                    const entryId = item.entry_id || item.id
+                                                                                                    if (!byEntry[entryId]) {
+                                                                                                        byEntry[entryId] = {
+                                                                                                            id: entryId,
+                                                                                                            numbers: item.display_numbers || item.numbers,
+                                                                                                            bet_type: item.bet_type,
+                                                                                                            display_bet_type: item.display_bet_type || BET_TYPES[item.bet_type] || item.bet_type,
+                                                                                                            amount: 0,
+                                                                                                            display_amount: item.display_amount,
+                                                                                                            count: 0,
+                                                                                                            ids: []
+                                                                                                        }
+                                                                                                    }
+                                                                                                    byEntry[entryId].amount += item.amount
+                                                                                                    byEntry[entryId].count += 1
+                                                                                                    byEntry[entryId].ids.push(item.id)
+                                                                                                })
+                                                                                                displayItems = Object.values(byEntry)
+                                                                                            }
+                                                                                            
+                                                                                            return displayItems.map((item, itemIdx) => (
+                                                                                                <div key={item.id} style={{ 
+                                                                                                    display: 'flex', 
+                                                                                                    justifyContent: 'space-between', 
+                                                                                                    alignItems: 'center',
+                                                                                                    padding: '0.5rem 0.75rem',
+                                                                                                    borderBottom: itemIdx < displayItems.length - 1 ? '1px dashed var(--color-border)' : 'none',
+                                                                                                    background: 'rgba(255,255,255,0.02)'
+                                                                                                }}>
+                                                                                                    <div>
+                                                                                                        <span style={{ fontWeight: '600', marginRight: '0.5rem', fontSize: '0.95rem' }}>{item.numbers}</span>
+                                                                                                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                                            {billDisplayMode === 'summary' ? item.display_bet_type : (BET_TYPES[item.bet_type] || item.bet_type)}
+                                                                                                        </span>
+                                                                                                        {billDisplayMode === 'summary' && item.count > 1 && (
+                                                                                                            <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>
+                                                                                                                ({item.count} รายการ)
+                                                                                                            </span>
+                                                                                                        )}
+                                                                                                    </div>
+                                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                                                        <span style={{ fontWeight: '500' }}>
+                                                                                                            {billDisplayMode === 'summary' && item.display_amount ? (
+                                                                                                                <>{round.currency_symbol}{item.display_amount}</>
+                                                                                                            ) : (
+                                                                                                                <>{round.currency_symbol}{item.amount.toLocaleString()}</>
+                                                                                                            )}
+                                                                                                        </span>
+                                                                                                        {isOpen && billDisplayMode === 'detailed' && (
+                                                                                                            <button 
+                                                                                                                className="btn btn-icon btn-sm"
+                                                                                                                onClick={(e) => {
+                                                                                                                    e.stopPropagation()
+                                                                                                                    handleDeleteSingleItem(item.id)
+                                                                                                                }}
+                                                                                                                title="ลบ"
+                                                                                                                style={{ padding: '0.15rem', color: 'var(--color-danger)' }}
+                                                                                                            >
+                                                                                                                <FiTrash2 size={12} />
+                                                                                                            </button>
+                                                                                                        )}
+                                                                                                    </div>
                                                                                                 </div>
-                                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                                                    <span style={{ fontWeight: '500' }}>{round.currency_symbol}{item.amount.toLocaleString()}</span>
-                                                                                                    {isOpen && (
-                                                                                                        <button 
-                                                                                                            className="btn btn-icon btn-sm"
-                                                                                                            onClick={(e) => {
-                                                                                                                e.stopPropagation()
-                                                                                                                handleDeleteSingleItem(item.id)
-                                                                                                            }}
-                                                                                                            title="ลบ"
-                                                                                                            style={{ padding: '0.15rem', color: 'var(--color-danger)' }}
-                                                                                                        >
-                                                                                                            <FiTrash2 size={12} />
-                                                                                                        </button>
-                                                                                                    )}
-                                                                                                </div>
-                                                                                            </div>
-                                                                                        ))}
+                                                                                            ))
+                                                                                        })()}
                                                                                     </div>
                                                                                 )}
                                                                             </div>

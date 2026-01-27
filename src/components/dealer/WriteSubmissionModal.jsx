@@ -527,20 +527,17 @@ export default function WriteSubmissionModal({
             const billId = generateUUID()
             const timestamp = new Date().toISOString()
 
-            const inserts = drafts.map(d => {
-                const { display_numbers, ...rest } = d
-                return {
-                    ...rest,
-                    round_id: round.id,
-                    user_id: targetUser.id,
-                    bill_id: billId,
-                    bill_note: billNote || null,
-                    is_deleted: false,
-                    // Track who submitted: dealer submitted on behalf of user
-                    submitted_by: dealerId,
-                    submitted_by_type: 'dealer'
-                }
-            })
+            const inserts = drafts.map(d => ({
+                ...d,
+                round_id: round.id,
+                user_id: targetUser.id,
+                bill_id: billId,
+                bill_note: billNote || null,
+                is_deleted: false,
+                // Track who submitted: dealer submitted on behalf of user
+                submitted_by: dealerId,
+                submitted_by_type: 'dealer'
+            }))
 
             const { error } = await supabase.from('submissions').insert(inserts)
             if (error) throw error
