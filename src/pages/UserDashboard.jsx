@@ -3309,31 +3309,37 @@ export default function UserDashboard() {
                                             return <div className="bet-type-grid"></div>
                                         }
 
-                                        // กำหนด CSS class ตามจำนวนหลัก
+                                        // สำหรับ 2 หลัก ที่ไม่มี * ให้แสดงปุ่ม toggle "กลับ" เป็นปุ่มแรก
+                                        const show2DigitToggle = digits === 2 && !hasStarInAmount && available.length > 0
+                                        
+                                        // คำนวณจำนวนปุ่มทั้งหมด (รวม toggle ถ้ามี)
+                                        const totalButtons = available.length + (show2DigitToggle ? 1 : 0)
+                                        
+                                        // กำหนด CSS class ตามจำนวนปุ่ม
+                                        // 2-3 ปุ่ม: 1 แถว
+                                        // 4 ปุ่ม: 2x2
+                                        // 5 ปุ่ม: 3+2
+                                        // 6 ปุ่ม: 3x2
+                                        // 7 ปุ่ม: 3+3+1
                                         let gridClass = 'bet-type-grid'
-                                        if (digits === 1) {
-                                            gridClass = 'bet-type-grid grid-cols-3'
-                                        } else if (digits === 2) {
-                                            gridClass = 'bet-type-grid grid-cols-3'
-                                        } else if (digits === 3) {
+                                        if (totalButtons === 1) {
+                                            gridClass = 'bet-type-grid grid-cols-1'
+                                        } else if (totalButtons === 2) {
                                             gridClass = 'bet-type-grid grid-cols-2'
-                                        } else if (digits === 4) {
-                                            if (isLaoOrHanoi && isAmountEmpty) {
-                                                gridClass = 'bet-type-grid grid-cols-1'
-                                            } else if (isLaoOrHanoi) {
-                                                gridClass = 'bet-type-grid grid-cols-3'
-                                            } else {
-                                                gridClass = 'bet-type-grid grid-cols-2'
-                                            }
-                                        } else if (digits === 5) {
+                                        } else if (totalButtons === 3) {
+                                            gridClass = 'bet-type-grid grid-cols-3'
+                                        } else if (totalButtons === 4) {
                                             gridClass = 'bet-type-grid grid-cols-2'
+                                        } else if (totalButtons === 5) {
+                                            gridClass = 'bet-type-grid grid-cols-5'
+                                        } else if (totalButtons === 6) {
+                                            gridClass = 'bet-type-grid grid-cols-3'
+                                        } else if (totalButtons >= 7) {
+                                            gridClass = 'bet-type-grid grid-cols-7'
                                         }
 
                                         // Sort by saved order
                                         const sortedAvailable = sortBetTypes(available, digits)
-                                        
-                                        // สำหรับ 2 หลัก ที่ไม่มี * ให้แสดงปุ่ม toggle "กลับ" เป็นปุ่มแรก
-                                        const show2DigitToggle = digits === 2 && !hasStarInAmount && available.length > 0
 
                                         return (
                                             <div className={gridClass}>

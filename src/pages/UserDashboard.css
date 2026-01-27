@@ -412,7 +412,7 @@
 .bet-type-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 0.75rem;
+    gap: 0.5rem;
 }
 
 .bet-type-grid.grid-cols-1 {
@@ -427,8 +427,28 @@
     grid-template-columns: repeat(3, 1fr);
 }
 
+.bet-type-grid.grid-cols-5 {
+    grid-template-columns: repeat(6, 1fr);
+}
+
+.bet-type-grid.grid-cols-5 .bet-type-btn:nth-child(-n+3) {
+    grid-column: span 2;
+}
+
+.bet-type-grid.grid-cols-5 .bet-type-btn:nth-child(n+4) {
+    grid-column: span 3;
+}
+
+.bet-type-grid.grid-cols-7 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.bet-type-grid.grid-cols-7 .bet-type-btn:nth-child(7) {
+    grid-column: span 3;
+}
+
 .bet-type-btn {
-    padding: 0.75rem;
+    padding: 0.75rem 0.5rem;
     border: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.03);
     color: var(--color-text);
@@ -436,10 +456,11 @@
     cursor: pointer;
     transition: all 0.2s ease;
     font-size: 0.9rem;
+    font-weight: 500;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 48px;
+    min-height: 52px;
 }
 
 .bet-type-btn:hover {

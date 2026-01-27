@@ -857,65 +857,55 @@ export default function WriteSubmissionModal({
                                     return null
                                 }
                                 
-                                // กำหนดจำนวนคอลัมน์ตามจำนวนหลัก
-                                let gridStyle = {}
-                                if (digits === 1) {
-                                    // 1 หลัก: 3 คอลัมน์
-                                    gridStyle = { 
-                                        display: 'grid', 
-                                        gridTemplateColumns: 'repeat(3, 1fr)', 
-                                        gap: '0.5rem' 
-                                    }
-                                } else if (digits === 2) {
-                                    // 2 หลัก: 3 คอลัมน์ (ถ้าตกขอบก็ 2)
-                                    gridStyle = { 
-                                        display: 'grid', 
-                                        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', 
-                                        gap: '0.5rem' 
-                                    }
-                                } else if (digits === 3) {
-                                    // 3 หลัก: 2 คอลัมน์
-                                    gridStyle = { 
-                                        display: 'grid', 
-                                        gridTemplateColumns: 'repeat(2, 1fr)', 
-                                        gap: '0.5rem' 
-                                    }
-                                } else if (digits === 4) {
-                                    if (isLaoOrHanoi) {
-                                        if (isAmountEmpty) {
-                                            // 4 หลัก ลาว/ฮานอย ช่องเงินว่าง: เต็มความกว้าง
-                                            gridStyle = { 
-                                                display: 'grid', 
-                                                gridTemplateColumns: '1fr', 
-                                                gap: '0.5rem' 
-                                            }
-                                        } else {
-                                            // 4 หลัก ลาว/ฮานอย มีเงิน: 3 คอลัมน์
-                                            gridStyle = { 
-                                                display: 'grid', 
-                                                gridTemplateColumns: 'repeat(3, 1fr)', 
-                                                gap: '0.5rem' 
-                                            }
-                                        }
-                                    } else {
-                                        // 4 หลัก ไทย: 2 คอลัมน์
-                                        gridStyle = { 
-                                            display: 'grid', 
-                                            gridTemplateColumns: 'repeat(2, 1fr)', 
-                                            gap: '0.5rem' 
-                                        }
-                                    }
-                                } else if (digits === 5) {
-                                    // 5 หลัก: 2 คอลัมน์
-                                    gridStyle = { 
-                                        display: 'grid', 
-                                        gridTemplateColumns: 'repeat(2, 1fr)', 
-                                        gap: '0.5rem' 
-                                    }
-                                }
-                                
                                 // สำหรับ 2 หลัก ที่ไม่มี * ให้แสดงปุ่ม toggle "กลับ" เป็นปุ่มแรก
                                 const show2DigitToggle = digits === 2 && !hasStarInAmount
+                                
+                                // คำนวณจำนวนปุ่มทั้งหมด (รวม toggle ถ้ามี)
+                                const totalButtons = available.length + (show2DigitToggle ? 1 : 0)
+                                
+                                // กำหนด layout ตามจำนวนปุ่ม
+                                // 2-3 ปุ่ม: 1 แถว
+                                // 4 ปุ่ม: 2x2
+                                // 5 ปุ่ม: 3+2
+                                // 6 ปุ่ม: 3x2
+                                // 7 ปุ่ม: 3+3+1
+                                let gridStyle = { display: 'grid', gap: '0.5rem' }
+                                if (totalButtons <= 3) {
+                                    gridStyle.gridTemplateColumns = `repeat(${totalButtons}, 1fr)`
+                                } else if (totalButtons === 4) {
+                                    gridStyle.gridTemplateColumns = 'repeat(2, 1fr)'
+                                } else if (totalButtons === 5) {
+                                    gridStyle.gridTemplateColumns = 'repeat(6, 1fr)'
+                                } else if (totalButtons === 6) {
+                                    gridStyle.gridTemplateColumns = 'repeat(3, 1fr)'
+                                } else if (totalButtons >= 7) {
+                                    gridStyle.gridTemplateColumns = 'repeat(3, 1fr)'
+                                }
+                                
+                                // Style สำหรับปุ่มแต่ละตัว
+                                const buttonStyle = {
+                                    fontSize: '0.9rem',
+                                    minHeight: '48px',
+                                    padding: '0.75rem 0.5rem',
+                                    borderRadius: 'var(--radius-md)',
+                                    cursor: 'pointer',
+                                    fontWeight: 500,
+                                    transition: 'all 0.15s ease'
+                                }
+                                
+                                // สำหรับ 5 ปุ่ม: แถวบน 3 ปุ่ม (span 2), แถวล่าง 2 ปุ่ม (span 3)
+                                const getGridSpan = (index) => {
+                                    if (totalButtons === 5) {
+                                        if (index < 3) return { gridColumn: 'span 2' }
+                                        return { gridColumn: 'span 3' }
+                                    }
+                                    if (totalButtons === 7 && index === 6) {
+                                        return { gridColumn: 'span 3' }
+                                    }
+                                    return {}
+                                }
+                                
+                                let buttonIndex = 0
                                 
                                 return (
                                     <div style={gridStyle}>
@@ -925,15 +915,11 @@ export default function WriteSubmissionModal({
                                                 type="button"
                                                 onClick={() => setIsReversed(!isReversed)}
                                                 style={{ 
-                                                    fontSize: '0.85rem',
-                                                    padding: '0.5rem 1rem',
-                                                    borderRadius: 'var(--radius-md)',
+                                                    ...buttonStyle,
                                                     border: '2px solid #9b59b6',
                                                     background: isReversed ? '#9b59b6' : 'transparent',
                                                     color: isReversed ? '#fff' : '#9b59b6',
-                                                    cursor: 'pointer',
-                                                    fontWeight: 500,
-                                                    transition: 'all 0.15s ease'
+                                                    ...getGridSpan(buttonIndex++)
                                                 }}
                                             >
                                                 กลับ
@@ -941,16 +927,23 @@ export default function WriteSubmissionModal({
                                         )}
                                         
                                         {/* ปุ่มประเภทเลข */}
-                                        {available.map(item => {
+                                        {available.map((item, idx) => {
                                             const key = typeof item === 'string' ? item : item.id
                                             const label = typeof item === 'string' ? (BET_TYPES[key]?.label || key) : item.label
+                                            const currentIndex = show2DigitToggle ? idx + 1 : idx
                                             return (
                                                 <button
                                                     key={key}
                                                     type="button"
-                                                    className="btn btn-outline btn-sm"
+                                                    className="btn btn-outline"
                                                     onClick={() => addToDraft(key)}
-                                                    style={{ fontSize: '0.85rem' }}
+                                                    style={{ 
+                                                        ...buttonStyle,
+                                                        border: '1px solid var(--color-primary)',
+                                                        background: 'transparent',
+                                                        color: 'var(--color-primary)',
+                                                        ...getGridSpan(currentIndex)
+                                                    }}
                                                 >
                                                     {label}
                                                 </button>
