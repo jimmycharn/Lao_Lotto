@@ -5403,7 +5403,7 @@ function UpstreamDealerSettingsInline({ dealer, isLinked, onSaved }) {
             'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
             'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
             '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
-            '3_top': '3 ตัวตรง', '3_tod': '3 ตัวโต๊ด', '3_bottom': '3 ตัวล่าง',
+            '3_top': '3 ตัวบน', '3_tod': '3 ตัวโต๊ด', '3_bottom': '3 ตัวล่าง',
             '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
         },
         lao: {
@@ -5411,7 +5411,7 @@ function UpstreamDealerSettingsInline({ dealer, isLinked, onSaved }) {
             'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
             'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
             '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
-            '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
+            '3_top': '3 ตัวตรง', '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
             '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
         },
         hanoi: {
@@ -5419,7 +5419,7 @@ function UpstreamDealerSettingsInline({ dealer, isLinked, onSaved }) {
             'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
             'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
             '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
-            '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
+            '3_top': '3 ตัวตรง', '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
             '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
         },
         stock: { '2_top': '2 ตัวบน', '2_bottom': '2 ตัวล่าง' }
@@ -6382,7 +6382,7 @@ function UpstreamDealerSettings({ dealer, onClose, onSaved }) {
             'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
             'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
             '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
-            '3_top': '3 ตัวตรง', '3_tod': '3 ตัวโต๊ด', '3_bottom': '3 ตัวล่าง',
+            '3_top': '3 ตัวบน', '3_tod': '3 ตัวโต๊ด', '3_bottom': '3 ตัวล่าง',
             '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
         },
         lao: {
@@ -6390,7 +6390,7 @@ function UpstreamDealerSettings({ dealer, onClose, onSaved }) {
             'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
             'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
             '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
-            '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
+            '3_top': '3 ตัวตรง', '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
             '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
         },
         hanoi: {
@@ -6398,7 +6398,7 @@ function UpstreamDealerSettings({ dealer, onClose, onSaved }) {
             'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
             'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
             '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
-            '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
+            '3_top': '3 ตัวตรง', '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
             '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
         },
         stock: { '2_top': '2 ตัวบน', '2_bottom': '2 ตัวล่าง' }
@@ -6746,7 +6746,7 @@ function MemberSettings({ member, onClose, isInline = false }) {
             '2_center': '2 ตัวถ่าง',
             '2_run': '2 ตัวลอย',
             '2_bottom': '2 ตัวล่าง',
-            '3_top': '3 ตัวตรง',
+            '3_top': '3 ตัวบน',
             '3_tod': '3 ตัวโต๊ด',
             '3_bottom': '3 ตัวล่าง',
             '4_run': '4 ตัวลอย',
@@ -6763,6 +6763,7 @@ function MemberSettings({ member, onClose, isInline = false }) {
             '2_center': '2 ตัวถ่าง',
             '2_run': '2 ตัวลอย',
             '2_bottom': '2 ตัวล่าง',
+            '3_top': '3 ตัวตรง',
             '3_straight': '3 ตัวตรง',
             '3_tod_single': '3 ตัวโต๊ด',
             '4_run': '4 ตัวลอย',
@@ -6779,6 +6780,7 @@ function MemberSettings({ member, onClose, isInline = false }) {
             '2_center': '2 ตัวถ่าง',
             '2_run': '2 ตัวลอย',
             '2_bottom': '2 ตัวล่าง',
+            '3_top': '3 ตัวตรง',
             '3_straight': '3 ตัวตรง',
             '3_tod_single': '3 ตัวโต๊ด',
             '4_run': '4 ตัวลอย',

@@ -232,7 +232,7 @@ export default function ResultsModal({ round, onClose }) {
                             {laoForm['4_set'].length >= 2 && renderDerivedPreview({
                                 '2 ตัวบน': derived['2_top'],
                                 '2 ตัวล่าง': derived['2_bottom'],
-                                '3 ตัวบน': derived['3_top']
+                                '3 ตัวตรง': derived['3_top']
                             })}
                         </div>
                     )}
@@ -243,7 +243,7 @@ export default function ResultsModal({ round, onClose }) {
                             {hanoiForm['4_set'].length >= 2 && (
                                 <div className="auto-derived-info">
                                     <span>→ 2 ตัวบน: <strong>{derived['2_top']}</strong></span>
-                                    <span>→ 3 ตัวบน: <strong>{derived['3_top']}</strong></span>
+                                    <span>→ 3 ตัวตรง: <strong>{derived['3_top']}</strong></span>
                                 </div>
                             )}
                             <div className="form-divider"></div>

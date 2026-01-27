@@ -3254,10 +3254,11 @@ export default function UserDashboard() {
                                                 } else if (amtParts.length === 1 && !hasStarInAmount) {
                                                     // ตัวเลขอย่างเดียวเช่น 100
                                                     const permCount = getPermutations(submitForm.numbers).length
+                                                    const isLaoHanoi = ['lao', 'hanoi'].includes(lotteryType)
                                                     available = [
                                                         { id: '3_perm_from_3', label: `คูณชุด ${permCount}` },
                                                         { id: '3_straight_tod', label: 'เต็ง-โต๊ด' },
-                                                        { id: '3_top', label: '3 ตัวบน' },
+                                                        { id: '3_top', label: isLaoHanoi ? '3 ตัวตรง' : '3 ตัวบน' },
                                                         { id: '3_tod', label: '3 ตัวโต๊ด' }
                                                     ]
                                                     if (lotteryType === 'thai') {
@@ -3935,7 +3936,7 @@ function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
             '2_center': '2 ตัวถ่าง',
             '2_run': '2 ตัวลอย',
             '2_bottom': '2 ตัวล่าง',
-            '3_top': '3 ตัวตรง',
+            '3_top': '3 ตัวบน',
             '3_tod': '3 ตัวโต๊ด',
             '3_bottom': '3 ตัวล่าง',
             '4_run': '4 ตัวลอย',
@@ -3952,6 +3953,7 @@ function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
             '2_center': '2 ตัวถ่าง',
             '2_run': '2 ตัวลอย',
             '2_bottom': '2 ตัวล่าง',
+            '3_top': '3 ตัวตรง',
             '3_straight': '3 ตัวตรง',
             '3_tod_single': '3 ตัวโต๊ด',
             '4_run': '4 ตัวลอย',
@@ -3968,6 +3970,7 @@ function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
             '2_center': '2 ตัวถ่าง',
             '2_run': '2 ตัวลอย',
             '2_bottom': '2 ตัวล่าง',
+            '3_top': '3 ตัวตรง',
             '3_straight': '3 ตัวตรง',
             '3_tod_single': '3 ตัวโต๊ด',
             '4_run': '4 ตัวลอย',

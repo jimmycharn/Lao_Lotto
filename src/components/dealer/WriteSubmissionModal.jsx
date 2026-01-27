@@ -206,7 +206,9 @@ export default function WriteSubmissionModal({
         } else if (betType === '2_spread_rev') {
             displayLabel = '2 ตัวถ่างกลับ'
         } else if (betType === '3_top') {
-            displayLabel = '3 ตัวบน'
+            // หวยไทย: 3 ตัวบน, หวยลาว/ฮานอย: 3 ตัวตรง
+            const isLaoHanoi = ['lao', 'hanoi'].includes(round.lottery_type)
+            displayLabel = isLaoHanoi ? '3 ตัวตรง' : '3 ตัวบน'
         } else if (betType === '3_tod') {
             displayLabel = '3 ตัวโต๊ด'
         } else if (betType === '3_bottom') {
@@ -641,10 +643,11 @@ export default function WriteSubmissionModal({
                 } else if (amtParts.length === 1 && !hasStarInAmount) {
                     // ตัวเลขอย่างเดียวเช่น 100
                     const permCount = getPermutations(submitForm.numbers).length
+                    const isLaoHanoi = ['lao', 'hanoi'].includes(lotteryType)
                     available = [
                         { id: '3_perm_from_3', label: `คูณชุด ${permCount}` },
                         { id: '3_straight_tod', label: 'เต็ง-โต๊ด' },
-                        { id: '3_top', label: '3 ตัวบน' },
+                        { id: '3_top', label: isLaoHanoi ? '3 ตัวตรง' : '3 ตัวบน' },
                         { id: '3_tod', label: '3 ตัวโต๊ด' }
                     ]
                     if (lotteryType === 'thai') {
