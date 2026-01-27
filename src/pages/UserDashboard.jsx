@@ -80,6 +80,11 @@ export default function UserDashboard() {
     const [displayMode, setDisplayMode] = useState('summary') // summary, detailed
     const [isGroupByBill, setIsGroupByBill] = useState(true)
     const [expandedBills, setExpandedBills] = useState([])
+    const [billSortBy, setBillSortBy] = useState('time') // 'time' for bill sorting
+    const [billSortOrder, setBillSortOrder] = useState('desc') // 'asc' or 'desc'
+    const [itemSortMode, setItemSortMode] = useState('original') // 'asc', 'desc', 'original' - for items inside bills
+    const [listSortBy, setListSortBy] = useState('time') // 'time' or 'number' - for non-grouped view
+    const [listSortOrder, setListSortOrder] = useState('desc') // 'asc' or 'desc'
     const [currentBillId, setCurrentBillId] = useState(null)
     const [billNote, setBillNote] = useState('')
     const [isEditingBill, setIsEditingBill] = useState(false) // Track if editing existing bill
@@ -2209,6 +2214,158 @@ export default function UserDashboard() {
                                                             >
                                                                 <FiLayers /> <span>แยกใบโพย</span>
                                                             </button>
+                                                            
+                                                            {/* Sort toggle buttons - different for grouped vs non-grouped */}
+                                                            {isGroupByBill ? (
+                                                                <>
+                                                                    {/* Bill sort by time */}
+                                                                    <div style={{ 
+                                                                        display: 'flex', 
+                                                                        gap: '2px', 
+                                                                        background: 'var(--color-surface)', 
+                                                                        borderRadius: '8px', 
+                                                                        padding: '3px',
+                                                                        marginLeft: '0.5rem'
+                                                                    }}>
+                                                                        <button
+                                                                            onClick={() => setBillSortOrder(billSortOrder === 'desc' ? 'asc' : 'desc')}
+                                                                            style={{
+                                                                                padding: '0.35rem 0.5rem',
+                                                                                borderRadius: '6px',
+                                                                                border: 'none',
+                                                                                background: 'var(--color-primary)',
+                                                                                color: '#000',
+                                                                                fontSize: '0.75rem',
+                                                                                fontWeight: '500',
+                                                                                cursor: 'pointer',
+                                                                                transition: 'all 0.2s ease'
+                                                                            }}
+                                                                            title="เรียงใบโพยตามเวลา"
+                                                                        >
+                                                                            เวลา {billSortOrder === 'desc' ? '↓' : '↑'}
+                                                                        </button>
+                                                                    </div>
+                                                                    {/* Item sort inside bills - 3 options */}
+                                                                    <div style={{ 
+                                                                        display: 'flex', 
+                                                                        gap: '2px', 
+                                                                        background: 'var(--color-surface)', 
+                                                                        borderRadius: '8px', 
+                                                                        padding: '3px',
+                                                                        marginLeft: '0.25rem'
+                                                                    }}>
+                                                                        <button
+                                                                            onClick={() => setItemSortMode('asc')}
+                                                                            style={{
+                                                                                padding: '0.35rem 0.4rem',
+                                                                                borderRadius: '6px',
+                                                                                border: 'none',
+                                                                                background: itemSortMode === 'asc' ? 'var(--color-primary)' : 'transparent',
+                                                                                color: itemSortMode === 'asc' ? '#000' : 'var(--color-text-muted)',
+                                                                                fontSize: '0.7rem',
+                                                                                fontWeight: '500',
+                                                                                cursor: 'pointer',
+                                                                                transition: 'all 0.2s ease'
+                                                                            }}
+                                                                            title="เรียงเลขน้อยไปมาก"
+                                                                        >
+                                                                            เลข↑
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => setItemSortMode('desc')}
+                                                                            style={{
+                                                                                padding: '0.35rem 0.4rem',
+                                                                                borderRadius: '6px',
+                                                                                border: 'none',
+                                                                                background: itemSortMode === 'desc' ? 'var(--color-primary)' : 'transparent',
+                                                                                color: itemSortMode === 'desc' ? '#000' : 'var(--color-text-muted)',
+                                                                                fontSize: '0.7rem',
+                                                                                fontWeight: '500',
+                                                                                cursor: 'pointer',
+                                                                                transition: 'all 0.2s ease'
+                                                                            }}
+                                                                            title="เรียงเลขมากไปน้อย"
+                                                                        >
+                                                                            เลข↓
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => setItemSortMode('original')}
+                                                                            style={{
+                                                                                padding: '0.35rem 0.4rem',
+                                                                                borderRadius: '6px',
+                                                                                border: 'none',
+                                                                                background: itemSortMode === 'original' ? 'var(--color-primary)' : 'transparent',
+                                                                                color: itemSortMode === 'original' ? '#000' : 'var(--color-text-muted)',
+                                                                                fontSize: '0.7rem',
+                                                                                fontWeight: '500',
+                                                                                cursor: 'pointer',
+                                                                                transition: 'all 0.2s ease'
+                                                                            }}
+                                                                            title="เรียงตามที่ป้อน"
+                                                                        >
+                                                                            ป้อน
+                                                                        </button>
+                                                                    </div>
+                                                                </>
+                                                            ) : (
+                                                                <div style={{ 
+                                                                    display: 'flex', 
+                                                                    gap: '2px', 
+                                                                    background: 'var(--color-surface)', 
+                                                                    borderRadius: '8px', 
+                                                                    padding: '3px',
+                                                                    marginLeft: '0.5rem'
+                                                                }}>
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            if (listSortBy === 'time') {
+                                                                                setListSortOrder(listSortOrder === 'desc' ? 'asc' : 'desc')
+                                                                            } else {
+                                                                                setListSortBy('time')
+                                                                                setListSortOrder('desc')
+                                                                            }
+                                                                        }}
+                                                                        style={{
+                                                                            padding: '0.35rem 0.5rem',
+                                                                            borderRadius: '6px',
+                                                                            border: 'none',
+                                                                            background: listSortBy === 'time' ? 'var(--color-primary)' : 'transparent',
+                                                                            color: listSortBy === 'time' ? '#000' : 'var(--color-text-muted)',
+                                                                            fontSize: '0.75rem',
+                                                                            fontWeight: '500',
+                                                                            cursor: 'pointer',
+                                                                            transition: 'all 0.2s ease'
+                                                                        }}
+                                                                        title="เรียงตามเวลา"
+                                                                    >
+                                                                        เวลา {listSortBy === 'time' && (listSortOrder === 'desc' ? '↓' : '↑')}
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            if (listSortBy === 'number') {
+                                                                                setListSortOrder(listSortOrder === 'asc' ? 'desc' : 'asc')
+                                                                            } else {
+                                                                                setListSortBy('number')
+                                                                                setListSortOrder('asc')
+                                                                            }
+                                                                        }}
+                                                                        style={{
+                                                                            padding: '0.35rem 0.5rem',
+                                                                            borderRadius: '6px',
+                                                                            border: 'none',
+                                                                            background: listSortBy === 'number' ? 'var(--color-primary)' : 'transparent',
+                                                                            color: listSortBy === 'number' ? '#000' : 'var(--color-text-muted)',
+                                                                            fontSize: '0.75rem',
+                                                                            fontWeight: '500',
+                                                                            cursor: 'pointer',
+                                                                            transition: 'all 0.2s ease'
+                                                                        }}
+                                                                        title="เรียงตามเลข"
+                                                                    >
+                                                                        เลข {listSortBy === 'number' && (listSortOrder === 'asc' ? '↑' : '↓')}
+                                                                    </button>
+                                                                </div>
+                                                            )}
                                                             {submissions.length > 0 && (
                                                                 <button
                                                                     className="bill-copy-btn"
@@ -2344,13 +2501,16 @@ export default function UserDashboard() {
                                                                             return acc
                                                                         }, {})
 
+                                                                        // Sort bills by time only
+                                                                        const sortedBillEntries = Object.entries(bills).sort((a, b) => {
+                                                                            const timeA = new Date(a[1][0].created_at).getTime()
+                                                                            const timeB = new Date(b[1][0].created_at).getTime()
+                                                                            return billSortOrder === 'desc' ? timeB - timeA : timeA - timeB
+                                                                        })
+
                                                                         return (
                                                                             <div className="bill-view-container">
-                                                                                {Object.entries(bills).sort((a, b) => {
-                                                                                    const latestA = new Date(a[1][0].created_at)
-                                                                                    const latestB = new Date(b[1][0].created_at)
-                                                                                    return latestB - latestA
-                                                                                }).map(([billId, billItems]) => {
+                                                                                {sortedBillEntries.map(([billId, billItems]) => {
                                                                                     const billTotal = billItems.reduce((sum, item) => sum + item.amount, 0)
                                                                                     const billCommission = billItems.reduce((sum, item) => sum + item.commission_amount, 0)
                                                                                     const billTime = new Date(billItems[0].created_at).toLocaleTimeString('th-TH', {
@@ -2363,6 +2523,16 @@ export default function UserDashboard() {
                                                                                     })
                                                                                     const isExpandedBill = expandedBills.includes(billId)
                                                                                     const processedBillItems = processItems(billItems)
+                                                                                    
+                                                                                    // Sort items inside bill based on itemSortMode
+                                                                                    const sortedBillItems = itemSortMode === 'original' 
+                                                                                        ? processedBillItems 
+                                                                                        : [...processedBillItems].sort((a, b) => {
+                                                                                            const numA = (displayMode === 'summary' ? (a.display_numbers || a.numbers) : a.numbers) || ''
+                                                                                            const numB = (displayMode === 'summary' ? (b.display_numbers || b.numbers) : b.numbers) || ''
+                                                                                            const comparison = numA.localeCompare(numB, undefined, { numeric: true })
+                                                                                            return itemSortMode === 'asc' ? comparison : -comparison
+                                                                                        })
                                                                                     const isDealerSubmitted = billItems[0]?.submitted_by_type === 'dealer'
 
                                                                                     // Copy bill function
@@ -2474,7 +2644,7 @@ export default function UserDashboard() {
                                                                                             {/* Bill Items - Collapsible */}
                                                                                             {isExpandedBill && (
                                                                                             <div className="bill-items-list">
-                                                                                                {processedBillItems.map(sub => (
+                                                                                                {sortedBillItems.map(sub => (
                                                                                                     <div
                                                                                                         key={sub.id || sub.entry_id}
                                                                                                         className={`bill-item-row ${canDelete(sub) ? 'editable' : ''}`}
@@ -2529,8 +2699,21 @@ export default function UserDashboard() {
                                                                             </div>
                                                                         )
                                                                     } else {
-                                                                        // Single table view
-                                                                        const displayItems = processItems(filteredSubs)
+                                                                        // Single table view - sort based on listSortBy and listSortOrder
+                                                                        const processedItems = processItems(filteredSubs)
+                                                                        const displayItems = [...processedItems].sort((a, b) => {
+                                                                            if (listSortBy === 'time') {
+                                                                                const timeA = new Date(a.created_at).getTime()
+                                                                                const timeB = new Date(b.created_at).getTime()
+                                                                                return listSortOrder === 'desc' ? timeB - timeA : timeA - timeB
+                                                                            } else if (listSortBy === 'number') {
+                                                                                const numA = (displayMode === 'summary' ? (a.display_numbers || a.numbers) : a.numbers) || ''
+                                                                                const numB = (displayMode === 'summary' ? (b.display_numbers || b.numbers) : b.numbers) || ''
+                                                                                const comparison = numA.localeCompare(numB, undefined, { numeric: true })
+                                                                                return listSortOrder === 'asc' ? comparison : -comparison
+                                                                            }
+                                                                            return 0
+                                                                        })
                                                                         return (
                                                                             <table className="submissions-table">
                                                                                 <thead>

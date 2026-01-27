@@ -76,6 +76,13 @@ export default function RoundAccordionItem({
     const [displayMode, setDisplayMode] = useState('grouped')
     // Display mode for bills tab: 'summary' = ย่อ (group by entry_id), 'detailed' = เต็ม (show all items)
     const [billDisplayMode, setBillDisplayMode] = useState('summary')
+    // Sort order for bills by time: 'asc' or 'desc'
+    const [billSortOrder, setBillSortOrder] = useState('desc')
+    // Sort mode for items inside bills: 'asc', 'desc', 'original'
+    const [itemSortMode, setItemSortMode] = useState('original')
+    // Sort for "รวม" view: 'time' or 'number'
+    const [allViewSortBy, setAllViewSortBy] = useState('time')
+    const [allViewSortOrder, setAllViewSortOrder] = useState('desc')
     // Selected items for bulk delete
     const [selectedItems, setSelectedItems] = useState({})
     const [deletingItems, setDeletingItems] = useState(false)
@@ -1522,6 +1529,155 @@ export default function RoundAccordionItem({
                                                             </>
                                                         )}
                                                     </div>
+                                                    
+                                                    {/* Sort toggle - different for bills vs all view */}
+                                                    {totalViewMode === 'bills' ? (
+                                                        <>
+                                                            {/* Bill sort by time */}
+                                                            <div style={{ 
+                                                                display: 'flex', 
+                                                                gap: '2px', 
+                                                                background: 'var(--color-surface)', 
+                                                                borderRadius: '8px', 
+                                                                padding: '3px'
+                                                            }}>
+                                                                <button
+                                                                    onClick={() => setBillSortOrder(billSortOrder === 'desc' ? 'asc' : 'desc')}
+                                                                    style={{
+                                                                        padding: '0.4rem 0.6rem',
+                                                                        borderRadius: '6px',
+                                                                        border: 'none',
+                                                                        background: 'var(--color-primary)',
+                                                                        color: '#000',
+                                                                        fontSize: '0.8rem',
+                                                                        fontWeight: '500',
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s ease'
+                                                                    }}
+                                                                    title="เรียงใบโพยตามเวลา"
+                                                                >
+                                                                    เวลา {billSortOrder === 'desc' ? '↓' : '↑'}
+                                                                </button>
+                                                            </div>
+                                                            {/* Item sort inside bills - 3 options */}
+                                                            <div style={{ 
+                                                                display: 'flex', 
+                                                                gap: '2px', 
+                                                                background: 'var(--color-surface)', 
+                                                                borderRadius: '8px', 
+                                                                padding: '3px'
+                                                            }}>
+                                                                <button
+                                                                    onClick={() => setItemSortMode('asc')}
+                                                                    style={{
+                                                                        padding: '0.4rem 0.5rem',
+                                                                        borderRadius: '6px',
+                                                                        border: 'none',
+                                                                        background: itemSortMode === 'asc' ? 'var(--color-primary)' : 'transparent',
+                                                                        color: itemSortMode === 'asc' ? '#000' : 'var(--color-text-muted)',
+                                                                        fontSize: '0.75rem',
+                                                                        fontWeight: '500',
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s ease'
+                                                                    }}
+                                                                    title="เรียงเลขน้อยไปมาก"
+                                                                >
+                                                                    เลข↑
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setItemSortMode('desc')}
+                                                                    style={{
+                                                                        padding: '0.4rem 0.5rem',
+                                                                        borderRadius: '6px',
+                                                                        border: 'none',
+                                                                        background: itemSortMode === 'desc' ? 'var(--color-primary)' : 'transparent',
+                                                                        color: itemSortMode === 'desc' ? '#000' : 'var(--color-text-muted)',
+                                                                        fontSize: '0.75rem',
+                                                                        fontWeight: '500',
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s ease'
+                                                                    }}
+                                                                    title="เรียงเลขมากไปน้อย"
+                                                                >
+                                                                    เลข↓
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setItemSortMode('original')}
+                                                                    style={{
+                                                                        padding: '0.4rem 0.5rem',
+                                                                        borderRadius: '6px',
+                                                                        border: 'none',
+                                                                        background: itemSortMode === 'original' ? 'var(--color-primary)' : 'transparent',
+                                                                        color: itemSortMode === 'original' ? '#000' : 'var(--color-text-muted)',
+                                                                        fontSize: '0.75rem',
+                                                                        fontWeight: '500',
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s ease'
+                                                                    }}
+                                                                    title="เรียงตามที่ป้อน"
+                                                                >
+                                                                    ป้อน
+                                                                </button>
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <div style={{ 
+                                                            display: 'flex', 
+                                                            gap: '2px', 
+                                                            background: 'var(--color-surface)', 
+                                                            borderRadius: '8px', 
+                                                            padding: '3px'
+                                                        }}>
+                                                            <button
+                                                                onClick={() => {
+                                                                    if (allViewSortBy === 'time') {
+                                                                        setAllViewSortOrder(allViewSortOrder === 'desc' ? 'asc' : 'desc')
+                                                                    } else {
+                                                                        setAllViewSortBy('time')
+                                                                        setAllViewSortOrder('desc')
+                                                                    }
+                                                                }}
+                                                                style={{
+                                                                    padding: '0.4rem 0.6rem',
+                                                                    borderRadius: '6px',
+                                                                    border: 'none',
+                                                                    background: allViewSortBy === 'time' ? 'var(--color-primary)' : 'transparent',
+                                                                    color: allViewSortBy === 'time' ? '#000' : 'var(--color-text-muted)',
+                                                                    fontSize: '0.8rem',
+                                                                    fontWeight: '500',
+                                                                    cursor: 'pointer',
+                                                                    transition: 'all 0.2s ease'
+                                                                }}
+                                                                title="เรียงตามเวลา"
+                                                            >
+                                                                เวลา {allViewSortBy === 'time' && (allViewSortOrder === 'desc' ? '↓' : '↑')}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    if (allViewSortBy === 'number') {
+                                                                        setAllViewSortOrder(allViewSortOrder === 'asc' ? 'desc' : 'asc')
+                                                                    } else {
+                                                                        setAllViewSortBy('number')
+                                                                        setAllViewSortOrder('asc')
+                                                                    }
+                                                                }}
+                                                                style={{
+                                                                    padding: '0.4rem 0.6rem',
+                                                                    borderRadius: '6px',
+                                                                    border: 'none',
+                                                                    background: allViewSortBy === 'number' ? 'var(--color-primary)' : 'transparent',
+                                                                    color: allViewSortBy === 'number' ? '#000' : 'var(--color-text-muted)',
+                                                                    fontSize: '0.8rem',
+                                                                    fontWeight: '500',
+                                                                    cursor: 'pointer',
+                                                                    transition: 'all 0.2s ease'
+                                                                }}
+                                                                title="เรียงตามเลข"
+                                                            >
+                                                                เลข {allViewSortBy === 'number' && (allViewSortOrder === 'asc' ? '↑' : '↓')}
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 
                                                 {/* Row 2: Member filter buttons */}
@@ -1710,7 +1866,7 @@ export default function RoundAccordionItem({
                                                                         byEntry[entryId].count += 1
                                                                         byEntry[entryId].ids.push(s.id)
                                                                     })
-                                                                    filteredData = Object.values(byEntry).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+                                                                    filteredData = Object.values(byEntry)
                                                                 } else if (displayMode === 'grouped') {
                                                                     // Group by normalized numbers + bet_type
                                                                     const grouped = {}
@@ -1718,7 +1874,7 @@ export default function RoundAccordionItem({
                                                                         const normalizedNumbers = normalizeNumber(s.numbers, s.bet_type)
                                                                         const key = `${normalizedNumbers}|${s.bet_type}`
                                                                         if (!grouped[key]) {
-                                                                            grouped[key] = { numbers: normalizedNumbers, originalNumbers: [s.numbers], bet_type: s.bet_type, amount: 0, count: 0, id: key, ids: [] }
+                                                                            grouped[key] = { numbers: normalizedNumbers, originalNumbers: [s.numbers], bet_type: s.bet_type, amount: 0, count: 0, id: key, ids: [], created_at: s.created_at }
                                                                         } else {
                                                                             if (!grouped[key].originalNumbers.includes(s.numbers)) grouped[key].originalNumbers.push(s.numbers)
                                                                         }
@@ -1726,9 +1882,24 @@ export default function RoundAccordionItem({
                                                                         grouped[key].count += 1
                                                                         grouped[key].ids.push(s.id)
                                                                     })
-                                                                    filteredData = Object.values(grouped).sort((a, b) => b.amount - a.amount)
+                                                                    filteredData = Object.values(grouped)
                                                                 }
                                                                 // 'detailed' mode: keep filteredData as-is (individual submissions)
+                                                                
+                                                                // Sort based on allViewSortBy and allViewSortOrder
+                                                                filteredData = [...filteredData].sort((a, b) => {
+                                                                    if (allViewSortBy === 'time') {
+                                                                        const timeA = new Date(a.created_at).getTime()
+                                                                        const timeB = new Date(b.created_at).getTime()
+                                                                        return allViewSortOrder === 'desc' ? timeB - timeA : timeA - timeB
+                                                                    } else if (allViewSortBy === 'number') {
+                                                                        const numA = a.numbers || ''
+                                                                        const numB = b.numbers || ''
+                                                                        const comparison = numA.localeCompare(numB, undefined, { numeric: true })
+                                                                        return allViewSortOrder === 'asc' ? comparison : -comparison
+                                                                    }
+                                                                    return 0
+                                                                })
 
                                                                 const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
                                                                 const setPrice = round?.set_prices?.['4_top'] || 120
@@ -1840,9 +2011,16 @@ export default function RoundAccordionItem({
                                                             ? bills 
                                                             : bills.filter(b => b.user_name === inlineUserFilter)
                                                         
+                                                        // Sort bills by time only
+                                                        const sortedBills = [...filteredBills].sort((a, b) => {
+                                                            const timeA = new Date(a.created_at).getTime()
+                                                            const timeB = new Date(b.created_at).getTime()
+                                                            return billSortOrder === 'desc' ? timeB - timeA : timeA - timeB
+                                                        })
+                                                        
                                                         // Group bills by user
                                                         const billsByUser = {}
-                                                        filteredBills.forEach(bill => {
+                                                        sortedBills.forEach(bill => {
                                                             if (!billsByUser[bill.user_name]) {
                                                                 billsByUser[bill.user_name] = { user_name: bill.user_name, user_id: bill.user_id, bills: [], total: 0 }
                                                             }
@@ -1960,7 +2138,17 @@ export default function RoundAccordionItem({
                                                                                                 displayItems = Object.values(byEntry)
                                                                                             }
                                                                                             
-                                                                                            return displayItems.map((item, itemIdx) => (
+                                                                                            // Sort items based on itemSortMode
+                                                                                            const sortedItems = itemSortMode === 'original' 
+                                                                                                ? displayItems 
+                                                                                                : [...displayItems].sort((a, b) => {
+                                                                                                    const numA = a.numbers || ''
+                                                                                                    const numB = b.numbers || ''
+                                                                                                    const comparison = numA.localeCompare(numB, undefined, { numeric: true })
+                                                                                                    return itemSortMode === 'asc' ? comparison : -comparison
+                                                                                                })
+                                                                                            
+                                                                                            return sortedItems.map((item, itemIdx) => (
                                                                                                 <div key={item.id} style={{ 
                                                                                                     display: 'flex', 
                                                                                                     justifyContent: 'space-between', 
