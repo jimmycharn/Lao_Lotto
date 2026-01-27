@@ -475,6 +475,12 @@
     box-shadow: 0 0 15px rgba(212, 175, 55, 0.1);
 }
 
+.bet-type-btn.last-clicked {
+    border: 2px solid var(--color-primary);
+    background: rgba(212, 175, 55, 0.2);
+    color: var(--color-primary);
+}
+
 .bet-type-btn.dragging {
     opacity: 0.5;
     border: 2px dashed var(--color-primary);

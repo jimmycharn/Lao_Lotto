@@ -43,6 +43,8 @@ export default function WriteSubmissionModal({
     const [isReversed, setIsReversed] = useState(false) // Toggle for 2-digit reversed bets
     const [showPasteModal, setShowPasteModal] = useState(false)
     const [pasteText, setPasteText] = useState('')
+    const [lastClickedBetType, setLastClickedBetType] = useState(null) // Track last clicked bet type button
+    const [showCloseConfirm, setShowCloseConfirm] = useState(false) // Confirm before closing modal
 
     // Play sound when adding to draft
     function playAddSound() {
@@ -135,6 +137,9 @@ export default function WriteSubmissionModal({
             toast.error('กรุณากรอกตัวเลข')
             return
         }
+        
+        // Track last clicked bet type for highlighting
+        setLastClickedBetType(betType)
 
         // Parse amount - handle "100*50" format
         let amountParts = amountStr.split('*').map(p => parseFloat(p) || 0)
@@ -704,14 +709,24 @@ export default function WriteSubmissionModal({
     const totalAmount = drafts.reduce((sum, d) => sum + d.amount, 0)
     const totalCommission = drafts.reduce((sum, d) => sum + (d.commission_amount || 0), 0)
 
+    // Handle close with confirmation if there are drafts
+    function handleCloseAttempt() {
+        if (drafts.length > 0) {
+            setShowCloseConfirm(true)
+        } else {
+            onClose()
+        }
+    }
+
     return (
-        <div className="modal-overlay" onClick={onClose}>
+        <>
+        <div className="modal-overlay" onClick={handleCloseAttempt}>
             <div className="modal submission-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
                 <div className="modal-header">
                     <div className="header-title">
                         <h3><FiFileText /> เขียนโพยให้ {targetUser?.full_name || targetUser?.email}</h3>
                     </div>
-                    <button className="modal-close" onClick={onClose}>
+                    <button className="modal-close" onClick={handleCloseAttempt}>
                         <FiX />
                     </button>
                 </div>
@@ -774,6 +789,9 @@ export default function WriteSubmissionModal({
                                         const newNumbers = e.target.value.replace(/[^\d]/g, '')
                                         const digits = newNumbers.length
                                         const isLaoOrHanoi = ['lao', 'hanoi'].includes(round.lottery_type)
+                                        
+                                        // Reset last clicked bet type when numbers change
+                                        setLastClickedBetType(null)
                                         
                                         // For Lao/Hanoi: clear amount when entering 4+ digits
                                         if (isLaoOrHanoi && digits >= 4) {
@@ -931,6 +949,7 @@ export default function WriteSubmissionModal({
                                             const key = typeof item === 'string' ? item : item.id
                                             const label = typeof item === 'string' ? (BET_TYPES[key]?.label || key) : item.label
                                             const currentIndex = show2DigitToggle ? idx + 1 : idx
+                                            const isLastClicked = lastClickedBetType === key
                                             return (
                                                 <button
                                                     key={key}
@@ -939,8 +958,8 @@ export default function WriteSubmissionModal({
                                                     onClick={() => addToDraft(key)}
                                                     style={{ 
                                                         ...buttonStyle,
-                                                        border: '1px solid var(--color-primary)',
-                                                        background: 'transparent',
+                                                        border: isLastClicked ? '2px solid var(--color-primary)' : '1px solid var(--color-primary)',
+                                                        background: isLastClicked ? 'rgba(212, 175, 55, 0.2)' : 'transparent',
                                                         color: 'var(--color-primary)',
                                                         ...getGridSpan(currentIndex)
                                                     }}
@@ -1061,7 +1080,7 @@ export default function WriteSubmissionModal({
                 </div>
 
                 <div className="modal-footer">
-                    <button className="btn btn-secondary" onClick={onClose}>
+                    <button className="btn btn-secondary" onClick={handleCloseAttempt}>
                         ยกเลิก
                     </button>
                     <button 
@@ -1109,5 +1128,42 @@ export default function WriteSubmissionModal({
                 </div>
             )}
         </div>
+
+        {/* Close Confirmation Modal */}
+        {showCloseConfirm && (
+            <div className="modal-overlay" onClick={() => setShowCloseConfirm(false)} style={{ zIndex: 1002 }}>
+                <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+                    <div className="modal-header">
+                        <h3>ยืนยันการปิด</h3>
+                        <button className="modal-close" onClick={() => setShowCloseConfirm(false)}>
+                            <FiX />
+                        </button>
+                    </div>
+                    <div className="modal-body">
+                        <p style={{ textAlign: 'center', fontSize: '1rem' }}>
+                            คุณมีรายการที่ยังไม่ได้บันทึก {drafts.length} รายการ
+                        </p>
+                        <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
+                            ต้องการปิดหน้าต่างนี้หรือไม่?
+                        </p>
+                    </div>
+                    <div className="modal-footer" style={{ justifyContent: 'center', gap: '1rem' }}>
+                        <button className="btn btn-secondary" onClick={() => setShowCloseConfirm(false)}>
+                            ไม่ปิด
+                        </button>
+                        <button 
+                            className="btn btn-danger" 
+                            onClick={() => {
+                                setShowCloseConfirm(false)
+                                onClose()
+                            }}
+                        >
+                            ปิดเลย
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+        </>
     )
 }

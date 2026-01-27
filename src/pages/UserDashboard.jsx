@@ -94,6 +94,8 @@ export default function UserDashboard() {
     })
     const [draggedBetType, setDraggedBetType] = useState(null)
     const [isReversed, setIsReversed] = useState(false) // Toggle for 2-digit reversed bets
+    const [lastClickedBetType, setLastClickedBetType] = useState(null) // Track last clicked bet type button
+    const [showCloseConfirm, setShowCloseConfirm] = useState(false) // Confirm before closing modal
     const numberInputRef = useRef(null)
     const amountInputRef = useRef(null)
     const billNoteInputRef = useRef(null)
@@ -671,6 +673,12 @@ export default function UserDashboard() {
         console.log('Using userSettings:', freshUserSettings)
         console.log('lottery_settings:', freshUserSettings?.lottery_settings)
         const betType = betTypeOverride || submitForm.bet_type
+        
+        // Track last clicked bet type for highlighting
+        if (betTypeOverride) {
+            setLastClickedBetType(betTypeOverride)
+        }
+        
         // Clean numbers by removing spaces
         const cleanNumbers = (submitForm.numbers || '').replace(/\s/g, '')
         console.log('cleanNumbers:', cleanNumbers, 'betType:', betType)
@@ -3000,12 +3008,17 @@ export default function UserDashboard() {
 
             {/* Submit Modal */}
             {showSubmitModal && selectedRound && (
+                <>
                 <div className="modal-overlay" onClick={() => {
-                    setDrafts([])
-                    setCurrentBillId(null)
-                    setIsEditingBill(false)
-                    setBillNote('')
-                    setShowSubmitModal(false)
+                    if (drafts.length > 0) {
+                        setShowCloseConfirm(true)
+                    } else {
+                        setDrafts([])
+                        setCurrentBillId(null)
+                        setIsEditingBill(false)
+                        setBillNote('')
+                        setShowSubmitModal(false)
+                    }
                 }}>
                     <div className="modal submission-modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
@@ -3015,11 +3028,15 @@ export default function UserDashboard() {
                             </div>
                             <button className="modal-close" onClick={(e) => {
                                 e.stopPropagation()
-                                setDrafts([])
-                                setCurrentBillId(null)
-                                setIsEditingBill(false)
-                                setBillNote('')
-                                setShowSubmitModal(false)
+                                if (drafts.length > 0) {
+                                    setShowCloseConfirm(true)
+                                } else {
+                                    setDrafts([])
+                                    setCurrentBillId(null)
+                                    setIsEditingBill(false)
+                                    setBillNote('')
+                                    setShowSubmitModal(false)
+                                }
                             }}>
                                 <FiX />
                             </button>
@@ -3093,6 +3110,9 @@ export default function UserDashboard() {
                                                 const newNumbers = e.target.value.replace(/[^\d]/g, '')
                                                 const digitsOnly = newNumbers.replace(/\*/g, '')
                                                 const isLaoOrHanoi = ['lao', 'hanoi'].includes(selectedRound?.lottery_type)
+                                                
+                                                // Reset last clicked bet type when numbers change
+                                                setLastClickedBetType(null)
                                                 
                                                 // For Lao/Hanoi: clear amount when entering 4+ digits
                                                 if (isLaoOrHanoi && digitsOnly.length >= 4) {
@@ -3360,11 +3380,12 @@ export default function UserDashboard() {
                                                 {sortedAvailable.map(item => {
                                                     const key = typeof item === 'string' ? item : item.id
                                                     const label = typeof item === 'string' ? (BET_TYPES[key]?.label || key) : item.label
+                                                    const isLastClicked = lastClickedBetType === key
                                                     return (
                                                         <button
                                                             key={key}
                                                             type="button"
-                                                            className={`bet-type-btn ${draggedBetType?.key === key ? 'dragging' : ''}`}
+                                                            className={`bet-type-btn ${draggedBetType?.key === key ? 'dragging' : ''} ${isLastClicked ? 'last-clicked' : ''}`}
                                                             draggable
                                                             onMouseDown={(e) => e.preventDefault()}
                                                             onTouchStart={(e) => e.preventDefault()}
@@ -3554,6 +3575,48 @@ export default function UserDashboard() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Close Confirmation Modal */}
+            {showCloseConfirm && (
+                <div className="modal-overlay" onClick={() => setShowCloseConfirm(false)} style={{ zIndex: 1200 }}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px', zIndex: 1201 }}>
+                        <div className="modal-header">
+                            <h3>ยืนยันการปิด</h3>
+                            <button className="modal-close" onClick={() => setShowCloseConfirm(false)}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <p style={{ textAlign: 'center', fontSize: '1rem' }}>
+                                คุณมีรายการที่ยังไม่ได้บันทึก {drafts.length} รายการ
+                            </p>
+                            <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
+                                ต้องการปิดหน้าต่างนี้หรือไม่?
+                            </p>
+                        </div>
+                        <div className="modal-footer" style={{ justifyContent: 'center', gap: '1rem' }}>
+                            <button className="btn btn-secondary" onClick={() => setShowCloseConfirm(false)}>
+                                ไม่ปิด
+                            </button>
+                            <button 
+                                className="btn btn-danger" 
+                                onClick={() => {
+                                    setShowCloseConfirm(false)
+                                    setDrafts([])
+                                    setCurrentBillId(null)
+                                    setIsEditingBill(false)
+                                    setBillNote('')
+                                    setShowSubmitModal(false)
+                                }}
+                            >
+                                ปิดเลย
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            </>
             )}
 
             {/* Confirm Become Dealer Modal */}
