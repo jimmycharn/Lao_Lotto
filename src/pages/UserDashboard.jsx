@@ -2245,7 +2245,7 @@ export default function UserDashboard() {
                                                                             เวลา {billSortOrder === 'desc' ? '↓' : '↑'}
                                                                         </button>
                                                                     </div>
-                                                                    {/* Item sort inside bills - 3 options */}
+                                                                    {/* Item sort inside bills - 2 toggle buttons */}
                                                                     <div style={{ 
                                                                         display: 'flex', 
                                                                         gap: '2px', 
@@ -2255,55 +2255,38 @@ export default function UserDashboard() {
                                                                         marginLeft: '0.25rem'
                                                                     }}>
                                                                         <button
-                                                                            onClick={() => setItemSortMode('asc')}
+                                                                            onClick={() => setItemSortMode(itemSortMode === 'asc' ? 'desc' : 'asc')}
                                                                             style={{
                                                                                 padding: '0.35rem 0.4rem',
                                                                                 borderRadius: '6px',
                                                                                 border: 'none',
-                                                                                background: itemSortMode === 'asc' ? 'var(--color-primary)' : 'transparent',
-                                                                                color: itemSortMode === 'asc' ? '#000' : 'var(--color-text-muted)',
+                                                                                background: (itemSortMode === 'asc' || itemSortMode === 'desc') ? 'var(--color-primary)' : 'transparent',
+                                                                                color: (itemSortMode === 'asc' || itemSortMode === 'desc') ? '#000' : 'var(--color-text-muted)',
                                                                                 fontSize: '0.7rem',
                                                                                 fontWeight: '500',
                                                                                 cursor: 'pointer',
                                                                                 transition: 'all 0.2s ease'
                                                                             }}
-                                                                            title="เรียงเลขน้อยไปมาก"
+                                                                            title={itemSortMode === 'asc' ? 'เรียงเลขน้อยไปมาก' : 'เรียงเลขมากไปน้อย'}
                                                                         >
-                                                                            เลข↑
+                                                                            เลข {(itemSortMode === 'asc' || itemSortMode === 'desc') ? (itemSortMode === 'asc' ? '↑' : '↓') : ''}
                                                                         </button>
                                                                         <button
-                                                                            onClick={() => setItemSortMode('desc')}
+                                                                            onClick={() => setItemSortMode(itemSortMode === 'original' ? 'original_rev' : 'original')}
                                                                             style={{
                                                                                 padding: '0.35rem 0.4rem',
                                                                                 borderRadius: '6px',
                                                                                 border: 'none',
-                                                                                background: itemSortMode === 'desc' ? 'var(--color-primary)' : 'transparent',
-                                                                                color: itemSortMode === 'desc' ? '#000' : 'var(--color-text-muted)',
+                                                                                background: (itemSortMode === 'original' || itemSortMode === 'original_rev') ? 'var(--color-primary)' : 'transparent',
+                                                                                color: (itemSortMode === 'original' || itemSortMode === 'original_rev') ? '#000' : 'var(--color-text-muted)',
                                                                                 fontSize: '0.7rem',
                                                                                 fontWeight: '500',
                                                                                 cursor: 'pointer',
                                                                                 transition: 'all 0.2s ease'
                                                                             }}
-                                                                            title="เรียงเลขมากไปน้อย"
+                                                                            title={itemSortMode === 'original' ? 'เรียงตามที่ป้อน (บนลงล่าง)' : 'เรียงตามที่ป้อน (ล่างขึ้นบน)'}
                                                                         >
-                                                                            เลข↓
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => setItemSortMode('original')}
-                                                                            style={{
-                                                                                padding: '0.35rem 0.4rem',
-                                                                                borderRadius: '6px',
-                                                                                border: 'none',
-                                                                                background: itemSortMode === 'original' ? 'var(--color-primary)' : 'transparent',
-                                                                                color: itemSortMode === 'original' ? '#000' : 'var(--color-text-muted)',
-                                                                                fontSize: '0.7rem',
-                                                                                fontWeight: '500',
-                                                                                cursor: 'pointer',
-                                                                                transition: 'all 0.2s ease'
-                                                                            }}
-                                                                            title="เรียงตามที่ป้อน"
-                                                                        >
-                                                                            ป้อน
+                                                                            ป้อน {(itemSortMode === 'original' || itemSortMode === 'original_rev') ? (itemSortMode === 'original' ? '↓' : '↑') : ''}
                                                                         </button>
                                                                     </div>
                                                                 </>
@@ -2525,14 +2508,21 @@ export default function UserDashboard() {
                                                                                     const processedBillItems = processItems(billItems)
                                                                                     
                                                                                     // Sort items inside bill based on itemSortMode
-                                                                                    const sortedBillItems = itemSortMode === 'original' 
-                                                                                        ? processedBillItems 
-                                                                                        : [...processedBillItems].sort((a, b) => {
-                                                                                            const numA = (displayMode === 'summary' ? (a.display_numbers || a.numbers) : a.numbers) || ''
-                                                                                            const numB = (displayMode === 'summary' ? (b.display_numbers || b.numbers) : b.numbers) || ''
-                                                                                            const comparison = numA.localeCompare(numB, undefined, { numeric: true })
-                                                                                            return itemSortMode === 'asc' ? comparison : -comparison
-                                                                                        })
+                                                                                    const sortedBillItems = (() => {
+                                                                                        if (itemSortMode === 'original') {
+                                                                                            return processedBillItems
+                                                                                        } else if (itemSortMode === 'original_rev') {
+                                                                                            return [...processedBillItems].reverse()
+                                                                                        } else {
+                                                                                            // asc or desc - sort by number
+                                                                                            return [...processedBillItems].sort((a, b) => {
+                                                                                                const numA = (displayMode === 'summary' ? (a.display_numbers || a.numbers) : a.numbers) || ''
+                                                                                                const numB = (displayMode === 'summary' ? (b.display_numbers || b.numbers) : b.numbers) || ''
+                                                                                                const comparison = numA.localeCompare(numB, undefined, { numeric: true })
+                                                                                                return itemSortMode === 'asc' ? comparison : -comparison
+                                                                                            })
+                                                                                        }
+                                                                                    })()
                                                                                     const isDealerSubmitted = billItems[0]?.submitted_by_type === 'dealer'
 
                                                                                     // Copy bill function
