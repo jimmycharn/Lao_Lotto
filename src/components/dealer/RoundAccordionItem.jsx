@@ -1413,8 +1413,8 @@ export default function RoundAccordionItem({
                                                 </div>
                                                 
                                                 {/* Row 0.5: Dropdown + Write bet button */}
-                                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                                    <select value={inlineUserFilter} onChange={(e) => setInlineUserFilter(e.target.value)} className="form-input" style={{ flex: 1, minHeight: '36px', fontSize: '0.85rem' }}>
+                                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'stretch' }}>
+                                                    <select value={inlineUserFilter} onChange={(e) => setInlineUserFilter(e.target.value)} className="form-input" style={{ flex: 1, minHeight: '40px', fontSize: '0.85rem' }}>
                                                         <option value="all">ทุกคน</option>
                                                         {memberFilterMode === 'all' ? (
                                                             allMembers.map(member => (
@@ -1437,8 +1437,7 @@ export default function RoundAccordionItem({
                                                                 alignItems: 'center',
                                                                 gap: '0.35rem',
                                                                 whiteSpace: 'nowrap',
-                                                                minHeight: '36px',
-                                                                padding: '0.4rem 0.6rem',
+                                                                padding: '0 0.75rem',
                                                                 fontSize: '0.85rem'
                                                             }}
                                                         >
@@ -2061,7 +2060,14 @@ export default function RoundAccordionItem({
                                                                                                 {bill.bill_note || `ใบโพย ${billIdx + 1}`}
                                                                                             </div>
                                                                                             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                                {billTime} • {bill.items.length} รายการ
+                                                                                                {billTime} • {billDisplayMode === 'summary' ? (() => {
+                                                                                                    const byEntry = {}
+                                                                                                    bill.items.forEach(item => {
+                                                                                                        const entryId = item.entry_id || item.id
+                                                                                                        if (!byEntry[entryId]) byEntry[entryId] = true
+                                                                                                    })
+                                                                                                    return Object.keys(byEntry).length
+                                                                                                })() : bill.items.length} รายการ
                                                                                             </div>
                                                                                         </div>
                                                                                     </div>
@@ -2143,7 +2149,7 @@ export default function RoundAccordionItem({
                                                                                                     <div>
                                                                                                         <span style={{ fontWeight: '600', marginRight: '0.5rem', fontSize: '0.95rem' }}>{item.numbers}</span>
                                                                                                         <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                                            {billDisplayMode === 'summary' ? item.display_bet_type : (BET_TYPES[item.bet_type] || item.bet_type)}
+                                                                                                            {billDisplayMode === 'summary' ? item.display_bet_type : (BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type)}
                                                                                                         </span>
                                                                                                         {billDisplayMode === 'summary' && item.count > 1 && (
                                                                                                             <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>
@@ -2159,7 +2165,7 @@ export default function RoundAccordionItem({
                                                                                                                 <>{round.currency_symbol}{item.amount.toLocaleString()}</>
                                                                                                             )}
                                                                                                         </span>
-                                                                                                        {isOpen && billDisplayMode === 'detailed' && (
+                                                                                                        {isOpen && billDisplayMode === 'summary' && (
                                                                                                             <button 
                                                                                                                 className="btn btn-icon btn-sm"
                                                                                                                 onClick={(e) => {
