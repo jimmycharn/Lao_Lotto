@@ -69,9 +69,9 @@ export default function RoundAccordionItem({
     const [inlineBetTypeFilter, setInlineBetTypeFilter] = useState('all')
     const [inlineSearch, setInlineSearch] = useState('')
     // Member filter: 'all' = all members, 'submitted' = only members who submitted
-    const [memberFilterMode, setMemberFilterMode] = useState('submitted')
+    const [memberFilterMode, setMemberFilterMode] = useState('all')
     // Total tab view mode: 'all' = ทั้งหมด (รวมเลข), 'bills' = แยกใบโพย
-    const [totalViewMode, setTotalViewMode] = useState('all')
+    const [totalViewMode, setTotalViewMode] = useState('bills')
     // Display mode for submissions: 'summary' = ย่อ, 'detailed' = เต็มไม่รวม, 'grouped' = เต็มรวมเลข
     const [displayMode, setDisplayMode] = useState('grouped')
     // Display mode for bills tab: 'summary' = ย่อ (group by entry_id), 'detailed' = เต็ม (show all items)
@@ -2042,7 +2042,7 @@ export default function RoundAccordionItem({
 
                                                         return Object.values(billsByUser).map(userGroup => {
                                                             const userKey = userGroup.user_id || userGroup.user_name
-                                                            const isUserExpanded = !expandedUserGroups.includes(userKey)
+                                                            const isUserExpanded = expandedUserGroups.includes(userKey)
                                                             // Calculate total items based on billDisplayMode
                                                             const totalItems = billDisplayMode === 'summary' 
                                                                 ? userGroup.bills.reduce((sum, bill) => {
@@ -2128,7 +2128,7 @@ export default function RoundAccordionItem({
                                                                                         justifyContent: 'space-between', 
                                                                                         alignItems: 'center',
                                                                                         padding: '0.6rem 0.75rem',
-                                                                                        background: isExpanded ? 'rgba(255,193,7,0.1)' : 'rgba(255,255,255,0.03)',
+                                                                                        background: isExpanded ? 'rgba(255,193,7,0.15)' : 'rgba(255,193,7,0.08)',
                                                                                         cursor: 'pointer',
                                                                                         transition: 'background 0.2s ease'
                                                                                     }}
@@ -2226,7 +2226,7 @@ export default function RoundAccordionItem({
                                                                                                     alignItems: 'center',
                                                                                                     padding: '0.5rem 0.75rem',
                                                                                                     borderBottom: itemIdx < displayItems.length - 1 ? '1px dashed var(--color-border)' : 'none',
-                                                                                                    background: 'rgba(30, 41, 59, 0.5)'
+                                                                                                    background: 'rgba(15, 23, 42, 0.8)'
                                                                                                 }}>
                                                                                                     <div>
                                                                                                         <span style={{ fontWeight: '600', marginRight: '0.5rem', fontSize: '0.95rem' }}>{item.numbers}</span>
