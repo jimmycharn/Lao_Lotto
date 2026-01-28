@@ -1792,12 +1792,14 @@ export default function RoundAccordionItem({
                                                         if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
                                                         return true
                                                     })
-                                                    if (displayMode === 'summary') {
+                                                    // Use billDisplayMode when in bills view, otherwise use displayMode
+                                                    const currentMode = totalViewMode === 'bills' ? billDisplayMode : displayMode
+                                                    if (currentMode === 'summary') {
                                                         // Count unique entry_ids
                                                         const entries = new Set()
                                                         filtered.forEach(s => entries.add(s.entry_id || s.id))
                                                         return entries.size
-                                                    } else if (displayMode === 'grouped') {
+                                                    } else if (currentMode === 'grouped') {
                                                         const grouped = {}
                                                         filtered.forEach(s => {
                                                             const normalizedNumbers = normalizeNumber(s.numbers, s.bet_type)
@@ -2229,23 +2231,21 @@ export default function RoundAccordionItem({
                                                                                                     background: 'rgba(15, 23, 42, 0.8)'
                                                                                                 }}>
                                                                                                     <div>
-                                                                                                        <span style={{ fontWeight: '600', marginRight: '0.5rem', fontSize: '0.95rem' }}>{item.numbers}</span>
-                                                                                                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                                            {billDisplayMode === 'summary' ? item.display_bet_type : (BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type)}
-                                                                                                        </span>
-                                                                                                        {billDisplayMode === 'summary' && item.count > 1 && (
-                                                                                                            <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>
-                                                                                                                ({item.count} รายการ)
+                                                                                                        <div>
+                                                                                                            <span style={{ fontWeight: '600', marginRight: '0.5rem', fontSize: '0.95rem' }}>{item.numbers}</span>
+                                                                                                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                                                {billDisplayMode === 'summary' ? item.display_bet_type : (BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type)}
                                                                                                             </span>
+                                                                                                        </div>
+                                                                                                        {billDisplayMode === 'summary' && item.count > 1 && (
+                                                                                                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                                                                                                                ({item.count} รายการ)
+                                                                                                            </div>
                                                                                                         )}
                                                                                                     </div>
                                                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                                                                         <span style={{ fontWeight: '500' }}>
-                                                                                                            {billDisplayMode === 'summary' && item.display_amount ? (
-                                                                                                                <>{round.currency_symbol}{item.display_amount}</>
-                                                                                                            ) : (
-                                                                                                                <>{round.currency_symbol}{item.amount.toLocaleString()}</>
-                                                                                                            )}
+                                                                                                            {round.currency_symbol}{item.amount.toLocaleString()}
                                                                                                         </span>
                                                                                                         {isOpen && billDisplayMode === 'summary' && (
                                                                                                             <button 
