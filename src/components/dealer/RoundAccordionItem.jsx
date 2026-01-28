@@ -1357,23 +1357,26 @@ export default function RoundAccordionItem({
                                         type="text"
                                         value={inlineSearch}
                                         onChange={(e) => setInlineSearch(e.target.value)}
-                                        placeholder="ค้นหาเลข..."
+                                        placeholder="ค้นหาเลขหรือบันทึกช่วยจำ..."
                                         className="form-input search-input"
+                                        style={{ fontSize: '0.85rem', height: '32px' }}
                                     />
                                     {inlineSearch && (
                                         <button className="search-clear-btn" onClick={() => setInlineSearch('')}><FiX /></button>
                                     )}
                                 </div>
-                                <select
-                                    value={inlineBetTypeFilter}
-                                    onChange={(e) => setInlineBetTypeFilter(e.target.value)}
-                                    className="form-input filter-select"
-                                >
-                                    <option value="all">ทุกประเภท</option>
-                                    {Object.entries(BET_TYPES_BY_LOTTERY[round.lottery_type] || {}).map(([type, config]) => (
-                                        <option key={type} value={type}>{config.label || BET_TYPES[type] || type}</option>
-                                    ))}
-                                </select>
+                                <div className="filter-select-wrapper">
+                                    <select
+                                        value={inlineBetTypeFilter}
+                                        onChange={(e) => setInlineBetTypeFilter(e.target.value)}
+                                        className="form-input filter-select"
+                                    >
+                                        <option value="all">ทุกประเภท</option>
+                                        {Object.entries(BET_TYPES_BY_LOTTERY[round.lottery_type] || {}).map(([type, config]) => (
+                                            <option key={type} value={type}>{config.label || BET_TYPES[type] || type}</option>
+                                        ))}
+                                    </select>
+                                </div>
                             </div>
 
                             <div className="inline-tabs">
@@ -1789,7 +1792,7 @@ export default function RoundAccordionItem({
                                                         const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
                                                         if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
                                                         if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
-                                                        if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
+                                                        if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
                                                         return true
                                                     })
                                                     // Use billDisplayMode when in bills view, otherwise use displayMode
@@ -1814,14 +1817,14 @@ export default function RoundAccordionItem({
                                                     const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
                                                     if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
                                                     if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
-                                                    if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
+                                                    if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
                                                     return true
                                                 }).reduce((sum, s) => sum + s.amount, 0).toLocaleString()}</span>
                                                 <span style={{ fontWeight: '600', fontSize: '0.9rem', color: 'var(--color-warning)' }}>{round.currency_symbol}{inlineSubmissions.filter(s => {
                                                     const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
                                                     if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
                                                     if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
-                                                    if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
+                                                    if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
                                                     return true
                                                 }).reduce((sum, s) => sum + (s.commission_amount || 0), 0).toLocaleString()}</span>
                                             </div>
@@ -1845,7 +1848,7 @@ export default function RoundAccordionItem({
                                                                     const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
                                                                     if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
                                                                     if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
-                                                                    if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
+                                                                    if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
                                                                     return true
                                                                 })
 
@@ -2017,9 +2020,12 @@ export default function RoundAccordionItem({
                                                     {(() => {
                                                         const bills = getSubmissionsByBills()
                                                         // Filter by user if selected
-                                                        const filteredBills = inlineUserFilter === 'all' 
-                                                            ? bills 
-                                                            : bills.filter(b => b.user_name === inlineUserFilter)
+                                                        const filteredBills = bills.filter(b => {
+                                                            if (inlineUserFilter !== 'all' && b.user_name !== inlineUserFilter) return false
+                                                            if (inlineBetTypeFilter !== 'all' && !b.items.some(item => item.bet_type === inlineBetTypeFilter)) return false
+                                                            if (inlineSearch && !(b.bill_note && b.bill_note.toLowerCase().includes(inlineSearch.toLowerCase())) && !b.items.some(item => item.numbers.includes(inlineSearch))) return false
+                                                            return true
+                                                        })
                                                         
                                                         // Sort bills by time only
                                                         const sortedBills = [...filteredBills].sort((a, b) => {
@@ -2045,17 +2051,30 @@ export default function RoundAccordionItem({
                                                         return Object.values(billsByUser).map(userGroup => {
                                                             const userKey = userGroup.user_id || userGroup.user_name
                                                             const isUserExpanded = expandedUserGroups.includes(userKey)
-                                                            // Calculate total items based on billDisplayMode
-                                                            const totalItems = billDisplayMode === 'summary' 
-                                                                ? userGroup.bills.reduce((sum, bill) => {
+                                                            // Calculate total items, bills count, and total amount based on billDisplayMode and filter
+                                                            let filteredBillsCount = 0
+                                                            let filteredTotal = 0
+                                                            const totalItems = userGroup.bills.reduce((sum, bill) => {
+                                                                // Filter items by bet type if selected
+                                                                let filteredItems = bill.items
+                                                                if (inlineBetTypeFilter !== 'all') {
+                                                                    filteredItems = filteredItems.filter(item => item.bet_type === inlineBetTypeFilter)
+                                                                }
+                                                                // Only count bill if it has filtered items
+                                                                if (filteredItems.length > 0) {
+                                                                    filteredBillsCount++
+                                                                    filteredTotal += filteredItems.reduce((s, item) => s + item.amount, 0)
+                                                                }
+                                                                if (billDisplayMode === 'summary') {
                                                                     const byEntry = {}
-                                                                    bill.items.forEach(item => {
+                                                                    filteredItems.forEach(item => {
                                                                         const entryId = item.entry_id || item.id
                                                                         if (!byEntry[entryId]) byEntry[entryId] = true
                                                                     })
                                                                     return sum + Object.keys(byEntry).length
-                                                                }, 0)
-                                                                : userGroup.bills.reduce((sum, bill) => sum + bill.items.length, 0)
+                                                                }
+                                                                return sum + filteredItems.length
+                                                            }, 0)
                                                             
                                                             return (
                                                             <div key={userKey} style={{ marginBottom: '0.5rem' }}>
@@ -2082,12 +2101,12 @@ export default function RoundAccordionItem({
                                                                         <div>
                                                                             <span>👤 {userGroup.user_name}</span>
                                                                             <div style={{ fontSize: '0.7rem', fontWeight: '400', opacity: 0.8 }}>
-                                                                                {userGroup.bills.length} ใบโพย • {totalItems} รายการ
+                                                                                {filteredBillsCount} ใบโพย • {totalItems} รายการ
                                                                             </div>
                                                                         </div>
                                                                     </div>
                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                        <span>{round.currency_symbol}{userGroup.total.toLocaleString()}</span>
+                                                                        <span>{round.currency_symbol}{(inlineBetTypeFilter === 'all' ? userGroup.total : filteredTotal).toLocaleString()}</span>
                                                                         {isOpen && (
                                                                             <button 
                                                                                 className="btn btn-icon btn-sm"
@@ -2144,20 +2163,31 @@ export default function RoundAccordionItem({
                                                                                                 {bill.bill_note || `ใบโพย ${billIdx + 1}`}
                                                                                             </div>
                                                                                             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                                {billTime} • {billDisplayMode === 'summary' ? (() => {
-                                                                                                    const byEntry = {}
-                                                                                                    bill.items.forEach(item => {
-                                                                                                        const entryId = item.entry_id || item.id
-                                                                                                        if (!byEntry[entryId]) byEntry[entryId] = true
-                                                                                                    })
-                                                                                                    return Object.keys(byEntry).length
-                                                                                                })() : bill.items.length} รายการ
+                                                                                                {billTime} • {(() => {
+                                                                                                    // Filter items by bet type if selected
+                                                                                                    let filteredItems = bill.items
+                                                                                                    if (inlineBetTypeFilter !== 'all') {
+                                                                                                        filteredItems = filteredItems.filter(item => item.bet_type === inlineBetTypeFilter)
+                                                                                                    }
+                                                                                                    if (billDisplayMode === 'summary') {
+                                                                                                        const byEntry = {}
+                                                                                                        filteredItems.forEach(item => {
+                                                                                                            const entryId = item.entry_id || item.id
+                                                                                                            if (!byEntry[entryId]) byEntry[entryId] = true
+                                                                                                        })
+                                                                                                        return Object.keys(byEntry).length
+                                                                                                    }
+                                                                                                    return filteredItems.length
+                                                                                                })()} รายการ
                                                                                             </div>
                                                                                         </div>
                                                                                     </div>
                                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                                                         <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>
-                                                                                            {round.currency_symbol}{bill.total.toLocaleString()}
+                                                                                            {round.currency_symbol}{(() => {
+                                                                                                if (inlineBetTypeFilter === 'all') return bill.total.toLocaleString()
+                                                                                                return bill.items.filter(item => item.bet_type === inlineBetTypeFilter).reduce((sum, item) => sum + item.amount, 0).toLocaleString()
+                                                                                            })()}
                                                                                         </span>
                                                                                         {isOpen && (
                                                                                             <button 
@@ -2179,11 +2209,15 @@ export default function RoundAccordionItem({
                                                                                 {isExpanded && (
                                                                                     <div style={{ borderTop: '1px solid var(--color-border)' }}>
                                                                                         {(() => {
-                                                                                            // Group items by entry_id for summary mode
+                                                                                            // Filter items by bet type if selected
                                                                                             let displayItems = bill.items
+                                                                                            if (inlineBetTypeFilter !== 'all') {
+                                                                                                displayItems = displayItems.filter(item => item.bet_type === inlineBetTypeFilter)
+                                                                                            }
+                                                                                            // Group items by entry_id for summary mode
                                                                                             if (billDisplayMode === 'summary') {
                                                                                                 const byEntry = {}
-                                                                                                bill.items.forEach(item => {
+                                                                                                displayItems.forEach(item => {
                                                                                                     const entryId = item.entry_id || item.id
                                                                                                     if (!byEntry[entryId]) {
                                                                                                         byEntry[entryId] = {
