@@ -964,6 +964,28 @@ export default function RoundAccordionItem({
         }
     }
 
+    // Delete multiple items by IDs (for deleting all user submissions)
+    const handleDeleteMultipleItems = async (ids) => {
+        setDeletingItems(true)
+        try {
+            const { error } = await supabase
+                .from('submissions')
+                .update({ is_deleted: true })
+                .in('id', ids)
+
+            if (error) throw error
+
+            toast.success(`ลบ ${ids.length} รายการสำเร็จ`)
+            await fetchInlineSubmissions(true)
+            if (onCreditUpdate) onCreditUpdate()
+        } catch (error) {
+            console.error('Error deleting items:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setDeletingItems(false)
+        }
+    }
+
     // Reclaim returned transfers back into the system (for sending dealer)
     const handleReclaimReturnedTransfers = async (transferItems) => {
         if (transferItems.length === 0) {
@@ -2021,7 +2043,25 @@ export default function RoundAccordionItem({
                                                                     fontWeight: '600'
                                                                 }}>
                                                                     <span>👤 {userGroup.user_name}</span>
-                                                                    <span>{round.currency_symbol}{userGroup.total.toLocaleString()}</span>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                        <span>{round.currency_symbol}{userGroup.total.toLocaleString()}</span>
+                                                                        {isOpen && (
+                                                                            <button 
+                                                                                className="btn btn-icon btn-sm"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation()
+                                                                                    const allItemIds = userGroup.bills.flatMap(bill => bill.items.map(item => item.id))
+                                                                                    if (window.confirm(`ต้องการลบข้อมูลทั้งหมดของ ${userGroup.user_name} (${allItemIds.length} รายการ) หรือไม่?`)) {
+                                                                                        handleDeleteMultipleItems(allItemIds)
+                                                                                    }
+                                                                                }}
+                                                                                title={`ลบข้อมูลทั้งหมดของ ${userGroup.user_name}`}
+                                                                                style={{ padding: '0.2rem 0.35rem', background: 'rgba(0,0,0,0.2)', border: 'none', borderRadius: '4px' }}
+                                                                            >
+                                                                                <FiTrash2 size={14} style={{ color: '#000' }} />
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                                 
                                                                 {/* Bills for this user - Collapsible cards */}
