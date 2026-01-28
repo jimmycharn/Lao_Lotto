@@ -1374,6 +1374,79 @@ export default function RoundAccordionItem({
                                         <div className="inline-tab-content">
                                             {/* Member filter and view mode - responsive layout */}
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                                                {/* Row 0: Member filter buttons */}
+                                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                    <button
+                                                        className={`filter-btn ${memberFilterMode === 'all' ? 'active' : ''}`}
+                                                        onClick={() => { setMemberFilterMode('all'); setInlineUserFilter('all'); }}
+                                                        style={{
+                                                            padding: '0.35rem 0.65rem',
+                                                            borderRadius: '20px',
+                                                            border: memberFilterMode === 'all' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                                            background: memberFilterMode === 'all' ? 'var(--color-primary)' : 'transparent',
+                                                            color: memberFilterMode === 'all' ? '#000' : 'var(--color-text)',
+                                                            fontSize: '0.8rem',
+                                                            cursor: 'pointer',
+                                                            transition: 'all 0.2s ease',
+                                                            whiteSpace: 'nowrap'
+                                                        }}
+                                                    >
+                                                        สมาชิกทั้งหมด ({allMembers.length})
+                                                    </button>
+                                                    <button
+                                                        className={`filter-btn ${memberFilterMode === 'submitted' ? 'active' : ''}`}
+                                                        onClick={() => { setMemberFilterMode('submitted'); setInlineUserFilter('all'); }}
+                                                        style={{
+                                                            padding: '0.35rem 0.65rem',
+                                                            borderRadius: '20px',
+                                                            border: memberFilterMode === 'submitted' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                                            background: memberFilterMode === 'submitted' ? 'var(--color-primary)' : 'transparent',
+                                                            color: memberFilterMode === 'submitted' ? '#000' : 'var(--color-text)',
+                                                            fontSize: '0.8rem',
+                                                            cursor: 'pointer',
+                                                            transition: 'all 0.2s ease',
+                                                            whiteSpace: 'nowrap'
+                                                        }}
+                                                    >
+                                                        สมาชิกส่งเลข ({[...new Set(inlineSubmissions.map(s => s.user_id))].length})
+                                                    </button>
+                                                </div>
+                                                
+                                                {/* Row 0.5: Dropdown + Write bet button */}
+                                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                                    <select value={inlineUserFilter} onChange={(e) => setInlineUserFilter(e.target.value)} className="form-input" style={{ flex: 1, minHeight: '36px', fontSize: '0.85rem' }}>
+                                                        <option value="all">ทุกคน</option>
+                                                        {memberFilterMode === 'all' ? (
+                                                            allMembers.map(member => (
+                                                                <option key={member.id} value={member.full_name || member.email || 'ไม่ระบุ'}>
+                                                                    {member.full_name || member.email || 'ไม่ระบุ'}
+                                                                </option>
+                                                            ))
+                                                        ) : (
+                                                            [...new Set(inlineSubmissions.map(s => s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'))].map(name => (
+                                                                <option key={name} value={name}>{name}</option>
+                                                            ))
+                                                        )}
+                                                    </select>
+                                                    {inlineUserFilter !== 'all' && isOpen && (
+                                                        <button
+                                                            className="btn btn-primary btn-sm"
+                                                            onClick={handleOpenWriteBet}
+                                                            style={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '0.35rem',
+                                                                whiteSpace: 'nowrap',
+                                                                minHeight: '36px',
+                                                                padding: '0.4rem 0.6rem',
+                                                                fontSize: '0.85rem'
+                                                            }}
+                                                        >
+                                                            <FiFileText /> เขียนโพย
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                
                                                 {/* Row 1: View mode toggle (รวม/ใบโพย) + Display mode toggle */}
                                                 <div style={{ 
                                                     display: 'flex', 
@@ -1559,7 +1632,7 @@ export default function RoundAccordionItem({
                                                                     เวลา {billSortOrder === 'desc' ? '↓' : '↑'}
                                                                 </button>
                                                             </div>
-                                                            {/* Item sort inside bills - 3 options */}
+                                                            {/* Item sort inside bills - 2 toggle buttons */}
                                                             <div style={{ 
                                                                 display: 'flex', 
                                                                 gap: '2px', 
@@ -1568,55 +1641,38 @@ export default function RoundAccordionItem({
                                                                 padding: '3px'
                                                             }}>
                                                                 <button
-                                                                    onClick={() => setItemSortMode('asc')}
+                                                                    onClick={() => setItemSortMode(itemSortMode === 'asc' ? 'desc' : 'asc')}
                                                                     style={{
                                                                         padding: '0.4rem 0.5rem',
                                                                         borderRadius: '6px',
                                                                         border: 'none',
-                                                                        background: itemSortMode === 'asc' ? 'var(--color-primary)' : 'transparent',
-                                                                        color: itemSortMode === 'asc' ? '#000' : 'var(--color-text-muted)',
+                                                                        background: (itemSortMode === 'asc' || itemSortMode === 'desc') ? 'var(--color-primary)' : 'transparent',
+                                                                        color: (itemSortMode === 'asc' || itemSortMode === 'desc') ? '#000' : 'var(--color-text-muted)',
                                                                         fontSize: '0.75rem',
                                                                         fontWeight: '500',
                                                                         cursor: 'pointer',
                                                                         transition: 'all 0.2s ease'
                                                                     }}
-                                                                    title="เรียงเลขน้อยไปมาก"
+                                                                    title={itemSortMode === 'asc' ? 'เรียงเลขน้อยไปมาก' : 'เรียงเลขมากไปน้อย'}
                                                                 >
-                                                                    เลข↑
+                                                                    เลข {(itemSortMode === 'asc' || itemSortMode === 'desc') ? (itemSortMode === 'asc' ? '↑' : '↓') : ''}
                                                                 </button>
                                                                 <button
-                                                                    onClick={() => setItemSortMode('desc')}
+                                                                    onClick={() => setItemSortMode(itemSortMode === 'original' ? 'original_rev' : 'original')}
                                                                     style={{
                                                                         padding: '0.4rem 0.5rem',
                                                                         borderRadius: '6px',
                                                                         border: 'none',
-                                                                        background: itemSortMode === 'desc' ? 'var(--color-primary)' : 'transparent',
-                                                                        color: itemSortMode === 'desc' ? '#000' : 'var(--color-text-muted)',
+                                                                        background: (itemSortMode === 'original' || itemSortMode === 'original_rev') ? 'var(--color-primary)' : 'transparent',
+                                                                        color: (itemSortMode === 'original' || itemSortMode === 'original_rev') ? '#000' : 'var(--color-text-muted)',
                                                                         fontSize: '0.75rem',
                                                                         fontWeight: '500',
                                                                         cursor: 'pointer',
                                                                         transition: 'all 0.2s ease'
                                                                     }}
-                                                                    title="เรียงเลขมากไปน้อย"
+                                                                    title={itemSortMode === 'original' ? 'เรียงตามที่ป้อน (บนลงล่าง)' : 'เรียงตามที่ป้อน (ล่างขึ้นบน)'}
                                                                 >
-                                                                    เลข↓
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => setItemSortMode('original')}
-                                                                    style={{
-                                                                        padding: '0.4rem 0.5rem',
-                                                                        borderRadius: '6px',
-                                                                        border: 'none',
-                                                                        background: itemSortMode === 'original' ? 'var(--color-primary)' : 'transparent',
-                                                                        color: itemSortMode === 'original' ? '#000' : 'var(--color-text-muted)',
-                                                                        fontSize: '0.75rem',
-                                                                        fontWeight: '500',
-                                                                        cursor: 'pointer',
-                                                                        transition: 'all 0.2s ease'
-                                                                    }}
-                                                                    title="เรียงตามที่ป้อน"
-                                                                >
-                                                                    ป้อน
+                                                                    ป้อน {(itemSortMode === 'original' || itemSortMode === 'original_rev') ? (itemSortMode === 'original' ? '↓' : '↑') : ''}
                                                                 </button>
                                                             </div>
                                                         </>
@@ -1679,86 +1735,6 @@ export default function RoundAccordionItem({
                                                         </div>
                                                     )}
                                                 </div>
-                                                
-                                                {/* Row 2: Member filter buttons */}
-                                                <div className="member-filter-buttons" style={{
-                                                    display: 'flex',
-                                                    gap: '0.5rem',
-                                                    flexWrap: 'wrap',
-                                                    marginTop: '0.5rem'
-                                                }}>
-                                                    <button
-                                                        className={`filter-btn ${memberFilterMode === 'all' ? 'active' : ''}`}
-                                                        onClick={() => { setMemberFilterMode('all'); setInlineUserFilter('all'); }}
-                                                        style={{
-                                                            padding: '0.35rem 0.65rem',
-                                                            borderRadius: '20px',
-                                                            border: memberFilterMode === 'all' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                                            background: memberFilterMode === 'all' ? 'var(--color-primary)' : 'transparent',
-                                                            color: memberFilterMode === 'all' ? '#000' : 'var(--color-text)',
-                                                            fontSize: '0.8rem',
-                                                            cursor: 'pointer',
-                                                            transition: 'all 0.2s ease',
-                                                            whiteSpace: 'nowrap'
-                                                        }}
-                                                    >
-                                                        ทั้งหมด ({allMembers.length})
-                                                    </button>
-                                                    <button
-                                                        className={`filter-btn ${memberFilterMode === 'submitted' ? 'active' : ''}`}
-                                                        onClick={() => { setMemberFilterMode('submitted'); setInlineUserFilter('all'); }}
-                                                        style={{
-                                                            padding: '0.35rem 0.65rem',
-                                                            borderRadius: '20px',
-                                                            border: memberFilterMode === 'submitted' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                                            background: memberFilterMode === 'submitted' ? 'var(--color-primary)' : 'transparent',
-                                                            color: memberFilterMode === 'submitted' ? '#000' : 'var(--color-text)',
-                                                            fontSize: '0.8rem',
-                                                            cursor: 'pointer',
-                                                            transition: 'all 0.2s ease',
-                                                            whiteSpace: 'nowrap'
-                                                        }}
-                                                    >
-                                                        ส่งเลข ({[...new Set(inlineSubmissions.map(s => s.user_id))].length})
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            {/* Row 3: Dropdown + Write bet button */}
-                                            <div className="inline-filters" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                                <select value={inlineUserFilter} onChange={(e) => setInlineUserFilter(e.target.value)} className="form-input" style={{ flex: 1, minHeight: '40px' }}>
-                                                    <option value="all">ทุกคน</option>
-                                                    {memberFilterMode === 'all' ? (
-                                                        // Show all members
-                                                        allMembers.map(member => (
-                                                            <option key={member.id} value={member.full_name || member.email || 'ไม่ระบุ'}>
-                                                                {member.full_name || member.email || 'ไม่ระบุ'}
-                                                            </option>
-                                                        ))
-                                                    ) : (
-                                                        // Show only members who submitted
-                                                        [...new Set(inlineSubmissions.map(s => s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'))].map(name => (
-                                                            <option key={name} value={name}>{name}</option>
-                                                        ))
-                                                    )}
-                                                </select>
-                                                {/* Write bet button - only show when a specific member is selected and round is open */}
-                                                {inlineUserFilter !== 'all' && isOpen && (
-                                                    <button
-                                                        className="btn btn-primary btn-sm"
-                                                        onClick={handleOpenWriteBet}
-                                                        style={{
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            gap: '0.35rem',
-                                                            whiteSpace: 'nowrap',
-                                                            minHeight: '40px',
-                                                            padding: '0.5rem 0.75rem'
-                                                        }}
-                                                    >
-                                                        <FiFileText /> เขียนโพย
-                                                    </button>
-                                                )}
                                             </div>
 
                                             {/* แสดงผลแบบตาราง 2 แถว: หัวข้อ + ค่า */}
@@ -2139,14 +2115,21 @@ export default function RoundAccordionItem({
                                                                                             }
                                                                                             
                                                                                             // Sort items based on itemSortMode
-                                                                                            const sortedItems = itemSortMode === 'original' 
-                                                                                                ? displayItems 
-                                                                                                : [...displayItems].sort((a, b) => {
-                                                                                                    const numA = a.numbers || ''
-                                                                                                    const numB = b.numbers || ''
-                                                                                                    const comparison = numA.localeCompare(numB, undefined, { numeric: true })
-                                                                                                    return itemSortMode === 'asc' ? comparison : -comparison
-                                                                                                })
+                                                                                            const sortedItems = (() => {
+                                                                                                if (itemSortMode === 'original') {
+                                                                                                    return displayItems
+                                                                                                } else if (itemSortMode === 'original_rev') {
+                                                                                                    return [...displayItems].reverse()
+                                                                                                } else {
+                                                                                                    // asc or desc - sort by number
+                                                                                                    return [...displayItems].sort((a, b) => {
+                                                                                                        const numA = a.numbers || ''
+                                                                                                        const numB = b.numbers || ''
+                                                                                                        const comparison = numA.localeCompare(numB, undefined, { numeric: true })
+                                                                                                        return itemSortMode === 'asc' ? comparison : -comparison
+                                                                                                    })
+                                                                                                }
+                                                                                            })()
                                                                                             
                                                                                             return sortedItems.map((item, itemIdx) => (
                                                                                                 <div key={item.id} style={{ 
