@@ -88,6 +88,8 @@ export default function RoundAccordionItem({
     const [deletingItems, setDeletingItems] = useState(false)
     // Expanded bills for collapsible view
     const [expandedBills, setExpandedBills] = useState([])
+    // Expanded user groups for collapsible view
+    const [expandedUserGroups, setExpandedUserGroups] = useState([])
 
     // Write bet on behalf of user states
     const [showWriteBetModal, setShowWriteBetModal] = useState(false)
@@ -936,6 +938,15 @@ export default function RoundAccordionItem({
             prev.includes(billKey) 
                 ? prev.filter(k => k !== billKey)
                 : [...prev, billKey]
+        )
+    }
+
+    // Toggle user group expansion
+    const toggleUserGroupExpand = (userKey) => {
+        setExpandedUserGroups(prev => 
+            prev.includes(userKey) 
+                ? prev.filter(k => k !== userKey)
+                : [...prev, userKey]
         )
     }
 
@@ -2029,20 +2040,50 @@ export default function RoundAccordionItem({
                                                             return <div className="empty-state" style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>ไม่มีข้อมูล</div>
                                                         }
 
-                                                        return Object.values(billsByUser).map(userGroup => (
-                                                            <div key={userGroup.user_id || userGroup.user_name} style={{ marginBottom: '0.5rem' }}>
-                                                                {/* User header */}
-                                                                <div style={{ 
-                                                                    display: 'flex', 
-                                                                    justifyContent: 'space-between', 
-                                                                    alignItems: 'center',
-                                                                    padding: '0.5rem 0.75rem',
-                                                                    background: 'var(--color-primary)',
-                                                                    color: '#000',
-                                                                    borderRadius: '8px 8px 0 0',
-                                                                    fontWeight: '600'
-                                                                }}>
-                                                                    <span>👤 {userGroup.user_name}</span>
+                                                        return Object.values(billsByUser).map(userGroup => {
+                                                            const userKey = userGroup.user_id || userGroup.user_name
+                                                            const isUserExpanded = !expandedUserGroups.includes(userKey)
+                                                            // Calculate total items based on billDisplayMode
+                                                            const totalItems = billDisplayMode === 'summary' 
+                                                                ? userGroup.bills.reduce((sum, bill) => {
+                                                                    const byEntry = {}
+                                                                    bill.items.forEach(item => {
+                                                                        const entryId = item.entry_id || item.id
+                                                                        if (!byEntry[entryId]) byEntry[entryId] = true
+                                                                    })
+                                                                    return sum + Object.keys(byEntry).length
+                                                                }, 0)
+                                                                : userGroup.bills.reduce((sum, bill) => sum + bill.items.length, 0)
+                                                            
+                                                            return (
+                                                            <div key={userKey} style={{ marginBottom: '0.5rem' }}>
+                                                                {/* User header - clickable to expand/collapse */}
+                                                                <div 
+                                                                    onClick={() => toggleUserGroupExpand(userKey)}
+                                                                    style={{ 
+                                                                        display: 'flex', 
+                                                                        justifyContent: 'space-between', 
+                                                                        alignItems: 'center',
+                                                                        padding: '0.5rem 0.75rem',
+                                                                        background: 'var(--color-primary)',
+                                                                        color: '#000',
+                                                                        borderRadius: isUserExpanded ? '8px 8px 0 0' : '8px',
+                                                                        fontWeight: '600',
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s ease'
+                                                                    }}
+                                                                >
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                        <span style={{ transition: 'transform 0.2s', transform: isUserExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+                                                                            <FiChevronRight size={16} />
+                                                                        </span>
+                                                                        <div>
+                                                                            <span>👤 {userGroup.user_name}</span>
+                                                                            <div style={{ fontSize: '0.7rem', fontWeight: '400', opacity: 0.8 }}>
+                                                                                {userGroup.bills.length} ใบโพย • {totalItems} รายการ
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                                         <span>{round.currency_symbol}{userGroup.total.toLocaleString()}</span>
                                                                         {isOpen && (
@@ -2065,6 +2106,7 @@ export default function RoundAccordionItem({
                                                                 </div>
                                                                 
                                                                 {/* Bills for this user - Collapsible cards */}
+                                                                {isUserExpanded && (
                                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.5rem', background: 'rgba(255,255,255,0.02)', borderRadius: '0 0 8px 8px', border: '1px solid var(--color-border)', borderTop: 'none' }}>
                                                                     {userGroup.bills.map((bill, billIdx) => {
                                                                         const billKey = `${bill.user_id}|${bill.bill_id}`
@@ -2184,7 +2226,7 @@ export default function RoundAccordionItem({
                                                                                                     alignItems: 'center',
                                                                                                     padding: '0.5rem 0.75rem',
                                                                                                     borderBottom: itemIdx < displayItems.length - 1 ? '1px dashed var(--color-border)' : 'none',
-                                                                                                    background: 'rgba(255,255,255,0.02)'
+                                                                                                    background: 'rgba(30, 41, 59, 0.5)'
                                                                                                 }}>
                                                                                                     <div>
                                                                                                         <span style={{ fontWeight: '600', marginRight: '0.5rem', fontSize: '0.95rem' }}>{item.numbers}</span>
@@ -2228,8 +2270,10 @@ export default function RoundAccordionItem({
                                                                         )
                                                                     })}
                                                                 </div>
+                                                                )}
                                                             </div>
-                                                        ))
+                                                        )
+                                                        })
                                                     })()}
                                                 </div>
                                             )}
