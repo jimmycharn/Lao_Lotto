@@ -26,10 +26,12 @@ import {
     FiCopy,
     FiClipboard,
     FiRefreshCw,
-    FiFileText
+    FiFileText,
+    FiEdit
 } from 'react-icons/fi'
 import './UserDashboard.css'
 import './ViewToggle.css'
+import WriteSubmissionModal from '../components/WriteSubmissionModal'
 
 // Import constants from centralized file
 import {
@@ -101,6 +103,7 @@ export default function UserDashboard() {
     const [isReversed, setIsReversed] = useState(false) // Toggle for 2-digit reversed bets
     const [lastClickedBetType, setLastClickedBetType] = useState(null) // Track last clicked bet type button
     const [showCloseConfirm, setShowCloseConfirm] = useState(false) // Confirm before closing modal
+    const [showWriteModal, setShowWriteModal] = useState(false) // Write submission modal
     const numberInputRef = useRef(null)
     const amountInputRef = useRef(null)
     const billNoteInputRef = useRef(null)
@@ -1155,6 +1158,71 @@ export default function UserDashboard() {
         }
     }
 
+    // Handle write submission from WriteSubmissionModal
+    async function handleWriteSubmit({ entries, billNote: note, rawLines }) {
+        if (!selectedRound || entries.length === 0) {
+            throw new Error('ไม่มีข้อมูลที่จะบันทึก')
+        }
+
+        // Check if dealer is active before submitting
+        if (selectedDealer) {
+            const { data: dealerProfile } = await supabase
+                .from('profiles')
+                .select('is_active')
+                .eq('id', selectedDealer.id)
+                .single()
+            
+            if (dealerProfile?.is_active === false) {
+                throw new Error('เจ้ามือถูกระงับการใช้งาน ไม่สามารถส่งเลขได้')
+            }
+        }
+
+        const billId = 'B-' + Math.random().toString(36).substring(2, 8).toUpperCase()
+        const timestamp = new Date().toISOString()
+        const lotteryKey = selectedRound.lottery_type === 'lao' || selectedRound.lottery_type === 'hanoi' ? 'lao' : selectedRound.lottery_type
+
+        // Prepare submissions
+        const submissionsToInsert = entries.map(entry => {
+            const commInfo = getCommissionForBetType(entry.betType, userSettings)
+            const commissionAmount = Math.round(entry.amount * commInfo.rate / 100)
+
+            return {
+                round_id: selectedRound.id,
+                user_id: profile.id,
+                dealer_id: selectedDealer?.id || profile.id,
+                bill_id: billId,
+                bill_note: note || null,
+                entry_id: generateUUID(),
+                bet_type: entry.betType,
+                numbers: entry.numbers,
+                amount: entry.amount,
+                commission_rate: commInfo.rate,
+                commission_amount: commissionAmount,
+                created_at: timestamp
+            }
+        })
+
+        // Insert to database
+        const { error } = await supabase
+            .from('submissions')
+            .insert(submissionsToInsert)
+
+        if (error) throw error
+
+        // Update pending deduction for dealer credit
+        const dealerIdForCredit = isOwnDealer ? user.id : selectedDealer?.id
+        if (dealerIdForCredit) {
+            try {
+                await updatePendingDeduction(dealerIdForCredit)
+            } catch (err) {
+                console.log('Error updating pending deduction:', err)
+            }
+        }
+
+        fetchSubmissions()
+        toast.success(`บันทึกโพยสำเร็จ! (${entries.length} รายการ)`)
+    }
+
     // Toggle bill expansion
     function toggleBill(billId) {
         setExpandedBills(prev =>
@@ -2135,6 +2203,18 @@ export default function UserDashboard() {
                                                                 }}
                                                             >
                                                                 <FiPlus /> ส่งเลข
+                                                            </button>
+                                                        )}
+                                                        {canSubmit() && (
+                                                            <button
+                                                                className="btn btn-secondary"
+                                                                style={{ marginLeft: '0.5rem' }}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setShowWriteModal(true)
+                                                                }}
+                                                            >
+                                                                <FiEdit /> เขียนโพย
                                                             </button>
                                                         )}
                                                     </div>
@@ -3181,7 +3261,6 @@ export default function UserDashboard() {
 
             {/* Submit Modal */}
             {showSubmitModal && selectedRound && (
-                <>
                 <div className="modal-overlay" onClick={() => {
                     if (drafts.length > 0) {
                         setShowCloseConfirm(true)
@@ -3789,8 +3868,6 @@ export default function UserDashboard() {
                     </div>
                 </div>
             )}
-            </>
-            )}
 
             {/* Confirm Become Dealer Modal */}
             {showDealerConfirmModal && (
@@ -4004,6 +4081,15 @@ export default function UserDashboard() {
                     </div>
                 </div>
             )}
+
+            {/* Write Submission Modal */}
+            <WriteSubmissionModal
+                isOpen={showWriteModal}
+                onClose={() => setShowWriteModal(false)}
+                onSubmit={handleWriteSubmit}
+                roundInfo={selectedRound ? { name: selectedRound.name } : null}
+                currencySymbol={selectedRound?.currency_symbol || '฿'}
+            />
         </div>
     )
 }
