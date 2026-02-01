@@ -227,12 +227,12 @@ export default function WriteSubmissionModal({
         }
     }, [isOpen])
 
-    // Scroll to bottom when new line added
+    // Scroll to bottom when new line added or when typing new input
     useEffect(() => {
         if (linesContainerRef.current) {
             linesContainerRef.current.scrollTop = linesContainerRef.current.scrollHeight
         }
-    }, [lines])
+    }, [lines, currentInput])
 
     // Calculate total
     const calculateTotal = () => {
@@ -279,15 +279,15 @@ export default function WriteSubmissionModal({
         setError('')
     }
 
-    // Handle type button click
+    // Handle type button click - add space after type for next amount
     const handleTypeClick = (type) => {
         const parts = currentInput.trim().split(/\s+/)
         if (parts.length >= 2) {
             const newParts = parts.slice(0, 2)
             newParts.push(type)
-            setCurrentInput(newParts.join(' '))
+            setCurrentInput(newParts.join(' ') + ' ')
         } else {
-            setCurrentInput(prev => prev.trim() + ' ' + type)
+            setCurrentInput(prev => prev.trim() + ' ' + type + ' ')
         }
         setError('')
     }
@@ -401,15 +401,16 @@ export default function WriteSubmissionModal({
         const buttons = []
 
         if (numLen === 1) {
-            buttons.push({ label: 'บน', value: 'บน' })
+            // 1 digit: ล่าง only (บน is default, no need to show)
             buttons.push({ label: 'ล่าง', value: 'ล่าง' })
         } else if (numLen === 2) {
-            buttons.push({ label: 'บน', value: 'บน' })
+            // 2 digits: ล่าง, ลอย, บนกลับ, ล่างกลับ (บน is default)
             buttons.push({ label: 'ล่าง', value: 'ล่าง' })
+            buttons.push({ label: 'ลอย', value: 'ลอย' })
             buttons.push({ label: 'บนกลับ', value: 'บนกลับ' })
             buttons.push({ label: 'ล่างกลับ', value: 'ล่างกลับ' })
         } else if (numLen === 3) {
-            buttons.push({ label: 'บน', value: 'บน' })
+            // 3 digits: ล่าง, โต๊ด, เต็งโต๊ด, กลับ, คูณชุด (บน is default)
             buttons.push({ label: 'ล่าง', value: 'ล่าง' })
             buttons.push({ label: 'โต๊ด', value: 'โต๊ด' })
             buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด' })
@@ -464,8 +465,8 @@ export default function WriteSubmissionModal({
                     </button>
                 </div>
 
-                {/* Bill Note */}
-                <div className="write-modal-note">
+                {/* Bill Note + Save Button Row */}
+                <div className="write-modal-note-row">
                     <input
                         type="text"
                         placeholder="ชื่อผู้ซื้อ / บันทึกช่วยจำ (ไม่บังคับ)"
@@ -473,6 +474,15 @@ export default function WriteSubmissionModal({
                         onChange={e => setBillNote(e.target.value)}
                         className="note-input"
                     />
+                    {!success && (
+                        <button 
+                            className="save-btn-inline"
+                            onClick={handleSubmit}
+                            disabled={lines.length === 0 || submitting}
+                        >
+                            {submitting ? '...' : 'บันทึก'}
+                        </button>
+                    )}
                 </div>
 
                 {/* Lines Display */}
@@ -494,6 +504,8 @@ export default function WriteSubmissionModal({
                             <div 
                                 key={index} 
                                 className={`line-item ${editingIndex === index ? 'editing' : ''} ${hasError ? 'has-error' : ''}`}
+                                onClick={() => handleEditLine(index)}
+                                style={{ cursor: 'pointer' }}
                             >
                                 <div className="line-content">
                                     <span className="line-number">{index + 1}.</span>
@@ -510,22 +522,11 @@ export default function WriteSubmissionModal({
                                 </div>
                                 <div className="line-actions">
                                     <button 
-                                        className="action-btn insert"
-                                        onClick={() => handleInsertLine(index)}
-                                        title="แทรกบรรทัด"
-                                    >
-                                        <FiPlus />
-                                    </button>
-                                    <button 
-                                        className="action-btn edit"
-                                        onClick={() => handleEditLine(index)}
-                                        title="แก้ไข"
-                                    >
-                                        <FiEdit2 />
-                                    </button>
-                                    <button 
                                         className="action-btn delete"
-                                        onClick={() => handleDeleteLine(index)}
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            handleDeleteLine(index)
+                                        }}
                                         title="ลบ"
                                     >
                                         <FiTrash2 />
@@ -619,10 +620,10 @@ export default function WriteSubmissionModal({
                             </button>
                         </div>
 
-                        {/* Type Buttons Row */}
-                        {typeButtons.length > 0 && (
-                            <div className="type-buttons-row">
-                                {typeButtons.map(btn => (
+                        {/* Type Buttons Row - always show container for fixed height */}
+                        <div className="type-buttons-row">
+                            {typeButtons.length > 0 ? (
+                                typeButtons.map(btn => (
                                     <button 
                                         key={btn.value}
                                         onClick={() => handleTypeClick(btn.value)}
@@ -630,28 +631,22 @@ export default function WriteSubmissionModal({
                                     >
                                         {btn.label}
                                     </button>
-                                ))}
-                            </div>
-                        )}
+                                ))
+                            ) : (
+                                <span className="type-placeholder">ป้อนเลขเพื่อเลือกประเภท</span>
+                            )}
+                        </div>
                     </div>
                 )}
 
-                {/* Submit Button */}
-                <div className="write-modal-footer">
-                    {!success ? (
-                        <button 
-                            className="submit-btn"
-                            onClick={handleSubmit}
-                            disabled={lines.length === 0 || submitting}
-                        >
-                            {submitting ? 'กำลังบันทึก...' : 'บันทึกโพย'}
-                        </button>
-                    ) : (
+                {/* Success Footer - only show close button after success */}
+                {success && (
+                    <div className="write-modal-footer">
                         <button className="close-btn-footer" onClick={onClose}>
                             ปิด
                         </button>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
         </div>
     )

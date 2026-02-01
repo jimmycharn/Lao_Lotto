@@ -71,37 +71,62 @@
     background: rgba(255, 255, 255, 0.2);
 }
 
-/* Bill Note */
-.write-modal-note {
-    padding: 0.75rem 1rem;
+/* Bill Note + Save Button Row */
+.write-modal-note-row {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    align-items: center;
 }
 
-.write-modal-note .note-input {
-    width: 100%;
+.write-modal-note-row .note-input {
+    flex: 1;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
-    padding: 0.6rem 0.75rem;
+    padding: 0.5rem 0.75rem;
     color: #fff;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
 }
 
-.write-modal-note .note-input::placeholder {
+.write-modal-note-row .note-input::placeholder {
     color: rgba(255, 255, 255, 0.4);
 }
 
-.write-modal-note .note-input:focus {
+.write-modal-note-row .note-input:focus {
     outline: none;
     border-color: #667eea;
     background: rgba(102, 126, 234, 0.1);
 }
 
-/* Lines Display */
+.save-btn-inline {
+    padding: 0.5rem 1rem;
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+
+.save-btn-inline:hover:not(:disabled) {
+    transform: scale(1.02);
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.4);
+}
+
+.save-btn-inline:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Lines Display - flex to fill remaining space */
 .write-modal-lines {
     flex: 1 1 auto;
-    min-height: 50px;
-    max-height: 80px;
+    min-height: 100px;
     overflow-y: auto;
     padding: 0.5rem 0.75rem;
     background: rgba(0, 0, 0, 0.2);
@@ -185,6 +210,7 @@
     font-size: 0.95rem;
     font-family: 'Courier New', monospace;
     font-weight: 500;
+    white-space: pre;
 }
 
 .line-expand {
@@ -208,6 +234,7 @@
 .cursor {
     color: #22c55e;
     animation: blink 1s infinite;
+    margin-left: -0.25rem;
 }
 
 @keyframes blink {
@@ -418,12 +445,22 @@
     cursor: not-allowed;
 }
 
-/* Type Buttons Row */
+/* Type Buttons Row - fixed height to prevent layout shift */
 .type-buttons-row {
     display: flex;
     gap: 0.4rem;
     flex-wrap: wrap;
     margin-top: 0.5rem;
+    min-height: 36px;
+    align-items: center;
+}
+
+.type-placeholder {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 0.75rem;
+    font-style: italic;
+    width: 100%;
+    text-align: center;
 }
 
 /* Type Button in row */
@@ -509,13 +546,23 @@
     
     .write-modal {
         max-width: 100%;
+        height: 100vh;
         max-height: 100vh;
         border-radius: 0;
     }
     
     .write-modal-lines {
-        min-height: 60px;
-        max-height: 80px;
+        flex: 1 1 auto;
+        min-height: 80px;
+    }
+    
+    .write-modal-note-row {
+        padding: 0.4rem 0.5rem;
+    }
+    
+    .save-btn-inline {
+        padding: 0.4rem 0.75rem;
+        font-size: 0.8rem;
     }
     
     .number-pad-4col {
@@ -537,7 +584,6 @@
         min-width: 50px;
     }
     
-    .submit-btn,
     .close-btn-footer {
         height: 44px;
     }
