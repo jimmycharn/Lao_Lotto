@@ -56,101 +56,129 @@ const parseLine = (line) => {
     const numLen = numbers.length
 
     if (numLen === 1) {
-        if (typeStr.includes('ล่าง')) {
+        // 1 digit: วิ่งบน/ล่าง, หน้าบน/ล่าง, กลางบน, หลังบน/ล่าง
+        if (typeStr.includes('วิ่งล่าง')) {
+            betType = 'run_bottom'
+        } else if (typeStr.includes('วิ่งบน')) {
+            betType = 'run_top'
+        } else if (typeStr.includes('หน้าบน')) {
+            betType = 'front_top'
+        } else if (typeStr.includes('หน้าล่าง')) {
+            betType = 'front_bottom'
+        } else if (typeStr.includes('กลางบน')) {
+            betType = 'middle_top'
+        } else if (typeStr.includes('หลังบน')) {
+            betType = 'back_top'
+        } else if (typeStr.includes('หลังล่าง')) {
+            betType = 'back_bottom'
+        } else if (typeStr.includes('ล่าง')) {
             betType = 'run_bottom'
         } else {
             betType = 'run_top'
         }
     } else if (numLen === 2) {
-        if (typeStr.includes('ล่างกลับ')) {
+        // 2 digits: 2ตัวบน/ล่าง, 2ตัวมี, 2ตัวหน้า, 2ตัวถ่าง, กลับ
+        if (typeStr.includes('2ตัวล่างกลับ') || typeStr.includes('ล่างกลับ')) {
             betType = '2_bottom'
             specialType = 'reverse'
-            const match = typeStr.match(/ล่างกลับ\s*(\d+)?/)
+            const match = typeStr.match(/(?:2ตัว)?ล่างกลับ\s*(\d+)?/)
             if (match && match[1]) reverseAmount = parseInt(match[1])
-        } else if (typeStr.includes('บนกลับ') || (typeStr.includes('กลับ') && !typeStr.includes('ล่าง'))) {
+        } else if (typeStr.includes('2ตัวบนกลับ') || typeStr.includes('บนกลับ') || (typeStr.includes('กลับ') && !typeStr.includes('ล่าง'))) {
             betType = '2_top'
             specialType = 'reverse'
-            const match = typeStr.match(/(?:บน)?กลับ\s*(\d+)?/)
+            const match = typeStr.match(/(?:2ตัว)?(?:บน)?กลับ\s*(\d+)?/)
             if (match && match[1]) reverseAmount = parseInt(match[1])
-        } else if (typeStr.includes('ล่าง')) {
+        } else if (typeStr.includes('2ตัวมี')) {
+            betType = '2_teng'
+        } else if (typeStr.includes('2ตัวหน้า')) {
+            betType = '2_front'
+            // Check for reverse amount
+            const match = typeStr.match(/2ตัวหน้า\s*(\d+)?/)
+            if (match && match[1]) {
+                reverseAmount = parseInt(match[1])
+                specialType = 'reverse'
+            }
+        } else if (typeStr.includes('2ตัวถ่าง')) {
+            betType = '2_tang'
+            // Check for reverse amount
+            const match = typeStr.match(/2ตัวถ่าง\s*(\d+)?/)
+            if (match && match[1]) {
+                reverseAmount = parseInt(match[1])
+                specialType = 'reverse'
+            }
+        } else if (typeStr.includes('2ตัวล่าง') || typeStr.includes('ล่าง')) {
             betType = '2_bottom'
+        } else if (typeStr.includes('2ตัวบน')) {
+            betType = '2_top'
         } else {
             betType = '2_top'
         }
     } else if (numLen === 3) {
-        if (typeStr.includes('คูณชุด6') || typeStr.includes('ชุด6')) {
+        // 3 digits: 3ตัวบน/ตรง, 3ตัวโต๊ด, 3ตัวล่าง, เต็งโต๊ด, กลับ, คูณชุด
+        const permCount = getPermutationCount(numbers)
+        if (typeStr.includes('คูณชุด')) {
             betType = '3_top'
-            specialType = 'set6'
-        } else if (typeStr.includes('คูณชุด3') || typeStr.includes('ชุด3')) {
-            betType = '3_top'
-            specialType = 'set3'
+            specialType = permCount === 3 ? 'set3' : 'set6'
         } else if (typeStr.includes('เต็งโต๊ด')) {
             betType = '3_top'
             specialType = 'tengTod'
             const match = typeStr.match(/เต็งโต๊ด\s*(\d+)?/)
             if (match && match[1]) reverseAmount = parseInt(match[1])
-        } else if (typeStr.includes('โต๊ด')) {
+        } else if (typeStr.includes('3ตัวโต๊ด') || typeStr.includes('โต๊ด')) {
             betType = '3_tod'
         } else if (typeStr.includes('กลับ')) {
             betType = '3_top'
             specialType = 'reverse'
-            const match = typeStr.match(/กลับ\s*(\d+)?/)
+            const match = typeStr.match(/กลับ\s*\d*\s*(\d+)?$/)
             if (match && match[1]) reverseAmount = parseInt(match[1])
-        } else if (typeStr.includes('ล่าง')) {
+        } else if (typeStr.includes('3ตัวล่าง') || typeStr.includes('ล่าง')) {
             betType = '3_bottom'
         } else {
             betType = '3_top'
         }
     } else if (numLen === 4) {
-        const permCount = getPermutationCount(numbers)
-        if (typeStr.includes('ลอย')) {
+        // 4 digits: 4ตัวชุด, ลอยแพ, 3xPerm
+        if (typeStr.includes('4ตัวชุด') || typeStr.includes('ชุด')) {
+            betType = '4_set'
+        } else if (typeStr.includes('ลอยแพ') || typeStr.includes('ลอย')) {
             betType = '4_run'
-        } else if (typeStr.includes('กลับ24') || typeStr.includes('กลับ 24')) {
-            betType = '4_run'
-            specialType = 'reverse24'
-            const match = typeStr.match(/กลับ\s*24\s*(\d+)?/)
-            if (match && match[1]) reverseAmount = parseInt(match[1])
-        } else if (typeStr.includes('กลับ12') || typeStr.includes('กลับ 12')) {
-            betType = '4_run'
-            specialType = 'reverse12'
-            const match = typeStr.match(/กลับ\s*12\s*(\d+)?/)
-            if (match && match[1]) reverseAmount = parseInt(match[1])
-        } else if (typeStr.includes('กลับ6') || typeStr.includes('กลับ 6')) {
-            betType = '4_run'
-            specialType = 'reverse6'
-            const match = typeStr.match(/กลับ\s*6\s*(\d+)?/)
-            if (match && match[1]) reverseAmount = parseInt(match[1])
-        } else if (typeStr.includes('กลับ4') || typeStr.includes('กลับ 4')) {
-            betType = '4_run'
-            specialType = 'reverse4'
-            const match = typeStr.match(/กลับ\s*4\s*(\d+)?/)
-            if (match && match[1]) reverseAmount = parseInt(match[1])
-        } else if (typeStr.includes('กลับ')) {
-            betType = '4_run'
-            specialType = `reverse${permCount}`
-            const match = typeStr.match(/กลับ\s*(\d+)?/)
-            if (match && match[1]) reverseAmount = parseInt(match[1])
+        } else if (typeStr.includes('3xPerm') || typeStr.includes('3x')) {
+            betType = '3_top'
+            specialType = '3xPerm'
         } else {
             betType = '4_run'
         }
     } else if (numLen === 5) {
-        betType = '5_run'
-        if (typeStr.includes('กลับ')) {
-            const permCount = getPermutationCount(numbers)
-            specialType = `reverse${permCount}`
-            const match = typeStr.match(/กลับ\s*(\d+)?/)
-            if (match && match[1]) reverseAmount = parseInt(match[1])
+        // 5 digits: ลอยแพ, 3xPerm
+        if (typeStr.includes('ลอยแพ') || typeStr.includes('ลอย')) {
+            betType = '5_run'
+        } else if (typeStr.includes('3xPerm') || typeStr.includes('3x')) {
+            betType = '3_top'
+            specialType = '3xPerm'
+        } else {
+            betType = '5_run'
         }
     }
 
-    return {
-        numbers,
-        amount,
-        betType,
-        specialType,
-        reverseAmount,
-        raw: trimmed
+    return { numbers, amount, betType, specialType, reverseAmount }
+}
+
+// Helper: Get all 3-digit combinations from 4 or 5 digit number
+const get3DigitCombinations = (numbers) => {
+    const digits = numbers.split('')
+    const combinations = new Set()
+    
+    for (let i = 0; i < digits.length; i++) {
+        for (let j = 0; j < digits.length; j++) {
+            if (j === i) continue
+            for (let k = 0; k < digits.length; k++) {
+                if (k === i || k === j) continue
+                combinations.add(digits[i] + digits[j] + digits[k])
+            }
+        }
     }
+    
+    return Array.from(combinations)
 }
 
 // Generate entries from parsed line with display info for grouped view
@@ -167,7 +195,16 @@ const generateEntries = (parsed, entryId, rawLine) => {
     // Build display text from raw line (the original input)
     const displayText = rawLine || `${numbers}=${amount}`
 
-    if (specialType === 'reverse') {
+    if (specialType === '3xPerm') {
+        // 4 or 5 digit number -> generate all 3-digit combinations
+        const combos = get3DigitCombinations(numbers)
+        entryCount = combos.length
+        totalAmount = amount * combos.length
+        
+        combos.forEach(combo => {
+            entries.push({ numbers: combo, amount, betType: '3_top', entryId, displayText, displayAmount: totalAmount })
+        })
+    } else if (specialType === 'reverse') {
         // 2 or 3 digits reverse
         const perms = getPermutations(numbers)
         entryCount = perms.length
@@ -193,16 +230,6 @@ const generateEntries = (parsed, entryId, rawLine) => {
         if (reverseAmount) {
             entries.push({ numbers, amount: reverseAmount, betType: '3_tod', entryId, displayText, displayAmount: totalAmount })
         }
-    } else if (specialType && specialType.startsWith('reverse')) {
-        // 4 or 5 digits reverse
-        const perms = getPermutations(numbers)
-        entryCount = perms.length
-        totalAmount = amount + (reverseAmount || amount) * (perms.length - 1)
-        
-        entries.push({ numbers, amount, betType, entryId, displayText, displayAmount: totalAmount })
-        perms.filter(p => p !== numbers).forEach(p => {
-            entries.push({ numbers: p, amount: reverseAmount || amount, betType, entryId, displayText, displayAmount: totalAmount })
-        })
     } else {
         entries.push({ numbers, amount, betType, entryId, displayText, displayAmount: amount })
     }
@@ -215,13 +242,22 @@ const getBetTypeLabel = (betType) => {
     const labels = {
         'run_top': 'วิ่งบน',
         'run_bottom': 'วิ่งล่าง',
+        'front_top': 'หน้าบน',
+        'front_bottom': 'หน้าล่าง',
+        'middle_top': 'กลางบน',
+        'back_top': 'หลังบน',
+        'back_bottom': 'หลังล่าง',
         '2_top': '2 ตัวบน',
         '2_bottom': '2 ตัวล่าง',
+        '2_teng': '2 ตัวมี',
+        '2_front': '2 ตัวหน้า',
+        '2_tang': '2 ตัวถ่าง',
         '3_top': '3 ตัวบน',
         '3_tod': '3 ตัวโต๊ด',
         '3_bottom': '3 ตัวล่าง',
-        '4_run': '4 ตัวลอย',
-        '5_run': '5 ตัวลอย'
+        '4_set': '4 ตัวชุด',
+        '4_run': 'ลอยแพ',
+        '5_run': 'ลอยแพ'
     }
     return labels[betType] || betType
 }
@@ -242,6 +278,7 @@ export default function WriteSubmissionModal({
     const [error, setError] = useState('')
     const [success, setSuccess] = useState(false)
     const [submitting, setSubmitting] = useState(false)
+    const [topBottomToggle, setTopBottomToggle] = useState('top') // 'top' = บน, 'bottom' = ล่าง
     const linesContainerRef = useRef(null)
     const isEditMode = !!editingData
 
@@ -317,7 +354,7 @@ export default function WriteSubmissionModal({
     }
 
     // Handle type button click - format: 123=50 ล่าง
-    const handleTypeClick = (type) => {
+    const handleTypeClick = (type, autoSubmit = false) => {
         const input = currentInput.trim()
         const eqIndex = input.indexOf('=')
         
@@ -327,8 +364,31 @@ export default function WriteSubmissionModal({
             const parts = afterEq.split(/\s+/)
             const amount = parts[0] || ''
             
-            // Format: 123=50 ล่าง (with space for next amount)
-            setCurrentInput(beforeEq + amount + ' ' + type + ' ')
+            // Format: 123=50 ล่าง
+            const newLine = beforeEq + amount + ' ' + type
+            
+            if (autoSubmit) {
+                // Auto submit - add line directly without pressing enter
+                const parsed = parseLine(newLine.trim())
+                if (parsed && parsed.error) {
+                    setError(parsed.error)
+                    return
+                }
+                
+                if (editingIndex !== null) {
+                    const newLines = [...lines]
+                    newLines[editingIndex] = newLine.trim()
+                    setLines(newLines)
+                    setEditingIndex(null)
+                } else {
+                    setLines(prev => [...prev, newLine.trim()])
+                }
+                setCurrentInput('')
+                setError('')
+            } else {
+                // Not auto submit - add type and space for potential reverse amount
+                setCurrentInput(newLine + ' ')
+            }
         } else {
             setCurrentInput(prev => prev.trim() + ' ' + type + ' ')
         }
@@ -448,7 +508,7 @@ export default function WriteSubmissionModal({
         setSuccess(false)
     }
 
-    // Get available type buttons based on current input
+    // Get available type buttons based on current input and toggle state
     const getAvailableTypeButtons = () => {
         // Parse input: format is "123=50" or "123=50 ล่าง"
         const input = currentInput.trim()
@@ -470,48 +530,55 @@ export default function WriteSubmissionModal({
         if (!/^\d+$/.test(numbers)) return []
 
         const buttons = []
+        const isTop = topBottomToggle === 'top'
 
         if (numLen === 1) {
-            // 1 digit: ล่าง only (บน is default, no need to show)
-            buttons.push({ label: 'ล่าง', value: 'ล่าง' })
+            // 1 digit: วิ่ง, หน้า, กลาง(บนเท่านั้น), หลัง
+            if (isTop) {
+                buttons.push({ label: 'วิ่งบน', value: 'วิ่งบน', autoSubmit: true })
+                buttons.push({ label: 'หน้าบน', value: 'หน้าบน', autoSubmit: true })
+                buttons.push({ label: 'กลางบน', value: 'กลางบน', autoSubmit: true })
+                buttons.push({ label: 'หลังบน', value: 'หลังบน', autoSubmit: true })
+            } else {
+                buttons.push({ label: 'วิ่งล่าง', value: 'วิ่งล่าง', autoSubmit: true })
+                buttons.push({ label: 'หน้าล่าง', value: 'หน้าล่าง', autoSubmit: true })
+                buttons.push({ label: 'หลังล่าง', value: 'หลังล่าง', autoSubmit: true })
+            }
         } else if (numLen === 2) {
-            // 2 digits: ล่าง, ลอย, บนกลับ, ล่างกลับ (บน is default)
-            buttons.push({ label: 'ล่าง', value: 'ล่าง' })
-            buttons.push({ label: 'ลอย', value: 'ลอย' })
-            buttons.push({ label: 'บนกลับ', value: 'บนกลับ' })
-            buttons.push({ label: 'ล่างกลับ', value: 'ล่างกลับ' })
+            // 2 digits
+            if (isTop) {
+                buttons.push({ label: '2ตัวบน', value: '2ตัวบน', autoSubmit: true })
+                buttons.push({ label: '2ตัวมี', value: '2ตัวมี', autoSubmit: true })
+                buttons.push({ label: '2ตัวหน้า', value: '2ตัวหน้า', autoSubmit: false })
+                buttons.push({ label: '2ตัวถ่าง', value: '2ตัวถ่าง', autoSubmit: false })
+                buttons.push({ label: '2ตัวบนกลับ', value: '2ตัวบนกลับ', autoSubmit: false })
+            } else {
+                buttons.push({ label: '2ตัวล่าง', value: '2ตัวล่าง', autoSubmit: true })
+                buttons.push({ label: '2ตัวล่างกลับ', value: '2ตัวล่างกลับ', autoSubmit: false })
+            }
         } else if (numLen === 3) {
-            // 3 digits: ล่าง, โต๊ด, เต็งโต๊ด, กลับ, คูณชุด (บน is default)
-            buttons.push({ label: 'ล่าง', value: 'ล่าง' })
-            buttons.push({ label: 'โต๊ด', value: 'โต๊ด' })
-            buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด' })
-            buttons.push({ label: 'กลับ', value: 'กลับ' })
-            
-            const permCount = getPermutationCount(numbers)
-            if (permCount === 3) {
-                buttons.push({ label: 'คูณชุด3', value: 'คูณชุด3' })
-            } else if (permCount === 6) {
-                buttons.push({ label: 'คูณชุด6', value: 'คูณชุด6' })
+            // 3 digits
+            if (isTop) {
+                buttons.push({ label: '3ตัวโต๊ด', value: '3ตัวโต๊ด', autoSubmit: true })
+                buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: false })
+                
+                const permCount = getPermutationCount(numbers)
+                if (permCount > 1) {
+                    buttons.push({ label: `กลับ${permCount - 1}`, value: `กลับ${permCount - 1}`, autoSubmit: false })
+                    buttons.push({ label: `คูณชุด${permCount}`, value: `คูณชุด${permCount}`, autoSubmit: true })
+                }
+            } else {
+                buttons.push({ label: '3ตัวล่าง', value: '3ตัวล่าง', autoSubmit: true })
             }
         } else if (numLen === 4) {
-            buttons.push({ label: 'ลอย', value: 'ลอย' })
-            
-            const permCount = getPermutationCount(numbers)
-            if (permCount === 24) {
-                buttons.push({ label: 'กลับ24', value: 'กลับ24' })
-            } else if (permCount === 12) {
-                buttons.push({ label: 'กลับ12', value: 'กลับ12' })
-            } else if (permCount === 6) {
-                buttons.push({ label: 'กลับ6', value: 'กลับ6' })
-            } else if (permCount === 4) {
-                buttons.push({ label: 'กลับ4', value: 'กลับ4' })
-            }
+            // 4 digits - no top/bottom distinction
+            buttons.push({ label: '4ตัวชุด', value: '4ตัวชุด', autoSubmit: true })
+            buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+            buttons.push({ label: '3xPerm', value: '3xPerm', autoSubmit: true })
         } else if (numLen === 5) {
-            buttons.push({ label: 'ลอย', value: 'ลอย' })
-            const permCount = getPermutationCount(numbers)
-            if (permCount > 1) {
-                buttons.push({ label: `กลับ${permCount}`, value: `กลับ${permCount}` })
-            }
+            // 5 digits - no top/bottom distinction
+            buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+            buttons.push({ label: '3xPerm', value: '3xPerm', autoSubmit: true })
         }
 
         return buttons
@@ -661,20 +728,16 @@ export default function WriteSubmissionModal({
                             <button onClick={() => handleNumberClick('6')}>6</button>
                             <button onClick={handleClear} className="clear">C</button>
                             
-                            {/* Row 3: 1, 2, 3, Type Button */}
+                            {/* Row 3: 1, 2, 3, Toggle บน/ล่าง */}
                             <button onClick={() => handleNumberClick('1')}>1</button>
                             <button onClick={() => handleNumberClick('2')}>2</button>
                             <button onClick={() => handleNumberClick('3')}>3</button>
-                            {typeButtons.length > 0 ? (
-                                <button 
-                                    onClick={() => handleTypeClick(typeButtons[0].value)}
-                                    className="type-inline"
-                                >
-                                    {typeButtons[0].label}
-                                </button>
-                            ) : (
-                                <button disabled className="type-inline disabled">-</button>
-                            )}
+                            <button 
+                                onClick={() => setTopBottomToggle(prev => prev === 'top' ? 'bottom' : 'top')}
+                                className={`toggle-btn ${topBottomToggle}`}
+                            >
+                                {topBottomToggle === 'top' ? 'บน' : 'ล่าง'}
+                            </button>
                             
                             {/* Row 4: 0, Space (wide), Enter */}
                             <button onClick={() => handleNumberClick('0')}>0</button>
@@ -699,8 +762,8 @@ export default function WriteSubmissionModal({
                                 typeButtons.map(btn => (
                                     <button 
                                         key={btn.value}
-                                        onClick={() => handleTypeClick(btn.value)}
-                                        className="type-btn"
+                                        onClick={() => handleTypeClick(btn.value, btn.autoSubmit)}
+                                        className={`type-btn ${btn.autoSubmit ? 'auto' : 'manual'}`}
                                     >
                                         {btn.label}
                                     </button>

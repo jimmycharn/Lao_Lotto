@@ -427,6 +427,30 @@
     cursor: not-allowed;
 }
 
+/* Toggle Button บน/ล่าง */
+.number-pad-4col button.toggle-btn {
+    font-size: 1rem;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.number-pad-4col button.toggle-btn.top {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    border-color: rgba(102, 126, 234, 0.5);
+}
+
+.number-pad-4col button.toggle-btn.bottom {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: #fff;
+    border-color: rgba(245, 87, 108, 0.5);
+}
+
+.number-pad-4col button.toggle-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
 .number-pad-4col button.space-btn {
     grid-column: span 2;
     background: rgba(255, 255, 255, 0.08);
@@ -487,8 +511,29 @@
     transition: all 0.15s;
 }
 
+/* Auto submit buttons - green tint */
+.type-btn.auto {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: rgba(34, 197, 94, 0.3);
+    color: #22c55e;
+}
+
+.type-btn.auto:hover {
+    background: rgba(34, 197, 94, 0.25);
+}
+
+/* Manual buttons - need enter - orange tint */
+.type-btn.manual {
+    background: rgba(251, 191, 36, 0.15);
+    border-color: rgba(251, 191, 36, 0.3);
+    color: #fbbf24;
+}
+
+.type-btn.manual:hover {
+    background: rgba(251, 191, 36, 0.25);
+}
+
 .type-btn:hover {
-    background: rgba(102, 126, 234, 0.25);
     transform: scale(1.02);
 }
 
