@@ -1973,8 +1973,16 @@ export default function RoundAccordionItem({
                                                                                         </td>
                                                                                     )}
                                                                                     <td className="number-cell">
-                                                                                        <div className="number-value">{sub.numbers}</div>
-                                                                                        <div className="type-sub-label">{displayLabel}</div>
+                                                                                        {displayMode === 'summary' && sub.display_bet_type ? (
+                                                                                            <>
+                                                                                                <div className="number-value">{sub.display_bet_type}</div>
+                                                                                            </>
+                                                                                        ) : (
+                                                                                            <>
+                                                                                                <div className="number-value">{sub.numbers}</div>
+                                                                                                <div className="type-sub-label">{displayLabel}</div>
+                                                                                            </>
+                                                                                        )}
                                                                                         {(displayMode === 'summary' || displayMode === 'grouped') && sub.count > 1 && (
                                                                                             <div className="count-sub-label">({sub.count} รายการ)</div>
                                                                                         )}
@@ -2266,10 +2274,18 @@ export default function RoundAccordionItem({
                                                                                                 }}>
                                                                                                     <div>
                                                                                                         <div>
-                                                                                                            <span style={{ fontWeight: '600', marginRight: '0.5rem', fontSize: '0.95rem' }}>{item.numbers}</span>
-                                                                                                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                                                {billDisplayMode === 'summary' ? item.display_bet_type : (BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type)}
-                                                                                                            </span>
+                                                                                                            {billDisplayMode === 'summary' && item.display_bet_type ? (
+                                                                                                                <>
+                                                                                                                    <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>{item.display_bet_type}</span>
+                                                                                                                </>
+                                                                                                            ) : (
+                                                                                                                <>
+                                                                                                                    <span style={{ fontWeight: '600', marginRight: '0.5rem', fontSize: '0.95rem' }}>{item.numbers}</span>
+                                                                                                                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                                                        {BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}
+                                                                                                                    </span>
+                                                                                                                </>
+                                                                                                            )}
                                                                                                         </div>
                                                                                                         {billDisplayMode === 'summary' && item.count > 1 && (
                                                                                                             <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
