@@ -4175,6 +4175,13 @@
     color: var(--color-text);
 }
 
+.bill-display-text {
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.95rem;
+    color: var(--color-text);
+    flex: 1;
+}
+
 /* Bill Card Actions */
 .bill-card-actions {
     display: flex;

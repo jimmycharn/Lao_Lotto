@@ -53,6 +53,15 @@
     font-weight: 500;
 }
 
+.write-modal-header .bill-badge {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: #fff;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
 .write-modal-header .close-btn {
     background: rgba(255, 255, 255, 0.1);
     border: none;
@@ -234,7 +243,7 @@
 .cursor {
     color: #22c55e;
     animation: blink 1s infinite;
-    margin-left: -0.25rem;
+    margin-left: 0;
 }
 
 @keyframes blink {
@@ -293,15 +302,15 @@
     border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.write-modal-total span {
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 0.9rem;
+.write-modal-total .line-count {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.85rem;
 }
 
 .write-modal-total .total-amount {
     color: #22c55e;
-    font-size: 1.2rem;
-    font-weight: 700;
+    font-size: 1rem;
+    font-weight: 600;
 }
 
 /* Error Message */

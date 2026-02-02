@@ -11,15 +11,29 @@ const getPermutationCount = (numStr) => {
 }
 
 // Parse a single line of input
+// Supports both formats: "123 50 ล่าง" (old) and "123=50 ล่าง" (new)
 const parseLine = (line) => {
     const trimmed = line.trim()
     if (!trimmed) return null
 
-    const parts = trimmed.split(/\s+/)
-    if (parts.length < 2) return { error: 'รูปแบบไม่ถูกต้อง: ต้องมีเลขและจำนวนเงิน' }
-
-    const numbers = parts[0]
-    const amount = parseInt(parts[1])
+    let numbers, amount, typeStr
+    
+    // Check if using new format with =
+    if (trimmed.includes('=')) {
+        const eqIndex = trimmed.indexOf('=')
+        numbers = trimmed.substring(0, eqIndex).trim()
+        const afterEq = trimmed.substring(eqIndex + 1).trim()
+        const parts = afterEq.split(/\s+/)
+        amount = parseInt(parts[0])
+        typeStr = parts.slice(1).join(' ').toLowerCase()
+    } else {
+        // Old format with spaces
+        const parts = trimmed.split(/\s+/)
+        if (parts.length < 2) return { error: 'รูปแบบไม่ถูกต้อง: ต้องมีเลขและจำนวนเงิน' }
+        numbers = parts[0]
+        amount = parseInt(parts[1])
+        typeStr = parts.slice(2).join(' ').toLowerCase()
+    }
 
     // Validate numbers
     if (!/^\d+$/.test(numbers)) {
@@ -39,7 +53,6 @@ const parseLine = (line) => {
     let reverseAmount = null
     let specialType = null
 
-    const typeStr = parts.slice(2).join(' ').toLowerCase()
     const numLen = numbers.length
 
     if (numLen === 1) {
@@ -140,44 +153,58 @@ const parseLine = (line) => {
     }
 }
 
-// Generate entries from parsed line
-const generateEntries = (parsed) => {
+// Generate entries from parsed line with display info for grouped view
+const generateEntries = (parsed, entryId, rawLine) => {
     if (!parsed || parsed.error) return []
 
     const { numbers, amount, betType, specialType, reverseAmount } = parsed
     const entries = []
+    
+    // Calculate total amount and count for display
+    let totalAmount = amount
+    let entryCount = 1
+    
+    // Build display text from raw line (the original input)
+    const displayText = rawLine || `${numbers}=${amount}`
 
     if (specialType === 'reverse') {
         // 2 or 3 digits reverse
-        entries.push({ numbers, amount, betType })
         const perms = getPermutations(numbers)
+        entryCount = perms.length
+        totalAmount = amount + (reverseAmount || amount) * (perms.length - 1)
+        
+        entries.push({ numbers, amount, betType, entryId, displayText, displayAmount: totalAmount })
         perms.filter(p => p !== numbers).forEach(p => {
-            entries.push({ numbers: p, amount: reverseAmount || amount, betType })
+            entries.push({ numbers: p, amount: reverseAmount || amount, betType, entryId, displayText, displayAmount: totalAmount })
         })
-    } else if (specialType === 'set3') {
+    } else if (specialType === 'set3' || specialType === 'set6') {
         const perms = getPermutations(numbers)
-        perms.forEach(p => {
-            entries.push({ numbers: p, amount, betType })
-        })
-    } else if (specialType === 'set6') {
-        const perms = getPermutations(numbers)
-        perms.forEach(p => {
-            entries.push({ numbers: p, amount, betType })
+        entryCount = perms.length
+        totalAmount = amount * perms.length
+        
+        perms.forEach((p, i) => {
+            entries.push({ numbers: p, amount, betType, entryId, displayText, displayAmount: totalAmount })
         })
     } else if (specialType === 'tengTod') {
-        entries.push({ numbers, amount, betType: '3_top' })
+        entryCount = reverseAmount ? 2 : 1
+        totalAmount = amount + (reverseAmount || 0)
+        
+        entries.push({ numbers, amount, betType: '3_top', entryId, displayText, displayAmount: totalAmount })
         if (reverseAmount) {
-            entries.push({ numbers, amount: reverseAmount, betType: '3_tod' })
+            entries.push({ numbers, amount: reverseAmount, betType: '3_tod', entryId, displayText, displayAmount: totalAmount })
         }
     } else if (specialType && specialType.startsWith('reverse')) {
         // 4 or 5 digits reverse
-        entries.push({ numbers, amount, betType })
         const perms = getPermutations(numbers)
+        entryCount = perms.length
+        totalAmount = amount + (reverseAmount || amount) * (perms.length - 1)
+        
+        entries.push({ numbers, amount, betType, entryId, displayText, displayAmount: totalAmount })
         perms.filter(p => p !== numbers).forEach(p => {
-            entries.push({ numbers: p, amount: reverseAmount || amount, betType })
+            entries.push({ numbers: p, amount: reverseAmount || amount, betType, entryId, displayText, displayAmount: totalAmount })
         })
     } else {
-        entries.push({ numbers, amount, betType })
+        entries.push({ numbers, amount, betType, entryId, displayText, displayAmount: amount })
     }
 
     return entries
@@ -204,7 +231,9 @@ export default function WriteSubmissionModal({
     onClose, 
     onSubmit, 
     roundInfo,
-    currencySymbol = '฿'
+    currencySymbol = '฿',
+    editingData = null,
+    onEditSubmit = null
 }) {
     const [lines, setLines] = useState([])
     const [currentInput, setCurrentInput] = useState('')
@@ -214,18 +243,26 @@ export default function WriteSubmissionModal({
     const [success, setSuccess] = useState(false)
     const [submitting, setSubmitting] = useState(false)
     const linesContainerRef = useRef(null)
+    const isEditMode = !!editingData
 
-    // Reset state when modal opens
+    // Reset state when modal opens or load editing data
     useEffect(() => {
         if (isOpen) {
-            setLines([])
+            if (editingData) {
+                // Load existing data for editing
+                setLines(editingData.originalLines || [])
+                setBillNote(editingData.billNote || '')
+            } else {
+                // New submission
+                setLines([])
+                setBillNote('')
+            }
             setCurrentInput('')
             setEditingIndex(null)
-            setBillNote('')
             setError('')
             setSuccess(false)
         }
-    }, [isOpen])
+    }, [isOpen, editingData])
 
     // Scroll to bottom when new line added or when typing new input
     useEffect(() => {
@@ -279,13 +316,19 @@ export default function WriteSubmissionModal({
         setError('')
     }
 
-    // Handle type button click - add space after type for next amount
+    // Handle type button click - format: 123=50 ล่าง
     const handleTypeClick = (type) => {
-        const parts = currentInput.trim().split(/\s+/)
-        if (parts.length >= 2) {
-            const newParts = parts.slice(0, 2)
-            newParts.push(type)
-            setCurrentInput(newParts.join(' ') + ' ')
+        const input = currentInput.trim()
+        const eqIndex = input.indexOf('=')
+        
+        if (eqIndex !== -1) {
+            const beforeEq = input.substring(0, eqIndex + 1)
+            const afterEq = input.substring(eqIndex + 1).trim()
+            const parts = afterEq.split(/\s+/)
+            const amount = parts[0] || ''
+            
+            // Format: 123=50 ล่าง (with space for next amount)
+            setCurrentInput(beforeEq + amount + ' ' + type + ' ')
         } else {
             setCurrentInput(prev => prev.trim() + ' ' + type + ' ')
         }
@@ -358,19 +401,34 @@ export default function WriteSubmissionModal({
 
         try {
             const allEntries = []
-            for (const line of lines) {
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i]
                 const parsed = parseLine(line)
                 if (parsed && !parsed.error) {
-                    const entries = generateEntries(parsed)
+                    // Generate unique entryId for each line (group of entries)
+                    const entryId = 'E-' + Math.random().toString(36).substring(2, 10).toUpperCase()
+                    const entries = generateEntries(parsed, entryId, line)
                     allEntries.push(...entries)
                 }
             }
 
-            await onSubmit({
-                entries: allEntries,
-                billNote,
-                rawLines: lines
-            })
+            if (isEditMode && onEditSubmit) {
+                // Edit mode - call onEditSubmit with original bill data
+                await onEditSubmit({
+                    entries: allEntries,
+                    billNote,
+                    rawLines: lines,
+                    originalBillId: editingData.billId,
+                    originalItems: editingData.originalItems
+                })
+            } else {
+                // New submission
+                await onSubmit({
+                    entries: allEntries,
+                    billNote,
+                    rawLines: lines
+                })
+            }
 
             setSuccess(true)
         } catch (err) {
@@ -392,8 +450,21 @@ export default function WriteSubmissionModal({
 
     // Get available type buttons based on current input
     const getAvailableTypeButtons = () => {
-        const parts = currentInput.trim().split(/\s+/)
-        const numbers = parts[0] || ''
+        // Parse input: format is "123=50" or "123=50 ล่าง"
+        const input = currentInput.trim()
+        const eqIndex = input.indexOf('=')
+        
+        // Only show type buttons after entering amount (after =)
+        if (eqIndex === -1) return []
+        
+        const numbers = input.substring(0, eqIndex)
+        const afterEq = input.substring(eqIndex + 1).trim()
+        const parts = afterEq.split(/\s+/)
+        const amount = parts[0] || ''
+        
+        // Must have amount entered after =
+        if (!amount || !/^\d+$/.test(amount)) return []
+        
         const numLen = numbers.length
 
         if (!/^\d+$/.test(numbers)) return []
@@ -456,9 +527,12 @@ export default function WriteSubmissionModal({
             <div className="write-modal" onClick={e => e.stopPropagation()}>
                 {/* Header */}
                 <div className="write-modal-header">
-                    <h3>🖊️ เขียนโพย</h3>
+                    <h3>{isEditMode ? '✏️ แก้ไขโพย' : '🖊️ เขียนโพย'}</h3>
                     {roundInfo && (
                         <span className="round-badge">{roundInfo.name}</span>
+                    )}
+                    {isEditMode && editingData?.billId && (
+                        <span className="bill-badge">{editingData.billId}</span>
                     )}
                     <button className="close-btn" onClick={onClose}>
                         <FiX />
@@ -511,7 +585,7 @@ export default function WriteSubmissionModal({
                                     <span className="line-number">{index + 1}.</span>
                                     <span className="line-text">{line}</span>
                                     {!hasError && entries.length > 1 && (
-                                        <span className="line-expand">({entries.length} รายการ)</span>
+                                        <span className="line-expand">({entries.length})</span>
                                     )}
                                     {!hasError && (
                                         <span className="line-total">{currencySymbol}{lineTotal.toLocaleString()}</span>
@@ -541,8 +615,7 @@ export default function WriteSubmissionModal({
                         <div className="line-item current">
                             <div className="line-content">
                                 <span className="line-number">▶</span>
-                                <span className="line-text">{currentInput}</span>
-                                <span className="cursor">|</span>
+                                <span className="line-text">{currentInput}<span className="cursor">|</span></span>
                             </div>
                         </div>
                     )}
@@ -550,8 +623,8 @@ export default function WriteSubmissionModal({
 
                 {/* Total */}
                 <div className="write-modal-total">
-                    <span>ยอดรวม:</span>
-                    <span className="total-amount">{currencySymbol}{total.toLocaleString()}</span>
+                    <span className="line-count">{lines.length} รายการ</span>
+                    <span className="total-amount">ยอดรวม: {currencySymbol}{total.toLocaleString()}</span>
                 </div>
 
                 {/* Error Message */}
@@ -606,10 +679,10 @@ export default function WriteSubmissionModal({
                             {/* Row 4: 0, Space (wide), Enter */}
                             <button onClick={() => handleNumberClick('0')}>0</button>
                             <button 
-                                onClick={() => setCurrentInput(prev => prev + ' ')} 
+                                onClick={() => setCurrentInput(prev => prev + '=')} 
                                 className="space-btn"
                             >
-                                ―
+                                =
                             </button>
                             <button 
                                 className="enter-inline"

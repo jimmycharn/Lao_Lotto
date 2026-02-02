@@ -104,6 +104,7 @@ export default function UserDashboard() {
     const [lastClickedBetType, setLastClickedBetType] = useState(null) // Track last clicked bet type button
     const [showCloseConfirm, setShowCloseConfirm] = useState(false) // Confirm before closing modal
     const [showWriteModal, setShowWriteModal] = useState(false) // Write submission modal
+    const [editingBillData, setEditingBillData] = useState(null) // Data for editing bill with WriteSubmissionModal
     const numberInputRef = useRef(null)
     const amountInputRef = useRef(null)
     const billNoteInputRef = useRef(null)
@@ -1181,7 +1182,8 @@ export default function UserDashboard() {
         const timestamp = new Date().toISOString()
         const lotteryKey = selectedRound.lottery_type === 'lao' || selectedRound.lottery_type === 'hanoi' ? 'lao' : selectedRound.lottery_type
 
-        // Prepare submissions
+        // Prepare submissions - all entries share the same bill_id and bill_note
+        // Group entries by lineIndex to share entry_id and display_text
         const submissionsToInsert = entries.map(entry => {
             const commInfo = getCommissionForBetType(entry.betType, userSettings)
             const commissionAmount = Math.round(entry.amount * commInfo.rate / 100)
@@ -1189,13 +1191,15 @@ export default function UserDashboard() {
             return {
                 round_id: selectedRound.id,
                 user_id: profile.id,
-                dealer_id: selectedDealer?.id || profile.id,
                 bill_id: billId,
                 bill_note: note || null,
-                entry_id: generateUUID(),
+                entry_id: entry.entryId,
                 bet_type: entry.betType,
                 numbers: entry.numbers,
                 amount: entry.amount,
+                display_numbers: entry.displayText || entry.numbers,
+                display_amount: entry.displayAmount?.toString() || entry.amount.toString(),
+                display_bet_type: entry.displayText || null,
                 commission_rate: commInfo.rate,
                 commission_amount: commissionAmount,
                 created_at: timestamp
@@ -1221,6 +1225,69 @@ export default function UserDashboard() {
 
         fetchSubmissions()
         toast.success(`บันทึกโพยสำเร็จ! (${entries.length} รายการ)`)
+    }
+
+    // Handle edit bill submission from WriteSubmissionModal
+    async function handleEditBillSubmit({ entries, billNote: note, rawLines, originalBillId, originalItems }) {
+        if (!selectedRound || entries.length === 0) {
+            throw new Error('ไม่มีข้อมูลที่จะบันทึก')
+        }
+
+        // Delete original submissions first
+        const originalIds = originalItems.map(item => item.id).filter(Boolean)
+        if (originalIds.length > 0) {
+            const { error: deleteError } = await supabase
+                .from('submissions')
+                .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+                .in('id', originalIds)
+            
+            if (deleteError) throw deleteError
+        }
+
+        // Insert new submissions with same bill_id
+        const timestamp = new Date().toISOString()
+        const submissionsToInsert = entries.map(entry => {
+            const commInfo = getCommissionForBetType(entry.betType, userSettings)
+            const commissionAmount = Math.round(entry.amount * commInfo.rate / 100)
+
+            return {
+                round_id: selectedRound.id,
+                user_id: profile.id,
+                bill_id: originalBillId,
+                bill_note: note || null,
+                entry_id: entry.entryId,
+                bet_type: entry.betType,
+                numbers: entry.numbers,
+                amount: entry.amount,
+                display_numbers: entry.displayText || entry.numbers,
+                display_amount: entry.displayAmount?.toString() || entry.amount.toString(),
+                display_bet_type: entry.displayText || null,
+                commission_rate: commInfo.rate,
+                commission_amount: commissionAmount,
+                created_at: timestamp
+            }
+        })
+
+        const { error } = await supabase
+            .from('submissions')
+            .insert(submissionsToInsert)
+
+        if (error) throw error
+
+        // Update pending deduction
+        const dealerIdForCredit = isOwnDealer ? user.id : selectedDealer?.id
+        if (dealerIdForCredit) {
+            try {
+                await updatePendingDeduction(dealerIdForCredit)
+            } catch (err) {
+                console.log('Error updating pending deduction:', err)
+            }
+        }
+
+        // Clear editing data
+        setEditingBillData(null)
+        fetchSubmissions()
+        toast.success(`แก้ไขโพยสำเร็จ! (${entries.length} รายการ)`)
     }
 
     // Toggle bill expansion
@@ -1295,57 +1362,48 @@ export default function UserDashboard() {
         }
     }
 
-    // Edit bill - load all submissions as drafts and allow adding/removing
+    // Edit bill - open WriteSubmissionModal with existing data
     function handleEditBill(billId, billItems) {
-        // Group items by entry_id to calculate original_count
+        // Group items by entry_id to reconstruct original lines
         const entryGroups = billItems.reduce((acc, item) => {
             const key = item.entry_id || item.id
             if (!acc[key]) {
-                acc[key] = []
+                acc[key] = {
+                    items: [],
+                    // display_bet_type now stores the full original line (e.g., "123=100 คูณชุด6")
+                    originalLine: item.display_bet_type || null
+                }
             }
-            acc[key].push(item)
+            acc[key].items.push(item)
             return acc
         }, {})
 
-        // Convert bill items to draft format matching the drafts state structure
-        const newDrafts = billItems.map((item, index) => {
-            const entryId = item.entry_id || item.id
-            const groupSize = entryGroups[entryId]?.length || 1
-
-            return {
-                id: `edit-${billId}-${index}`,
-                originalId: item.id,
-                entry_id: item.entry_id,
-                numbers: item.numbers, // Keep actual numbers for DB
-                bet_type: item.bet_type,
-                amount: item.amount,
-                commission_rate: item.commission_rate,
-                commission_amount: item.commission_amount,
-                display_numbers: item.display_numbers || item.numbers, // For display
-                display_bet_type: item.display_bet_type || BET_TYPES[item.bet_type]?.label || item.bet_type,
-                display_amount: item.display_amount || item.amount?.toString(),
-                original_count: groupSize // Track original group size for collapsed view
+        // Reconstruct original lines from grouped entries
+        const originalLines = Object.values(entryGroups).map(group => {
+            const firstItem = group.items[0]
+            
+            // If we have the original line stored, use it directly
+            if (group.originalLine) {
+                return group.originalLine
             }
+            
+            // Fallback: reconstruct from individual fields (for old data)
+            const numbers = firstItem.numbers
+            const amount = firstItem.amount
+            const betType = BET_TYPES[firstItem.bet_type]?.label || firstItem.bet_type
+            
+            // Simple format for fallback
+            return `${numbers}=${amount}`
         })
 
-        // Set drafts and bill info for editing
-        setDrafts(newDrafts)
-        setCurrentBillId(billId)
-        setBillNote(billItems[0]?.bill_note || '')
-        setIsEditingBill(true) // Mark as editing existing bill
-        setIsDraftsExpanded(true)
-
-        // Reset submit form
-        setSubmitForm({
-            bet_type: '2_top',
-            numbers: '',
-            amount: ''
+        // Set editing data and open WriteSubmissionModal
+        setEditingBillData({
+            billId,
+            billNote: billItems[0]?.bill_note || '',
+            originalLines,
+            originalItems: billItems
         })
-
-        // Open the submit modal to show the form with drafts
-        setShowSubmitModal(true)
-
-        toast.info(`กำลังแก้ไขโพยใบ ${billId} - เพิ่ม/ลบเลขได้เลย`)
+        setShowWriteModal(true)
     }
 
     // Open edit modal for a submission
@@ -2587,6 +2645,10 @@ export default function UserDashboard() {
                                                                                     const isExpandedBill = expandedBills.includes(billId)
                                                                                     const processedBillItems = processItems(billItems)
                                                                                     
+                                                                                    // Count unique entry_ids for actual line count (not expanded count)
+                                                                                    const uniqueEntryIds = new Set(billItems.map(item => item.entry_id).filter(Boolean))
+                                                                                    const actualLineCount = uniqueEntryIds.size > 0 ? uniqueEntryIds.size : processedBillItems.length
+                                                                                    
                                                                                     // Sort items inside bill based on itemSortMode
                                                                                     const sortedBillItems = (() => {
                                                                                         if (itemSortMode === 'original') {
@@ -2698,7 +2760,7 @@ export default function UserDashboard() {
                                                                                                             {round.currency_symbol}{billTotal.toLocaleString()}
                                                                                                         </span>
                                                                                                         <span className="bill-count">
-                                                                                                            {processedBillItems.length} รายการ
+                                                                                                            {actualLineCount} รายการ
                                                                                                         </span>
                                                                                                     </div>
                                                                                                     <button
@@ -2720,19 +2782,30 @@ export default function UserDashboard() {
                                                                                                         className={`bill-item-row ${canDelete(sub) ? 'editable' : ''}`}
                                                                                                         onClick={() => handleEditSubmission(sub)}
                                                                                                     >
-                                                                                                        <div className="bill-item-left">
-                                                                                                            <span className="bill-bet-type">
-                                                                                                                {displayMode === 'summary' ? (sub.display_bet_type || BET_TYPES[sub.bet_type]?.label) : BET_TYPES[sub.bet_type]?.label}
-                                                                                                            </span>
-                                                                                                            <span className="bill-number">
-                                                                                                                {displayMode === 'summary' ? (sub.display_numbers || sub.numbers) : sub.numbers}
-                                                                                                            </span>
-                                                                                                        </div>
-                                                                                                        <span className="bill-item-amount">
-                                                                                                            {round.currency_symbol}{displayMode === 'summary' 
-                                                                                                                ? (typeof sub.display_amount === 'string' ? sub.display_amount : sub.amount?.toLocaleString()) 
-                                                                                                                : sub.amount?.toLocaleString()}
-                                                                                                        </span>
+                                                                                                        {displayMode === 'summary' && sub.display_bet_type ? (
+                                                                                                            <>
+                                                                                                                <span className="bill-display-text">
+                                                                                                                    {sub.display_bet_type}
+                                                                                                                </span>
+                                                                                                                <span className="bill-item-amount">
+                                                                                                                    {round.currency_symbol}{sub.display_amount || sub.amount?.toLocaleString()}
+                                                                                                                </span>
+                                                                                                            </>
+                                                                                                        ) : (
+                                                                                                            <>
+                                                                                                                <div className="bill-item-left">
+                                                                                                                    <span className="bill-bet-type">
+                                                                                                                        {BET_TYPES[sub.bet_type]?.label}
+                                                                                                                    </span>
+                                                                                                                    <span className="bill-number">
+                                                                                                                        {sub.numbers}
+                                                                                                                    </span>
+                                                                                                                </div>
+                                                                                                                <span className="bill-item-amount">
+                                                                                                                    {round.currency_symbol}{sub.amount?.toLocaleString()}
+                                                                                                                </span>
+                                                                                                            </>
+                                                                                                        )}
                                                                                                     </div>
                                                                                                 ))}
                                                                                             </div>
@@ -4085,10 +4158,15 @@ export default function UserDashboard() {
             {/* Write Submission Modal */}
             <WriteSubmissionModal
                 isOpen={showWriteModal}
-                onClose={() => setShowWriteModal(false)}
+                onClose={() => {
+                    setShowWriteModal(false)
+                    setEditingBillData(null)
+                }}
                 onSubmit={handleWriteSubmit}
                 roundInfo={selectedRound ? { name: selectedRound.name } : null}
                 currencySymbol={selectedRound?.currency_symbol || '฿'}
+                editingData={editingBillData}
+                onEditSubmit={handleEditBillSubmit}
             />
         </div>
     )
