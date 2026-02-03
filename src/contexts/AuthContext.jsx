@@ -5,6 +5,48 @@ const AuthContext = createContext({})
 
 export const useAuth = () => useContext(AuthContext)
 
+// Cache keys for localStorage
+const PROFILE_CACHE_KEY = 'lao_lotto_profile_cache'
+const PROFILE_CACHE_EXPIRY = 5 * 60 * 1000 // 5 minutes
+
+// Get cached profile from localStorage
+function getCachedProfile(userId) {
+    try {
+        const cached = localStorage.getItem(PROFILE_CACHE_KEY)
+        if (cached) {
+            const { profile, timestamp, uid } = JSON.parse(cached)
+            if (uid === userId && Date.now() - timestamp < PROFILE_CACHE_EXPIRY) {
+                return profile
+            }
+        }
+    } catch (e) {
+        // Ignore cache errors
+    }
+    return null
+}
+
+// Save profile to localStorage cache
+function setCachedProfile(userId, profile) {
+    try {
+        localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({
+            profile,
+            timestamp: Date.now(),
+            uid: userId
+        }))
+    } catch (e) {
+        // Ignore cache errors
+    }
+}
+
+// Clear profile cache
+function clearProfileCache() {
+    try {
+        localStorage.removeItem(PROFILE_CACHE_KEY)
+    } catch (e) {
+        // Ignore
+    }
+}
+
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null)
     const [profile, setProfile] = useState(null)
@@ -26,8 +68,17 @@ export function AuthProvider({ children }) {
             
             if (session?.user) {
                 setUser(session.user)
+                
+                // Try to use cached profile first for instant UI
+                const cachedProfile = getCachedProfile(session.user.id)
+                if (cachedProfile) {
+                    setProfile(cachedProfile)
+                    setLoading(false) // Show UI immediately with cached data
+                }
+                
                 profileFetched = true
-                await fetchProfile(session.user)
+                // Fetch fresh profile in background (will update if different)
+                await fetchProfile(session.user, !!cachedProfile)
             } else {
                 setLoading(false)
             }
@@ -64,7 +115,7 @@ export function AuthProvider({ children }) {
         }
     }, [])
 
-    async function fetchProfile(userOrId) {
+    async function fetchProfile(userOrId, hasCachedProfile = false) {
         if (!supabase || !userOrId) {
             setLoading(false)
             return
@@ -81,7 +132,7 @@ export function AuthProvider({ children }) {
         const userId = userOrId?.id || userOrId
         const userEmail = userOrId?.email
 
-        console.log('Fetching profile for:', userId)
+        console.log('Fetching profile for:', userId, hasCachedProfile ? '(background refresh)' : '')
 
         try {
             const { data, error } = await supabase
@@ -123,12 +174,17 @@ export function AuthProvider({ children }) {
             if (data) {
                 console.log('Profile loaded:', data.role)
                 setProfile(data)
+                // Cache the profile for faster refresh
+                setCachedProfile(userId, data)
             }
         } catch (error) {
             console.error('Error in fetchProfile:', error)
         } finally {
             fetchingRef.current = false
-            setLoading(false)
+            // Only set loading false if we didn't already have cached data
+            if (!hasCachedProfile) {
+                setLoading(false)
+            }
         }
     }
 
@@ -163,6 +219,9 @@ export function AuthProvider({ children }) {
         // Force clear local state immediately to ensure UI updates
         setUser(null)
         setProfile(null)
+        
+        // Clear profile cache
+        clearProfileCache()
 
         // Manually clear Supabase tokens from localStorage to prevent auto-login on refresh
         Object.keys(localStorage).forEach(key => {
