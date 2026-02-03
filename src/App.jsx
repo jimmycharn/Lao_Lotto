@@ -1,19 +1,32 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ToastProvider } from './contexts/ToastContext'
 import Navbar from './components/Navbar'
-import Home from './pages/Home'
-import Login from './pages/Login'
-import Register from './pages/Register'
-import InvitationAccept from './pages/InvitationAccept'
-import DealerConnect from './pages/DealerConnect'
-import BuyLottery from './pages/BuyLottery'
-import Profile from './pages/Profile'
-import Dealer from './pages/Dealer'
-import Admin from './pages/Admin'
-import SuperAdmin from './pages/SuperAdmin'
-import UserDashboard from './pages/UserDashboard'
 import './index.css'
+
+// Lazy load pages - โหลดเฉพาะหน้าที่ใช้
+const Home = lazy(() => import('./pages/Home'))
+const Login = lazy(() => import('./pages/Login'))
+const Register = lazy(() => import('./pages/Register'))
+const InvitationAccept = lazy(() => import('./pages/InvitationAccept'))
+const DealerConnect = lazy(() => import('./pages/DealerConnect'))
+const BuyLottery = lazy(() => import('./pages/BuyLottery'))
+const Profile = lazy(() => import('./pages/Profile'))
+const Dealer = lazy(() => import('./pages/Dealer'))
+const Admin = lazy(() => import('./pages/Admin'))
+const SuperAdmin = lazy(() => import('./pages/SuperAdmin'))
+const UserDashboard = lazy(() => import('./pages/UserDashboard'))
+
+// Loading component for Suspense
+function PageLoader() {
+  return (
+    <div className="loading-screen">
+      <div className="spinner"></div>
+      <p>กำลังโหลด...</p>
+    </div>
+  )
+}
 
 // Protected Route Component
 function ProtectedRoute({ children, requireAuth = false, requireDealer = false, requireAdmin = false }) {
@@ -80,12 +93,13 @@ function AppContent() {
     <Router>
       <Navbar />
       <main className="main-content">
-        <Routes>
-          <Route path="/" element={<HomeRedirect />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/invite" element={<InvitationAccept />} />
-          <Route path="/dealer-connect" element={<DealerConnect />} />
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/" element={<HomeRedirect />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/invite" element={<InvitationAccept />} />
+            <Route path="/dealer-connect" element={<DealerConnect />} />
           <Route
             path="/profile"
             element={
@@ -136,7 +150,8 @@ function AppContent() {
             }
           />
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+          </Routes>
+        </Suspense>
       </main>
     </Router>
   )
