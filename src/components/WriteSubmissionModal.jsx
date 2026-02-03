@@ -366,6 +366,7 @@ export default function WriteSubmissionModal({
     const [topBottomToggle, setTopBottomToggle] = useState('top') // 'top' = บน, 'bottom' = ล่าง
     const [isLocked, setIsLocked] = useState(false) // ล็อคราคา/รูปแบบ
     const [lockedAmount, setLockedAmount] = useState('') // จำนวนเงินที่ล็อคไว้
+    const [showCloseConfirm, setShowCloseConfirm] = useState(false)
     const linesContainerRef = useRef(null)
     const isEditMode = !!editingData
 
@@ -531,25 +532,40 @@ export default function WriteSubmissionModal({
                     return
                 }
                 
-                // ปรับ คูณชุด ตามจำนวน permutation ของเลขปัจจุบัน
+                // ปรับ multiplier ตามจำนวน permutation ของเลขปัจจุบัน
                 let adjustedAmount = lockedAmount
                 
-                // ถ้าเลขเป็น 3 หลัก และ lockedAmount มี คูณชุด
-                if (trimmed.length === 3 && lockedAmount.includes('คูณชุด')) {
+                // ถ้าเลขเป็น 3 หลัก และ lockedAmount มีคำว่า คูณชุด หรือ กลับ
+                if (trimmed.length === 3 && (lockedAmount.includes('คูณชุด') || lockedAmount.includes('กลับ'))) {
                     const currentPermCount = getPermutationCount(trimmed)
-                    // แยกจำนวนเงินหลักออกจาก คูณชุด
+                    // แยกจำนวนเงินหลักออกจาก multiplier
                     const amountMatch = lockedAmount.match(/^(\d+)/)
                     const baseAmount = amountMatch ? amountMatch[1] : lockedAmount
                     
-                    if (currentPermCount === 6) {
-                        adjustedAmount = baseAmount + ' คูณชุด6'
-                    } else if (currentPermCount === 3) {
-                        adjustedAmount = baseAmount + ' คูณชุด3'
-                    } else if (currentPermCount === 1) {
-                        // เลขซ้ำทั้งหมด เช่น 111 - ไม่ต้องใส่ คูณชุด
-                        adjustedAmount = baseAmount
-                    } else {
-                        adjustedAmount = baseAmount + ' คูณชุด' + currentPermCount
+                    if (lockedAmount.includes('คูณชุด')) {
+                        // ปรับ คูณชุด
+                        if (currentPermCount === 6) {
+                            adjustedAmount = baseAmount + ' คูณชุด6'
+                        } else if (currentPermCount === 3) {
+                            adjustedAmount = baseAmount + ' คูณชุด3'
+                        } else if (currentPermCount === 1) {
+                            // เลขซ้ำทั้งหมด เช่น 111 - ไม่ต้องใส่ คูณชุด
+                            adjustedAmount = baseAmount
+                        } else {
+                            adjustedAmount = baseAmount + ' คูณชุด' + currentPermCount
+                        }
+                    } else if (lockedAmount.includes('กลับ')) {
+                        // ปรับ กลับ
+                        if (currentPermCount === 6) {
+                            adjustedAmount = baseAmount + ' กลับ5'
+                        } else if (currentPermCount === 3) {
+                            adjustedAmount = baseAmount + ' กลับ2'
+                        } else if (currentPermCount === 1) {
+                            // เลขซ้ำทั้งหมด เช่น 111 - ไม่ต้องใส่ กลับ
+                            adjustedAmount = baseAmount
+                        } else {
+                            adjustedAmount = baseAmount + ' กลับ' + (currentPermCount - 1)
+                        }
                     }
                 }
                 
@@ -583,10 +599,16 @@ export default function WriteSubmissionModal({
 
     // Handle delete line
     const handleDeleteLine = (index) => {
-        setLines(prev => prev.filter((_, i) => i !== index))
+        const newLines = lines.filter((_, i) => i !== index)
+        setLines(newLines)
         if (editingIndex === index) {
             setEditingIndex(null)
             setCurrentInput('')
+        }
+        // ถ้าไม่มีรายการเหลือ ให้ปลดล็อคทันที
+        if (newLines.length === 0) {
+            setIsLocked(false)
+            setLockedAmount('')
         }
     }
 
@@ -653,6 +675,17 @@ export default function WriteSubmissionModal({
             }
 
             setSuccess(true)
+            // เคลียร์ข้อมูลทั้งหมดและเตรียมรับข้อมูลใหม่ทันที
+            setTimeout(() => {
+                setLines([])
+                setCurrentInput('')
+                setEditingIndex(null)
+                setBillNote('')
+                setError('')
+                setSuccess(false)
+                setIsLocked(false)
+                setLockedAmount('')
+            }, 1500) // แสดง success 1.5 วินาที แล้วเคลียร์
         } catch (err) {
             setError(err.message || 'เกิดข้อผิดพลาด')
         } finally {
@@ -667,7 +700,28 @@ export default function WriteSubmissionModal({
         setEditingIndex(null)
         setBillNote('')
         setError('')
-        setSuccess(false)
+    }
+
+    // Handle close modal with confirmation
+    const handleClose = () => {
+        // ถ้ามีข้อมูลอยู่ ให้ถามก่อน
+        if (lines.length > 0 || currentInput.trim() || billNote.trim()) {
+            setShowCloseConfirm(true)
+        } else {
+            // ไม่มีข้อมูล ปิดได้เลย
+            onClose()
+        }
+    }
+
+    // Confirm close modal
+    const confirmClose = () => {
+        setShowCloseConfirm(false)
+        onClose()
+    }
+
+    // Cancel close modal
+    const cancelClose = () => {
+        setShowCloseConfirm(false)
     }
 
     // Get available type buttons based on current input and toggle state
@@ -752,7 +806,7 @@ export default function WriteSubmissionModal({
     const typeButtons = getAvailableTypeButtons()
 
     return (
-        <div className="write-modal-overlay" onClick={onClose}>
+        <div className="write-modal-overlay" onClick={handleClose}>
             <div className="write-modal" onClick={e => e.stopPropagation()}>
                 {/* Header */}
                 <div className="write-modal-header">
@@ -763,7 +817,7 @@ export default function WriteSubmissionModal({
                     {isEditMode && editingData?.billId && (
                         <span className="bill-badge">{editingData.billId}</span>
                     )}
-                    <button className="close-btn" onClick={onClose}>
+                    <button className="close-btn" onClick={handleClose}>
                         <FiX />
                     </button>
                 </div>
@@ -873,6 +927,25 @@ export default function WriteSubmissionModal({
                     </div>
                 )}
 
+                {/* Type Buttons Row - moved above number pad */}
+                {!success && (
+                    <div className="type-buttons-row">
+                        {typeButtons.length > 0 ? (
+                            typeButtons.map(btn => (
+                                <button 
+                                    key={btn.value}
+                                    onClick={() => handleTypeClick(btn.value, btn.autoSubmit)}
+                                    className={`type-btn ${btn.autoSubmit ? 'auto' : 'manual'}`}
+                                >
+                                    {btn.label}
+                                </button>
+                            ))
+                        ) : (
+                            <span className="type-placeholder">ป้อนเลขเพื่อเลือกประเภท</span>
+                        )}
+                    </div>
+                )}
+
                 {/* Input Pad */}
                 {!success && (
                     <div className="write-modal-pad">
@@ -957,23 +1030,6 @@ export default function WriteSubmissionModal({
                                 ↵
                             </button>
                         </div>
-
-                        {/* Type Buttons Row - always show container for fixed height */}
-                        <div className="type-buttons-row">
-                            {typeButtons.length > 0 ? (
-                                typeButtons.map(btn => (
-                                    <button 
-                                        key={btn.value}
-                                        onClick={() => handleTypeClick(btn.value, btn.autoSubmit)}
-                                        className={`type-btn ${btn.autoSubmit ? 'auto' : 'manual'}`}
-                                    >
-                                        {btn.label}
-                                    </button>
-                                ))
-                            ) : (
-                                <span className="type-placeholder">ป้อนเลขเพื่อเลือกประเภท</span>
-                            )}
-                        </div>
                     </div>
                 )}
 
@@ -983,6 +1039,25 @@ export default function WriteSubmissionModal({
                         <button className="close-btn-footer" onClick={onClose}>
                             ปิด
                         </button>
+                    </div>
+                )}
+                
+                {/* Close Confirmation Dialog */}
+                {showCloseConfirm && (
+                    <div className="confirm-dialog-overlay">
+                        <div className="confirm-dialog">
+                            <h3>ยืนยันการปิด</h3>
+                            <p>คุณมีข้อมูลที่ยังไม่ได้บันทึก</p>
+                            <p>ต้องการปิดหน้าต่างนี้หรือไม่?</p>
+                            <div className="confirm-dialog-buttons">
+                                <button className="confirm-btn cancel" onClick={cancelClose}>
+                                    ยกเลิก
+                                </button>
+                                <button className="confirm-btn ok" onClick={confirmClose}>
+                                    ปิดเลย
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>
