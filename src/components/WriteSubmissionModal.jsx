@@ -478,9 +478,13 @@ export default function WriteSubmissionModal({
                 // Auto submit - add line directly without pressing enter
                 const parsed = parseLine(newLine.trim())
                 if (parsed && parsed.error) {
+                    playSound('error')
                     setError(parsed.error)
                     return
                 }
+                
+                // Success - play success sound
+                playSound('success')
                 
                 if (editingIndex !== null) {
                     const newLines = [...lines]
@@ -493,10 +497,12 @@ export default function WriteSubmissionModal({
                 setCurrentInput('')
                 setError('')
             } else {
-                // Not auto submit - add type and space for potential reverse amount
+                // Not auto submit - just click sound
+                playSound('click')
                 setCurrentInput(newLine + ' ')
             }
         } else {
+            playSound('click')
             setCurrentInput(prev => prev.trim() + ' ' + type + ' ')
         }
         setError('')
@@ -983,6 +989,7 @@ export default function WriteSubmissionModal({
                             <button type="button" onClick={() => handleNumberClick('0')}>0</button>
                             <button 
                                 onClick={() => {
+                                    playSound('click')
                                     // ถ้าล็อคอยู่ ให้เติม = และจำนวนเงินที่ล็อคไว้
                                     if (isLocked && lockedAmount) {
                                         setCurrentInput(prev => prev + '=' + lockedAmount)
