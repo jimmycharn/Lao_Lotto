@@ -4167,6 +4167,8 @@ export default function UserDashboard() {
                 currencySymbol={selectedRound?.currency_symbol || '฿'}
                 editingData={editingBillData}
                 onEditSubmit={handleEditBillSubmit}
+                lotteryType={selectedRound?.lottery_type}
+                setPrice={userSettings?.lottery_settings?.[selectedRound?.lottery_type]?.['4_set']?.setPrice || selectedRound?.set_prices?.['4_top'] || 120}
             />
         </div>
     )

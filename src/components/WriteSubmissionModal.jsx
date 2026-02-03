@@ -1,7 +1,64 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { FiX, FiTrash2, FiEdit2, FiPlus, FiCheck, FiRefreshCw } from 'react-icons/fi'
 import { getPermutations } from '../constants/lotteryTypes'
 import './WriteSubmissionModal.css'
+
+// Sound effects using Web Audio API
+const createAudioContext = () => {
+    if (typeof window !== 'undefined' && window.AudioContext) {
+        return new (window.AudioContext || window.webkitAudioContext)()
+    }
+    return null
+}
+
+// Play a beep sound with specified frequency and duration
+const playSound = (type) => {
+    try {
+        const audioCtx = createAudioContext()
+        if (!audioCtx) return
+        
+        const oscillator = audioCtx.createOscillator()
+        const gainNode = audioCtx.createGain()
+        
+        oscillator.connect(gainNode)
+        gainNode.connect(audioCtx.destination)
+        
+        // Different sounds for different events
+        if (type === 'click') {
+            // Short click sound - high pitch, very short
+            oscillator.frequency.value = 800
+            oscillator.type = 'sine'
+            gainNode.gain.value = 0.1
+            oscillator.start()
+            oscillator.stop(audioCtx.currentTime + 0.05)
+        } else if (type === 'success') {
+            // Success sound - pleasant two-tone
+            oscillator.frequency.value = 600
+            oscillator.type = 'sine'
+            gainNode.gain.value = 0.15
+            oscillator.start()
+            setTimeout(() => {
+                oscillator.frequency.value = 800
+            }, 100)
+            oscillator.stop(audioCtx.currentTime + 0.2)
+        } else if (type === 'error') {
+            // Error sound - low buzz
+            oscillator.frequency.value = 200
+            oscillator.type = 'square'
+            gainNode.gain.value = 0.1
+            oscillator.start()
+            oscillator.stop(audioCtx.currentTime + 0.15)
+        }
+        
+        // Clean up
+        oscillator.onended = () => {
+            audioCtx.close()
+        }
+    } catch (e) {
+        // Silently fail if audio not supported
+        console.log('Audio not supported')
+    }
+}
 
 // Calculate unique permutations count
 const getPermutationCount = (numStr) => {
@@ -182,10 +239,12 @@ const get3DigitCombinations = (numbers) => {
 }
 
 // Generate entries from parsed line with display info for grouped view
-const generateEntries = (parsed, entryId, rawLine) => {
+// options: { setPrice, lotteryType } for 4ตัวชุด handling
+const generateEntries = (parsed, entryId, rawLine, options = {}) => {
     if (!parsed || parsed.error) return []
 
     const { numbers, amount, betType, specialType, reverseAmount } = parsed
+    const { setPrice = 120, lotteryType = 'thai' } = options
     const entries = []
     
     // Calculate total amount and count for display
@@ -194,6 +253,24 @@ const generateEntries = (parsed, entryId, rawLine) => {
     
     // Build display text from raw line (the original input)
     const displayText = rawLine || `${numbers}=${amount}`
+    
+    // Special handling for 4ตัวชุด (Lao/Hanoi only)
+    const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
+    if (betType === '4_set' && isLaoOrHanoi) {
+        // amount = จำนวนชุด, setPrice = ราคาต่อชุด
+        const setCount = amount || 1
+        const calculatedAmount = setCount * setPrice
+        entries.push({ 
+            numbers, 
+            amount: calculatedAmount, 
+            betType, 
+            entryId, 
+            displayText: `${numbers}=${setCount} 4ตัวชุด(${setCount})`, 
+            displayAmount: calculatedAmount,
+            setCount  // เก็บจำนวนชุดไว้ด้วย
+        })
+        return entries
+    }
 
     if (specialType === '3xPerm') {
         // 4 or 5 digit number -> generate all 3-digit combinations
@@ -223,13 +300,18 @@ const generateEntries = (parsed, entryId, rawLine) => {
             entries.push({ numbers: p, amount, betType, entryId, displayText, displayAmount: totalAmount })
         })
     } else if (specialType === 'tengTod') {
-        entryCount = reverseAmount ? 2 : 1
-        totalAmount = amount + (reverseAmount || 0)
+        // เต็งโต๊ด: ถ้าไม่มี reverseAmount ใช้จำนวนเงินเดียวกันสำหรับทั้ง 3ตัวบน/ตรง และ โต๊ด
+        // ถ้ามี reverseAmount ใช้ amount สำหรับ 3ตัวบน/ตรง และ reverseAmount สำหรับ โต๊ด
+        const straightAmt = amount
+        const todAmt = reverseAmount || amount  // ถ้าไม่ระบุ reverseAmount ใช้ amount เดียวกัน
+        entryCount = 2  // เสมอ 2 รายการ
+        totalAmount = straightAmt + todAmt
         
-        entries.push({ numbers, amount, betType: '3_top', entryId, displayText, displayAmount: totalAmount })
-        if (reverseAmount) {
-            entries.push({ numbers, amount: reverseAmount, betType: '3_tod', entryId, displayText, displayAmount: totalAmount })
-        }
+        // 3ตัวบน/ตรง - เลขตามที่ป้อน
+        entries.push({ numbers, amount: straightAmt, betType: '3_top', entryId, displayText, displayAmount: totalAmount })
+        // โต๊ด - เลขเรียงลำดับ
+        const sortedNumbers = numbers.split('').sort().join('')
+        entries.push({ numbers: sortedNumbers, amount: todAmt, betType: '3_tod', entryId, displayText, displayAmount: totalAmount })
     } else {
         entries.push({ numbers, amount, betType, entryId, displayText, displayAmount: amount })
     }
@@ -269,7 +351,10 @@ export default function WriteSubmissionModal({
     roundInfo,
     currencySymbol = '฿',
     editingData = null,
-    onEditSubmit = null
+    onEditSubmit = null,
+    lotteryType = 'thai',
+    setPrice = 120,  // ราคาต่อชุดสำหรับ 4ตัวชุด
+    priceLocked = false  // ล็อคราคา
 }) {
     const [lines, setLines] = useState([])
     const [currentInput, setCurrentInput] = useState('')
@@ -279,6 +364,8 @@ export default function WriteSubmissionModal({
     const [success, setSuccess] = useState(false)
     const [submitting, setSubmitting] = useState(false)
     const [topBottomToggle, setTopBottomToggle] = useState('top') // 'top' = บน, 'bottom' = ล่าง
+    const [isLocked, setIsLocked] = useState(false) // ล็อคราคา/รูปแบบ
+    const [lockedAmount, setLockedAmount] = useState('') // จำนวนเงินที่ล็อคไว้
     const linesContainerRef = useRef(null)
     const isEditMode = !!editingData
 
@@ -314,7 +401,7 @@ export default function WriteSubmissionModal({
         lines.forEach(line => {
             const parsed = parseLine(line)
             if (parsed && !parsed.error) {
-                const entries = generateEntries(parsed)
+                const entries = generateEntries(parsed, null, line, { setPrice, lotteryType })
                 entries.forEach(e => total += e.amount)
             }
         })
@@ -323,18 +410,37 @@ export default function WriteSubmissionModal({
 
     // Handle number pad click
     const handleNumberClick = (num) => {
+        // ป้องกันไม่ให้ป้อน 0 เป็นตัวแรกหลัง = (ในส่วนจำนวนเงิน)
+        if (num === '0') {
+            const input = currentInput.trim()
+            const eqIndex = input.indexOf('=')
+            if (eqIndex !== -1) {
+                // มี = แล้ว ตรวจสอบว่าหลัง = มีอะไรบ้าง
+                const afterEq = input.substring(eqIndex + 1)
+                // ถ้าหลัง = ว่างเปล่า หรือมีแค่ space ห้ามป้อน 0
+                if (afterEq.trim() === '') {
+                    playSound('error')
+                    setError('จำนวนเงินต้องไม่ขึ้นต้นด้วย 0')
+                    return
+                }
+            }
+        }
+        
+        playSound('click')
         setCurrentInput(prev => prev + num)
         setError('')
     }
 
     // Handle backspace
     const handleBackspace = () => {
+        playSound('click')
         setCurrentInput(prev => prev.slice(0, -1))
         setError('')
     }
 
     // Handle clear
     const handleClear = () => {
+        playSound('click')
         setCurrentInput('')
         setError('')
     }
@@ -397,14 +503,70 @@ export default function WriteSubmissionModal({
 
     // Handle enter - add line
     const handleEnter = () => {
-        const trimmed = currentInput.trim()
+        let trimmed = currentInput.trim()
         if (!trimmed) return
+
+        // ถ้าล็อคราคาอยู่ และป้อนแค่ตัวเลข (ไม่มี =) ให้เติมราคาที่ล็อคไว้อัตโนมัติ
+        if (isLocked && lockedAmount && !trimmed.includes('=')) {
+            // ตรวจสอบว่าเป็นตัวเลขล้วนๆ
+            if (/^\d+$/.test(trimmed)) {
+                // ตรวจสอบว่า lockedAmount เป็นตัวเลขล้วนๆ หรือมีข้อความประเภทตามหลัง
+                const isAmountOnly = /^\d+$/.test(lockedAmount.trim())
+                
+                // หาจำนวนหลักของรายการล่าสุด
+                let lastDigitCount = 0
+                if (lines.length > 0) {
+                    const lastLine = lines[lines.length - 1]
+                    const lastNumbers = lastLine.split('=')[0].trim()
+                    lastDigitCount = lastNumbers.length
+                }
+                
+                // ถ้าจำนวนหลักเปลี่ยนไป และ lockedAmount มีข้อความประเภท (เช่น คูณชุด) ให้ปลดล็อคและแจ้งเตือน
+                // แต่ถ้า lockedAmount เป็นตัวเลขล้วนๆ ให้บันทึกได้เลย
+                if (lastDigitCount > 0 && trimmed.length !== lastDigitCount && !isAmountOnly) {
+                    playSound('error')
+                    setIsLocked(false)
+                    setLockedAmount('')
+                    setError(`จำนวนหลักไม่ตรงกัน (${lastDigitCount} หลัก → ${trimmed.length} หลัก) กรุณาป้อนให้ครบ`)
+                    return
+                }
+                
+                // ปรับ คูณชุด ตามจำนวน permutation ของเลขปัจจุบัน
+                let adjustedAmount = lockedAmount
+                
+                // ถ้าเลขเป็น 3 หลัก และ lockedAmount มี คูณชุด
+                if (trimmed.length === 3 && lockedAmount.includes('คูณชุด')) {
+                    const currentPermCount = getPermutationCount(trimmed)
+                    // แยกจำนวนเงินหลักออกจาก คูณชุด
+                    const amountMatch = lockedAmount.match(/^(\d+)/)
+                    const baseAmount = amountMatch ? amountMatch[1] : lockedAmount
+                    
+                    if (currentPermCount === 6) {
+                        adjustedAmount = baseAmount + ' คูณชุด6'
+                    } else if (currentPermCount === 3) {
+                        adjustedAmount = baseAmount + ' คูณชุด3'
+                    } else if (currentPermCount === 1) {
+                        // เลขซ้ำทั้งหมด เช่น 111 - ไม่ต้องใส่ คูณชุด
+                        adjustedAmount = baseAmount
+                    } else {
+                        adjustedAmount = baseAmount + ' คูณชุด' + currentPermCount
+                    }
+                }
+                
+                trimmed = trimmed + '=' + adjustedAmount
+                setCurrentInput(trimmed)
+            }
+        }
 
         const parsed = parseLine(trimmed)
         if (parsed && parsed.error) {
+            playSound('error')
             setError(parsed.error)
             return
         }
+
+        // Success - play success sound
+        playSound('success')
 
         if (editingIndex !== null) {
             const newLines = [...lines]
@@ -467,7 +629,7 @@ export default function WriteSubmissionModal({
                 if (parsed && !parsed.error) {
                     // Generate unique entryId for each line (group of entries)
                     const entryId = 'E-' + Math.random().toString(36).substring(2, 10).toUpperCase()
-                    const entries = generateEntries(parsed, entryId, line)
+                    const entries = generateEntries(parsed, entryId, line, { setPrice, lotteryType })
                     allEntries.push(...entries)
                 }
             }
@@ -638,7 +800,7 @@ export default function WriteSubmissionModal({
                     {lines.map((line, index) => {
                         const parsed = parseLine(line)
                         const hasError = parsed && parsed.error
-                        const entries = !hasError ? generateEntries(parsed) : []
+                        const entries = !hasError ? generateEntries(parsed, null, line, { setPrice, lotteryType }) : []
                         const lineTotal = entries.reduce((sum, e) => sum + e.amount, 0)
 
                         return (
@@ -717,35 +879,75 @@ export default function WriteSubmissionModal({
                         {/* Number Pad - 4 columns */}
                         <div className="number-pad-4col">
                             {/* Row 1: 7, 8, 9, ⌫ */}
-                            <button onClick={() => handleNumberClick('7')}>7</button>
-                            <button onClick={() => handleNumberClick('8')}>8</button>
-                            <button onClick={() => handleNumberClick('9')}>9</button>
-                            <button onClick={handleBackspace} className="backspace">⌫</button>
+                            <button type="button" onClick={() => handleNumberClick('7')}>7</button>
+                            <button type="button" onClick={() => handleNumberClick('8')}>8</button>
+                            <button type="button" onClick={() => handleNumberClick('9')}>9</button>
+                            <button type="button" onClick={handleBackspace} className="backspace">⌫</button>
                             
                             {/* Row 2: 4, 5, 6, C */}
-                            <button onClick={() => handleNumberClick('4')}>4</button>
-                            <button onClick={() => handleNumberClick('5')}>5</button>
-                            <button onClick={() => handleNumberClick('6')}>6</button>
-                            <button onClick={handleClear} className="clear">C</button>
+                            <button type="button" onClick={() => handleNumberClick('4')}>4</button>
+                            <button type="button" onClick={() => handleNumberClick('5')}>5</button>
+                            <button type="button" onClick={() => handleNumberClick('6')}>6</button>
+                            <button type="button" onClick={handleClear} className="clear">C</button>
                             
                             {/* Row 3: 1, 2, 3, Toggle บน/ล่าง */}
-                            <button onClick={() => handleNumberClick('1')}>1</button>
-                            <button onClick={() => handleNumberClick('2')}>2</button>
-                            <button onClick={() => handleNumberClick('3')}>3</button>
+                            <button type="button" onClick={() => handleNumberClick('1')}>1</button>
+                            <button type="button" onClick={() => handleNumberClick('2')}>2</button>
+                            <button type="button" onClick={() => handleNumberClick('3')}>3</button>
                             <button 
-                                onClick={() => setTopBottomToggle(prev => prev === 'top' ? 'bottom' : 'top')}
-                                className={`toggle-btn ${topBottomToggle}`}
+                                onClick={() => {
+                                    if (!isLocked) {
+                                        setTopBottomToggle(prev => prev === 'top' ? 'bottom' : 'top')
+                                    }
+                                }}
+                                className={`toggle-btn ${topBottomToggle} ${isLocked ? 'disabled' : ''}`}
+                                disabled={isLocked}
                             >
                                 {topBottomToggle === 'top' ? 'บน' : 'ล่าง'}
                             </button>
                             
-                            {/* Row 4: 0, Space (wide), Enter */}
-                            <button onClick={() => handleNumberClick('0')}>0</button>
+                            {/* Row 4: 0, =, ล็อค, Enter */}
+                            <button type="button" onClick={() => handleNumberClick('0')}>0</button>
                             <button 
-                                onClick={() => setCurrentInput(prev => prev + '=')} 
-                                className="space-btn"
+                                onClick={() => {
+                                    // ถ้าล็อคอยู่ ให้เติม = และจำนวนเงินที่ล็อคไว้
+                                    if (isLocked && lockedAmount) {
+                                        setCurrentInput(prev => prev + '=' + lockedAmount)
+                                    } else {
+                                        setCurrentInput(prev => prev + '=')
+                                    }
+                                }} 
+                                className="eq-btn"
                             >
                                 =
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    if (!isLocked) {
+                                        // เปิดล็อค - เก็บจำนวนเงินจากรายการล่าสุดที่ป้อนเสร็จ
+                                        if (lines.length > 0) {
+                                            const lastLine = lines[lines.length - 1]
+                                            const eqIndex = lastLine.indexOf('=')
+                                            if (eqIndex !== -1) {
+                                                const afterEq = lastLine.substring(eqIndex + 1).trim()
+                                                // แยกเอาเฉพาะจำนวนเงินหลัก (ตัวเลขแรก)
+                                                const amountMatch = afterEq.match(/^(\d+)/)
+                                                if (amountMatch) {
+                                                    // เก็บทั้งหมดหลัง = (รวม คูณชุด ถ้ามี)
+                                                    setLockedAmount(afterEq)
+                                                    setIsLocked(true)
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        // ปิดล็อค
+                                        setIsLocked(false)
+                                        setLockedAmount('')
+                                    }
+                                }}
+                                className={`lock-btn ${isLocked ? 'locked' : 'unlocked'}`}
+                            >
+                                {isLocked ? 'ล็อค' : 'ไม่ล็อค'}
                             </button>
                             <button 
                                 className="enter-inline"
