@@ -61,28 +61,60 @@ export function AuthProvider({ children }) {
 
         let isMounted = true
         let profileFetched = false
+        
+        // Timeout to prevent infinite loading - if getSession hangs
+        const loadingTimeout = setTimeout(() => {
+            if (isMounted && loading) {
+                console.warn('Auth loading timeout - clearing stale session')
+                setLoading(false)
+                // Clear potentially corrupted auth data
+                clearProfileCache()
+                Object.keys(localStorage).forEach(key => {
+                    if (key.startsWith('sb-') && key.includes('-auth-token')) {
+                        localStorage.removeItem(key)
+                    }
+                })
+            }
+        }, 5000) // 5 second timeout
 
-        // Get initial session
-        supabase.auth.getSession().then(async ({ data: { session } }) => {
-            if (!isMounted) return
-            
-            if (session?.user) {
-                setUser(session.user)
+        // Get initial session with error handling
+        supabase.auth.getSession()
+            .then(async ({ data: { session }, error }) => {
+                clearTimeout(loadingTimeout)
+                if (!isMounted) return
                 
-                // Try to use cached profile first for instant UI
-                const cachedProfile = getCachedProfile(session.user.id)
-                if (cachedProfile) {
-                    setProfile(cachedProfile)
-                    setLoading(false) // Show UI immediately with cached data
+                if (error) {
+                    console.error('getSession error:', error)
+                    setLoading(false)
+                    return
                 }
                 
-                profileFetched = true
-                // Fetch fresh profile in background (will update if different)
-                await fetchProfile(session.user, !!cachedProfile)
-            } else {
-                setLoading(false)
-            }
-        })
+                if (session?.user) {
+                    setUser(session.user)
+                    
+                    // Try to use cached profile first for instant UI
+                    const cachedProfile = getCachedProfile(session.user.id)
+                    if (cachedProfile) {
+                        setProfile(cachedProfile)
+                        setLoading(false) // Show UI immediately with cached data
+                    }
+                    
+                    profileFetched = true
+                    // Fetch fresh profile in background (will update if different)
+                    await fetchProfile(session.user, !!cachedProfile)
+                } else {
+                    setLoading(false)
+                }
+            })
+            .catch((err) => {
+                clearTimeout(loadingTimeout)
+                console.error('getSession failed:', err)
+                if (isMounted) {
+                    setLoading(false)
+                    // Clear corrupted auth data
+                    clearProfileCache()
+                }
+            })
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -111,6 +143,7 @@ export function AuthProvider({ children }) {
 
         return () => {
             isMounted = false
+            clearTimeout(loadingTimeout)
             subscription.unsubscribe()
         }
     }, [])
