@@ -62,20 +62,15 @@ export function AuthProvider({ children }) {
         let isMounted = true
         let profileFetched = false
         
-        // Timeout to prevent infinite loading - if getSession hangs
+        // Timeout to prevent infinite loading - just stop loading, don't clear session
         const loadingTimeout = setTimeout(() => {
             if (isMounted && loading) {
-                console.warn('Auth loading timeout - clearing stale session')
+                console.warn('Auth loading timeout - stopping loading spinner')
                 setLoading(false)
-                // Clear potentially corrupted auth data
-                clearProfileCache()
-                Object.keys(localStorage).forEach(key => {
-                    if (key.startsWith('sb-') && key.includes('-auth-token')) {
-                        localStorage.removeItem(key)
-                    }
-                })
+                // Don't clear auth tokens - just stop the loading state
+                // User can still use the app, auth will retry on next action
             }
-        }, 5000) // 5 second timeout
+        }, 8000) // 8 second timeout - just stop loading, don't logout
 
         // Get initial session with error handling
         supabase.auth.getSession()
@@ -111,8 +106,8 @@ export function AuthProvider({ children }) {
                 console.error('getSession failed:', err)
                 if (isMounted) {
                     setLoading(false)
-                    // Clear corrupted auth data
-                    clearProfileCache()
+                    // Don't clear auth - just stop loading
+                    // Network errors shouldn't logout the user
                 }
             })
 
