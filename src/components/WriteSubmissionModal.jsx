@@ -368,6 +368,7 @@ export default function WriteSubmissionModal({
     const [lockedAmount, setLockedAmount] = useState('') // จำนวนเงินที่ล็อคไว้
     const [showCloseConfirm, setShowCloseConfirm] = useState(false)
     const linesContainerRef = useRef(null)
+    const noteInputRef = useRef(null)
     const isEditMode = !!editingData
 
     // Reset state when modal opens or load editing data
@@ -386,6 +387,13 @@ export default function WriteSubmissionModal({
             setEditingIndex(null)
             setError('')
             setSuccess(false)
+            
+            // Focus note input when modal opens
+            setTimeout(() => {
+                if (noteInputRef.current) {
+                    noteInputRef.current.focus()
+                }
+            }, 100)
         }
     }, [isOpen, editingData])
 
@@ -691,6 +699,10 @@ export default function WriteSubmissionModal({
                 setSuccess(false)
                 setIsLocked(false)
                 setLockedAmount('')
+                // Focus note input after clearing
+                if (noteInputRef.current) {
+                    noteInputRef.current.focus()
+                }
             }, 1500) // แสดง success 1.5 วินาที แล้วเคลียร์
         } catch (err) {
             setError(err.message || 'เกิดข้อผิดพลาด')
@@ -831,6 +843,7 @@ export default function WriteSubmissionModal({
                 {/* Bill Note + Save Button Row */}
                 <div className="write-modal-note-row">
                     <input
+                        ref={noteInputRef}
                         type="text"
                         placeholder="ชื่อผู้ซื้อ / บันทึกช่วยจำ (ไม่บังคับ)"
                         value={billNote}
