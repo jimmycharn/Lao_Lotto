@@ -61,23 +61,21 @@ export function AuthProvider({ children }) {
 
         let isMounted = true
         let profileFetched = false
-        
-        // Timeout to prevent infinite loading - just stop loading, don't clear session
-        const loadingTimeout = setTimeout(() => {
-            if (isMounted) {
-                console.warn('Auth loading timeout - stopping loading spinner')
-                setLoading(false)
-                fetchingRef.current = false // Reset fetching ref to prevent stuck state
-                // Don't clear auth tokens - just stop the loading state
-                // User can still use the app, auth will retry on next action
-            }
-        }, 5000) // 5 second timeout - reduced for better UX
 
-        // Get initial session with error handling
-        supabase.auth.getSession()
-            .then(async ({ data: { session }, error }) => {
-                clearTimeout(loadingTimeout)
+        // Helper function to handle session
+        const handleSession = async () => {
+            try {
+                // Race between getSession and a 3 second timeout
+                const result = await Promise.race([
+                    supabase.auth.getSession(),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Session timeout')), 3000)
+                    )
+                ])
+                
                 if (!isMounted) return
+                
+                const { data: { session }, error } = result
                 
                 if (error) {
                     console.error('getSession error:', error)
@@ -94,25 +92,22 @@ export function AuthProvider({ children }) {
                         setProfile(cachedProfile)
                     }
                     
-                    // Always set loading false immediately - don't wait for profile fetch
-                    setLoading(false)
-                    
                     profileFetched = true
-                    // Fetch fresh profile in background (will update if different)
-                    fetchProfile(session.user, true) // Always treat as background fetch
-                } else {
-                    setLoading(false)
+                    // Fetch fresh profile in background
+                    fetchProfile(session.user, true)
                 }
-            })
-            .catch((err) => {
-                clearTimeout(loadingTimeout)
-                console.error('getSession failed:', err)
+                
+                // Always set loading false
+                setLoading(false)
+            } catch (err) {
+                console.warn('Auth session check failed or timed out:', err.message)
                 if (isMounted) {
                     setLoading(false)
-                    // Don't clear auth - just stop loading
-                    // Network errors shouldn't logout the user
                 }
-            })
+            }
+        }
+        
+        handleSession()
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
