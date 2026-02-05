@@ -32,7 +32,7 @@ import {
     getDefaultLimitsForType,
     getLotteryTypeKey
 } from '../../constants/lotteryTypes'
-import WriteSubmissionModal from './WriteSubmissionModal'
+import DealerWriteSubmissionWrapper from './DealerWriteSubmissionWrapper'
 
 export default function RoundAccordionItem({ 
     round, 
@@ -2846,9 +2846,9 @@ export default function RoundAccordionItem({
                 </div>
             )}
 
-            {/* Write Bet Modal - Uses WriteSubmissionModal component */}
+            {/* Write Bet Modal - Uses DealerWriteSubmissionWrapper with numpad UI */}
             {showWriteBetModal && selectedMemberForBet && (
-                <WriteSubmissionModal
+                <DealerWriteSubmissionWrapper
                     round={round}
                     targetUser={selectedMemberForBet}
                     dealerId={user.id}
