@@ -223,7 +223,7 @@
     align-items: center;
     justify-content: center;
     z-index: 1000;
-    padding: 1rem;
+    padding: 0.5rem;
     animation: fadeIn 0.2s ease;
 }
 
@@ -312,5 +312,15 @@
 
     .form-row {
         grid-template-columns: 1fr;
+    }
+    
+    .modal-overlay {
+        padding: 4px !important;
+    }
+    
+    .modal {
+        max-width: calc(100vw - 8px) !important;
+        width: calc(100vw - 8px) !important;
+        border-radius: 12px !important;
     }
 }
