@@ -205,8 +205,20 @@
 }
 
 .line-item.current {
-    background: rgba(34, 197, 94, 0.15);
-    border: 1px solid rgba(34, 197, 94, 0.3);
+    background: rgba(34, 197, 94, 0.2);
+    border: 2px solid rgba(34, 197, 94, 0.5);
+}
+
+.line-item.current .line-number {
+    color: #22c55e;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.line-item.current .line-text {
+    color: #22c55e;
+    font-size: 1.15rem;
+    font-weight: 600;
 }
 
 .line-content {
@@ -253,6 +265,8 @@
     color: #22c55e;
     animation: blink 1s infinite;
     margin-left: 0;
+    font-size: 1.2rem;
+    font-weight: bold;
 }
 
 @keyframes blink {
@@ -891,6 +905,27 @@ html.theme-light .line-number {
 [data-theme="light"] .line-text,
 html.theme-light .line-text {
     color: #1a1a2e !important;
+}
+
+[data-theme="light"] .line-item.current,
+html.theme-light .line-item.current {
+    background: rgba(34, 197, 94, 0.15) !important;
+    border: 2px solid rgba(34, 197, 94, 0.5) !important;
+}
+
+[data-theme="light"] .line-item.current .line-number,
+html.theme-light .line-item.current .line-number {
+    color: #16a34a !important;
+}
+
+[data-theme="light"] .line-item.current .line-text,
+html.theme-light .line-item.current .line-text {
+    color: #16a34a !important;
+}
+
+[data-theme="light"] .cursor,
+html.theme-light .cursor {
+    color: #16a34a !important;
 }
 
 [data-theme="light"] .line-expand,

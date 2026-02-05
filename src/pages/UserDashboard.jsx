@@ -1206,7 +1206,7 @@ export default function UserDashboard() {
                 amount: entry.amount,
                 display_numbers: entry.displayText || entry.numbers,
                 display_amount: entry.displayAmount?.toString() || entry.amount.toString(),
-                display_bet_type: entry.displayText || null,
+                display_bet_type: null, // ไม่ใช้ display_bet_type แยก เพราะ display_numbers มีข้อมูลครบแล้ว
                 commission_rate: commInfo.rate,
                 commission_amount: commissionAmount,
                 created_at: timestamp
@@ -1268,7 +1268,7 @@ export default function UserDashboard() {
                 amount: entry.amount,
                 display_numbers: entry.displayText || entry.numbers,
                 display_amount: entry.displayAmount?.toString() || entry.amount.toString(),
-                display_bet_type: entry.displayText || null,
+                display_bet_type: null, // ไม่ใช้ display_bet_type แยก เพราะ display_numbers มีข้อมูลครบแล้ว
                 commission_rate: commInfo.rate,
                 commission_amount: commissionAmount,
                 created_at: timestamp
@@ -2890,7 +2890,11 @@ export default function UserDashboard() {
                                                                                                         {displayMode === 'summary' ? (sub.display_numbers || sub.numbers) : sub.numbers}
                                                                                                     </span>
                                                                                                     <span className="sub-type">
-                                                                                                        {displayMode === 'summary' ? (sub.display_bet_type || BET_TYPES[sub.bet_type]?.label) : BET_TYPES[sub.bet_type]?.label}
+                                                                                                        {displayMode === 'summary' 
+                                                                                                            ? (sub.display_bet_type && sub.display_bet_type !== sub.display_numbers 
+                                                                                                                ? sub.display_bet_type 
+                                                                                                                : BET_TYPES[sub.bet_type]?.label) 
+                                                                                                            : BET_TYPES[sub.bet_type]?.label}
                                                                                                     </span>
                                                                                                 </div>
                                                                                             </td>
