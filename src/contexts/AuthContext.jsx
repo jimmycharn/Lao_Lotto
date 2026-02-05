@@ -64,13 +64,14 @@ export function AuthProvider({ children }) {
         
         // Timeout to prevent infinite loading - just stop loading, don't clear session
         const loadingTimeout = setTimeout(() => {
-            if (isMounted && loading) {
+            if (isMounted) {
                 console.warn('Auth loading timeout - stopping loading spinner')
                 setLoading(false)
+                fetchingRef.current = false // Reset fetching ref to prevent stuck state
                 // Don't clear auth tokens - just stop the loading state
                 // User can still use the app, auth will retry on next action
             }
-        }, 8000) // 8 second timeout - just stop loading, don't logout
+        }, 5000) // 5 second timeout - reduced for better UX
 
         // Get initial session with error handling
         supabase.auth.getSession()
@@ -149,9 +150,13 @@ export function AuthProvider({ children }) {
             return
         }
         
-        // Prevent duplicate fetches
+        // Prevent duplicate fetches - but still set loading false if needed
         if (fetchingRef.current) {
             console.log('Profile fetch already in progress, skipping')
+            // Still need to set loading false if we're waiting
+            if (!hasCachedProfile) {
+                setTimeout(() => setLoading(false), 100)
+            }
             return
         }
         fetchingRef.current = true
