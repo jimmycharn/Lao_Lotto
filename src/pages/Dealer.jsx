@@ -5523,6 +5523,29 @@ function UpstreamDealerSettingsInline({ dealer, isLinked, onSaved }) {
         }))
     }
 
+    // Handle Enter key to jump to next input and select all
+    const handleSettingsInputKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault()
+            const form = e.target.closest('.upstream-dealer-settings-inline')
+            if (!form) return
+
+            const inputs = Array.from(form.querySelectorAll('input[type="number"]:not([disabled])'))
+            const currentIndex = inputs.indexOf(e.target)
+            
+            if (currentIndex >= 0 && currentIndex < inputs.length - 1) {
+                const nextInput = inputs[currentIndex + 1]
+                nextInput.focus()
+                nextInput.select()
+            }
+        }
+    }
+
+    // Handle focus to select all text
+    const handleSettingsInputFocus = (e) => {
+        e.target.select()
+    }
+
     if (loading) {
         return <div className="loading-state"><div className="spinner"></div></div>
     }
@@ -5597,6 +5620,8 @@ function UpstreamDealerSettingsInline({ dealer, isLinked, onSaved }) {
                                 className="form-input"
                                 value={settings[activeTab]['4_set'].setPrice || 0}
                                 onChange={e => updateSetting(activeTab, '4_set', 'setPrice', e.target.value)}
+                                onKeyDown={handleSettingsInputKeyDown}
+                                onFocus={handleSettingsInputFocus}
                                 disabled={readOnly}
                                 style={{ width: '100%' }}
                             />
@@ -5608,6 +5633,8 @@ function UpstreamDealerSettingsInline({ dealer, isLinked, onSaved }) {
                                 className="form-input"
                                 value={settings[activeTab]['4_set'].commission || 0}
                                 onChange={e => updateSetting(activeTab, '4_set', 'commission', e.target.value)}
+                                onKeyDown={handleSettingsInputKeyDown}
+                                onFocus={handleSettingsInputFocus}
                                 disabled={readOnly}
                                 style={{ width: '100%' }}
                             />
@@ -5627,6 +5654,8 @@ function UpstreamDealerSettingsInline({ dealer, isLinked, onSaved }) {
                                     className="form-input"
                                     value={prizeValue}
                                     onChange={e => updateSetPrize(activeTab, prizeKey, e.target.value)}
+                                    onKeyDown={handleSettingsInputKeyDown}
+                                    onFocus={handleSettingsInputFocus}
                                     disabled={readOnly}
                                     style={{ width: '100%', fontSize: '0.9rem' }}
                                 />
@@ -5660,6 +5689,8 @@ function UpstreamDealerSettingsInline({ dealer, isLinked, onSaved }) {
                                     className="form-input"
                                     value={settings[activeTab]?.[key]?.commission || 0}
                                     onChange={e => updateSetting(activeTab, key, 'commission', e.target.value)}
+                                    onKeyDown={handleSettingsInputKeyDown}
+                                    onFocus={handleSettingsInputFocus}
                                     disabled={readOnly}
                                     style={{ width: '60px', textAlign: 'center', fontSize: '0.85rem', padding: '0.3rem' }}
                                 />
@@ -5671,6 +5702,8 @@ function UpstreamDealerSettingsInline({ dealer, isLinked, onSaved }) {
                                     className="form-input"
                                     value={settings[activeTab]?.[key]?.payout || 0}
                                     onChange={e => updateSetting(activeTab, key, 'payout', e.target.value)}
+                                    onKeyDown={handleSettingsInputKeyDown}
+                                    onFocus={handleSettingsInputFocus}
                                     disabled={readOnly}
                                     style={{ width: '70px', textAlign: 'center', fontSize: '0.85rem', padding: '0.3rem' }}
                                 />
@@ -6890,6 +6923,29 @@ function MemberSettings({ member, onClose, isInline = false }) {
         }))
     }
 
+    // Handle Enter key to jump to next input and select all
+    const handleSettingsInputKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault()
+            const form = e.target.closest('.settings-form, .member-settings-inline')
+            if (!form) return
+
+            const inputs = Array.from(form.querySelectorAll('input[type="number"]:not([disabled])'))
+            const currentIndex = inputs.indexOf(e.target)
+            
+            if (currentIndex >= 0 && currentIndex < inputs.length - 1) {
+                const nextInput = inputs[currentIndex + 1]
+                nextInput.focus()
+                nextInput.select() // Select all text in next input
+            }
+        }
+    }
+
+    // Handle focus to select all text
+    const handleSettingsInputFocus = (e) => {
+        e.target.select()
+    }
+
     const LOTTERY_TABS = [
         { key: 'thai', label: 'หวยไทย' },
         { key: 'lao', label: 'หวยลาว' },
@@ -6955,6 +7011,8 @@ function MemberSettings({ member, onClose, isInline = false }) {
                                                     newSettings[activeTab]['4_set'].setPrice = Number(e.target.value)
                                                     setSettings(newSettings)
                                                 }}
+                                                onKeyDown={handleSettingsInputKeyDown}
+                                                onFocus={handleSettingsInputFocus}
                                             />
                                             <span className="input-suffix">บาท</span>
                                         </div>
@@ -6971,6 +7029,8 @@ function MemberSettings({ member, onClose, isInline = false }) {
                                                     newSettings[activeTab]['4_set'].commission = Number(e.target.value)
                                                     setSettings(newSettings)
                                                 }}
+                                                onKeyDown={handleSettingsInputKeyDown}
+                                                onFocus={handleSettingsInputFocus}
                                             />
                                             <span className="input-suffix">฿/ชุด</span>
                                         </div>
@@ -7000,6 +7060,8 @@ function MemberSettings({ member, onClose, isInline = false }) {
                                                                 newSettings[activeTab]['4_set'].prizes[prizeKey] = Number(e.target.value)
                                                                 setSettings(newSettings)
                                                             }}
+                                                            onKeyDown={handleSettingsInputKeyDown}
+                                                            onFocus={handleSettingsInputFocus}
                                                         />
                                                         <span className="input-suffix">บาท</span>
                                                     </div>
@@ -7036,6 +7098,8 @@ function MemberSettings({ member, onClose, isInline = false }) {
                                                         className="form-input small"
                                                         value={value.commission}
                                                         onChange={e => updateSetting(activeTab, key, 'commission', e.target.value)}
+                                                        onKeyDown={handleSettingsInputKeyDown}
+                                                        onFocus={handleSettingsInputFocus}
                                                     />
                                                     <span className="input-suffix">%</span>
                                                 </div>
@@ -7047,6 +7111,8 @@ function MemberSettings({ member, onClose, isInline = false }) {
                                                         className="form-input small"
                                                         value={value.payout}
                                                         onChange={e => updateSetting(activeTab, key, 'payout', e.target.value)}
+                                                        onKeyDown={handleSettingsInputKeyDown}
+                                                        onFocus={handleSettingsInputFocus}
                                                     />
                                                     <span className="input-suffix">เท่า</span>
                                                 </div>
