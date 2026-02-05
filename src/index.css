@@ -1,6 +1,9 @@
 /* Import Thai Font - must be first */
 @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap');
 
+/* Import Light Theme Overrides - must be after fonts but before other styles */
+@import './styles/theme-light.css';
+
 /* ========================================
    LAO LOTTO - Design System
    ======================================== */
@@ -548,6 +551,3 @@ select.form-input option:checked {
     font-size: 1.25rem;
   }
 }
-
-/* Import Light Theme Overrides */
-@import './styles/theme-light.css';
