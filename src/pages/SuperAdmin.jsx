@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
+import { useTheme, DASHBOARDS } from '../contexts/ThemeContext'
 import { supabase } from '../lib/supabase'
 import {
     FiHome,
@@ -39,7 +40,13 @@ import './SuperAdmin.css'
 export default function SuperAdmin() {
     const { user, profile, isSuperAdmin, loading } = useAuth()
     const { toast } = useToast()
+    const { setActiveDashboard } = useTheme()
     const [activeTab, setActiveTab] = useState('dashboard')
+    
+    // Set active dashboard for theme on mount
+    useEffect(() => {
+        setActiveDashboard(DASHBOARDS.SUPERADMIN)
+    }, [setActiveDashboard])
 
     // Dashboard Stats
     const [stats, setStats] = useState({

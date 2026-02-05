@@ -3724,3 +3724,237 @@
     color: rgba(255, 255, 255, 0.5);
     margin-right: 0.5rem;
 }
+
+/* =============================================
+   LIGHT THEME OVERRIDES FOR DEALER
+   ============================================= */
+
+/* Tabs - Light Theme */
+[data-theme="light"] .dealer-tabs,
+html.theme-light .dealer-tabs {
+    background: #e8eaed !important;
+}
+
+[data-theme="light"] .tab-btn,
+html.theme-light .tab-btn {
+    color: #4a4a5a !important;
+}
+
+[data-theme="light"] .tab-btn:hover,
+html.theme-light .tab-btn:hover {
+    color: #1a1a2e !important;
+    background: rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .tab-btn.active,
+html.theme-light .tab-btn.active {
+    background: var(--color-primary) !important;
+    color: #ffffff !important;
+}
+
+/* Round accordion - Light Theme */
+[data-theme="light"] .round-accordion-header,
+html.theme-light .round-accordion-header {
+    background: #ffffff !important;
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-theme="light"] .round-accordion-header:hover,
+html.theme-light .round-accordion-header:hover {
+    background: #f8f9fa !important;
+}
+
+[data-theme="light"] .round-accordion-content,
+html.theme-light .round-accordion-content {
+    background: #f8f9fa !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+    border-top: none !important;
+}
+
+/* Round info text - Light Theme */
+[data-theme="light"] .round-name,
+[data-theme="light"] .round-title,
+html.theme-light .round-name,
+html.theme-light .round-title {
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .round-date,
+[data-theme="light"] .round-time,
+html.theme-light .round-date,
+html.theme-light .round-time {
+    color: #4a4a5a !important;
+}
+
+/* Round summary stats - Light Theme */
+[data-theme="light"] .round-summary-stats .stat-label,
+html.theme-light .round-summary-stats .stat-label {
+    color: #6c6c7c !important;
+}
+
+[data-theme="light"] .round-summary-stats .stat-value,
+html.theme-light .round-summary-stats .stat-value {
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .round-header-center h3,
+html.theme-light .round-header-center h3 {
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .round-meta,
+html.theme-light .round-meta {
+    color: #4a4a5a !important;
+}
+
+[data-theme="light"] .chevron,
+html.theme-light .chevron {
+    color: #4a4a5a !important;
+}
+
+/* Sub tabs (งวดที่เปิดอยู่/งวดที่ปิดแล้ว) - Light Theme */
+[data-theme="light"] .sub-tab-btn,
+html.theme-light .sub-tab-btn {
+    background: transparent !important;
+    border: 1px solid rgba(0, 0, 0, 0.2) !important;
+    color: #4a4a5a !important;
+}
+
+[data-theme="light"] .sub-tab-btn:hover,
+html.theme-light .sub-tab-btn:hover {
+    border-color: var(--color-primary) !important;
+    color: var(--color-primary) !important;
+}
+
+[data-theme="light"] .sub-tab-btn.active,
+html.theme-light .sub-tab-btn.active {
+    background: var(--color-primary) !important;
+    border-color: var(--color-primary) !important;
+    color: #ffffff !important;
+}
+
+/* Action buttons in round - Light Theme */
+[data-theme="light"] .round-actions .btn-icon,
+[data-theme="light"] .action-buttons .btn-icon,
+html.theme-light .round-actions .btn-icon,
+html.theme-light .action-buttons .btn-icon {
+    background: #f0f2f5 !important;
+    border: 1px solid rgba(0, 0, 0, 0.15) !important;
+    color: #4a4a5a !important;
+}
+
+[data-theme="light"] .round-actions .btn-icon:hover,
+[data-theme="light"] .action-buttons .btn-icon:hover,
+html.theme-light .round-actions .btn-icon:hover,
+html.theme-light .action-buttons .btn-icon:hover {
+    background: #e8eaed !important;
+    color: #1a1a2e !important;
+}
+
+/* Section header - Light Theme */
+[data-theme="light"] .section-header h2,
+html.theme-light .section-header h2 {
+    color: #1a1a2e !important;
+}
+
+/* Page header - Light Theme */
+[data-theme="light"] .page-header p,
+html.theme-light .page-header p {
+    color: #6c6c7c !important;
+}
+
+/* Cards - Light Theme */
+[data-theme="light"] .card,
+html.theme-light .card {
+    background: #ffffff !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Expand icon - Light Theme */
+[data-theme="light"] .expand-icon,
+html.theme-light .expand-icon {
+    color: #4a4a5a !important;
+}
+
+/* Mobile responsive fixes for round accordion */
+@media (max-width: 768px) {
+    .round-accordion-header {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        padding: 1rem !important;
+    }
+    
+    .round-header-left {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 0.5rem !important;
+        margin-bottom: 0.75rem !important;
+    }
+    
+    .round-header-center {
+        width: 100% !important;
+        margin-bottom: 0.75rem !important;
+    }
+    
+    .round-header-center h3 {
+        font-size: 1rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+    
+    .round-meta {
+        flex-direction: column !important;
+        gap: 0.25rem !important;
+    }
+    
+    .round-meta span {
+        font-size: 0.8rem !important;
+    }
+    
+    .round-summary-stats {
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        gap: 0.5rem !important;
+        margin-top: 0.75rem !important;
+    }
+    
+    .round-summary-stats .summary-row {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 0.75rem !important;
+        width: 100% !important;
+    }
+    
+    .round-summary-stats .stat-item {
+        flex: 0 0 auto !important;
+        min-width: auto !important;
+        padding: 0 !important;
+        border: none !important;
+    }
+    
+    .round-summary-stats .stat-label {
+        font-size: 0.65rem !important;
+    }
+    
+    .round-summary-stats .stat-value {
+        font-size: 0.85rem !important;
+    }
+    
+    .round-header-right {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        width: 100% !important;
+        margin-top: 0.5rem !important;
+        padding-top: 0.75rem !important;
+        border-top: 1px solid var(--color-border) !important;
+    }
+    
+    .round-actions {
+        display: flex !important;
+        gap: 0.5rem !important;
+    }
+    
+    .round-actions .icon-btn {
+        padding: 0.5rem !important;
+    }
+}

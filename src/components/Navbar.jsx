@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useTheme, THEMES, DASHBOARDS } from '../contexts/ThemeContext'
 import {
     FiMenu,
     FiX,
@@ -13,19 +14,30 @@ import {
     FiUsers,
     FiSettings,
     FiGift,
-    FiSend
+    FiSend,
+    FiSun,
+    FiMoon
 } from 'react-icons/fi'
 import './Navbar.css'
 
 export default function Navbar() {
     const [isOpen, setIsOpen] = useState(false)
     const { user, profile, signOut, isSuperAdmin, isDealer } = useAuth()
+    const { themes, toggleTheme, activeDashboard } = useTheme()
     const navigate = useNavigate()
     const location = useLocation()
+    
+    // Get current theme based on active dashboard or global
+    const currentTheme = themes[activeDashboard] || themes[DASHBOARDS.GLOBAL] || THEMES.DARK
+    const isDarkTheme = currentTheme === THEMES.DARK
+    
+    const handleThemeToggle = () => {
+        toggleTheme(activeDashboard || DASHBOARDS.GLOBAL)
+    }
 
     const handleSignOut = async () => {
         await signOut()
-        navigate('/')
+        navigate('/login')
         setIsOpen(false)
     }
 
@@ -133,6 +145,16 @@ export default function Navbar() {
                             </div>
                         )}
                     </div>
+
+                    {/* Theme Toggle Button */}
+                    <button
+                        className="theme-toggle-btn"
+                        onClick={handleThemeToggle}
+                        aria-label="Toggle theme"
+                        title={isDarkTheme ? 'เปลี่ยนเป็นธีมสว่าง' : 'เปลี่ยนเป็นธีมมืด'}
+                    >
+                        {isDarkTheme ? <FiSun /> : <FiMoon />}
+                    </button>
 
                     {/* Mobile Menu Button */}
                     <button

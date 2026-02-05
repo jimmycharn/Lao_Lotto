@@ -165,6 +165,32 @@
     gap: 0.5rem;
 }
 
+/* Theme Toggle Button */
+.theme-toggle-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: var(--color-primary);
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    width: 40px;
+    height: 40px;
+}
+
+.theme-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: scale(1.05);
+}
+
+.theme-toggle-btn:active {
+    transform: scale(0.95);
+}
+
 /* Mobile Menu Button */
 .mobile-menu-btn {
     display: none;
@@ -271,4 +297,120 @@
     .mobile-menu-btn {
         display: block;
     }
+}
+
+/* =============================================
+   LIGHT THEME OVERRIDES FOR NAVBAR
+   ============================================= */
+
+/* Navbar - Light Theme */
+[data-theme="light"] .navbar,
+html.theme-light .navbar {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-theme="light"] .logo-lotto,
+html.theme-light .logo-lotto {
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .brand-user-name,
+html.theme-light .brand-user-name {
+    color: #4a4a5a !important;
+}
+
+[data-theme="light"] .mobile-menu-btn,
+html.theme-light .mobile-menu-btn {
+    color: #1a1a2e !important;
+}
+
+/* Mobile Menu - Light Theme */
+[data-theme="light"] .mobile-menu,
+html.theme-light .mobile-menu {
+    background: rgba(255, 255, 255, 0.98) !important;
+}
+
+[data-theme="light"] .mobile-menu-content,
+html.theme-light .mobile-menu-content {
+    background: transparent !important;
+}
+
+[data-theme="light"] .mobile-nav-link,
+html.theme-light .mobile-nav-link {
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .mobile-nav-link:hover,
+[data-theme="light"] .mobile-nav-link.active,
+html.theme-light .mobile-nav-link:hover,
+html.theme-light .mobile-nav-link.active {
+    background: rgba(184, 150, 12, 0.15) !important;
+    color: #b8960c !important;
+}
+
+[data-theme="light"] .mobile-admin-section,
+html.theme-light .mobile-admin-section {
+    border-top: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-theme="light"] .mobile-section-title,
+html.theme-light .mobile-section-title {
+    color: #6c6c7c !important;
+}
+
+[data-theme="light"] .mobile-auth,
+html.theme-light .mobile-auth {
+    border-top: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-theme="light"] .mobile-user-info,
+html.theme-light .mobile-user-info {
+    background: rgba(0, 0, 0, 0.05) !important;
+    color: #1a1a2e !important;
+}
+
+/* Button outline in mobile menu - Light Theme */
+[data-theme="light"] .mobile-auth .btn-outline,
+html.theme-light .mobile-auth .btn-outline {
+    background: transparent !important;
+    color: #b8960c !important;
+    border: 2px solid #b8960c !important;
+}
+
+[data-theme="light"] .mobile-auth .btn-outline:hover,
+html.theme-light .mobile-auth .btn-outline:hover {
+    background: #b8960c !important;
+    color: #ffffff !important;
+}
+
+/* Desktop nav links - Light Theme */
+[data-theme="light"] .nav-link,
+html.theme-light .nav-link {
+    color: #4a4a5a !important;
+}
+
+[data-theme="light"] .nav-link:hover,
+html.theme-light .nav-link:hover {
+    color: #1a1a2e !important;
+    background: rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme="light"] .nav-link.active,
+html.theme-light .nav-link.active {
+    color: #b8960c !important;
+    background: rgba(184, 150, 12, 0.1) !important;
+}
+
+/* Theme Toggle Button - Light Theme */
+[data-theme="light"] .theme-toggle-btn,
+html.theme-light .theme-toggle-btn {
+    background: rgba(0, 0, 0, 0.05) !important;
+    border: 1px solid rgba(0, 0, 0, 0.15) !important;
+    color: var(--color-primary) !important;
+}
+
+[data-theme="light"] .theme-toggle-btn:hover,
+html.theme-light .theme-toggle-btn:hover {
+    background: rgba(0, 0, 0, 0.1) !important;
 }

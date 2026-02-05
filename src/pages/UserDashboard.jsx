@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
+import { useTheme, DASHBOARDS } from '../contexts/ThemeContext'
 import { supabase } from '../lib/supabase'
 import { checkDealerCreditForBet, updatePendingDeduction } from '../utils/creditCheck'
 import {
@@ -47,6 +48,12 @@ export default function UserDashboard() {
 
     const { user, profile } = useAuth()
     const { toast } = useToast()
+    const { setActiveDashboard } = useTheme()
+    
+    // Set active dashboard for theme on mount
+    useEffect(() => {
+        setActiveDashboard(DASHBOARDS.USER)
+    }, [setActiveDashboard])
     const [rounds, setRounds] = useState([])
     const [selectedRound, setSelectedRound] = useState(null)
     const [submissions, setSubmissions] = useState([])
@@ -2114,9 +2121,11 @@ export default function UserDashboard() {
         <div className="user-dashboard">
             <div className="container">
                 {/* Header */}
-                <div className="page-header">
-                    <h1><FiUser /> แดชบอร์ดสมาชิก</h1>
-                    <p>ส่งเลขหวยให้เจ้ามือของคุณ</p>
+                <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                    <div>
+                        <h1><FiUser /> แดชบอร์ดสมาชิก</h1>
+                        <p>ส่งเลขหวยให้เจ้ามือของคุณ</p>
+                    </div>
                 </div>
 
                 {/* Create own dealer button - above dealer selector */}

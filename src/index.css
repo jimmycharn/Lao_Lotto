@@ -69,6 +69,58 @@
   --color-danger: #e94560;
 }
 
+/* ========================================
+   LIGHT THEME Variables
+   ======================================== */
+:root.theme-light,
+[data-theme="light"] {
+  /* Colors - Light Theme */
+  --color-primary: #b8960c;
+  --color-primary-light: #d4af37;
+  --color-primary-dark: #8b7209;
+
+  --color-secondary: #f5f7fa;
+  --color-secondary-light: #ffffff;
+  --color-accent: #e94560;
+
+  /* Background */
+  --bg-dark: #f0f2f5;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f8f9fa;
+  --bg-glass: rgba(255, 255, 255, 0.9);
+
+  /* Text */
+  --text-primary: #1a1a2e;
+  --text-secondary: #4a4a5a;
+  --text-muted: #8c8c9c;
+  --text-gold: #b8960c;
+
+  /* Status */
+  --color-success: #00a854;
+  --color-warning: #e6a700;
+  --color-error: #d93649;
+  --color-info: #0a9dc7;
+
+  /* Gradients */
+  --gradient-gold: linear-gradient(135deg, #b8960c 0%, #d4af37 50%, #b8960c 100%);
+  --gradient-dark: linear-gradient(135deg, #f5f7fa 0%, #e8eaed 100%);
+  --gradient-accent: linear-gradient(135deg, #d93649 0%, #ff6b6b 100%);
+
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --shadow-gold: 0 4px 20px rgba(184, 150, 12, 0.2);
+
+  /* Compatibility Aliases for Dashboard */
+  --color-surface: #ffffff;
+  --color-surface-light: #f8f9fa;
+  --color-text: #1a1a2e;
+  --color-text-muted: #6c6c7c;
+  --color-card: #ffffff;
+  --color-border: rgba(0, 0, 0, 0.1);
+}
+
 /* Reset & Base */
 *,
 *::before,
@@ -105,6 +157,16 @@ body::before {
     radial-gradient(circle at 80% 20%, rgba(233, 69, 96, 0.05) 0%, transparent 50%),
     var(--bg-dark);
   z-index: -1;
+  transition: background 0.3s ease;
+}
+
+/* Light theme background pattern */
+:root.theme-light body::before,
+[data-theme="light"] body::before {
+  background:
+    radial-gradient(circle at 20% 80%, rgba(184, 150, 12, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(233, 69, 96, 0.05) 0%, transparent 50%),
+    var(--bg-dark);
 }
 
 #root {
@@ -333,6 +395,21 @@ select.form-input option:checked {
   color: #000000;
 }
 
+/* Light theme select options */
+:root.theme-light select.form-input option,
+[data-theme="light"] select.form-input option {
+  background: #ffffff;
+  color: #1a1a2e;
+}
+
+:root.theme-light select.form-input option:hover,
+:root.theme-light select.form-input option:checked,
+[data-theme="light"] select.form-input option:hover,
+[data-theme="light"] select.form-input option:checked {
+  background: #b8960c;
+  color: #ffffff;
+}
+
 /* Badge Styles */
 .badge {
   display: inline-flex;
@@ -471,3 +548,6 @@ select.form-input option:checked {
     font-size: 1.25rem;
   }
 }
+
+/* Import Light Theme Overrides */
+@import './styles/theme-light.css';

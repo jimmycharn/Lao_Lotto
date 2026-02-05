@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
+import { useTheme, DASHBOARDS } from '../contexts/ThemeContext'
 import { supabase } from '../lib/supabase'
 import { checkDealerCreditForBet, checkUpstreamDealerCredit, getDealerCreditSummary, updatePendingDeduction } from '../utils/creditCheck'
 import QRCode from 'react-qr-code'
@@ -66,7 +67,13 @@ import RoundAccordionItem from '../components/dealer/RoundAccordionItem'
 export default function Dealer() {
     const { user, profile, isDealer, isSuperAdmin, isAccountSuspended } = useAuth()
     const { toast } = useToast()
+    const { setActiveDashboard, getTheme } = useTheme()
     const [searchParams] = useSearchParams()
+    
+    // Set active dashboard for theme on mount
+    useEffect(() => {
+        setActiveDashboard(DASHBOARDS.DEALER)
+    }, [setActiveDashboard])
     const [activeTab, setActiveTab] = useState('rounds')
     const [rounds, setRounds] = useState([])
     const [members, setMembers] = useState([])

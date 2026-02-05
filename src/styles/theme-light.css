@@ -1,0 +1,623 @@
+/* =============================================
+   LIGHT THEME OVERRIDES
+   ============================================= */
+
+/* Apply light theme when data-theme="light" is set on root */
+:root.theme-light,
+[data-theme="light"] {
+    /* Override hardcoded dark colors */
+    color-scheme: light;
+}
+
+/* =============================================
+   SUPER ADMIN - Light Theme
+   ============================================= */
+
+:root.theme-light .super-admin,
+[data-theme="light"] .super-admin {
+    background: linear-gradient(135deg, #f5f7fa 0%, #e8eaed 50%, #f0f2f5 100%);
+}
+
+:root.theme-light .sidebar,
+[data-theme="light"] .sidebar {
+    background: rgba(255, 255, 255, 0.95);
+    border-right: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+:root.theme-light .sidebar-header,
+[data-theme="light"] .sidebar-header {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+:root.theme-light .nav-item,
+[data-theme="light"] .nav-item {
+    color: rgba(0, 0, 0, 0.6);
+}
+
+:root.theme-light .nav-item:hover,
+[data-theme="light"] .nav-item:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: rgba(0, 0, 0, 0.9);
+}
+
+:root.theme-light .nav-item.active,
+[data-theme="light"] .nav-item.active {
+    background: linear-gradient(135deg, rgba(184, 150, 12, 0.15) 0%, rgba(212, 175, 55, 0.15) 100%);
+    color: #1a1a2e;
+}
+
+:root.theme-light .content-header,
+[data-theme="light"] .content-header {
+    background: rgba(255, 255, 255, 0.9);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+:root.theme-light .content-header h1,
+[data-theme="light"] .content-header h1 {
+    color: #1a1a2e;
+}
+
+/* =============================================
+   CARDS & SURFACES - Light Theme
+   ============================================= */
+
+:root.theme-light .card,
+[data-theme="light"] .card {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+:root.theme-light .card:hover,
+[data-theme="light"] .card:hover {
+    border-color: var(--color-primary);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+:root.theme-light .stat-card,
+[data-theme="light"] .stat-card {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+:root.theme-light .stats-grid .card,
+[data-theme="light"] .stats-grid .card {
+    background: #ffffff;
+}
+
+/* =============================================
+   TABLES - Light Theme
+   ============================================= */
+
+:root.theme-light table,
+[data-theme="light"] table {
+    background: #ffffff;
+}
+
+:root.theme-light th,
+[data-theme="light"] th {
+    background: #f8f9fa;
+    color: #1a1a2e;
+    border-bottom: 2px solid rgba(0, 0, 0, 0.1);
+}
+
+:root.theme-light td,
+[data-theme="light"] td {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    color: #1a1a2e;
+}
+
+:root.theme-light tr:hover,
+[data-theme="light"] tr:hover {
+    background: rgba(184, 150, 12, 0.05);
+}
+
+:root.theme-light .clickable-row:hover,
+[data-theme="light"] .clickable-row:hover {
+    background: rgba(184, 150, 12, 0.08);
+}
+
+/* =============================================
+   TABS - Light Theme
+   ============================================= */
+
+:root.theme-light .dealer-tabs,
+:root.theme-light .user-tabs,
+[data-theme="light"] .dealer-tabs,
+[data-theme="light"] .user-tabs {
+    background: #f0f2f5;
+}
+
+:root.theme-light .tab-btn,
+[data-theme="light"] .tab-btn {
+    color: #4a4a5a;
+}
+
+:root.theme-light .tab-btn:hover,
+[data-theme="light"] .tab-btn:hover {
+    color: #1a1a2e;
+    background: rgba(0, 0, 0, 0.05);
+}
+
+:root.theme-light .tab-btn.active,
+[data-theme="light"] .tab-btn.active {
+    background: var(--color-primary);
+    color: #ffffff;
+}
+
+/* =============================================
+   MODALS - Light Theme
+   ============================================= */
+
+:root.theme-light .modal,
+[data-theme="light"] .modal {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+:root.theme-light .modal-header,
+[data-theme="light"] .modal-header {
+    background: #f8f9fa;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+:root.theme-light .modal-header h2,
+:root.theme-light .modal-header h3,
+[data-theme="light"] .modal-header h2,
+[data-theme="light"] .modal-header h3 {
+    color: #1a1a2e;
+}
+
+:root.theme-light .modal-footer,
+[data-theme="light"] .modal-footer {
+    background: #f8f9fa;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+:root.theme-light .modal-overlay,
+[data-theme="light"] .modal-overlay {
+    background: rgba(0, 0, 0, 0.4);
+}
+
+/* =============================================
+   FORMS & INPUTS - Light Theme
+   ============================================= */
+
+:root.theme-light .form-input,
+:root.theme-light input[type="text"],
+:root.theme-light input[type="number"],
+:root.theme-light input[type="email"],
+:root.theme-light input[type="password"],
+:root.theme-light input[type="date"],
+:root.theme-light input[type="time"],
+:root.theme-light select,
+:root.theme-light textarea,
+[data-theme="light"] .form-input,
+[data-theme="light"] input[type="text"],
+[data-theme="light"] input[type="number"],
+[data-theme="light"] input[type="email"],
+[data-theme="light"] input[type="password"],
+[data-theme="light"] input[type="date"],
+[data-theme="light"] input[type="time"],
+[data-theme="light"] select,
+[data-theme="light"] textarea {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    color: #1a1a2e;
+}
+
+:root.theme-light .form-input:focus,
+:root.theme-light input:focus,
+:root.theme-light select:focus,
+:root.theme-light textarea:focus,
+[data-theme="light"] .form-input:focus,
+[data-theme="light"] input:focus,
+[data-theme="light"] select:focus,
+[data-theme="light"] textarea:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(184, 150, 12, 0.15);
+}
+
+:root.theme-light .form-input::placeholder,
+:root.theme-light input::placeholder,
+[data-theme="light"] .form-input::placeholder,
+[data-theme="light"] input::placeholder {
+    color: #8c8c9c;
+}
+
+:root.theme-light .form-label,
+[data-theme="light"] .form-label {
+    color: #4a4a5a;
+}
+
+/* =============================================
+   BUTTONS - Light Theme
+   ============================================= */
+
+:root.theme-light .btn-secondary,
+[data-theme="light"] .btn-secondary {
+    background: #f0f2f5;
+    color: #1a1a2e;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+:root.theme-light .btn-secondary:hover,
+[data-theme="light"] .btn-secondary:hover {
+    background: #e8eaed;
+    border-color: var(--color-primary);
+}
+
+:root.theme-light .btn-icon,
+[data-theme="light"] .btn-icon {
+    color: #4a4a5a;
+}
+
+:root.theme-light .btn-icon:hover,
+[data-theme="light"] .btn-icon:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #1a1a2e;
+}
+
+/* =============================================
+   ACCORDION ITEMS - Light Theme
+   ============================================= */
+
+:root.theme-light .round-accordion-header,
+[data-theme="light"] .round-accordion-header {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+:root.theme-light .round-accordion-header:hover,
+[data-theme="light"] .round-accordion-header:hover {
+    border-color: var(--color-primary);
+}
+
+:root.theme-light .round-accordion-content,
+[data-theme="light"] .round-accordion-content {
+    background: #f8f9fa;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-top: none;
+}
+
+:root.theme-light .member-accordion-item,
+[data-theme="light"] .member-accordion-item {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+/* =============================================
+   BADGES & STATUS - Light Theme
+   ============================================= */
+
+:root.theme-light .status-badge,
+[data-theme="light"] .status-badge {
+    background: rgba(0, 0, 0, 0.06);
+    color: #4a4a5a;
+}
+
+:root.theme-light .status-badge.open,
+[data-theme="light"] .status-badge.open {
+    background: rgba(0, 168, 84, 0.15);
+    color: #00a854;
+}
+
+:root.theme-light .status-badge.closed,
+[data-theme="light"] .status-badge.closed {
+    background: rgba(217, 54, 73, 0.15);
+    color: #d93649;
+}
+
+/* =============================================
+   DEALER SELECTOR - Light Theme
+   ============================================= */
+
+:root.theme-light .dealer-selector-bar,
+[data-theme="light"] .dealer-selector-bar {
+    background: #f0f2f5;
+}
+
+:root.theme-light .dealer-pill,
+[data-theme="light"] .dealer-pill {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    color: #4a4a5a;
+}
+
+:root.theme-light .dealer-pill:hover,
+[data-theme="light"] .dealer-pill:hover {
+    border-color: var(--color-primary);
+}
+
+:root.theme-light .dealer-pill.active,
+[data-theme="light"] .dealer-pill.active {
+    background: var(--color-primary);
+    color: #ffffff;
+    border-color: var(--color-primary);
+}
+
+/* =============================================
+   SCROLLBAR - Light Theme
+   ============================================= */
+
+:root.theme-light::-webkit-scrollbar-track,
+[data-theme="light"]::-webkit-scrollbar-track {
+    background: #f0f2f5;
+}
+
+:root.theme-light::-webkit-scrollbar-thumb,
+[data-theme="light"]::-webkit-scrollbar-thumb {
+    background: #c0c0c0;
+}
+
+:root.theme-light::-webkit-scrollbar-thumb:hover,
+[data-theme="light"]::-webkit-scrollbar-thumb:hover {
+    background: var(--color-primary);
+}
+
+/* =============================================
+   MISC ELEMENTS - Light Theme
+   ============================================= */
+
+:root.theme-light .empty-state,
+[data-theme="light"] .empty-state {
+    color: #4a4a5a;
+}
+
+:root.theme-light .loading-state,
+[data-theme="light"] .loading-state {
+    color: #4a4a5a;
+}
+
+:root.theme-light .section-header h2,
+:root.theme-light .section-header h3,
+[data-theme="light"] .section-header h2,
+[data-theme="light"] .section-header h3 {
+    color: #1a1a2e;
+}
+
+:root.theme-light .info-label,
+[data-theme="light"] .info-label {
+    color: #6c6c7c;
+}
+
+:root.theme-light .info-value,
+[data-theme="light"] .info-value {
+    color: #1a1a2e;
+}
+
+/* Bill cards */
+:root.theme-light .bill-card-new,
+[data-theme="light"] .bill-card-new {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+:root.theme-light .bill-card-new:hover,
+[data-theme="light"] .bill-card-new:hover {
+    border-color: var(--color-primary);
+}
+
+/* Settings tables */
+:root.theme-light .settings-table,
+[data-theme="light"] .settings-table {
+    background: #ffffff;
+}
+
+:root.theme-light .settings-table th,
+[data-theme="light"] .settings-table th {
+    background: #f0f2f5;
+    color: #1a1a2e;
+}
+
+:root.theme-light .settings-tabs,
+[data-theme="light"] .settings-tabs {
+    background: #f0f2f5;
+}
+
+:root.theme-light .settings-tab,
+[data-theme="light"] .settings-tab {
+    color: #4a4a5a;
+}
+
+:root.theme-light .settings-tab.active,
+[data-theme="light"] .settings-tab.active {
+    background: var(--color-primary);
+    color: #ffffff;
+}
+
+/* Credit display */
+:root.theme-light .credit-display,
+[data-theme="light"] .credit-display {
+    background: #ffffff !important;
+}
+
+/* Filter buttons */
+:root.theme-light .filter-btn,
+[data-theme="light"] .filter-btn {
+    background: #f0f2f5;
+    color: #4a4a5a;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+:root.theme-light .filter-btn:hover,
+[data-theme="light"] .filter-btn:hover {
+    background: #e8eaed;
+}
+
+:root.theme-light .filter-btn.active,
+[data-theme="light"] .filter-btn.active {
+    background: var(--color-primary);
+    color: #ffffff;
+    border-color: var(--color-primary);
+}
+
+/* Rounds tabs */
+:root.theme-light .rounds-tabs,
+[data-theme="light"] .rounds-tabs {
+    background: #f0f2f5;
+}
+
+:root.theme-light .rounds-tab-btn,
+[data-theme="light"] .rounds-tab-btn {
+    color: #4a4a5a;
+}
+
+:root.theme-light .rounds-tab-btn.active,
+[data-theme="light"] .rounds-tab-btn.active {
+    background: var(--color-primary);
+    color: #ffffff;
+}
+
+/* Topup modal */
+:root.theme-light .topup-history-item,
+[data-theme="light"] .topup-history-item {
+    background: #f8f9fa;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+/* QR Code container */
+:root.theme-light .qr-container,
+[data-theme="light"] .qr-container {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* =============================================
+   NAVBAR - Light Theme
+   ============================================= */
+
+:root.theme-light .navbar,
+[data-theme="light"] .navbar {
+    background: rgba(255, 255, 255, 0.95);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+:root.theme-light .logo-lotto,
+[data-theme="light"] .logo-lotto {
+    color: #1a1a2e;
+}
+
+:root.theme-light .brand-user-name,
+[data-theme="light"] .brand-user-name {
+    color: #4a4a5a;
+}
+
+:root.theme-light .nav-link,
+[data-theme="light"] .nav-link {
+    color: #4a4a5a;
+}
+
+:root.theme-light .nav-link:hover,
+[data-theme="light"] .nav-link:hover {
+    color: #1a1a2e;
+    background: rgba(0, 0, 0, 0.05);
+}
+
+:root.theme-light .nav-link.active,
+[data-theme="light"] .nav-link.active {
+    color: var(--color-primary);
+    background: rgba(184, 150, 12, 0.1);
+}
+
+:root.theme-light .mobile-menu-btn,
+[data-theme="light"] .mobile-menu-btn {
+    color: #1a1a2e;
+}
+
+/* Mobile Menu - Light Theme */
+:root.theme-light .mobile-menu,
+[data-theme="light"] .mobile-menu {
+    background: rgba(255, 255, 255, 0.98);
+}
+
+:root.theme-light .mobile-nav-link,
+[data-theme="light"] .mobile-nav-link {
+    color: #4a4a5a;
+}
+
+:root.theme-light .mobile-nav-link:hover,
+:root.theme-light .mobile-nav-link.active,
+[data-theme="light"] .mobile-nav-link:hover,
+[data-theme="light"] .mobile-nav-link.active {
+    background: rgba(184, 150, 12, 0.1);
+    color: var(--color-primary);
+}
+
+:root.theme-light .mobile-admin-section,
+[data-theme="light"] .mobile-admin-section {
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+:root.theme-light .mobile-section-title,
+[data-theme="light"] .mobile-section-title {
+    color: #8c8c9c;
+}
+
+:root.theme-light .mobile-auth,
+[data-theme="light"] .mobile-auth {
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+:root.theme-light .mobile-user-info,
+[data-theme="light"] .mobile-user-info {
+    background: rgba(0, 0, 0, 0.05);
+    color: #4a4a5a;
+}
+
+/* Button outline - Light Theme */
+:root.theme-light .btn-outline,
+[data-theme="light"] .btn-outline {
+    background: transparent;
+    color: var(--color-primary);
+    border: 2px solid var(--color-primary);
+}
+
+:root.theme-light .btn-outline:hover,
+[data-theme="light"] .btn-outline:hover {
+    background: var(--color-primary);
+    color: #ffffff;
+}
+
+/* Mobile auth button - Light Theme */
+:root.theme-light .mobile-auth-btn,
+[data-theme="light"] .mobile-auth-btn {
+    color: #1a1a2e;
+}
+
+:root.theme-light .mobile-auth-btn.btn-outline,
+[data-theme="light"] .mobile-auth-btn.btn-outline {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+:root.theme-light .mobile-auth-btn.btn-outline:hover,
+[data-theme="light"] .mobile-auth-btn.btn-outline:hover {
+    background: var(--color-primary);
+    color: #ffffff;
+}
+
+/* Transitions for smooth theme switching */
+.super-admin,
+.dealer-page,
+.user-dashboard,
+.sidebar,
+.card,
+.modal,
+.form-input,
+input,
+select,
+textarea,
+.tab-btn,
+.btn,
+table,
+th,
+td,
+.navbar,
+.mobile-menu,
+.mobile-nav-link {
+    transition: background-color 0.3s ease, 
+                border-color 0.3s ease, 
+                color 0.3s ease,
+                box-shadow 0.3s ease;
+}

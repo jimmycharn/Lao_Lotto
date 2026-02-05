@@ -1378,3 +1378,370 @@
 .btn-icon.btn-danger:hover {
     background: rgba(245, 87, 108, 0.25);
 }
+
+/* =============================================
+   LIGHT THEME OVERRIDES FOR SUPER ADMIN
+   ============================================= */
+
+[data-theme="light"] .super-admin,
+html.theme-light .super-admin {
+    background: linear-gradient(135deg, #f5f7fa 0%, #e8eaed 50%, #f0f2f5 100%) !important;
+}
+
+[data-theme="light"] .sidebar,
+html.theme-light .sidebar {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border-right: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .sidebar-header,
+html.theme-light .sidebar-header {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .nav-item,
+html.theme-light .nav-item {
+    color: rgba(0, 0, 0, 0.6) !important;
+}
+
+[data-theme="light"] .nav-item:hover,
+html.theme-light .nav-item:hover {
+    background: rgba(0, 0, 0, 0.05) !important;
+    color: rgba(0, 0, 0, 0.9) !important;
+}
+
+[data-theme="light"] .nav-item.active,
+html.theme-light .nav-item.active {
+    background: linear-gradient(135deg, rgba(184, 150, 12, 0.15) 0%, rgba(212, 175, 55, 0.15) 100%) !important;
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .content-header,
+html.theme-light .content-header {
+    background: rgba(255, 255, 255, 0.9) !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .content-header h1,
+html.theme-light .content-header h1 {
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .stat-card,
+html.theme-light .stat-card {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .stat-card:hover,
+html.theme-light .stat-card:hover {
+    border-color: rgba(0, 0, 0, 0.15) !important;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-theme="light"] .stat-value,
+html.theme-light .stat-value {
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .stat-label,
+html.theme-light .stat-label {
+    color: rgba(0, 0, 0, 0.6) !important;
+}
+
+[data-theme="light"] .recent-section,
+html.theme-light .recent-section {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .recent-section h3,
+html.theme-light .recent-section h3 {
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .recent-item,
+html.theme-light .recent-item {
+    background: rgba(0, 0, 0, 0.03) !important;
+}
+
+[data-theme="light"] .recent-name,
+html.theme-light .recent-name {
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .recent-meta,
+html.theme-light .recent-meta {
+    color: rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-theme="light"] .search-box,
+html.theme-light .search-box {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border: 1px solid rgba(0, 0, 0, 0.15) !important;
+}
+
+[data-theme="light"] .search-box svg,
+html.theme-light .search-box svg {
+    color: rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-theme="light"] .search-box input,
+html.theme-light .search-box input {
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .search-box input::placeholder,
+html.theme-light .search-box input::placeholder {
+    color: rgba(0, 0, 0, 0.4) !important;
+}
+
+[data-theme="light"] .filter-btn,
+html.theme-light .filter-btn {
+    border: 1px solid rgba(0, 0, 0, 0.15) !important;
+    color: rgba(0, 0, 0, 0.6) !important;
+}
+
+[data-theme="light"] .filter-btn:hover,
+html.theme-light .filter-btn:hover {
+    border-color: rgba(0, 0, 0, 0.25) !important;
+    color: rgba(0, 0, 0, 0.9) !important;
+}
+
+[data-theme="light"] .filter-btn.active,
+html.theme-light .filter-btn.active {
+    background: linear-gradient(135deg, rgba(184, 150, 12, 0.2) 0%, rgba(212, 175, 55, 0.2) 100%) !important;
+    border-color: rgba(184, 150, 12, 0.5) !important;
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .card,
+html.theme-light .card {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .card-header,
+html.theme-light .card-header {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .card-header h3,
+html.theme-light .card-header h3 {
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .data-table-container,
+[data-theme="light"] .table-container,
+html.theme-light .data-table-container,
+html.theme-light .table-container {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .data-table th,
+html.theme-light .data-table th {
+    background: rgba(0, 0, 0, 0.03) !important;
+    color: rgba(0, 0, 0, 0.6) !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-theme="light"] .data-table td,
+html.theme-light .data-table td {
+    color: #1a1a2e !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+}
+
+[data-theme="light"] .data-table tbody tr:hover,
+html.theme-light .data-table tbody tr:hover {
+    background: rgba(184, 150, 12, 0.05) !important;
+}
+
+[data-theme="light"] .dealer-name,
+html.theme-light .dealer-name {
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .dealer-email,
+html.theme-light .dealer-email {
+    color: rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-theme="light"] .text-muted,
+html.theme-light .text-muted {
+    color: rgba(0, 0, 0, 0.4) !important;
+}
+
+[data-theme="light"] .modal-content,
+html.theme-light .modal-content {
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-theme="light"] .modal-header,
+html.theme-light .modal-header {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .modal-header h3,
+html.theme-light .modal-header h3 {
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .modal-footer,
+html.theme-light .modal-footer {
+    border-top: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .form-group label,
+html.theme-light .form-group label {
+    color: rgba(0, 0, 0, 0.7) !important;
+}
+
+[data-theme="light"] .form-group input,
+[data-theme="light"] .form-group select,
+[data-theme="light"] .form-group textarea,
+html.theme-light .form-group input,
+html.theme-light .form-group select,
+html.theme-light .form-group textarea {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border: 1px solid rgba(0, 0, 0, 0.15) !important;
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .form-group input:focus,
+[data-theme="light"] .form-group select:focus,
+[data-theme="light"] .form-group textarea:focus,
+html.theme-light .form-group input:focus,
+html.theme-light .form-group select:focus,
+html.theme-light .form-group textarea:focus {
+    border-color: rgba(184, 150, 12, 0.5) !important;
+}
+
+[data-theme="light"] .settings-section,
+html.theme-light .settings-section {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .settings-section h3,
+html.theme-light .settings-section h3 {
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .setting-item label,
+html.theme-light .setting-item label {
+    color: rgba(0, 0, 0, 0.7) !important;
+}
+
+[data-theme="light"] .setting-input input,
+[data-theme="light"] .setting-input select,
+html.theme-light .setting-input input,
+html.theme-light .setting-input select {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border: 1px solid rgba(0, 0, 0, 0.15) !important;
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .setting-input .unit,
+html.theme-light .setting-input .unit {
+    color: rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-theme="light"] .package-card,
+html.theme-light .package-card {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .package-header h3,
+html.theme-light .package-header h3 {
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .billing-model,
+html.theme-light .billing-model {
+    color: rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-theme="light"] .package-features .feature,
+html.theme-light .package-features .feature {
+    color: rgba(0, 0, 0, 0.7) !important;
+}
+
+[data-theme="light"] .package-description,
+html.theme-light .package-description {
+    color: rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-theme="light"] .loading-state,
+[data-theme="light"] .empty-state,
+html.theme-light .loading-state,
+html.theme-light .empty-state {
+    color: rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-theme="light"] .btn,
+html.theme-light .btn {
+    border: 1px solid rgba(0, 0, 0, 0.15) !important;
+    background: rgba(255, 255, 255, 0.95) !important;
+    color: rgba(0, 0, 0, 0.8) !important;
+}
+
+[data-theme="light"] .btn:hover,
+html.theme-light .btn:hover {
+    background: rgba(0, 0, 0, 0.05) !important;
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .btn-primary,
+html.theme-light .btn-primary {
+    background: linear-gradient(135deg, #b8960c 0%, #d4af37 100%) !important;
+    border-color: transparent !important;
+    color: #fff !important;
+}
+
+[data-theme="light"] .btn-primary:hover,
+html.theme-light .btn-primary:hover {
+    box-shadow: 0 4px 15px rgba(184, 150, 12, 0.4) !important;
+}
+
+[data-theme="light"] .checkbox-label,
+html.theme-light .checkbox-label {
+    color: rgba(0, 0, 0, 0.8) !important;
+}
+
+[data-theme="light"] .invitation-card,
+html.theme-light .invitation-card {
+    background: linear-gradient(135deg, rgba(184, 150, 12, 0.1) 0%, rgba(212, 175, 55, 0.1) 100%) !important;
+    border: 1px solid rgba(184, 150, 12, 0.3) !important;
+}
+
+[data-theme="light"] .invitation-header h3,
+html.theme-light .invitation-header h3 {
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .invitation-header p,
+html.theme-light .invitation-header p {
+    color: rgba(0, 0, 0, 0.6) !important;
+}
+
+[data-theme="light"] .invitation-link,
+html.theme-light .invitation-link {
+    background: rgba(0, 0, 0, 0.05) !important;
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+    color: rgba(0, 0, 0, 0.8) !important;
+}
+
+[data-theme="light"] .dealer-assign-info,
+html.theme-light .dealer-assign-info {
+    background: rgba(0, 0, 0, 0.05) !important;
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .dealer-assign-info strong,
+html.theme-light .dealer-assign-info strong {
+    color: rgba(0, 0, 0, 0.7) !important;
+}
