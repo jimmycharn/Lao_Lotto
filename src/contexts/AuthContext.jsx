@@ -92,12 +92,14 @@ export function AuthProvider({ children }) {
                     const cachedProfile = getCachedProfile(session.user.id)
                     if (cachedProfile) {
                         setProfile(cachedProfile)
-                        setLoading(false) // Show UI immediately with cached data
                     }
+                    
+                    // Always set loading false immediately - don't wait for profile fetch
+                    setLoading(false)
                     
                     profileFetched = true
                     // Fetch fresh profile in background (will update if different)
-                    await fetchProfile(session.user, !!cachedProfile)
+                    fetchProfile(session.user, true) // Always treat as background fetch
                 } else {
                     setLoading(false)
                 }
