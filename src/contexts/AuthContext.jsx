@@ -118,11 +118,14 @@ export function AuthProvider({ children }) {
                 // Skip initial session - already handled above
                 if (event === 'INITIAL_SESSION') return
                 
-                if (event === 'SIGNED_IN' && !profileFetched) {
+                if (event === 'SIGNED_IN') {
                     setUser(session?.user ?? null)
-                    setLoading(true)
-                    await fetchProfile(session.user)
-                    profileFetched = true
+                    // Don't set loading = true, just fetch profile in background
+                    setLoading(false) // Always stop loading on sign in
+                    if (!profileFetched) {
+                        profileFetched = true
+                        fetchProfile(session.user, true) // Background fetch
+                    }
                 } else if (event === 'SIGNED_OUT') {
                     setUser(null)
                     setProfile(null)
@@ -136,7 +139,6 @@ export function AuthProvider({ children }) {
 
         return () => {
             isMounted = false
-            clearTimeout(loadingTimeout)
             subscription.unsubscribe()
         }
     }, [])
