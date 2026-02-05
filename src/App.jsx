@@ -31,9 +31,11 @@ function PageLoader() {
 
 // Protected Route Component
 function ProtectedRoute({ children, requireAuth = false, requireDealer = false, requireAdmin = false }) {
-  const { user, loading, isDealer, isSuperAdmin } = useAuth()
+  const { user, loading, isDealer, isSuperAdmin, profile } = useAuth()
 
-  if (loading) {
+  // Only show loading if we don't have user info yet AND still loading
+  // If we have user but no profile yet, still show the page (profile will load in background)
+  if (loading && !user) {
     return (
       <div className="loading-screen">
         <div className="spinner"></div>
@@ -44,6 +46,16 @@ function ProtectedRoute({ children, requireAuth = false, requireDealer = false, 
 
   if (requireAuth && !user) {
     return <Navigate to="/login" replace />
+  }
+
+  // For dealer/admin checks, if we have user but no profile yet, show loading briefly
+  if ((requireDealer || requireAdmin) && user && !profile && loading) {
+    return (
+      <div className="loading-screen">
+        <div className="spinner"></div>
+        <p>กำลังโหลด...</p>
+      </div>
+    )
   }
 
   if (requireDealer && !isDealer && !isSuperAdmin) {
@@ -61,7 +73,18 @@ function ProtectedRoute({ children, requireAuth = false, requireDealer = false, 
 function HomeRedirect() {
   const { user, profile, loading, isDealer, isSuperAdmin } = useAuth()
 
-  if (loading) {
+  // Only show loading if we don't have user info yet
+  if (loading && !user) {
+    return (
+      <div className="loading-screen">
+        <div className="spinner"></div>
+        <p>กำลังโหลด...</p>
+      </div>
+    )
+  }
+
+  // If we have user but waiting for profile to determine role, show loading briefly
+  if (user && !profile && loading) {
     return (
       <div className="loading-screen">
         <div className="spinner"></div>
