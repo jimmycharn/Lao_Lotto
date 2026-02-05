@@ -2342,10 +2342,10 @@
 .dealer-selector-bar {
     display: flex;
     gap: 0.5rem;
-    margin-bottom: 1.5rem;
-    padding: 0.5rem;
-    background: var(--color-surface);
-    border-radius: var(--radius-lg);
+    margin-bottom: 1rem;
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
@@ -2357,15 +2357,15 @@
 
 .dealer-pill {
     flex-shrink: 0;
-    padding: 0.75rem 1.5rem;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: var(--radius-lg);
+    padding: 0.5rem 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-md);
     cursor: pointer;
     transition: all 0.2s ease;
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    min-width: 160px;
+    min-width: auto;
 }
 
 .dealer-info-row {
@@ -4521,4 +4521,47 @@
     .winning-numbers-grid {
         grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     }
+}
+
+/* =============================================
+   LIGHT THEME - DEALER SELECTOR
+   ============================================= */
+
+[data-theme="light"] .dealer-pill,
+html.theme-light .dealer-pill {
+    border: 1px solid rgba(0, 0, 0, 0.15) !important;
+    background: #ffffff !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .dealer-pill:hover,
+html.theme-light .dealer-pill:hover {
+    border-color: rgba(0, 0, 0, 0.25) !important;
+    background: #f8f9fa !important;
+}
+
+[data-theme="light"] .dealer-pill .dealer-label,
+html.theme-light .dealer-pill .dealer-label {
+    color: rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-theme="light"] .dealer-pill .dealer-name,
+html.theme-light .dealer-pill .dealer-name {
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .dealer-pill.active,
+html.theme-light .dealer-pill.active {
+    border-color: var(--color-primary) !important;
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.15), rgba(212, 175, 55, 0.08)) !important;
+}
+
+[data-theme="light"] .dealer-pill.active .dealer-label,
+html.theme-light .dealer-pill.active .dealer-label {
+    color: var(--color-primary) !important;
+}
+
+[data-theme="light"] .dealer-pill.active .dealer-name,
+html.theme-light .dealer-pill.active .dealer-name {
+    color: var(--color-primary-dark) !important;
 }
