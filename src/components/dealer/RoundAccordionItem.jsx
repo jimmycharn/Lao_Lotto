@@ -1973,9 +1973,9 @@ export default function RoundAccordionItem({
                                                                                         </td>
                                                                                     )}
                                                                                     <td className="number-cell">
-                                                                                        {displayMode === 'summary' && sub.display_bet_type ? (
+                                                                                        {displayMode === 'summary' ? (
                                                                                             <>
-                                                                                                <div className="number-value">{sub.display_bet_type}</div>
+                                                                                                <div className="number-value">{sub.numbers}</div>
                                                                                             </>
                                                                                         ) : (
                                                                                             <>
@@ -2270,14 +2270,12 @@ export default function RoundAccordionItem({
                                                                                                     alignItems: 'center',
                                                                                                     padding: '0.5rem 0.75rem',
                                                                                                     borderBottom: itemIdx < displayItems.length - 1 ? '1px dashed var(--color-border)' : 'none',
-                                                                                                    background: 'rgba(15, 23, 42, 0.8)'
+                                                                                                    background: 'var(--color-surface)'
                                                                                                 }}>
                                                                                                     <div>
                                                                                                         <div>
-                                                                                                            {billDisplayMode === 'summary' && item.display_bet_type ? (
-                                                                                                                <>
-                                                                                                                    <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>{item.display_bet_type}</span>
-                                                                                                                </>
+                                                                                                            {billDisplayMode === 'summary' && item.numbers ? (
+                                                                                                                <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>{item.numbers}</span>
                                                                                                             ) : (
                                                                                                                 <>
                                                                                                                     <span style={{ fontWeight: '600', marginRight: '0.5rem', fontSize: '0.95rem' }}>{item.numbers}</span>

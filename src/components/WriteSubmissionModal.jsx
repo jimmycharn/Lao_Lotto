@@ -224,6 +224,11 @@ const parseLine = (line) => {
         }
     }
 
+    // Validate betType - ต้องไม่เป็น null
+    if (!betType) {
+        return { error: `ไม่สามารถระบุประเภทเลข ${numLen} หลักได้` }
+    }
+
     return { numbers, amount, betType, specialType, reverseAmount }
 }
 
@@ -251,6 +256,13 @@ const generateEntries = (parsed, entryId, rawLine, options = {}) => {
     if (!parsed || parsed.error) return []
 
     const { numbers, amount, betType, specialType, reverseAmount } = parsed
+    
+    // Validate betType - ต้องไม่เป็น null หรือ undefined
+    if (!betType) {
+        console.error('generateEntries: betType is null or undefined', { parsed, rawLine })
+        return []
+    }
+    
     const { setPrice = 120, lotteryType = 'thai' } = options
     const entries = []
     
@@ -1422,16 +1434,20 @@ export default function WriteSubmissionModal({
                                             const eqIndex = lastLine.indexOf('=')
                                             if (eqIndex !== -1) {
                                                 const afterEq = lastLine.substring(eqIndex + 1).trim()
-                                                // แยกเอาเฉพาะจำนวนเงิน (และ * ถ้ามี) ไม่รวม type
+                                                const typeStr = afterEq.toLowerCase()
+                                                
+                                                // ตรวจสอบว่าเป็น คูณชุด หรือไม่ - ถ้าใช่ให้เอาเฉพาะ amount1
+                                                const isKoonChud = typeStr.includes('คูณชุด')
+                                                
                                                 let amountToLock = ''
-                                                if (afterEq.includes('*')) {
-                                                    // มี * - เก็บ amount1*amount2
+                                                if (afterEq.includes('*') && !isKoonChud) {
+                                                    // มี * และไม่ใช่คูณชุด - เก็บ amount1*amount2
                                                     const match = afterEq.match(/^(\d+\*\d+)/)
                                                     if (match) {
                                                         amountToLock = match[1]
                                                     }
                                                 } else {
-                                                    // ไม่มี * - เก็บเฉพาะจำนวนเงินแรก
+                                                    // ไม่มี * หรือเป็นคูณชุด - เก็บเฉพาะจำนวนเงินแรก
                                                     const match = afterEq.match(/^(\d+)/)
                                                     if (match) {
                                                         amountToLock = match[1]

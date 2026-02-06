@@ -81,20 +81,24 @@ export default function DealerWriteSubmissionWrapper({
         const timestamp = new Date().toISOString()
 
         // Transform entries to submissions format
+        // Note: WriteSubmissionModal ส่ง betType (camelCase) แต่ database ใช้ bet_type (snake_case)
         const inserts = entries.map(entry => {
-            const commissionRate = getCommissionRate(entry.bet_type)
-            const isSetBet = entry.bet_type === '4_set'
+            const betType = entry.betType || entry.bet_type  // รองรับทั้ง camelCase และ snake_case
+            const commissionRate = getCommissionRate(betType)
+            const isSetBet = betType === '4_set'
             const commissionAmount = isSetBet ? commissionRate : (entry.amount * commissionRate) / 100
 
             return {
-                entry_id: entry.entry_id || generateUUID(),
+                entry_id: entry.entryId || entry.entry_id || generateUUID(),
                 round_id: round.id,
                 user_id: targetUser.id,
                 bill_id: billId,
                 bill_note: billNote || null,
-                bet_type: entry.bet_type,
+                bet_type: betType,
                 numbers: entry.numbers,
                 amount: entry.amount,
+                display_numbers: entry.displayText || entry.display_numbers || entry.numbers,
+                display_amount: entry.displayAmount?.toString() || entry.display_amount || entry.amount.toString(),
                 commission_rate: commissionRate,
                 commission_amount: commissionAmount,
                 is_deleted: false,
