@@ -744,6 +744,42 @@ export default function WriteSubmissionModal({
     // Handle enter - add line
     const handleEnter = () => {
         let trimmed = currentInput.trim()
+        
+        // Special case: กด Enter เมื่อ input ว่าง และมี draft อยู่แล้ว
+        // ให้ดึงรายการล่าสุดมาเป็นรายการใหม่ (เลข=จำนวนเงิน) เพื่อรอเลือก type
+        if (!trimmed && lines.length > 0) {
+            const lastLine = lines[lines.length - 1]
+            const eqIndex = lastLine.indexOf('=')
+            if (eqIndex !== -1) {
+                const numbers = lastLine.substring(0, eqIndex)
+                const afterEq = lastLine.substring(eqIndex + 1).trim()
+                
+                // แยกเอาเฉพาะจำนวนเงิน (และ * ถ้ามี) ไม่รวม type
+                let amountPart = ''
+                if (afterEq.includes('*')) {
+                    // มี * - เก็บ amount1*amount2
+                    const match = afterEq.match(/^(\d+\*\d+)/)
+                    if (match) {
+                        amountPart = match[1]
+                    }
+                } else {
+                    // ไม่มี * - เก็บเฉพาะจำนวนเงินแรก
+                    const match = afterEq.match(/^(\d+)/)
+                    if (match) {
+                        amountPart = match[1]
+                    }
+                }
+                
+                if (amountPart) {
+                    playSound('click')
+                    setCurrentInput(`${numbers}=${amountPart}`)
+                    setError('')
+                    return
+                }
+            }
+            return
+        }
+        
         if (!trimmed) return
 
         const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
