@@ -29,6 +29,50 @@
     height: auto;
 }
 
+/* Desktop/Tablet: modal height 80% of viewport and larger buttons */
+@media (min-width: 768px) {
+    .write-modal {
+        height: 80vh;
+        max-height: 80vh;
+        margin: auto;
+    }
+    
+    .write-modal-overlay {
+        align-items: center;
+    }
+    
+    /* Increase button height by 30% (52px -> 68px) */
+    .number-pad-4col button {
+        height: 68px;
+        font-size: 1.5rem;
+    }
+    
+    .number-pad-4col button.toggle-btn {
+        font-size: 1.2rem;
+    }
+    
+    .number-pad-4col button.lock-btn {
+        font-size: 1rem;
+    }
+    
+    .number-pad-4col button.enter-inline {
+        font-size: 1.5rem;
+    }
+    
+    /* Increase lines display height for desktop */
+    .write-modal-lines {
+        height: 180px;
+        min-height: 180px;
+        max-height: 180px;
+    }
+    
+    /* Type buttons row - larger */
+    .type-buttons-row button {
+        padding: 0.6rem 1rem;
+        font-size: 0.95rem;
+    }
+}
+
 /* Header */
 .write-modal-header {
     display: flex;
