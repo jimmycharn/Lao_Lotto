@@ -68,21 +68,32 @@ const getPermutationCount = (numStr) => {
 }
 
 // Parse a single line of input
-// Supports both formats: "123 50 ล่าง" (old) and "123=50 ล่าง" (new)
+// Supports formats: "123=50 บน", "123=50*30 บนกลับ", "123 50 ล่าง" (old)
 const parseLine = (line) => {
     const trimmed = line.trim()
     if (!trimmed) return null
 
-    let numbers, amount, typeStr
+    let numbers, amount, amount2 = null, typeStr
     
     // Check if using new format with =
     if (trimmed.includes('=')) {
         const eqIndex = trimmed.indexOf('=')
         numbers = trimmed.substring(0, eqIndex).trim()
         const afterEq = trimmed.substring(eqIndex + 1).trim()
-        const parts = afterEq.split(/\s+/)
-        amount = parseInt(parts[0])
-        typeStr = parts.slice(1).join(' ').toLowerCase()
+        
+        // Check for * in amount (two amounts)
+        if (afterEq.includes('*')) {
+            const starIndex = afterEq.indexOf('*')
+            amount = parseInt(afterEq.substring(0, starIndex).trim())
+            const afterStar = afterEq.substring(starIndex + 1).trim()
+            const parts = afterStar.split(/\s+/)
+            amount2 = parseInt(parts[0])
+            typeStr = parts.slice(1).join(' ').toLowerCase()
+        } else {
+            const parts = afterEq.split(/\s+/)
+            amount = parseInt(parts[0])
+            typeStr = parts.slice(1).join(' ').toLowerCase()
+        }
     } else {
         // Old format with spaces
         const parts = trimmed.split(/\s+/)
@@ -104,19 +115,24 @@ const parseLine = (line) => {
     if (isNaN(amount) || amount <= 0) {
         return { error: 'จำนวนเงินไม่ถูกต้อง' }
     }
+    
+    // Validate amount2 if present
+    if (amount2 !== null && (isNaN(amount2) || amount2 <= 0)) {
+        return { error: 'จำนวนเงินชุดที่ 2 ไม่ถูกต้อง' }
+    }
 
     // Parse type and options
     let betType = null
-    let reverseAmount = null
+    let reverseAmount = amount2  // Use amount2 as reverseAmount if present
     let specialType = null
 
     const numLen = numbers.length
 
     if (numLen === 1) {
-        // 1 digit: วิ่งบน/ล่าง, หน้าบน/ล่าง, กลางบน, หลังบน/ล่าง
-        if (typeStr.includes('วิ่งล่าง')) {
+        // 1 digit: ลอยบน/ล่าง, หน้าบน/ล่าง, กลางบน, หลังบน/ล่าง
+        if (typeStr.includes('ลอยล่าง') || typeStr.includes('วิ่งล่าง')) {
             betType = 'run_bottom'
-        } else if (typeStr.includes('วิ่งบน')) {
+        } else if (typeStr.includes('ลอยบน') || typeStr.includes('วิ่งบน')) {
             betType = 'run_top'
         } else if (typeStr.includes('หน้าบน')) {
             betType = 'front_top'
@@ -134,84 +150,74 @@ const parseLine = (line) => {
             betType = 'run_top'
         }
     } else if (numLen === 2) {
-        // 2 digits: 2ตัวบน/ล่าง, 2ตัวมี, 2ตัวหน้า, 2ตัวถ่าง, กลับ
-        if (typeStr.includes('2ตัวล่างกลับ') || typeStr.includes('ล่างกลับ')) {
+        // 2 digits: บน/ล่าง, ลอย, หน้า, ถ่าง, กลับ
+        if (typeStr.includes('ล่างกลับ')) {
             betType = '2_bottom'
             specialType = 'reverse'
-            const match = typeStr.match(/(?:2ตัว)?ล่างกลับ\s*(\d+)?/)
-            if (match && match[1]) reverseAmount = parseInt(match[1])
-        } else if (typeStr.includes('2ตัวบนกลับ') || typeStr.includes('บนกลับ') || (typeStr.includes('กลับ') && !typeStr.includes('ล่าง'))) {
+        } else if (typeStr.includes('บนกลับ') || (typeStr.includes('กลับ') && !typeStr.includes('ล่าง') && !typeStr.includes('หน้า') && !typeStr.includes('ถ่าง'))) {
             betType = '2_top'
             specialType = 'reverse'
-            const match = typeStr.match(/(?:2ตัว)?(?:บน)?กลับ\s*(\d+)?/)
-            if (match && match[1]) reverseAmount = parseInt(match[1])
-        } else if (typeStr.includes('2ตัวมี')) {
-            betType = '2_teng'
-        } else if (typeStr.includes('2ตัวหน้า')) {
+        } else if (typeStr.includes('หน้ากลับ')) {
             betType = '2_front'
-            // Check for reverse amount
-            const match = typeStr.match(/2ตัวหน้า\s*(\d+)?/)
-            if (match && match[1]) {
-                reverseAmount = parseInt(match[1])
-                specialType = 'reverse'
-            }
-        } else if (typeStr.includes('2ตัวถ่าง')) {
+            specialType = 'reverse'
+        } else if (typeStr.includes('ถ่างกลับ')) {
             betType = '2_tang'
-            // Check for reverse amount
-            const match = typeStr.match(/2ตัวถ่าง\s*(\d+)?/)
-            if (match && match[1]) {
-                reverseAmount = parseInt(match[1])
-                specialType = 'reverse'
-            }
-        } else if (typeStr.includes('2ตัวล่าง') || typeStr.includes('ล่าง')) {
+            specialType = 'reverse'
+        } else if (typeStr.includes('ลอย') || typeStr.includes('2ตัวมี')) {
+            betType = '2_teng'
+        } else if (typeStr.includes('หน้าบน') || typeStr.includes('หน้า') || typeStr.includes('2ตัวหน้า')) {
+            betType = '2_front'
+        } else if (typeStr.includes('ถ่างบน') || typeStr.includes('ถ่าง') || typeStr.includes('2ตัวถ่าง')) {
+            betType = '2_tang'
+        } else if (typeStr.includes('ล่าง') || typeStr.includes('2ตัวล่าง')) {
             betType = '2_bottom'
-        } else if (typeStr.includes('2ตัวบน')) {
+        } else if (typeStr.includes('บน') || typeStr.includes('2ตัวบน')) {
             betType = '2_top'
         } else {
             betType = '2_top'
         }
     } else if (numLen === 3) {
-        // 3 digits: 3ตัวบน/ตรง, 3ตัวโต๊ด, 3ตัวล่าง, เต็งโต๊ด, กลับ, คูณชุด
+        // 3 digits: บน/ตรง, โต๊ด, ล่าง, เต็งโต๊ด, กลับ, คูณชุด
         const permCount = getPermutationCount(numbers)
         if (typeStr.includes('คูณชุด')) {
             betType = '3_top'
-            specialType = permCount === 3 ? 'set3' : 'set6'
+            specialType = permCount === 3 ? 'set3' : (permCount === 6 ? 'set6' : 'set' + permCount)
         } else if (typeStr.includes('เต็งโต๊ด')) {
             betType = '3_top'
             specialType = 'tengTod'
-            const match = typeStr.match(/เต็งโต๊ด\s*(\d+)?/)
-            if (match && match[1]) reverseAmount = parseInt(match[1])
-        } else if (typeStr.includes('3ตัวโต๊ด') || typeStr.includes('โต๊ด')) {
+        } else if (typeStr.includes('โต๊ด') || typeStr.includes('3ตัวโต๊ด')) {
             betType = '3_tod'
         } else if (typeStr.includes('กลับ')) {
             betType = '3_top'
             specialType = 'reverse'
-            const match = typeStr.match(/กลับ\s*\d*\s*(\d+)?$/)
-            if (match && match[1]) reverseAmount = parseInt(match[1])
-        } else if (typeStr.includes('3ตัวล่าง') || typeStr.includes('ล่าง')) {
+        } else if (typeStr.includes('ล่าง') || typeStr.includes('3ตัวล่าง')) {
             betType = '3_bottom'
+        } else if (typeStr.includes('ตรง') || typeStr.includes('บน') || typeStr.includes('3ตัวบน')) {
+            betType = '3_top'
         } else {
             betType = '3_top'
         }
     } else if (numLen === 4) {
-        // 4 digits: 4ตัวชุด, ลอยแพ, 3xPerm
+        // 4 digits: 4ตัวชุด, ลอยแพ, คูณชุด
+        const permCount = getPermutationCount(numbers)
         if (typeStr.includes('4ตัวชุด') || typeStr.includes('ชุด')) {
             betType = '4_set'
-        } else if (typeStr.includes('ลอยแพ') || typeStr.includes('ลอย')) {
-            betType = '4_run'
-        } else if (typeStr.includes('3xPerm') || typeStr.includes('3x')) {
+        } else if (typeStr.includes('คูณชุด')) {
             betType = '3_top'
             specialType = '3xPerm'
+        } else if (typeStr.includes('ลอยแพ') || typeStr.includes('ลอย')) {
+            betType = '4_run'
         } else {
             betType = '4_run'
         }
     } else if (numLen === 5) {
-        // 5 digits: ลอยแพ, 3xPerm
-        if (typeStr.includes('ลอยแพ') || typeStr.includes('ลอย')) {
-            betType = '5_run'
-        } else if (typeStr.includes('3xPerm') || typeStr.includes('3x')) {
+        // 5 digits: ลอยแพ, คูณชุด
+        const permCount = getPermutationCount(numbers)
+        if (typeStr.includes('คูณชุด')) {
             betType = '3_top'
             specialType = '3xPerm'
+        } else if (typeStr.includes('ลอยแพ') || typeStr.includes('ลอย')) {
+            betType = '5_run'
         } else {
             betType = '5_run'
         }
@@ -312,6 +318,24 @@ const generateEntries = (parsed, entryId, rawLine, options = {}) => {
         // โต๊ด - เลขเรียงลำดับ
         const sortedNumbers = numbers.split('').sort().join('')
         entries.push({ numbers: sortedNumbers, amount: todAmt, betType: '3_tod', entryId, displayText, displayAmount: totalAmount })
+    } else if (betType === '4_run' || betType === '5_run') {
+        // ลอยแพ 4-5 ตัว: สร้าง entries สำหรับแต่ละหลัก
+        const digits = numbers.split('')
+        entryCount = digits.length
+        totalAmount = amount * digits.length
+        
+        digits.forEach((digit, idx) => {
+            // สร้าง entry สำหรับแต่ละหลัก (วิ่งบน)
+            entries.push({ 
+                numbers: digit, 
+                amount, 
+                betType: 'run_top', 
+                entryId, 
+                displayText, 
+                displayAmount: totalAmount,
+                position: idx + 1  // ตำแหน่งหลัก
+            })
+        })
     } else {
         entries.push({ numbers, amount, betType, entryId, displayText, displayAmount: amount })
     }
@@ -369,7 +393,87 @@ export default function WriteSubmissionModal({
     const [showCloseConfirm, setShowCloseConfirm] = useState(false)
     const linesContainerRef = useRef(null)
     const noteInputRef = useRef(null)
+    const modalRef = useRef(null)
     const isEditMode = !!editingData
+
+    // Handle keyboard input for desktop
+    useEffect(() => {
+        if (!isOpen) return
+
+        const handleKeyDown = (e) => {
+            // Ignore if typing in note input
+            if (document.activeElement === noteInputRef.current) return
+            
+            // Number keys 0-9
+            if (/^[0-9]$/.test(e.key)) {
+                e.preventDefault()
+                handleNumberClick(e.key)
+            }
+            // Backspace
+            else if (e.key === 'Backspace') {
+                e.preventDefault()
+                handleBackspace()
+            }
+            // Enter
+            else if (e.key === 'Enter') {
+                e.preventDefault()
+                handleEnter()
+            }
+            // = key - มีได้ 1 อันเท่านั้น และต้องอยู่หลังเลขชุดแรก
+            else if (e.key === '=') {
+                e.preventDefault()
+                const input = currentInput.trim()
+                // ไม่อนุญาตถ้ามี = อยู่แล้ว
+                if (input.includes('=')) {
+                    playSound('error')
+                    return
+                }
+                // ต้องมีตัวเลขก่อน =
+                if (!/^\d+$/.test(input)) {
+                    playSound('error')
+                    return
+                }
+                playSound('click')
+                if (isLocked && lockedAmount) {
+                    setCurrentInput(prev => prev + '=' + lockedAmount)
+                } else {
+                    setCurrentInput(prev => prev + '=')
+                }
+            }
+            // * key - มีได้ 1 อันเท่านั้น และต้องอยู่หลังเลขชุดที่ 2 (จำนวนเงินแรก)
+            else if (e.key === '*') {
+                e.preventDefault()
+                const input = currentInput.trim()
+                // ไม่อนุญาตถ้ามี * อยู่แล้ว
+                if (input.includes('*')) {
+                    playSound('error')
+                    return
+                }
+                const eqIndex = input.indexOf('=')
+                // ต้องมี = ก่อน
+                if (eqIndex === -1) {
+                    playSound('error')
+                    return
+                }
+                const afterEq = input.substring(eqIndex + 1).trim()
+                // ต้องมีตัวเลข (จำนวนเงินแรก) หลัง =
+                if (!/^\d+$/.test(afterEq) || afterEq.length === 0) {
+                    playSound('error')
+                    return
+                }
+                playSound('click')
+                setCurrentInput(prev => prev + '*')
+            }
+            // Escape - clear current input
+            else if (e.key === 'Escape') {
+                e.preventDefault()
+                handleClear()
+            }
+        }
+
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [isOpen, currentInput, isLocked, lockedAmount])
 
     // Reset state when modal opens or load editing data
     useEffect(() => {
@@ -468,23 +572,50 @@ export default function WriteSubmissionModal({
         setError('')
     }
 
-    // Handle type button click - format: 123=50 ล่าง
+    // Handle type button click - format: 123=50 ล่าง or 123=50*30 บนกลับ
     const handleTypeClick = (type, autoSubmit = false) => {
         const input = currentInput.trim()
         const eqIndex = input.indexOf('=')
         
         if (eqIndex !== -1) {
-            const beforeEq = input.substring(0, eqIndex + 1)
+            const numbers = input.substring(0, eqIndex)
             const afterEq = input.substring(eqIndex + 1).trim()
-            const parts = afterEq.split(/\s+/)
-            const amount = parts[0] || ''
+            const numLen = numbers.length
+            const hasSecondAmount = afterEq.includes('*')
+            const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
             
-            // Format: 123=50 ล่าง
-            const newLine = beforeEq + amount + ' ' + type
+            let amount1 = ''
+            let amount2 = ''
+            let displayLine = ''
+            
+            if (hasSecondAmount) {
+                const amountParts = afterEq.split('*')
+                amount1 = amountParts[0].trim()
+                amount2 = amountParts[1] ? amountParts[1].split(/\s+/)[0].trim() : ''
+                displayLine = `${numbers}=${amount1}*${amount2} ${type}`
+            } else {
+                const parts = afterEq.split(/\s+/)
+                amount1 = parts[0] || ''
+                
+                // Special handling for different types
+                if (type === 'บนกลับ' || type === 'ล่างกลับ' || type === 'หน้ากลับ' || type === 'ถ่างกลับ') {
+                    // กลับ without * means same amount for both
+                    displayLine = `${numbers}=${amount1}*${amount1} ${type}`
+                } else if (type === 'เต็งโต๊ด' && numLen === 3) {
+                    // เต็งโต๊ด without * means same amount for both
+                    displayLine = `${numbers}=${amount1}*${amount1} ${type}`
+                } else if (type === 'คูณชุด') {
+                    // คูณชุด - calculate permutation count
+                    const permCount = getPermutationCount(numbers)
+                    displayLine = `${numbers}=${amount1}*${permCount} ${type}`
+                } else {
+                    displayLine = `${numbers}=${amount1} ${type}`
+                }
+            }
             
             if (autoSubmit) {
                 // Auto submit - add line directly without pressing enter
-                const parsed = parseLine(newLine.trim())
+                const parsed = parseLine(displayLine.trim())
                 if (parsed && parsed.error) {
                     playSound('error')
                     setError(parsed.error)
@@ -496,18 +627,18 @@ export default function WriteSubmissionModal({
                 
                 if (editingIndex !== null) {
                     const newLines = [...lines]
-                    newLines[editingIndex] = newLine.trim()
+                    newLines[editingIndex] = displayLine.trim()
                     setLines(newLines)
                     setEditingIndex(null)
                 } else {
-                    setLines(prev => [...prev, newLine.trim()])
+                    setLines(prev => [...prev, displayLine.trim()])
                 }
                 setCurrentInput('')
                 setError('')
             } else {
                 // Not auto submit - just click sound
                 playSound('click')
-                setCurrentInput(newLine + ' ')
+                setCurrentInput(displayLine + ' ')
             }
         } else {
             playSound('click')
@@ -516,75 +647,161 @@ export default function WriteSubmissionModal({
         setError('')
     }
 
+    // Get default bet type based on digit count, toggle state, and amount format
+    const getDefaultBetType = (numbers, hasSecondAmount) => {
+        const numLen = numbers.length
+        const isTop = topBottomToggle === 'top'
+        const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
+        
+        if (numLen === 1) {
+            // 1 digit - ไม่รองรับ *
+            if (hasSecondAmount) return { error: 'เลข 1 ตัวไม่รองรับจำนวนเงิน 2 ชุด' }
+            return { type: isTop ? 'ลอยบน' : 'ลอยล่าง' }
+        } else if (numLen === 2) {
+            if (hasSecondAmount) {
+                // มี * - default เป็นกลับ
+                return { type: isTop ? 'บนกลับ' : 'ล่างกลับ' }
+            } else {
+                return { type: isTop ? 'บน' : 'ล่าง' }
+            }
+        } else if (numLen === 3) {
+            if (hasSecondAmount) {
+                // มี * - default เป็นเต็งโต๊ด
+                if (isTop) {
+                    return { type: 'เต็งโต๊ด' }
+                } else {
+                    // หวยไทย 3ตัวล่าง ไม่รองรับ *, ลาว/ฮานอย ไม่มี 3ตัวล่าง
+                    if (isLaoOrHanoi) {
+                        return { type: 'เต็งโต๊ด' } // fallback to บน
+                    } else {
+                        return { error: 'เลข 3 ตัวล่างไม่รองรับจำนวนเงิน 2 ชุด' }
+                    }
+                }
+            } else {
+                if (isTop) {
+                    return { type: isLaoOrHanoi ? 'ตรง' : 'บน' }
+                } else {
+                    if (isLaoOrHanoi) {
+                        return { type: 'ตรง' } // fallback to ตรง
+                    } else {
+                        return { type: 'ล่าง' }
+                    }
+                }
+            }
+        } else if (numLen === 4) {
+            // 4 digit - ไม่รองรับ *
+            if (hasSecondAmount) return { error: 'เลข 4 ตัวไม่รองรับจำนวนเงิน 2 ชุด' }
+            return { type: 'ลอยแพ' }
+        } else if (numLen === 5) {
+            // 5 digit - ไม่รองรับ *
+            if (hasSecondAmount) return { error: 'เลข 5 ตัวไม่รองรับจำนวนเงิน 2 ชุด' }
+            return { type: 'ลอยแพ' }
+        }
+        
+        return { error: 'จำนวนหลักไม่ถูกต้อง' }
+    }
+
     // Handle enter - add line
     const handleEnter = () => {
         let trimmed = currentInput.trim()
         if (!trimmed) return
 
+        const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
+
+        // Case 1: ถ้าไม่ล็อค และป้อนแค่ตัวเลข (ไม่มี =) ให้เติม = ต่อท้าย
+        if (!isLocked && !trimmed.includes('=')) {
+            if (/^\d+$/.test(trimmed)) {
+                playSound('click')
+                setCurrentInput(trimmed + '=')
+                return  // ไม่บันทึก รอให้ป้อนจำนวนเงินต่อ
+            }
+        }
+
+        // Case 2: ถ้ามี "เลข=จำนวนเงิน" (ไม่มี *) กด Enter ให้เติม * ต่อท้าย
+        if (trimmed.includes('=') && !trimmed.includes('*')) {
+            const eqIndex = trimmed.indexOf('=')
+            const numbers = trimmed.substring(0, eqIndex)
+            const afterEq = trimmed.substring(eqIndex + 1).trim()
+            
+            // ตรวจสอบว่า afterEq เป็นตัวเลขล้วนๆ (ยังไม่มี type)
+            if (/^\d+$/.test(numbers) && /^\d+$/.test(afterEq) && afterEq.length > 0) {
+                playSound('click')
+                setCurrentInput(trimmed + '*')
+                return  // ไม่บันทึก รอให้ป้อนจำนวนเงินชุดที่ 2 หรือเลือก type
+            }
+        }
+
         // ถ้าล็อคราคาอยู่ และป้อนแค่ตัวเลข (ไม่มี =) ให้เติมราคาที่ล็อคไว้อัตโนมัติ
         if (isLocked && lockedAmount && !trimmed.includes('=')) {
             // ตรวจสอบว่าเป็นตัวเลขล้วนๆ
             if (/^\d+$/.test(trimmed)) {
-                // ตรวจสอบว่า lockedAmount เป็นตัวเลขล้วนๆ หรือมีข้อความประเภทตามหลัง
-                const isAmountOnly = /^\d+$/.test(lockedAmount.trim())
+                const numLen = trimmed.length
                 
-                // หาจำนวนหลักของรายการล่าสุด
-                let lastDigitCount = 0
-                if (lines.length > 0) {
-                    const lastLine = lines[lines.length - 1]
-                    const lastNumbers = lastLine.split('=')[0].trim()
-                    lastDigitCount = lastNumbers.length
-                }
+                // ตรวจสอบว่า lockedAmount มี * หรือไม่
+                const lockedHasSecondAmount = lockedAmount.includes('*')
                 
-                // ถ้าจำนวนหลักเปลี่ยนไป และ lockedAmount มีข้อความประเภท (เช่น คูณชุด) ให้ปลดล็อคและแจ้งเตือน
-                // แต่ถ้า lockedAmount เป็นตัวเลขล้วนๆ ให้บันทึกได้เลย
-                if (lastDigitCount > 0 && trimmed.length !== lastDigitCount && !isAmountOnly) {
-                    playSound('error')
-                    setIsLocked(false)
-                    setLockedAmount('')
-                    setError(`จำนวนหลักไม่ตรงกัน (${lastDigitCount} หลัก → ${trimmed.length} หลัก) กรุณาป้อนให้ครบ`)
-                    return
-                }
-                
-                // ปรับ multiplier ตามจำนวน permutation ของเลขปัจจุบัน
-                let adjustedAmount = lockedAmount
-                
-                // ถ้าเลขเป็น 3 หลัก และ lockedAmount มีคำว่า คูณชุด หรือ กลับ
-                if (trimmed.length === 3 && (lockedAmount.includes('คูณชุด') || lockedAmount.includes('กลับ'))) {
-                    const currentPermCount = getPermutationCount(trimmed)
-                    // แยกจำนวนเงินหลักออกจาก multiplier
-                    const amountMatch = lockedAmount.match(/^(\d+)/)
-                    const baseAmount = amountMatch ? amountMatch[1] : lockedAmount
-                    
-                    if (lockedAmount.includes('คูณชุด')) {
-                        // ปรับ คูณชุด
-                        if (currentPermCount === 6) {
-                            adjustedAmount = baseAmount + ' คูณชุด6'
-                        } else if (currentPermCount === 3) {
-                            adjustedAmount = baseAmount + ' คูณชุด3'
-                        } else if (currentPermCount === 1) {
-                            // เลขซ้ำทั้งหมด เช่น 111 - ไม่ต้องใส่ คูณชุด
-                            adjustedAmount = baseAmount
-                        } else {
-                            adjustedAmount = baseAmount + ' คูณชุด' + currentPermCount
-                        }
-                    } else if (lockedAmount.includes('กลับ')) {
-                        // ปรับ กลับ
-                        if (currentPermCount === 6) {
-                            adjustedAmount = baseAmount + ' กลับ5'
-                        } else if (currentPermCount === 3) {
-                            adjustedAmount = baseAmount + ' กลับ2'
-                        } else if (currentPermCount === 1) {
-                            // เลขซ้ำทั้งหมด เช่น 111 - ไม่ต้องใส่ กลับ
-                            adjustedAmount = baseAmount
-                        } else {
-                            adjustedAmount = baseAmount + ' กลับ' + (currentPermCount - 1)
-                        }
+                // ตรวจสอบ error cases
+                if (lockedHasSecondAmount) {
+                    if (numLen === 1) {
+                        playSound('error')
+                        setError('เลข 1 ตัวไม่รองรับจำนวนเงิน 2 ชุด')
+                        return
+                    }
+                    if (numLen === 4) {
+                        playSound('error')
+                        setError('เลข 4 ตัวไม่รองรับจำนวนเงิน 2 ชุด')
+                        return
+                    }
+                    if (numLen === 5) {
+                        playSound('error')
+                        setError('เลข 5 ตัวไม่รองรับจำนวนเงิน 2 ชุด')
+                        return
                     }
                 }
                 
-                trimmed = trimmed + '=' + adjustedAmount
+                // Get default type
+                const defaultResult = getDefaultBetType(trimmed, lockedHasSecondAmount)
+                if (defaultResult.error) {
+                    playSound('error')
+                    setError(defaultResult.error)
+                    return
+                }
+                
+                // Build the line with locked amount and default type
+                trimmed = `${trimmed}=${lockedAmount} ${defaultResult.type}`
                 setCurrentInput(trimmed)
+            }
+        }
+
+        // ถ้ามี = แต่ไม่มีประเภท ให้เติม default type
+        if (trimmed.includes('=')) {
+            const eqIndex = trimmed.indexOf('=')
+            const numbers = trimmed.substring(0, eqIndex)
+            const afterEq = trimmed.substring(eqIndex + 1).trim()
+            
+            // Check if there's already a type specified (non-numeric text after amount)
+            const hasSecondAmount = afterEq.includes('*')
+            let hasType = false
+            
+            if (hasSecondAmount) {
+                const parts = afterEq.split('*')
+                const afterSecondAmount = parts[1] ? parts[1].trim() : ''
+                const typePart = afterSecondAmount.split(/\s+/).slice(1).join(' ')
+                hasType = typePart.length > 0 && !/^\d+$/.test(typePart)
+            } else {
+                const parts = afterEq.split(/\s+/)
+                hasType = parts.length > 1 && !/^\d+$/.test(parts.slice(1).join(' '))
+            }
+            
+            if (!hasType && /^\d+$/.test(numbers)) {
+                // No type specified, add default
+                const defaultResult = getDefaultBetType(numbers, hasSecondAmount)
+                if (defaultResult.error) {
+                    playSound('error')
+                    setError(defaultResult.error)
+                    return
+                }
+                trimmed = `${trimmed} ${defaultResult.type}`
             }
         }
 
@@ -744,7 +961,7 @@ export default function WriteSubmissionModal({
 
     // Get available type buttons based on current input and toggle state
     const getAvailableTypeButtons = () => {
-        // Parse input: format is "123=50" or "123=50 ล่าง"
+        // Parse input: format is "123=50" or "123=50*30" or "123=50 ล่าง"
         const input = currentInput.trim()
         const eqIndex = input.indexOf('=')
         
@@ -753,66 +970,147 @@ export default function WriteSubmissionModal({
         
         const numbers = input.substring(0, eqIndex)
         const afterEq = input.substring(eqIndex + 1).trim()
-        const parts = afterEq.split(/\s+/)
-        const amount = parts[0] || ''
         
-        // Must have amount entered after =
-        if (!amount || !/^\d+$/.test(amount)) return []
+        // Check if amount has * (two amounts)
+        const hasSecondAmount = afterEq.includes('*')
+        let amount1 = ''
+        let amount2 = ''
+        
+        if (hasSecondAmount) {
+            const amountParts = afterEq.split('*')
+            amount1 = amountParts[0].trim()
+            amount2 = amountParts[1] ? amountParts[1].split(/\s+/)[0].trim() : ''
+        } else {
+            const parts = afterEq.split(/\s+/)
+            amount1 = parts[0] || ''
+        }
+        
+        // Must have first amount entered after =
+        if (!amount1 || !/^\d+$/.test(amount1)) return []
+        // If has *, must have second amount too
+        if (hasSecondAmount && (!amount2 || !/^\d+$/.test(amount2))) return []
         
         const numLen = numbers.length
-
         if (!/^\d+$/.test(numbers)) return []
 
         const buttons = []
         const isTop = topBottomToggle === 'top'
+        const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
 
         if (numLen === 1) {
-            // 1 digit: วิ่ง, หน้า, กลาง(บนเท่านั้น), หลัง
+            // 1 digit: ลอย, หน้า, กลาง(บนเท่านั้น), หลัง
+            // ไม่รองรับ * ในจำนวนเงิน
+            if (hasSecondAmount) return []
+            
             if (isTop) {
-                buttons.push({ label: 'วิ่งบน', value: 'วิ่งบน', autoSubmit: true })
+                buttons.push({ label: 'ลอยบน', value: 'ลอยบน', autoSubmit: true })
                 buttons.push({ label: 'หน้าบน', value: 'หน้าบน', autoSubmit: true })
                 buttons.push({ label: 'กลางบน', value: 'กลางบน', autoSubmit: true })
                 buttons.push({ label: 'หลังบน', value: 'หลังบน', autoSubmit: true })
             } else {
-                buttons.push({ label: 'วิ่งล่าง', value: 'วิ่งล่าง', autoSubmit: true })
+                buttons.push({ label: 'ลอยล่าง', value: 'ลอยล่าง', autoSubmit: true })
                 buttons.push({ label: 'หน้าล่าง', value: 'หน้าล่าง', autoSubmit: true })
                 buttons.push({ label: 'หลังล่าง', value: 'หลังล่าง', autoSubmit: true })
             }
         } else if (numLen === 2) {
             // 2 digits
-            if (isTop) {
-                buttons.push({ label: '2ตัวบน', value: '2ตัวบน', autoSubmit: true })
-                buttons.push({ label: '2ตัวมี', value: '2ตัวมี', autoSubmit: true })
-                buttons.push({ label: '2ตัวหน้า', value: '2ตัวหน้า', autoSubmit: false })
-                buttons.push({ label: '2ตัวถ่าง', value: '2ตัวถ่าง', autoSubmit: false })
-                buttons.push({ label: '2ตัวบนกลับ', value: '2ตัวบนกลับ', autoSubmit: false })
+            if (hasSecondAmount) {
+                // มี * ในจำนวนเงิน - แสดงเฉพาะปุ่มกลับ
+                if (isTop) {
+                    buttons.push({ label: 'บนกลับ', value: 'บนกลับ', autoSubmit: true })
+                    buttons.push({ label: 'หน้ากลับ', value: 'หน้ากลับ', autoSubmit: true })
+                    buttons.push({ label: 'ถ่างกลับ', value: 'ถ่างกลับ', autoSubmit: true })
+                } else {
+                    buttons.push({ label: 'ล่างกลับ', value: 'ล่างกลับ', autoSubmit: true })
+                }
             } else {
-                buttons.push({ label: '2ตัวล่าง', value: '2ตัวล่าง', autoSubmit: true })
-                buttons.push({ label: '2ตัวล่างกลับ', value: '2ตัวล่างกลับ', autoSubmit: false })
+                // ไม่มี * ในจำนวนเงิน
+                if (isTop) {
+                    buttons.push({ label: 'บน', value: 'บน', autoSubmit: true })
+                    buttons.push({ label: 'บนกลับ', value: 'บนกลับ', autoSubmit: true })
+                    buttons.push({ label: 'ลอย', value: 'ลอย', autoSubmit: true })
+                    buttons.push({ label: 'หน้าบน', value: 'หน้าบน', autoSubmit: true })
+                    buttons.push({ label: 'หน้ากลับ', value: 'หน้ากลับ', autoSubmit: true })
+                    buttons.push({ label: 'ถ่างบน', value: 'ถ่างบน', autoSubmit: true })
+                    buttons.push({ label: 'ถ่างกลับ', value: 'ถ่างกลับ', autoSubmit: true })
+                } else {
+                    buttons.push({ label: 'ล่าง', value: 'ล่าง', autoSubmit: true })
+                    buttons.push({ label: 'ล่างกลับ', value: 'ล่างกลับ', autoSubmit: true })
+                }
             }
         } else if (numLen === 3) {
             // 3 digits
-            if (isTop) {
-                buttons.push({ label: '3ตัวโต๊ด', value: '3ตัวโต๊ด', autoSubmit: true })
-                buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: false })
-                
-                const permCount = getPermutationCount(numbers)
-                if (permCount > 1) {
-                    buttons.push({ label: `กลับ${permCount - 1}`, value: `กลับ${permCount - 1}`, autoSubmit: false })
-                    buttons.push({ label: `คูณชุด${permCount}`, value: `คูณชุด${permCount}`, autoSubmit: true })
+            const permCount = getPermutationCount(numbers)
+            
+            if (hasSecondAmount) {
+                // มี * ในจำนวนเงิน - แสดงเฉพาะ เต็งโต๊ด และ กลับ
+                if (isTop) {
+                    buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: true })
+                    if (permCount > 1) {
+                        buttons.push({ label: 'กลับ', value: 'กลับ', autoSubmit: true })
+                    }
+                } else {
+                    // หวยไทยมี 3ตัวล่าง, ลาว/ฮานอยไม่มี
+                    if (!isLaoOrHanoi) {
+                        // สำหรับหวยไทย - ไม่มีปุ่มเพราะ 3ตัวล่าง ไม่รองรับ *
+                    }
+                    // ถ้าเป็นลาว/ฮานอย ไม่แสดงปุ่มเพราะไม่มี 3ตัวล่าง
                 }
             } else {
-                buttons.push({ label: '3ตัวล่าง', value: '3ตัวล่าง', autoSubmit: true })
+                // ไม่มี * ในจำนวนเงิน
+                if (isTop) {
+                    if (isLaoOrHanoi) {
+                        buttons.push({ label: 'ตรง', value: 'ตรง', autoSubmit: true })
+                    } else {
+                        buttons.push({ label: 'บน', value: 'บน', autoSubmit: true })
+                    }
+                    buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: true })
+                    buttons.push({ label: 'โต๊ด', value: 'โต๊ด', autoSubmit: true })
+                    if (permCount > 1) {
+                        buttons.push({ label: 'คูณชุด', value: `คูณชุด`, autoSubmit: true })
+                    }
+                } else {
+                    if (!isLaoOrHanoi) {
+                        // หวยไทยมี 3ตัวล่าง
+                        buttons.push({ label: 'ล่าง', value: 'ล่าง', autoSubmit: true })
+                    }
+                    // ลาว/ฮานอย ไม่มี 3ตัวล่าง - ไม่แสดงปุ่ม
+                }
             }
         } else if (numLen === 4) {
-            // 4 digits - no top/bottom distinction
-            buttons.push({ label: '4ตัวชุด', value: '4ตัวชุด', autoSubmit: true })
-            buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
-            buttons.push({ label: '3xPerm', value: '3xPerm', autoSubmit: true })
+            // 4 digits - ไม่รองรับ * ในจำนวนเงิน
+            if (hasSecondAmount) return []
+            
+            const permCount = getPermutationCount(numbers)
+            
+            if (isLaoOrHanoi) {
+                // ลาว/ฮานอย: 4ตัวชุด, ลอยแพ, คูณชุด
+                // ถ้าจำนวนเงินน้อย (<=99) อาจเป็นจำนวนชุด
+                const amountNum = parseInt(amount1)
+                if (amountNum <= 99) {
+                    buttons.push({ label: '4ตัวชุด', value: '4ตัวชุด', autoSubmit: true })
+                }
+                buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+                if (permCount > 1) {
+                    buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                }
+            } else {
+                // หวยไทย: ลอยแพ, คูณชุด
+                buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+                if (permCount > 1) {
+                    buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                }
+            }
         } else if (numLen === 5) {
-            // 5 digits - no top/bottom distinction
+            // 5 digits - ไม่รองรับ * ในจำนวนเงิน
+            if (hasSecondAmount) return []
+            
+            const permCount = getPermutationCount(numbers)
+            
             buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
-            buttons.push({ label: '3xPerm', value: '3xPerm', autoSubmit: true })
+            if (permCount > 1) {
+                buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+            }
         }
 
         return buttons
@@ -1002,6 +1300,17 @@ export default function WriteSubmissionModal({
                             <button type="button" onClick={() => handleNumberClick('0')}>0</button>
                             <button 
                                 onClick={() => {
+                                    const input = currentInput.trim()
+                                    // ไม่อนุญาตถ้ามี = อยู่แล้ว
+                                    if (input.includes('=')) {
+                                        playSound('error')
+                                        return
+                                    }
+                                    // ต้องมีตัวเลขก่อน =
+                                    if (!/^\d+$/.test(input)) {
+                                        playSound('error')
+                                        return
+                                    }
                                     playSound('click')
                                     // ถ้าล็อคอยู่ ให้เติม = และจำนวนเงินที่ล็อคไว้
                                     if (isLocked && lockedAmount) {
@@ -1023,24 +1332,43 @@ export default function WriteSubmissionModal({
                                             const eqIndex = lastLine.indexOf('=')
                                             if (eqIndex !== -1) {
                                                 const afterEq = lastLine.substring(eqIndex + 1).trim()
-                                                // แยกเอาเฉพาะจำนวนเงินหลัก (ตัวเลขแรก)
-                                                const amountMatch = afterEq.match(/^(\d+)/)
-                                                if (amountMatch) {
-                                                    // เก็บทั้งหมดหลัง = (รวม คูณชุด ถ้ามี)
-                                                    setLockedAmount(afterEq)
+                                                // แยกเอาเฉพาะจำนวนเงิน (และ * ถ้ามี) ไม่รวม type
+                                                let amountToLock = ''
+                                                if (afterEq.includes('*')) {
+                                                    // มี * - เก็บ amount1*amount2
+                                                    const match = afterEq.match(/^(\d+\*\d+)/)
+                                                    if (match) {
+                                                        amountToLock = match[1]
+                                                    }
+                                                } else {
+                                                    // ไม่มี * - เก็บเฉพาะจำนวนเงินแรก
+                                                    const match = afterEq.match(/^(\d+)/)
+                                                    if (match) {
+                                                        amountToLock = match[1]
+                                                    }
+                                                }
+                                                if (amountToLock) {
+                                                    setLockedAmount(amountToLock)
                                                     setIsLocked(true)
+                                                    playSound('click')
                                                 }
                                             }
+                                        } else {
+                                            // ไม่มีรายการ - แจ้งเตือน
+                                            playSound('error')
+                                            setError('กรุณาป้อนอย่างน้อย 1 รายการก่อนล็อค')
                                         }
                                     } else {
                                         // ปิดล็อค
                                         setIsLocked(false)
                                         setLockedAmount('')
+                                        playSound('click')
                                     }
                                 }}
                                 className={`lock-btn ${isLocked ? 'locked' : 'unlocked'}`}
+                                title={isLocked ? `ล็อค: ${lockedAmount}` : 'คลิกเพื่อล็อคจำนวนเงิน'}
                             >
-                                {isLocked ? 'ล็อค' : 'ไม่ล็อค'}
+                                {isLocked ? `🔒${lockedAmount}` : '🔓'}
                             </button>
                             <button 
                                 className="enter-inline"
