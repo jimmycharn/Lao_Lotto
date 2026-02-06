@@ -576,13 +576,44 @@ export default function WriteSubmissionModal({
     const handleTypeClick = (type, autoSubmit = false) => {
         const input = currentInput.trim()
         const eqIndex = input.indexOf('=')
+        const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
+        
+        // Special case: 4ตัวชุด without = (Lao/Hanoi only)
+        if (eqIndex === -1 && type === '4ตัวชุด' && isLaoOrHanoi && /^\d{4}$/.test(input)) {
+            // Format: 1234=1 4ตัวชุด (1 set by default)
+            const displayLine = `${input}=1 4ตัวชุด`
+            
+            if (autoSubmit) {
+                const parsed = parseLine(displayLine.trim())
+                if (parsed && parsed.error) {
+                    playSound('error')
+                    setError(parsed.error)
+                    return
+                }
+                
+                playSound('success')
+                
+                if (editingIndex !== null) {
+                    const newLines = [...lines]
+                    newLines[editingIndex] = displayLine.trim()
+                    setLines(newLines)
+                    setEditingIndex(null)
+                } else {
+                    setLines(prev => [...prev, displayLine.trim()])
+                }
+                setCurrentInput('')
+                setError('')
+            } else {
+                setCurrentInput(displayLine)
+            }
+            return
+        }
         
         if (eqIndex !== -1) {
             const numbers = input.substring(0, eqIndex)
             const afterEq = input.substring(eqIndex + 1).trim()
             const numLen = numbers.length
             const hasSecondAmount = afterEq.includes('*')
-            const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
             
             let amount1 = ''
             let amount2 = ''
@@ -962,11 +993,26 @@ export default function WriteSubmissionModal({
     // Get available type buttons based on current input and toggle state
     const getAvailableTypeButtons = () => {
         // Parse input: format is "123=50" or "123=50*30" or "123=50 ล่าง"
-        const input = currentInput.trim()
-        const eqIndex = input.indexOf('=')
+        let input = currentInput.trim()
+        let eqIndex = input.indexOf('=')
+        const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
         
-        // Only show type buttons after entering amount (after =)
-        if (eqIndex === -1) return []
+        // Special case: 4 digits in Lao/Hanoi without = shows 4ตัวชุด button
+        if (eqIndex === -1) {
+            // Check if input is exactly 4 digits for Lao/Hanoi
+            if (isLaoOrHanoi && /^\d{4}$/.test(input)) {
+                return [{ label: '4ตัวชุด', value: '4ตัวชุด', autoSubmit: true }]
+            }
+            
+            // If locked and input is only numbers, simulate with locked amount
+            if (isLocked && lockedAmount && /^\d+$/.test(input) && input.length >= 1 && input.length <= 5) {
+                // Simulate input with locked amount to show appropriate buttons
+                input = `${input}=${lockedAmount}`
+                eqIndex = input.indexOf('=')
+            } else {
+                return []
+            }
+        }
         
         const numbers = input.substring(0, eqIndex)
         const afterEq = input.substring(eqIndex + 1).trim()
@@ -995,7 +1041,6 @@ export default function WriteSubmissionModal({
 
         const buttons = []
         const isTop = topBottomToggle === 'top'
-        const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
 
         if (numLen === 1) {
             // 1 digit: ลอย, หน้า, กลาง(บนเท่านั้น), หลัง
@@ -1287,12 +1332,10 @@ export default function WriteSubmissionModal({
                             <button type="button" onClick={() => handleNumberClick('3')}>3</button>
                             <button 
                                 onClick={() => {
-                                    if (!isLocked) {
-                                        setTopBottomToggle(prev => prev === 'top' ? 'bottom' : 'top')
-                                    }
+                                    playSound('click')
+                                    setTopBottomToggle(prev => prev === 'top' ? 'bottom' : 'top')
                                 }}
-                                className={`toggle-btn ${topBottomToggle} ${isLocked ? 'disabled' : ''}`}
-                                disabled={isLocked}
+                                className={`toggle-btn ${topBottomToggle}`}
                             >
                                 {topBottomToggle === 'top' ? 'บน' : 'ล่าง'}
                             </button>
