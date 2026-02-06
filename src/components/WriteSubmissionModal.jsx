@@ -200,11 +200,12 @@ const parseLine = (line) => {
     } else if (numLen === 4) {
         // 4 digits: 4ตัวชุด, ลอยแพ, คูณชุด
         const permCount = getPermutationCount(numbers)
-        if (typeStr.includes('4ตัวชุด') || typeStr.includes('ชุด')) {
-            betType = '4_set'
-        } else if (typeStr.includes('คูณชุด')) {
+        if (typeStr.includes('คูณชุด')) {
+            // คูณชุด ต้อง check ก่อน เพราะ 'ชุด' จะ match กับ 'คูณชุด' ด้วย
             betType = '3_top'
             specialType = '3xPerm'
+        } else if (typeStr.includes('4ตัวชุด') || typeStr.includes('ชุด')) {
+            betType = '4_set'
         } else if (typeStr.includes('ลอยแพ') || typeStr.includes('ลอย')) {
             betType = '4_run'
         } else {
