@@ -1377,8 +1377,8 @@ export default function UserDashboard() {
             if (!acc[key]) {
                 acc[key] = {
                     items: [],
-                    // display_bet_type now stores the full original line (e.g., "123=100 คูณชุด6")
-                    originalLine: item.display_bet_type || null
+                    // display_numbers stores the full original line (e.g., "584=100*6 คูณชุด")
+                    originalLine: item.display_numbers || null
                 }
             }
             acc[key].items.push(item)
@@ -2791,10 +2791,10 @@ export default function UserDashboard() {
                                                                                                         className={`bill-item-row ${canDelete(sub) ? 'editable' : ''}`}
                                                                                                         onClick={() => handleEditSubmission(sub)}
                                                                                                     >
-                                                                                                        {displayMode === 'summary' && sub.display_bet_type ? (
+                                                                                                        {displayMode === 'summary' && sub.display_numbers ? (
                                                                                                             <>
                                                                                                                 <span className="bill-display-text">
-                                                                                                                    {sub.display_bet_type}
+                                                                                                                    {sub.display_numbers}
                                                                                                                 </span>
                                                                                                                 <span className="bill-item-amount">
                                                                                                                     {round.currency_symbol}{sub.display_amount || sub.amount?.toLocaleString()}
