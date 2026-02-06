@@ -1462,7 +1462,7 @@ export default function WriteSubmissionModal({
                             <button 
                                 className="enter-inline"
                                 onClick={handleEnter}
-                                disabled={!currentInput.trim()}
+                                disabled={!currentInput.trim() && lines.length === 0}
                             >
                                 ↵
                             </button>
