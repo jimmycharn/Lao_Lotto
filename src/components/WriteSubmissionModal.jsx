@@ -574,8 +574,8 @@ export default function WriteSubmissionModal({
 
     // Handle type button click - format: 123=50 ล่าง or 123=50*30 บนกลับ
     const handleTypeClick = (type, autoSubmit = false) => {
-        const input = currentInput.trim()
-        const eqIndex = input.indexOf('=')
+        let input = currentInput.trim()
+        let eqIndex = input.indexOf('=')
         const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
         
         // Special case: 4ตัวชุด without = (Lao/Hanoi only)
@@ -607,6 +607,15 @@ export default function WriteSubmissionModal({
                 setCurrentInput(displayLine)
             }
             return
+        }
+        
+        // Special case: Locked amount and input is only numbers (no =)
+        // Combine with locked amount and submit directly
+        if (eqIndex === -1 && isLocked && lockedAmount && /^\d+$/.test(input) && input.length >= 1 && input.length <= 5) {
+            // Combine input with locked amount: 123 + lockedAmount(100*20) = 123=100*20
+            input = `${input}=${lockedAmount}`
+            eqIndex = input.indexOf('=')
+            // Continue to process with the combined input below
         }
         
         if (eqIndex !== -1) {
