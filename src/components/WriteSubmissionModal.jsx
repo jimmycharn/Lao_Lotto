@@ -1253,6 +1253,7 @@ export default function WriteSubmissionModal({
                                     key={btn.value}
                                     onClick={() => handleTypeClick(btn.value, btn.autoSubmit)}
                                     className={`type-btn ${btn.autoSubmit ? 'auto' : 'manual'}`}
+                                    data-type={btn.label}
                                 >
                                     {btn.label}
                                 </button>

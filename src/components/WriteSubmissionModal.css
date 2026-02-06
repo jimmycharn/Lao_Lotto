@@ -29,8 +29,8 @@
     height: auto;
 }
 
-/* Desktop/Tablet: modal height 80% of viewport and larger buttons */
-@media (min-width: 768px) {
+/* Desktop/Tablet Portrait: modal height 80% of viewport */
+@media (min-width: 768px) and (orientation: portrait) {
     .write-modal {
         height: 80vh;
         max-height: 80vh;
@@ -59,11 +59,43 @@
         font-size: 1.5rem;
     }
     
-    /* Increase lines display height for desktop */
-    .write-modal-lines {
-        height: 180px;
-        min-height: 180px;
-        max-height: 180px;
+    /* Type buttons row - larger */
+    .type-buttons-row button {
+        padding: 0.6rem 1rem;
+        font-size: 0.95rem;
+    }
+}
+
+/* Desktop/Tablet Landscape: modal full height */
+@media (min-width: 768px) and (orientation: landscape) {
+    .write-modal {
+        height: calc(100vh - 1rem);
+        max-height: calc(100vh - 1rem);
+        margin: 0.5rem auto;
+        border-radius: 12px;
+    }
+    
+    .write-modal-overlay {
+        align-items: center;
+        padding: 0.5rem;
+    }
+    
+    /* Increase button height by 30% (52px -> 68px) */
+    .number-pad-4col button {
+        height: 68px;
+        font-size: 1.5rem;
+    }
+    
+    .number-pad-4col button.toggle-btn {
+        font-size: 1.2rem;
+    }
+    
+    .number-pad-4col button.lock-btn {
+        font-size: 1rem;
+    }
+    
+    .number-pad-4col button.enter-inline {
+        font-size: 1.5rem;
     }
     
     /* Type buttons row - larger */
@@ -185,12 +217,10 @@
     cursor: not-allowed;
 }
 
-/* Lines Display - fixed height to prevent jumping */
+/* Lines Display - flex to fill available space */
 .write-modal-lines {
-    flex: 0 0 auto;
-    height: 120px;
-    min-height: 120px;
-    max-height: 120px;
+    flex: 1 1 auto;
+    min-height: 80px;
     overflow-y: auto;
     padding: 0.5rem 0.75rem;
     background: rgba(0, 0, 0, 0.2);
@@ -423,12 +453,13 @@
     background: #16a34a;
 }
 
-/* Input Pad */
+/* Input Pad - always at bottom */
 .write-modal-pad {
     padding: 0.5rem 0.75rem;
     background: linear-gradient(180deg, #1a1a2e 0%, #16162a 100%);
     border-top: 1px solid rgba(255, 255, 255, 0.1);
     flex-shrink: 0;
+    margin-top: auto;
 }
 
 /* Number Pad - 4 columns grid */
@@ -590,14 +621,21 @@
     cursor: not-allowed;
 }
 
-/* Type Buttons Row - fixed height to prevent layout shift */
+/* Type Buttons Row - above keyboard, only show when has buttons */
 .type-buttons-row {
     display: flex;
     gap: 0.4rem;
     flex-wrap: wrap;
-    margin-top: 0.5rem;
-    min-height: 36px;
-    align-items: center;
+    padding: 0.5rem 0.75rem;
+    align-items: stretch;
+    flex-shrink: 0;
+    background: rgba(0, 0, 0, 0.15);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Hide row when empty (only placeholder) */
+.type-buttons-row:has(.type-placeholder) {
+    display: none;
 }
 
 .type-placeholder {
@@ -608,49 +646,211 @@
     text-align: center;
 }
 
-/* Type Button in row */
+/* Type Button in row - base style */
 .type-btn {
     flex: 1;
     min-width: 60px;
     padding: 0.5rem 0.6rem;
-    background: rgba(102, 126, 234, 0.15);
-    border: 1px solid rgba(102, 126, 234, 0.3);
     border-radius: 8px;
-    color: #667eea;
-    font-size: 0.8rem;
-    font-weight: 500;
+    font-size: 0.85rem;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.15s;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
 }
 
-/* Auto submit buttons - green tint */
-.type-btn.auto {
-    background: rgba(34, 197, 94, 0.15);
-    border-color: rgba(34, 197, 94, 0.3);
-    color: #22c55e;
+/* Mobile: First row buttons match height with tallest button */
+@media (max-width: 767px) {
+    .type-buttons-row {
+        align-content: flex-start;
+    }
+    
+    /* First 5 buttons (first row) - taller to match 2-line button */
+    .type-btn:nth-child(-n+5) {
+        min-height: 52px;
+    }
+    
+    /* Remaining buttons (second row) - normal height */
+    .type-btn:nth-child(n+6) {
+        min-height: 40px;
+    }
 }
 
-.type-btn.auto:hover {
-    background: rgba(34, 197, 94, 0.25);
-}
-
-/* Manual buttons - need enter - orange tint */
-.type-btn.manual {
-    background: rgba(251, 191, 36, 0.15);
-    border-color: rgba(251, 191, 36, 0.3);
-    color: #fbbf24;
-}
-
-.type-btn.manual:hover {
-    background: rgba(251, 191, 36, 0.25);
+/* Desktop/Tablet: All buttons same height */
+@media (min-width: 768px) {
+    .type-btn {
+        min-height: 52px;
+    }
 }
 
 .type-btn:hover {
     transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .type-btn:active {
     transform: scale(0.98);
+}
+
+/* บน/ตรง - Purple gradient */
+.type-btn[data-type="บน"],
+.type-btn[data-type="ตรง"] {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: 1px solid rgba(102, 126, 234, 0.5);
+    color: #fff;
+}
+
+.type-btn[data-type="บน"]:hover,
+.type-btn[data-type="ตรง"]:hover {
+    background: linear-gradient(135deg, #7b8ff0 0%, #8a5db5 100%);
+}
+
+/* ล่าง - Pink gradient */
+.type-btn[data-type="ล่าง"] {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    border: 1px solid rgba(245, 87, 108, 0.5);
+    color: #fff;
+}
+
+.type-btn[data-type="ล่าง"]:hover {
+    background: linear-gradient(135deg, #f5a8fc 0%, #f77185 100%);
+}
+
+/* กลับ types - Blue gradient */
+.type-btn[data-type="บนกลับ"],
+.type-btn[data-type="ล่างกลับ"],
+.type-btn[data-type="หน้ากลับ"],
+.type-btn[data-type="ถ่างกลับ"],
+.type-btn[data-type="กลับ"] {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    border: 1px solid rgba(79, 172, 254, 0.5);
+    color: #fff;
+}
+
+.type-btn[data-type="บนกลับ"]:hover,
+.type-btn[data-type="ล่างกลับ"]:hover,
+.type-btn[data-type="หน้ากลับ"]:hover,
+.type-btn[data-type="ถ่างกลับ"]:hover,
+.type-btn[data-type="กลับ"]:hover {
+    background: linear-gradient(135deg, #6dbdfe 0%, #33f5fe 100%);
+}
+
+/* ลอย types - Green gradient */
+.type-btn[data-type="ลอย"],
+.type-btn[data-type="ลอยบน"],
+.type-btn[data-type="ลอยล่าง"],
+.type-btn[data-type="ลอยแพ"] {
+    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    border: 1px solid rgba(56, 239, 125, 0.5);
+    color: #fff;
+}
+
+.type-btn[data-type="ลอย"]:hover,
+.type-btn[data-type="ลอยบน"]:hover,
+.type-btn[data-type="ลอยล่าง"]:hover,
+.type-btn[data-type="ลอยแพ"]:hover {
+    background: linear-gradient(135deg, #15b3a6 0%, #5cf294 100%);
+}
+
+/* หน้า/ถ่าง types - Orange gradient */
+.type-btn[data-type="หน้าบน"],
+.type-btn[data-type="หน้าล่าง"],
+.type-btn[data-type="ถ่างบน"],
+.type-btn[data-type="ถ่างล่าง"] {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    border: 1px solid rgba(240, 147, 251, 0.5);
+    color: #fff;
+}
+
+.type-btn[data-type="หน้าบน"]:hover,
+.type-btn[data-type="หน้าล่าง"]:hover,
+.type-btn[data-type="ถ่างบน"]:hover,
+.type-btn[data-type="ถ่างล่าง"]:hover {
+    background: linear-gradient(135deg, #f5a8fc 0%, #f77185 100%);
+}
+
+/* โต๊ด - Yellow/Gold gradient */
+.type-btn[data-type="โต๊ด"] {
+    background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
+    border: 1px solid rgba(255, 210, 0, 0.5);
+    color: #1a1a2e;
+}
+
+.type-btn[data-type="โต๊ด"]:hover {
+    background: linear-gradient(135deg, #f9a93e 0%, #ffda33 100%);
+}
+
+/* เต็งโต๊ด - Red/Orange gradient */
+.type-btn[data-type="เต็งโต๊ด"] {
+    background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+    border: 1px solid rgba(244, 92, 67, 0.5);
+    color: #fff;
+}
+
+.type-btn[data-type="เต็งโต๊ด"]:hover {
+    background: linear-gradient(135deg, #ef4d60 0%, #f67563 100%);
+}
+
+/* คูณชุด - Teal gradient */
+.type-btn[data-type="คูณชุด"] {
+    background: linear-gradient(135deg, #00b4db 0%, #0083b0 100%);
+    border: 1px solid rgba(0, 180, 219, 0.5);
+    color: #fff;
+}
+
+.type-btn[data-type="คูณชุด"]:hover {
+    background: linear-gradient(135deg, #1fc8eb 0%, #1a9bc7 100%);
+}
+
+/* 4ตัวชุด - Indigo gradient */
+.type-btn[data-type="4ตัวชุด"] {
+    background: linear-gradient(135deg, #5c6bc0 0%, #3949ab 100%);
+    border: 1px solid rgba(92, 107, 192, 0.5);
+    color: #fff;
+}
+
+.type-btn[data-type="4ตัวชุด"]:hover {
+    background: linear-gradient(135deg, #7986cb 0%, #5c6bc0 100%);
+}
+
+/* กลาง types - Cyan gradient */
+.type-btn[data-type="กลางบน"],
+.type-btn[data-type="หลังบน"],
+.type-btn[data-type="หลังล่าง"] {
+    background: linear-gradient(135deg, #36d1dc 0%, #5b86e5 100%);
+    border: 1px solid rgba(54, 209, 220, 0.5);
+    color: #fff;
+}
+
+.type-btn[data-type="กลางบน"]:hover,
+.type-btn[data-type="หลังบน"]:hover,
+.type-btn[data-type="หลังล่าง"]:hover {
+    background: linear-gradient(135deg, #52dbe4 0%, #7599ea 100%);
+}
+
+/* Fallback for auto/manual classes */
+.type-btn.auto {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    border: 1px solid rgba(34, 197, 94, 0.5);
+    color: #fff;
+}
+
+.type-btn.auto:hover {
+    background: linear-gradient(135deg, #34d56f 0%, #1eb85a 100%);
+}
+
+.type-btn.manual {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    border: 1px solid rgba(245, 158, 11, 0.5);
+    color: #fff;
+}
+
+.type-btn.manual:hover {
+    background: linear-gradient(135deg, #f7b02d 0%, #e08816 100%);
 }
 
 /* Footer */
