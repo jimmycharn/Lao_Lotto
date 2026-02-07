@@ -125,7 +125,7 @@ export default function DealerWriteSubmissionWrapper({
         toast.success(`บันทึกโพยให้ ${targetUser.full_name || targetUser.email} สำเร็จ! (${entries.length} รายการ)`)
         
         if (onSuccess) onSuccess()
-        onClose()
+        // ไม่ปิด modal หลังบันทึก - ให้ผู้ใช้กดปิดเอง
     }
 
     // Handle edit submission from WriteSubmissionModal
@@ -200,7 +200,7 @@ export default function DealerWriteSubmissionWrapper({
         toast.success(`แก้ไขโพยให้ ${targetUser.full_name || targetUser.email} สำเร็จ! (${entries.length} รายการ)`)
         
         if (onSuccess) onSuccess()
-        onClose()
+        // ไม่ปิด modal หลังบันทึก - ให้ผู้ใช้กดปิดเอง
     }
 
     // Get set price from user settings or round settings

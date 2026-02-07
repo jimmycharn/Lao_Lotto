@@ -943,15 +943,18 @@ export default function RoundAccordionItem({
         }
     }
 
-    // Delete single submission
-    const handleDeleteSingleItem = async (id) => {
+    // Delete single submission or group of submissions
+    const handleDeleteSingleItem = async (idOrIds) => {
         if (!confirm('ต้องการลบรายการนี้?')) return
 
         try {
+            // Support both single id and array of ids (for summary mode groups)
+            const ids = Array.isArray(idOrIds) ? idOrIds : [idOrIds]
+            
             const { error } = await supabase
                 .from('submissions')
                 .update({ is_deleted: true })
-                .eq('id', id)
+                .in('id', ids)
 
             if (error) throw error
 
@@ -2385,7 +2388,7 @@ export default function RoundAccordionItem({
                                                                                                                 className="btn btn-icon btn-sm"
                                                                                                                 onClick={(e) => {
                                                                                                                     e.stopPropagation()
-                                                                                                                    handleDeleteSingleItem(item.id)
+                                                                                                                    handleDeleteSingleItem(item.ids || [item.id])
                                                                                                                 }}
                                                                                                                 title="ลบ"
                                                                                                                 style={{ padding: '0.15rem', color: 'var(--color-danger)' }}

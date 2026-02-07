@@ -1105,22 +1105,18 @@ export default function WriteSubmissionModal({
                 })
             }
 
-            setSuccess(true)
-            // เคลียร์ข้อมูลทั้งหมดและเตรียมรับข้อมูลใหม่ทันที
-            setTimeout(() => {
-                setLines([])
-                setCurrentInput('')
-                setEditingIndex(null)
-                setBillNote('')
-                setError('')
-                setSuccess(false)
-                setIsLocked(false)
-                setLockedAmount('')
-                // Focus note input after clearing
-                if (noteInputRef.current) {
-                    noteInputRef.current.focus()
-                }
-            }, 1500) // แสดง success 1.5 วินาที แล้วเคลียร์
+            // เคลียร์ข้อมูลทั้งหมดและเตรียมรับข้อมูลใหม่ทันที (ไม่ปิด modal)
+            setLines([])
+            setCurrentInput('')
+            setEditingIndex(null)
+            setBillNote('')
+            setError('')
+            setIsLocked(false)
+            setLockedAmount('')
+            // Focus note input after clearing
+            if (noteInputRef.current) {
+                noteInputRef.current.focus()
+            }
         } catch (err) {
             setError(err.message || 'เกิดข้อผิดพลาด')
         } finally {
