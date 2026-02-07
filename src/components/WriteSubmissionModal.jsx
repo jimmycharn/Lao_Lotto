@@ -404,9 +404,11 @@ export default function WriteSubmissionModal({
     const [isLocked, setIsLocked] = useState(false) // ล็อคราคา/รูปแบบ
     const [lockedAmount, setLockedAmount] = useState('') // จำนวนเงินที่ล็อคไว้
     const [showCloseConfirm, setShowCloseConfirm] = useState(false)
+    const [focusedTypeIndex, setFocusedTypeIndex] = useState(-1) // -1 = not focused on type buttons
     const linesContainerRef = useRef(null)
     const noteInputRef = useRef(null)
     const modalRef = useRef(null)
+    const typeButtonsRef = useRef([])
     const isEditMode = !!editingData
 
     // Handle keyboard input for desktop
@@ -416,6 +418,55 @@ export default function WriteSubmissionModal({
         const handleKeyDown = (e) => {
             // Ignore if typing in note input
             if (document.activeElement === noteInputRef.current) return
+            
+            // Get current type buttons
+            const currentTypeButtons = getAvailableTypeButtons()
+            const hasTypeButtons = currentTypeButtons.length > 0
+            
+            // Arrow Down or Tab - focus on type buttons if available
+            if ((e.key === 'ArrowDown' || e.key === 'Tab') && hasTypeButtons && focusedTypeIndex === -1) {
+                e.preventDefault()
+                setFocusedTypeIndex(0)
+                typeButtonsRef.current[0]?.focus()
+                return
+            }
+            
+            // Arrow Up - exit type buttons focus back to input
+            if (e.key === 'ArrowUp' && focusedTypeIndex >= 0) {
+                e.preventDefault()
+                setFocusedTypeIndex(-1)
+                return
+            }
+            
+            // Arrow Left/Right - navigate between type buttons
+            if (e.key === 'ArrowLeft' && focusedTypeIndex > 0) {
+                e.preventDefault()
+                const newIndex = focusedTypeIndex - 1
+                setFocusedTypeIndex(newIndex)
+                typeButtonsRef.current[newIndex]?.focus()
+                return
+            }
+            if (e.key === 'ArrowRight' && focusedTypeIndex >= 0 && focusedTypeIndex < currentTypeButtons.length - 1) {
+                e.preventDefault()
+                const newIndex = focusedTypeIndex + 1
+                setFocusedTypeIndex(newIndex)
+                typeButtonsRef.current[newIndex]?.focus()
+                return
+            }
+            
+            // Enter when focused on type button - click that button
+            if (e.key === 'Enter' && focusedTypeIndex >= 0 && currentTypeButtons[focusedTypeIndex]) {
+                e.preventDefault()
+                const btn = currentTypeButtons[focusedTypeIndex]
+                handleTypeClick(btn.value, btn.autoSubmit)
+                setFocusedTypeIndex(-1)
+                return
+            }
+            
+            // If focused on type buttons, ignore other keys except Escape
+            if (focusedTypeIndex >= 0 && e.key !== 'Escape') {
+                return
+            }
             
             // Number keys 0-9
             if (/^[0-9]$/.test(e.key)) {
@@ -477,16 +528,40 @@ export default function WriteSubmissionModal({
                 playSound('click')
                 setCurrentInput(prev => prev + '*')
             }
-            // Escape - clear current input
+            // Escape - clear current input and exit type button focus
             else if (e.key === 'Escape') {
                 e.preventDefault()
+                setFocusedTypeIndex(-1)
                 handleClear()
             }
         }
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [isOpen, currentInput, isLocked, lockedAmount])
+    }, [isOpen, currentInput, isLocked, lockedAmount, focusedTypeIndex])
+
+    // Prevent body scroll when modal is open
+    useEffect(() => {
+        if (isOpen) {
+            // Save current scroll position and prevent scrolling
+            const scrollY = window.scrollY
+            document.body.style.position = 'fixed'
+            document.body.style.top = `-${scrollY}px`
+            document.body.style.left = '0'
+            document.body.style.right = '0'
+            document.body.style.overflow = 'hidden'
+            
+            return () => {
+                // Restore scroll position when modal closes
+                document.body.style.position = ''
+                document.body.style.top = ''
+                document.body.style.left = ''
+                document.body.style.right = ''
+                document.body.style.overflow = ''
+                window.scrollTo(0, scrollY)
+            }
+        }
+    }, [isOpen])
 
     // Reset state when modal opens or load editing data
     useEffect(() => {
@@ -504,6 +579,7 @@ export default function WriteSubmissionModal({
             setEditingIndex(null)
             setError('')
             setSuccess(false)
+            setFocusedTypeIndex(-1)
             
             // Focus note input when modal opens
             setTimeout(() => {
@@ -536,9 +612,20 @@ export default function WriteSubmissionModal({
 
     // Handle number pad click
     const handleNumberClick = (num) => {
+        const input = currentInput.trim()
+        
+        // ป้องกันไม่ให้ป้อนอะไรหลังข้อความประเภท
+        const typeSuffixes = ['เต็งโต๊ด', 'บนกลับ', 'ล่างกลับ', 'หน้ากลับ', 'ถ่างกลับ', 'คูณชุด', 'ตรง', 'โต๊ด', 'บน', 'ล่าง', 'กลับ']
+        for (const suffix of typeSuffixes) {
+            if (input.endsWith(' ' + suffix)) {
+                playSound('error')
+                setError('ไม่สามารถป้อนข้อมูลหลังประเภทได้')
+                return
+            }
+        }
+        
         // ป้องกันไม่ให้ป้อน 0 เป็นตัวแรกหลัง = (ในส่วนจำนวนเงิน)
         if (num === '0') {
-            const input = currentInput.trim()
             const eqIndex = input.indexOf('=')
             if (eqIndex !== -1) {
                 // มี = แล้ว ตรวจสอบว่าหลัง = มีอะไรบ้าง
@@ -560,15 +647,39 @@ export default function WriteSubmissionModal({
     // Handle backspace
     const handleBackspace = () => {
         playSound('click')
-        setCurrentInput(prev => prev.slice(0, -1))
+        setCurrentInput(prev => {
+            // Check if input ends with a type suffix (after space)
+            // Type suffixes: ตรง, โต๊ด, เต็งโต๊ด, บน, ล่าง, กลับ, บนกลับ, ล่างกลับ, หน้ากลับ, ถ่างกลับ, คูณชุด
+            const typeSuffixes = ['เต็งโต๊ด', 'บนกลับ', 'ล่างกลับ', 'หน้ากลับ', 'ถ่างกลับ', 'คูณชุด', 'ตรง', 'โต๊ด', 'บน', 'ล่าง', 'กลับ']
+            
+            for (const suffix of typeSuffixes) {
+                // Check if ends with " suffix" (space + suffix)
+                if (prev.endsWith(' ' + suffix)) {
+                    // Remove the entire suffix including the space
+                    return prev.slice(0, -(suffix.length + 1))
+                }
+            }
+            
+            // Normal backspace - remove last character
+            return prev.slice(0, -1)
+        })
         setError('')
     }
 
-    // Handle clear
+    // Handle clear - clears input AND exits editing mode
     const handleClear = () => {
         playSound('click')
         setCurrentInput('')
         setError('')
+        setEditingIndex(null) // Exit editing mode
+    }
+    
+    // Handle clear input only - clears input but stays in editing mode
+    const handleClearInputOnly = () => {
+        playSound('click')
+        setCurrentInput('')
+        setError('')
+        // Keep editingIndex unchanged - stay in editing mode
     }
 
     // Handle amount shortcut
@@ -1286,7 +1397,19 @@ export default function WriteSubmissionModal({
                             >
                                 <div className="line-content">
                                     <span className="line-number">{index + 1}.</span>
-                                    <span className="line-text">{line}</span>
+                                    <span className="line-text">
+                                        {(() => {
+                                            // Split line into number part and type part
+                                            const typeSuffixes = ['เต็งโต๊ด', 'บนกลับ', 'ล่างกลับ', 'หน้ากลับ', 'ถ่างกลับ', 'คูณชุด', '4ตัวชุด', 'ตรง', 'โต๊ด', 'บน', 'ล่าง', 'กลับ', 'ลอย', 'ลอยบน', 'ลอยล่าง', 'ลอยแพ', 'หน้าบน', 'หน้าล่าง', 'ถ่างบน', 'ถ่างล่าง', 'กลางบน', 'หลังบน', 'หลังล่าง']
+                                            for (const suffix of typeSuffixes) {
+                                                if (line.endsWith(' ' + suffix)) {
+                                                    const numPart = line.slice(0, -(suffix.length + 1))
+                                                    return <>{numPart} <span className="type-suffix">{suffix}</span></>
+                                                }
+                                            }
+                                            return line
+                                        })()}
+                                    </span>
                                     {!hasError && entries.length > 1 && (
                                         <span className="line-expand">({entries.length})</span>
                                     )}
@@ -1314,11 +1437,23 @@ export default function WriteSubmissionModal({
                     })}
 
                     {/* Current Input Preview */}
-                    {currentInput && (
+                    {(currentInput || editingIndex !== null) && (
                         <div className="line-item current">
                             <div className="line-content">
                                 <span className="line-number">▶</span>
                                 <span className="line-text">{currentInput}<span className="cursor">|</span></span>
+                            </div>
+                            <div className="line-actions">
+                                <button 
+                                    className="action-btn clear"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleClearInputOnly() // Clear input but stay in editing mode
+                                    }}
+                                    title="เคลียร์ข้อความ"
+                                >
+                                    <FiX />
+                                </button>
                             </div>
                         </div>
                     )}
@@ -1351,11 +1486,17 @@ export default function WriteSubmissionModal({
                 {!success && (
                     <div className="type-buttons-row">
                         {typeButtons.length > 0 ? (
-                            typeButtons.map(btn => (
+                            typeButtons.map((btn, index) => (
                                 <button 
                                     key={btn.value}
-                                    onClick={() => handleTypeClick(btn.value, btn.autoSubmit)}
-                                    className={`type-btn ${btn.autoSubmit ? 'auto' : 'manual'}`}
+                                    ref={el => typeButtonsRef.current[index] = el}
+                                    onClick={() => {
+                                        handleTypeClick(btn.value, btn.autoSubmit)
+                                        setFocusedTypeIndex(-1)
+                                    }}
+                                    onFocus={() => setFocusedTypeIndex(index)}
+                                    onBlur={() => setFocusedTypeIndex(-1)}
+                                    className={`type-btn ${btn.autoSubmit ? 'auto' : 'manual'} ${focusedTypeIndex === index ? 'focused' : ''}`}
                                     data-type={btn.label}
                                 >
                                     {btn.label}

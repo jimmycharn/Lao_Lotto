@@ -114,6 +114,7 @@
     background: linear-gradient(135deg, #2d2d44 0%, #1a1a2e 100%);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     flex-shrink: 0;
+    border-radius: 16px 16px 0 0;
 }
 
 .write-modal-header h3 {
@@ -319,6 +320,12 @@
     white-space: pre;
 }
 
+.line-text .type-suffix {
+    font-size: 0.75rem;
+    font-weight: 400;
+    opacity: 0.85;
+}
+
 .line-expand {
     color: rgba(255, 255, 255, 0.5);
     font-size: 0.75rem;
@@ -391,6 +398,16 @@
     color: #22c55e;
 }
 
+.action-btn.clear {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+.action-btn.clear:hover {
+    background: rgba(239, 68, 68, 0.4);
+    color: #fff;
+}
+
 /* Total */
 .write-modal-total {
     display: flex;
@@ -460,6 +477,7 @@
     border-top: 1px solid rgba(255, 255, 255, 0.1);
     flex-shrink: 0;
     margin-top: auto;
+    border-radius: 0 0 16px 16px;
 }
 
 /* Number Pad - 4 columns grid */
@@ -677,6 +695,46 @@
     /* Remaining buttons (second row) - normal height */
     .type-btn:nth-child(n+6) {
         min-height: 40px;
+    }
+    
+    /* Reduce padding and spacing for narrow screens */
+    .line-item {
+        padding: 0.3rem 0.35rem;
+        gap: 0.15rem;
+    }
+    
+    .line-content {
+        gap: 0.15rem;
+    }
+    
+    .line-number {
+        min-width: 16px;
+        font-size: 0.7rem;
+    }
+    
+    .line-text {
+        font-size: 0.8rem;
+        letter-spacing: -0.5px;
+    }
+    
+    /* Make type text smaller and thinner on mobile */
+    .line-text .type-suffix {
+        font-size: 0.65rem;
+        font-weight: 400;
+        opacity: 0.75;
+        margin-left: -2px;
+    }
+    
+    .write-modal-lines {
+        padding: 0.35rem;
+    }
+    
+    .line-expand {
+        font-size: 0.6rem;
+    }
+    
+    .line-total {
+        font-size: 0.7rem;
     }
 }
 
@@ -1264,4 +1322,187 @@ html.theme-light .close-btn-footer {
 [data-theme="light"] .close-btn-footer:hover,
 html.theme-light .close-btn-footer:hover {
     background: rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Make text bolder and more visible in light theme */
+[data-theme="light"] .line-text,
+html.theme-light .line-text {
+    color: #000000 !important;
+    font-weight: 800 !important;
+    font-size: 1.1rem !important;
+}
+
+[data-theme="light"] .line-number,
+html.theme-light .line-number {
+    color: #1a1a1a !important;
+    font-weight: 700 !important;
+}
+
+[data-theme="light"] .line-total,
+html.theme-light .line-total {
+    color: #15803d !important;
+    font-weight: 800 !important;
+    font-size: 0.95rem !important;
+}
+
+[data-theme="light"] .line-error,
+html.theme-light .line-error {
+    color: #b91c1c !important;
+    font-weight: 700 !important;
+}
+
+[data-theme="light"] .write-modal-total .total-amount,
+html.theme-light .write-modal-total .total-amount {
+    color: #15803d !important;
+    font-weight: 800 !important;
+    font-size: 1.1rem !important;
+}
+
+[data-theme="light"] .write-modal-total .line-count,
+html.theme-light .write-modal-total .line-count {
+    color: #1a1a1a !important;
+    font-weight: 600 !important;
+}
+
+[data-theme="light"] .number-pad-4col button,
+html.theme-light .number-pad-4col button {
+    font-weight: 800 !important;
+    color: #000000 !important;
+    text-shadow: none !important;
+}
+
+[data-theme="light"] .type-buttons-row,
+html.theme-light .type-buttons-row {
+    background: rgba(0, 0, 0, 0.03) !important;
+    border-top: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .line-item.current .line-text,
+html.theme-light .line-item.current .line-text {
+    color: #166534 !important;
+    font-weight: 800 !important;
+    font-size: 1.2rem !important;
+}
+
+[data-theme="light"] .line-item.current .line-number,
+html.theme-light .line-item.current .line-number {
+    color: #166534 !important;
+    font-weight: 800 !important;
+}
+
+[data-theme="light"] .cursor,
+html.theme-light .cursor {
+    color: #166534 !important;
+    font-weight: 900 !important;
+}
+
+[data-theme="light"] .empty-lines,
+html.theme-light .empty-lines {
+    color: #444444 !important;
+    font-weight: 500 !important;
+}
+
+[data-theme="light"] .empty-lines .hint,
+html.theme-light .empty-lines .hint {
+    color: #666666 !important;
+}
+
+[data-theme="light"] .write-modal-header h3,
+html.theme-light .write-modal-header h3 {
+    color: #000000 !important;
+    font-weight: 700 !important;
+}
+
+[data-theme="light"] .write-modal-note-row .note-input,
+html.theme-light .write-modal-note-row .note-input {
+    color: #000000 !important;
+    font-weight: 500 !important;
+}
+
+[data-theme="light"] .write-modal-note-row .note-input::placeholder,
+html.theme-light .write-modal-note-row .note-input::placeholder {
+    color: #666666 !important;
+}
+
+/* Mobile light theme - extra bold text */
+@media (max-width: 767px) {
+    [data-theme="light"] .line-text,
+    html.theme-light .line-text {
+        color: #000000 !important;
+        font-weight: 900 !important;
+        font-size: 1.2rem !important;
+        -webkit-font-smoothing: antialiased !important;
+        text-shadow: 0 0 0.5px #000000 !important;
+        letter-spacing: 0.5px !important;
+    }
+
+    [data-theme="light"] .line-number,
+    html.theme-light .line-number {
+        color: #000000 !important;
+        font-weight: 800 !important;
+        font-size: 0.95rem !important;
+    }
+
+    [data-theme="light"] .line-total,
+    html.theme-light .line-total {
+        color: #15803d !important;
+        font-weight: 900 !important;
+        font-size: 1rem !important;
+    }
+
+    [data-theme="light"] .write-modal-total .total-amount,
+    html.theme-light .write-modal-total .total-amount {
+        color: #15803d !important;
+        font-weight: 900 !important;
+        font-size: 1.15rem !important;
+    }
+
+    [data-theme="light"] .write-modal-total .line-count,
+    html.theme-light .write-modal-total .line-count {
+        color: #000000 !important;
+        font-weight: 700 !important;
+    }
+
+    [data-theme="light"] .number-pad-4col button,
+    html.theme-light .number-pad-4col button {
+        font-weight: 900 !important;
+        color: #000000 !important;
+        font-size: 1.4rem !important;
+    }
+
+    [data-theme="light"] .line-item.current .line-text,
+    html.theme-light .line-item.current .line-text {
+        color: #166534 !important;
+        font-weight: 900 !important;
+        font-size: 1.25rem !important;
+    }
+
+    [data-theme="light"] .line-item.current .line-number,
+    html.theme-light .line-item.current .line-number {
+        color: #166534 !important;
+        font-weight: 900 !important;
+    }
+
+    [data-theme="light"] .write-modal-header h3,
+    html.theme-light .write-modal-header h3 {
+        color: #000000 !important;
+        font-weight: 800 !important;
+    }
+
+    [data-theme="light"] .write-modal-note-row .note-input,
+    html.theme-light .write-modal-note-row .note-input {
+        color: #000000 !important;
+        font-weight: 600 !important;
+    }
+
+    [data-theme="light"] .type-btn,
+    html.theme-light .type-btn {
+        font-weight: 800 !important;
+    }
+
+    [data-theme="light"] .empty-lines,
+    html.theme-light .empty-lines {
+        color: #333333 !important;
+        font-weight: 600 !important;
+    }
 }

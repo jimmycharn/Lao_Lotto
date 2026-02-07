@@ -94,6 +94,7 @@ export default function RoundAccordionItem({
     // Write bet on behalf of user states
     const [showWriteBetModal, setShowWriteBetModal] = useState(false)
     const [selectedMemberForBet, setSelectedMemberForBet] = useState(null)
+    const [editingBillData, setEditingBillData] = useState(null)
 
     // Inline excess transfer states
     const [selectedExcessItems, setSelectedExcessItems] = useState({})
@@ -354,8 +355,63 @@ export default function RoundAccordionItem({
         )
         if (member) {
             setSelectedMemberForBet(member)
+            setEditingBillData(null) // Clear editing data for new submission
             setShowWriteBetModal(true)
         }
+    }
+
+    // Edit bill - open WriteSubmissionModal with existing data
+    const handleEditBill = (billId, billItems, userId) => {
+        // Find the member object
+        const member = allMembers.find(m => m.id === userId)
+        if (!member) {
+            toast.error('ไม่พบข้อมูลสมาชิก')
+            return
+        }
+
+        // Sort items by created_at to maintain original order
+        const sortedItems = [...billItems].sort((a, b) => 
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        )
+
+        // Group items by entry_id to reconstruct original lines, preserving order
+        const entryGroups = new Map()
+        sortedItems.forEach(item => {
+            const key = item.entry_id || item.id
+            if (!entryGroups.has(key)) {
+                entryGroups.set(key, {
+                    items: [],
+                    originalLine: item.display_numbers || null,
+                    created_at: item.created_at
+                })
+            }
+            entryGroups.get(key).items.push(item)
+        })
+
+        // Reconstruct original lines from grouped entries (Map preserves insertion order)
+        const originalLines = Array.from(entryGroups.values()).map(group => {
+            const firstItem = group.items[0]
+            
+            // If we have the original line stored, use it directly
+            if (group.originalLine) {
+                return group.originalLine
+            }
+            
+            // Fallback: reconstruct from individual fields
+            const numbers = firstItem.numbers
+            const amount = firstItem.amount
+            return `${numbers}=${amount}`
+        })
+
+        // Set editing data and open WriteSubmissionModal
+        setSelectedMemberForBet(member)
+        setEditingBillData({
+            billId,
+            billNote: sortedItems[0]?.bill_note || '',
+            originalLines,
+            originalItems: sortedItems
+        })
+        setShowWriteBetModal(true)
     }
 
     const calculateExcessItems = () => {
@@ -1043,7 +1099,7 @@ export default function RoundAccordionItem({
         const byType = {}
         batchesToCopy.forEach(batch => {
             batch.items.forEach(item => {
-                const typeName = BET_TYPES[item.bet_type] || item.bet_type
+                const typeName = BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type
                 if (!byType[typeName]) byType[typeName] = { items: [], isSet4Digit: item.bet_type === '4_set' || item.bet_type === '4_top' }
                 byType[typeName].items.push(item)
             })
@@ -1867,7 +1923,7 @@ export default function RoundAccordionItem({
                                                                                 id: entryId,
                                                                                 numbers: s.display_numbers || s.numbers,
                                                                                 bet_type: s.bet_type,
-                                                                                display_bet_type: s.display_bet_type || BET_TYPES[s.bet_type] || s.bet_type,
+                                                                                display_bet_type: s.display_bet_type || BET_TYPES_BY_LOTTERY[round.lottery_type]?.[s.bet_type]?.label || BET_TYPES[s.bet_type] || s.bet_type,
                                                                                 amount: 0,
                                                                                 display_amount: s.display_amount,
                                                                                 count: 0,
@@ -1879,7 +1935,10 @@ export default function RoundAccordionItem({
                                                                         byEntry[entryId].count += 1
                                                                         byEntry[entryId].ids.push(s.id)
                                                                     })
-                                                                    filteredData = Object.values(byEntry)
+                                                                    // Sort by created_at to maintain original order
+                                                                    filteredData = Object.values(byEntry).sort((a, b) => 
+                                                                        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                                                                    )
                                                                 } else if (displayMode === 'grouped') {
                                                                     // Group by normalized numbers + bet_type
                                                                     const grouped = {}
@@ -1955,7 +2014,7 @@ export default function RoundAccordionItem({
                                                                             const isSelected = itemIds.some(id => selectedItems[id])
 
                                                                             // Display label based on mode
-                                                                            let displayLabel = BET_TYPES[sub.bet_type] || sub.bet_type
+                                                                            let displayLabel = BET_TYPES_BY_LOTTERY[round.lottery_type]?.[sub.bet_type]?.label || BET_TYPES[sub.bet_type] || sub.bet_type
                                                                             if (displayMode === 'summary' && sub.display_bet_type) {
                                                                                 displayLabel = sub.display_bet_type
                                                                             }
@@ -2198,17 +2257,30 @@ export default function RoundAccordionItem({
                                                                                             })()}
                                                                                         </span>
                                                                                         {isOpen && (
-                                                                                            <button 
-                                                                                                className="btn btn-icon btn-sm btn-danger"
-                                                                                                onClick={(e) => {
-                                                                                                    e.stopPropagation()
-                                                                                                    handleDeleteBill(bill.items)
-                                                                                                }}
-                                                                                                title="ลบใบโพย"
-                                                                                                style={{ padding: '0.25rem 0.4rem' }}
-                                                                                            >
-                                                                                                <FiTrash2 size={14} />
-                                                                                            </button>
+                                                                                            <>
+                                                                                                <button 
+                                                                                                    className="btn btn-icon btn-sm"
+                                                                                                    onClick={(e) => {
+                                                                                                        e.stopPropagation()
+                                                                                                        handleEditBill(bill.bill_id, bill.items, bill.user_id)
+                                                                                                    }}
+                                                                                                    title="แก้ไขใบโพย"
+                                                                                                    style={{ padding: '0.25rem 0.4rem', color: 'var(--color-primary)' }}
+                                                                                                >
+                                                                                                    <FiEdit2 size={14} />
+                                                                                                </button>
+                                                                                                <button 
+                                                                                                    className="btn btn-icon btn-sm btn-danger"
+                                                                                                    onClick={(e) => {
+                                                                                                        e.stopPropagation()
+                                                                                                        handleDeleteBill(bill.items)
+                                                                                                    }}
+                                                                                                    title="ลบใบโพย"
+                                                                                                    style={{ padding: '0.25rem 0.4rem' }}
+                                                                                                >
+                                                                                                    <FiTrash2 size={14} />
+                                                                                                </button>
+                                                                                            </>
                                                                                         )}
                                                                                     </div>
                                                                                 </div>
@@ -2217,8 +2289,11 @@ export default function RoundAccordionItem({
                                                                                 {isExpanded && (
                                                                                     <div style={{ borderTop: '1px solid var(--color-border)' }}>
                                                                                         {(() => {
+                                                                                            // Sort items by created_at first to ensure correct order
+                                                                                            let displayItems = [...bill.items].sort((a, b) => 
+                                                                                                new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                                                                                            )
                                                                                             // Filter items by bet type if selected
-                                                                                            let displayItems = bill.items
                                                                                             if (inlineBetTypeFilter !== 'all') {
                                                                                                 displayItems = displayItems.filter(item => item.bet_type === inlineBetTypeFilter)
                                                                                             }
@@ -2232,26 +2307,36 @@ export default function RoundAccordionItem({
                                                                                                             id: entryId,
                                                                                                             numbers: item.display_numbers || item.numbers,
                                                                                                             bet_type: item.bet_type,
-                                                                                                            display_bet_type: item.display_bet_type || BET_TYPES[item.bet_type] || item.bet_type,
+                                                                                                            display_bet_type: item.display_bet_type || BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type,
                                                                                                             amount: 0,
                                                                                                             display_amount: item.display_amount,
                                                                                                             count: 0,
-                                                                                                            ids: []
+                                                                                                            ids: [],
+                                                                                                            created_at: item.created_at
                                                                                                         }
                                                                                                     }
                                                                                                     byEntry[entryId].amount += item.amount
                                                                                                     byEntry[entryId].count += 1
                                                                                                     byEntry[entryId].ids.push(item.id)
                                                                                                 })
-                                                                                                displayItems = Object.values(byEntry)
+                                                                                                // Sort by created_at to maintain original order
+                                                                                                displayItems = Object.values(byEntry).sort((a, b) => 
+                                                                                                    new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                                                                                                )
                                                                                             }
                                                                                             
                                                                                             // Sort items based on itemSortMode
                                                                                             const sortedItems = (() => {
                                                                                                 if (itemSortMode === 'original') {
-                                                                                                    return displayItems
+                                                                                                    // Sort by created_at ascending (oldest first)
+                                                                                                    return [...displayItems].sort((a, b) => 
+                                                                                                        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                                                                                                    )
                                                                                                 } else if (itemSortMode === 'original_rev') {
-                                                                                                    return [...displayItems].reverse()
+                                                                                                    // Sort by created_at descending (newest first)
+                                                                                                    return [...displayItems].sort((a, b) => 
+                                                                                                        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                                                                                                    )
                                                                                                 } else {
                                                                                                     // asc or desc - sort by number
                                                                                                     return [...displayItems].sort((a, b) => {
@@ -2425,7 +2510,7 @@ export default function RoundAccordionItem({
                                                                                     </td>
                                                                                     <td className="number-cell">
                                                                                         <div className="number-value">{sub.numbers}</div>
-                                                                                        <div className="type-sub-label">{BET_TYPES[sub.bet_type] || sub.bet_type}</div>
+                                                                                        <div className="type-sub-label">{BET_TYPES_BY_LOTTERY[round.lottery_type]?.[sub.bet_type]?.label || BET_TYPES[sub.bet_type] || sub.bet_type}</div>
                                                                                     </td>
                                                                                     <td>
                                                                                         {round.currency_symbol}{sub.amount.toLocaleString()}
@@ -2528,7 +2613,7 @@ export default function RoundAccordionItem({
                                                                         <input type="checkbox" checked={isSelected || false} onChange={() => { }} style={{ width: '18px', height: '18px', accentColor: 'var(--color-warning)' }} />
                                                                         <div style={{ flex: 1 }}>
                                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                                                                                <span className="type-badge">{BET_TYPES[item.bet_type] || item.bet_type}</span>
+                                                                                <span className="type-badge">{BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}</span>
                                                                                 <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '1.1rem' }}>{item.displayNumbers || item.numbers}</span>
                                                                             </div>
                                                                             <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
@@ -2810,7 +2895,7 @@ export default function RoundAccordionItem({
                                                                                         return (
                                                                                             <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', borderBottom: '1px solid var(--color-border)', textDecoration: itemReturned ? 'line-through' : 'none', opacity: itemReturned ? 0.6 : 1, background: itemReturned ? 'rgba(239, 68, 68, 0.05)' : 'transparent' }}>
                                                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                                                    <span className="type-badge" style={{ fontSize: '0.7rem' }}>{BET_TYPES[item.bet_type] || item.bet_type}</span>
+                                                                                                    <span className="type-badge" style={{ fontSize: '0.7rem' }}>{BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}</span>
                                                                                                     <span style={{ fontWeight: 500, color: itemReturned ? 'var(--color-danger)' : 'var(--color-primary)' }}>{item.numbers}</span>
                                                                                                     {itemReturned && <span style={{ fontSize: '0.6rem', padding: '0.1rem 0.3rem', background: 'var(--color-danger)', color: 'white', borderRadius: '3px' }}>คืน</span>}
                                                                                                 </div>
@@ -2853,11 +2938,13 @@ export default function RoundAccordionItem({
                     onClose={() => {
                         setShowWriteBetModal(false)
                         setSelectedMemberForBet(null)
+                        setEditingBillData(null)
                     }}
                     onSuccess={() => {
                         fetchInlineSubmissions(true)
                         if (onCreditUpdate) onCreditUpdate()
                     }}
+                    editingData={editingBillData}
                 />
             )}
         </div>

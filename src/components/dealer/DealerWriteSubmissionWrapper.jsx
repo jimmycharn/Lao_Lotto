@@ -14,7 +14,8 @@ export default function DealerWriteSubmissionWrapper({
     targetUser,
     dealerId,
     onClose,
-    onSuccess
+    onSuccess,
+    editingData = null
 }) {
     const { toast } = useToast()
     const [userSettings, setUserSettings] = useState(null)
@@ -78,15 +79,18 @@ export default function DealerWriteSubmissionWrapper({
         }
 
         const billId = generateUUID()
-        const timestamp = new Date().toISOString()
+        const baseTimestamp = new Date()
 
         // Transform entries to submissions format
         // Note: WriteSubmissionModal ส่ง betType (camelCase) แต่ database ใช้ bet_type (snake_case)
-        const inserts = entries.map(entry => {
+        const inserts = entries.map((entry, index) => {
             const betType = entry.betType || entry.bet_type  // รองรับทั้ง camelCase และ snake_case
             const commissionRate = getCommissionRate(betType)
             const isSetBet = betType === '4_set'
             const commissionAmount = isSetBet ? commissionRate : (entry.amount * commissionRate) / 100
+            
+            // Add milliseconds offset to preserve order (each entry gets +1ms)
+            const entryTimestamp = new Date(baseTimestamp.getTime() + index).toISOString()
 
             return {
                 entry_id: entry.entryId || entry.entry_id || generateUUID(),
@@ -104,7 +108,7 @@ export default function DealerWriteSubmissionWrapper({
                 is_deleted: false,
                 submitted_by: dealerId,
                 submitted_by_type: 'dealer',
-                created_at: timestamp
+                created_at: entryTimestamp
             }
         })
 
@@ -119,6 +123,81 @@ export default function DealerWriteSubmissionWrapper({
         }
 
         toast.success(`บันทึกโพยให้ ${targetUser.full_name || targetUser.email} สำเร็จ! (${entries.length} รายการ)`)
+        
+        if (onSuccess) onSuccess()
+        onClose()
+    }
+
+    // Handle edit submission from WriteSubmissionModal
+    async function handleEditSubmit({ entries, billNote, originalBillId, originalItems }) {
+        if (!entries || entries.length === 0) {
+            throw new Error('ไม่มีข้อมูลที่จะบันทึก')
+        }
+
+        // Soft delete old entries
+        if (originalItems && originalItems.length > 0) {
+            const oldIds = originalItems.map(item => item.id)
+            const { error: deleteError } = await supabase
+                .from('submissions')
+                .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+                .in('id', oldIds)
+            
+            if (deleteError) throw deleteError
+        }
+
+        // Calculate total amount
+        const totalAmount = entries.reduce((sum, e) => sum + (e.amount || 0), 0)
+
+        // Check dealer credit before saving
+        const creditCheck = await checkDealerCreditForBet(dealerId, round.id, totalAmount)
+        if (!creditCheck.allowed) {
+            throw new Error(creditCheck.message)
+        }
+
+        const billId = originalBillId || generateUUID()
+        const baseTimestamp = new Date()
+
+        // Transform entries to submissions format
+        const inserts = entries.map((entry, index) => {
+            const betType = entry.betType || entry.bet_type
+            const commissionRate = getCommissionRate(betType)
+            const isSetBet = betType === '4_set'
+            const commissionAmount = isSetBet ? commissionRate : (entry.amount * commissionRate) / 100
+            
+            // Add milliseconds offset to preserve order (each entry gets +1ms)
+            const entryTimestamp = new Date(baseTimestamp.getTime() + index).toISOString()
+
+            return {
+                entry_id: entry.entryId || entry.entry_id || generateUUID(),
+                round_id: round.id,
+                user_id: targetUser.id,
+                bill_id: billId,
+                bill_note: billNote || null,
+                bet_type: betType,
+                numbers: entry.numbers,
+                amount: entry.amount,
+                display_numbers: entry.displayText || entry.display_numbers || entry.numbers,
+                display_amount: entry.displayAmount?.toString() || entry.display_amount || entry.amount.toString(),
+                commission_rate: commissionRate,
+                commission_amount: commissionAmount,
+                is_deleted: false,
+                submitted_by: dealerId,
+                submitted_by_type: 'dealer',
+                created_at: entryTimestamp
+            }
+        })
+
+        const { error } = await supabase.from('submissions').insert(inserts)
+        if (error) throw error
+
+        // Update pending deduction in background
+        if (dealerId) {
+            updatePendingDeduction(dealerId).catch(err => {
+                console.error('Background pending deduction update failed:', err)
+            })
+        }
+
+        toast.success(`แก้ไขโพยให้ ${targetUser.full_name || targetUser.email} สำเร็จ! (${entries.length} รายการ)`)
         
         if (onSuccess) onSuccess()
         onClose()
@@ -141,6 +220,8 @@ export default function DealerWriteSubmissionWrapper({
             currencySymbol={round.currency_symbol || '฿'}
             lotteryType={round.lottery_type}
             setPrice={setPrice}
+            editingData={editingData}
+            onEditSubmit={handleEditSubmit}
         />
     )
 }

@@ -1186,14 +1186,17 @@ export default function UserDashboard() {
         }
 
         const billId = 'B-' + Math.random().toString(36).substring(2, 8).toUpperCase()
-        const timestamp = new Date().toISOString()
+        const baseTimestamp = new Date()
         const lotteryKey = selectedRound.lottery_type === 'lao' || selectedRound.lottery_type === 'hanoi' ? 'lao' : selectedRound.lottery_type
 
         // Prepare submissions - all entries share the same bill_id and bill_note
         // Group entries by lineIndex to share entry_id and display_text
-        const submissionsToInsert = entries.map(entry => {
+        const submissionsToInsert = entries.map((entry, index) => {
             const commInfo = getCommissionForBetType(entry.betType, userSettings)
             const commissionAmount = Math.round(entry.amount * commInfo.rate / 100)
+            
+            // Add milliseconds offset to preserve order (each entry gets +1ms)
+            const entryTimestamp = new Date(baseTimestamp.getTime() + index).toISOString()
 
             return {
                 round_id: selectedRound.id,
@@ -1209,7 +1212,7 @@ export default function UserDashboard() {
                 display_bet_type: null, // ไม่ใช้ display_bet_type แยก เพราะ display_numbers มีข้อมูลครบแล้ว
                 commission_rate: commInfo.rate,
                 commission_amount: commissionAmount,
-                created_at: timestamp
+                created_at: entryTimestamp
             }
         })
 
@@ -1252,10 +1255,13 @@ export default function UserDashboard() {
         }
 
         // Insert new submissions with same bill_id
-        const timestamp = new Date().toISOString()
-        const submissionsToInsert = entries.map(entry => {
+        const baseTimestamp = new Date()
+        const submissionsToInsert = entries.map((entry, index) => {
             const commInfo = getCommissionForBetType(entry.betType, userSettings)
             const commissionAmount = Math.round(entry.amount * commInfo.rate / 100)
+            
+            // Add milliseconds offset to preserve order (each entry gets +1ms)
+            const entryTimestamp = new Date(baseTimestamp.getTime() + index).toISOString()
 
             return {
                 round_id: selectedRound.id,
@@ -1271,7 +1277,7 @@ export default function UserDashboard() {
                 display_bet_type: null, // ไม่ใช้ display_bet_type แยก เพราะ display_numbers มีข้อมูลครบแล้ว
                 commission_rate: commInfo.rate,
                 commission_amount: commissionAmount,
-                created_at: timestamp
+                created_at: entryTimestamp
             }
         })
 
@@ -1371,22 +1377,28 @@ export default function UserDashboard() {
 
     // Edit bill - open WriteSubmissionModal with existing data
     function handleEditBill(billId, billItems) {
-        // Group items by entry_id to reconstruct original lines
-        const entryGroups = billItems.reduce((acc, item) => {
+        // Sort items by created_at to maintain original order
+        const sortedItems = [...billItems].sort((a, b) => 
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        )
+
+        // Group items by entry_id to reconstruct original lines, preserving order
+        const entryGroups = new Map()
+        sortedItems.forEach(item => {
             const key = item.entry_id || item.id
-            if (!acc[key]) {
-                acc[key] = {
+            if (!entryGroups.has(key)) {
+                entryGroups.set(key, {
                     items: [],
                     // display_numbers stores the full original line (e.g., "584=100*6 คูณชุด")
-                    originalLine: item.display_numbers || null
-                }
+                    originalLine: item.display_numbers || null,
+                    created_at: item.created_at
+                })
             }
-            acc[key].items.push(item)
-            return acc
-        }, {})
+            entryGroups.get(key).items.push(item)
+        })
 
-        // Reconstruct original lines from grouped entries
-        const originalLines = Object.values(entryGroups).map(group => {
+        // Reconstruct original lines from grouped entries (Map preserves insertion order)
+        const originalLines = Array.from(entryGroups.values()).map(group => {
             const firstItem = group.items[0]
             
             // If we have the original line stored, use it directly
@@ -1397,7 +1409,6 @@ export default function UserDashboard() {
             // Fallback: reconstruct from individual fields (for old data)
             const numbers = firstItem.numbers
             const amount = firstItem.amount
-            const betType = BET_TYPES[firstItem.bet_type]?.label || firstItem.bet_type
             
             // Simple format for fallback
             return `${numbers}=${amount}`
@@ -1406,9 +1417,9 @@ export default function UserDashboard() {
         // Set editing data and open WriteSubmissionModal
         setEditingBillData({
             billId,
-            billNote: billItems[0]?.bill_note || '',
+            billNote: sortedItems[0]?.bill_note || '',
             originalLines,
-            originalItems: billItems
+            originalItems: sortedItems
         })
         setShowWriteModal(true)
     }
@@ -2607,7 +2618,11 @@ export default function UserDashboard() {
                                                                     // Helper to process items based on displayMode
                                                                     const processItems = (items) => {
                                                                         if (displayMode === 'detailed') return items
-                                                                        return items.reduce((acc, sub) => {
+                                                                        // Sort by created_at first to ensure correct grouping order
+                                                                        const sortedItems = [...items].sort((a, b) => 
+                                                                            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                                                                        )
+                                                                        return sortedItems.reduce((acc, sub) => {
                                                                             if (sub.entry_id) {
                                                                                 const existing = acc.find(a => a.entry_id === sub.entry_id)
                                                                                 if (existing) {
@@ -2661,9 +2676,15 @@ export default function UserDashboard() {
                                                                                     // Sort items inside bill based on itemSortMode
                                                                                     const sortedBillItems = (() => {
                                                                                         if (itemSortMode === 'original') {
-                                                                                            return processedBillItems
+                                                                                            // Sort by created_at ascending (oldest first)
+                                                                                            return [...processedBillItems].sort((a, b) => 
+                                                                                                new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                                                                                            )
                                                                                         } else if (itemSortMode === 'original_rev') {
-                                                                                            return [...processedBillItems].reverse()
+                                                                                            // Sort by created_at descending (newest first)
+                                                                                            return [...processedBillItems].sort((a, b) => 
+                                                                                                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                                                                                            )
                                                                                         } else {
                                                                                             // asc or desc - sort by number
                                                                                             return [...processedBillItems].sort((a, b) => {
