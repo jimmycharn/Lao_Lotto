@@ -48,8 +48,9 @@ function ProtectedRoute({ children, requireAuth = false, requireDealer = false, 
     return <Navigate to="/login" replace />
   }
 
-  // For dealer/admin checks, if we have user but no profile yet, show loading briefly
-  if ((requireDealer || requireAdmin) && user && !profile && loading) {
+  // For dealer/admin checks, if we have user but no profile yet, wait for profile to load
+  // This prevents redirect to "/" before we know the user's role
+  if ((requireDealer || requireAdmin) && user && !profile) {
     return (
       <div className="loading-screen">
         <div className="spinner"></div>
