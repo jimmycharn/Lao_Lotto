@@ -94,6 +94,7 @@ export default function Dealer() {
     const [showSummaryModal, setShowSummaryModal] = useState(false)
     const [saving, setSaving] = useState(false)
     const [expandedMemberId, setExpandedMemberId] = useState(null)
+    const [expandedRoundId, setExpandedRoundId] = useState(null) // Only one round can be expanded at a time
     const [subscription, setSubscription] = useState(null)
     const [dealerBankAccounts, setDealerBankAccounts] = useState([])
     const [roundsTab, setRoundsTab] = useState('open') // 'open' | 'closed'
@@ -1735,6 +1736,8 @@ export default function Dealer() {
                                                 user={user}
                                                 allMembers={members}
                                                 onCreditUpdate={fetchDealerCredit}
+                                                isExpanded={expandedRoundId === round.id}
+                                                onToggle={() => setExpandedRoundId(expandedRoundId === round.id ? null : round.id)}
                                             />
                                         ))}
                                     </div>

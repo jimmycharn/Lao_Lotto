@@ -49,10 +49,15 @@ export default function RoundAccordionItem({
     formatTime, 
     user,
     allMembers = [], // All members of the dealer
-    onCreditUpdate // Callback to refresh dealer credit after bet submission
+    onCreditUpdate, // Callback to refresh dealer credit after bet submission
+    isExpanded: isExpandedProp, // Controlled expanded state from parent
+    onToggle // Callback to toggle expanded state
 }) {
     const { toast } = useToast()
-    const [isExpanded, setIsExpanded] = useState(false)
+    // Use controlled state if provided, otherwise use internal state
+    const [internalExpanded, setInternalExpanded] = useState(false)
+    const isExpanded = isExpandedProp !== undefined ? isExpandedProp : internalExpanded
+    const setIsExpanded = onToggle || setInternalExpanded
     const [summaryData, setSummaryData] = useState({ loading: false, submissions: [], userSettings: {} })
 
     // Inline submissions view states
@@ -338,11 +343,21 @@ export default function RoundAccordionItem({
 
     const handleHeaderClick = () => {
         if (!isExpanded) {
-            setIsExpanded(true)
+            // If using controlled state (onToggle), just call it
+            // If using internal state, set to true
+            if (onToggle) {
+                onToggle()
+            } else {
+                setInternalExpanded(true)
+            }
             // Auto-load submissions when expanding
             fetchInlineSubmissions()
         } else {
-            setIsExpanded(false)
+            if (onToggle) {
+                onToggle()
+            } else {
+                setInternalExpanded(false)
+            }
         }
     }
 
