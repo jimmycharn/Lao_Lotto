@@ -13,6 +13,7 @@ const Register = lazy(() => import('./pages/Register'))
 const InvitationAccept = lazy(() => import('./pages/InvitationAccept'))
 const DealerConnect = lazy(() => import('./pages/DealerConnect'))
 const BuyLottery = lazy(() => import('./pages/BuyLottery'))
+const History = lazy(() => import('./pages/History'))
 const Profile = lazy(() => import('./pages/Profile'))
 const Dealer = lazy(() => import('./pages/Dealer'))
 const Admin = lazy(() => import('./pages/Admin'))
@@ -146,6 +147,14 @@ function AppContent() {
             element={
               <ProtectedRoute requireAuth>
                 <UserDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/history"
+            element={
+              <ProtectedRoute requireAuth>
+                <History />
               </ProtectedRoute>
             }
           />

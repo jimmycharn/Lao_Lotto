@@ -28,7 +28,9 @@ import {
     FiClipboard,
     FiRefreshCw,
     FiFileText,
-    FiEdit
+    FiEdit,
+    FiTrendingUp,
+    FiTrendingDown
 } from 'react-icons/fi'
 import './UserDashboard.css'
 import './ViewToggle.css'
@@ -76,6 +78,10 @@ export default function UserDashboard() {
     const [allResultSubmissions, setAllResultSubmissions] = useState([]) // All submissions for summary calculations
     const [resultsLoading, setResultsLoading] = useState(false)
     const [resultViewMode, setResultViewMode] = useState('winners') // 'all' or 'winners'
+
+    // History tab state
+    const [userHistory, setUserHistory] = useState([])
+    const [historyLoading, setHistoryLoading] = useState(false)
 
     // Submit form state
     const [showSubmitModal, setShowSubmitModal] = useState(false)
@@ -544,6 +550,28 @@ export default function UserDashboard() {
             }
         } catch (error) {
             console.error('Error fetching result submissions:', error)
+        }
+    }
+
+    // Fetch user history (archived rounds)
+    async function fetchUserHistory() {
+        if (!user?.id) return
+        setHistoryLoading(true)
+        try {
+            const { data, error } = await supabase
+                .from('user_round_history')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('deleted_at', { ascending: false })
+                .limit(50)
+
+            if (!error && data) {
+                setUserHistory(data)
+            }
+        } catch (error) {
+            console.error('Error fetching user history:', error)
+        } finally {
+            setHistoryLoading(false)
         }
     }
 
@@ -2195,6 +2223,12 @@ export default function UserDashboard() {
                         <FiAward /> ผลรางวัล
                     </button>
                     <button
+                        className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`}
+                        onClick={() => { setActiveTab('history'); fetchUserHistory(); }}
+                    >
+                        <FiClock /> ประวัติ
+                    </button>
+                    <button
                         className={`tab-btn ${activeTab === 'dealer' ? 'active' : ''}`}
                         onClick={() => setActiveTab('dealer')}
                     >
@@ -3356,6 +3390,58 @@ export default function UserDashboard() {
                                         </div>
                                     )
                                 })
+                            )}
+                        </div>
+                    )}
+
+                    {activeTab === 'history' && (
+                        <div className="history-tab-content">
+                            {historyLoading ? (
+                                <div className="loading-state">
+                                    <div className="spinner"></div>
+                                </div>
+                            ) : userHistory.length === 0 ? (
+                                <div className="empty-state card">
+                                    <FiClock className="empty-icon" />
+                                    <h3>ไม่มีประวัติ</h3>
+                                    <p>ประวัติจะแสดงเมื่อเจ้ามือลบงวดหวยที่คุณส่งเลข</p>
+                                </div>
+                            ) : (
+                                <div className="history-list">
+                                    {userHistory.map(item => (
+                                        <div key={item.id} className="card" style={{ marginBottom: '0.75rem', padding: '1rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                                                <span className={`lottery-badge ${item.lottery_type}`}>
+                                                    {LOTTERY_TYPES[item.lottery_type] || item.lottery_type}
+                                                </span>
+                                                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                                                    <FiCalendar style={{ marginRight: '0.25rem' }} />
+                                                    {new Date(item.round_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                </span>
+                                            </div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem', background: 'rgba(0,0,0,0.05)', borderRadius: '0.5rem' }}>
+                                                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>ยอดส่ง</span>
+                                                    <span style={{ fontWeight: '600' }}>฿{item.total_amount?.toLocaleString()}</span>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem', background: 'rgba(0,0,0,0.05)', borderRadius: '0.5rem' }}>
+                                                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>ค่าคอม</span>
+                                                    <span style={{ fontWeight: '600' }}>฿{item.total_commission?.toLocaleString()}</span>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem', background: 'rgba(0,0,0,0.05)', borderRadius: '0.5rem' }}>
+                                                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>รางวัล</span>
+                                                    <span style={{ fontWeight: '600', color: 'var(--color-success)' }}>฿{item.total_winnings?.toLocaleString()}</span>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem', background: item.profit_loss >= 0 ? 'rgba(46,204,113,0.1)' : 'rgba(231,76,60,0.1)', borderRadius: '0.5rem' }}>
+                                                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>กำไร/ขาดทุน</span>
+                                                    <span style={{ fontWeight: '600', color: item.profit_loss >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                                        {item.profit_loss >= 0 ? '+' : ''}฿{item.profit_loss?.toLocaleString()}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             )}
                         </div>
                     )}

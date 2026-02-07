@@ -97,7 +97,9 @@ export default function Dealer() {
     const [expandedRoundId, setExpandedRoundId] = useState(null) // Only one round can be expanded at a time
     const [subscription, setSubscription] = useState(null)
     const [dealerBankAccounts, setDealerBankAccounts] = useState([])
-    const [roundsTab, setRoundsTab] = useState('open') // 'open' | 'closed'
+    const [roundsTab, setRoundsTab] = useState('open') // 'open' | 'closed' | 'history'
+    const [roundHistory, setRoundHistory] = useState([])
+    const [historyLoading, setHistoryLoading] = useState(false)
     const [upstreamDealers, setUpstreamDealers] = useState([])
     const [loadingUpstream, setLoadingUpstream] = useState(false)
     const [downstreamDealers, setDownstreamDealers] = useState([]) // Dealers who send bets TO us
@@ -409,6 +411,28 @@ export default function Dealer() {
         fetchDealerCredit()
         fetchAssignedBankAccount()
         fetchTopupHistory()
+    }
+
+    // Fetch round history for dealer
+    async function fetchRoundHistory() {
+        if (!user?.id) return
+        setHistoryLoading(true)
+        try {
+            const { data, error } = await supabase
+                .from('round_history')
+                .select('*')
+                .eq('dealer_id', user.id)
+                .order('deleted_at', { ascending: false })
+                .limit(50)
+
+            if (!error && data) {
+                setRoundHistory(data)
+            }
+        } catch (error) {
+            console.error('Error fetching round history:', error)
+        } finally {
+            setHistoryLoading(false)
+        }
     }
     
     // Fetch dealer credit balance
@@ -1216,11 +1240,144 @@ export default function Dealer() {
         }
     }
 
-    // Delete round
+    // Delete round - with history preservation (only for closed + announced + has submissions)
     async function handleDeleteRound(roundId, roundStatus) {
         if (!confirm('ต้องการลบงวดนี้?')) return
 
         try {
+            // Get round details first
+            const { data: roundData } = await supabase
+                .from('lottery_rounds')
+                .select('*')
+                .eq('id', roundId)
+                .single()
+
+            if (!roundData) {
+                toast.error('ไม่พบข้อมูลงวด')
+                return
+            }
+
+            // Get all submissions for this round
+            const { data: submissions } = await supabase
+                .from('submissions')
+                .select('*')
+                .eq('round_id', roundId)
+                .eq('is_deleted', false)
+
+            // Calculate total amount
+            const totalAmount = submissions?.reduce((sum, s) => sum + (s.amount || 0), 0) || 0
+
+            // Only save history if: round is closed/announced + result announced + has submissions (totalAmount > 0)
+            const shouldSaveHistory = (roundData.status === 'closed' || roundData.status === 'announced') && 
+                                      roundData.is_result_announced === true && 
+                                      totalAmount > 0
+
+            console.log('Delete round debug:', {
+                roundId,
+                status: roundData.status,
+                is_result_announced: roundData.is_result_announced,
+                totalAmount,
+                shouldSaveHistory
+            })
+
+            if (shouldSaveHistory) {
+                // Get transfers for this round
+                const { data: transfers } = await supabase
+                    .from('bet_transfers')
+                    .select('*')
+                    .eq('round_id', roundId)
+
+                // Calculate dealer summary
+                // Note: submissions table uses commission_amount and prize_amount fields
+                const totalEntries = submissions?.length || 0
+                const totalCommission = submissions?.reduce((sum, s) => sum + (s.commission_amount || 0), 0) || 0
+                const totalPayout = submissions?.reduce((sum, s) => sum + (s.prize_amount || 0), 0) || 0
+
+                console.log('History save debug:', {
+                    totalEntries,
+                    totalAmount,
+                    totalCommission,
+                    totalPayout,
+                    sampleSubmission: submissions?.[0]
+                })
+
+                // Calculate upstream transfers
+                const transferredAmount = transfers?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0
+                const upstreamCommission = transfers?.reduce((sum, t) => sum + (t.commission_earned || 0), 0) || 0
+                const upstreamWinnings = transfers?.reduce((sum, t) => sum + (t.winnings || 0), 0) || 0
+
+                // Calculate profit
+                // กำไร = (ยอดรับ - ค่าคอม - จ่ายถูก) + (ยอดส่ง - (ค่าคอมที่ได้ + รับถูก))
+                const memberProfit = totalAmount - totalCommission - totalPayout
+                const upstreamProfit = transferredAmount - upstreamCommission - upstreamWinnings
+                const profit = memberProfit + upstreamProfit
+
+                // Save dealer round history
+                const { error: historyError } = await supabase
+                    .from('round_history')
+                    .insert({
+                        dealer_id: user.id,
+                        round_id: roundId,
+                        lottery_type: roundData.lottery_type,
+                        round_date: roundData.draw_date || roundData.open_time?.split('T')[0],
+                        open_time: roundData.open_time,
+                        close_time: roundData.close_time,
+                        total_entries: totalEntries,
+                        total_amount: totalAmount,
+                        total_commission: totalCommission,
+                        total_payout: totalPayout,
+                        transferred_amount: transferredAmount,
+                        upstream_commission: upstreamCommission,
+                        upstream_winnings: upstreamWinnings,
+                        profit: profit
+                    })
+
+                if (historyError) {
+                    console.error('Error saving dealer history:', historyError)
+                }
+
+                // Save user round history for each user
+                const userSubmissions = {}
+                submissions?.forEach(s => {
+                    if (!userSubmissions[s.user_id]) {
+                        userSubmissions[s.user_id] = {
+                            entries: 0,
+                            amount: 0,
+                            commission: 0,
+                            winnings: 0
+                        }
+                    }
+                    userSubmissions[s.user_id].entries += 1
+                    userSubmissions[s.user_id].amount += s.amount || 0
+                    userSubmissions[s.user_id].commission += s.commission_amount || 0
+                    userSubmissions[s.user_id].winnings += s.prize_amount || 0
+                })
+
+                // Insert user histories
+                const userHistories = Object.entries(userSubmissions).map(([userId, data]) => ({
+                    user_id: userId,
+                    dealer_id: user.id,
+                    round_id: roundId,
+                    lottery_type: roundData.lottery_type,
+                    round_date: roundData.draw_date || roundData.open_time?.split('T')[0],
+                    total_entries: data.entries,
+                    total_amount: data.amount,
+                    total_commission: data.commission,
+                    total_winnings: data.winnings,
+                    profit_loss: data.winnings + data.commission - data.amount
+                }))
+
+                if (userHistories.length > 0) {
+                    const { error: userHistoryError } = await supabase
+                        .from('user_round_history')
+                        .insert(userHistories)
+
+                    if (userHistoryError) {
+                        console.error('Error saving user histories:', userHistoryError)
+                    }
+                }
+            }
+
             // Only deduct credit if round is still OPEN (not closed or announced)
             // If round is closed/announced, credit was already deducted when closing
             if (roundStatus === 'open') {
@@ -1260,9 +1417,10 @@ export default function Dealer() {
 
             if (!error) {
                 setSelectedRound(null)
+                setExpandedRoundId(null)
                 fetchData()
                 fetchDealerCredit() // Refresh credit balance after deletion
-                toast.success('ลบงวดสำเร็จ')
+                toast.success('ลบงวดสำเร็จ - บันทึกประวัติแล้ว')
             }
         } catch (error) {
             console.error('Error:', error)
@@ -1689,7 +1847,7 @@ export default function Dealer() {
                                     </button>
                                 </div>
 
-                                {/* Sub-tabs for Open/Closed Rounds */}
+                                {/* Sub-tabs for Open/Closed/History Rounds */}
                                 <div className="rounds-sub-tabs">
                                     <button
                                         className={`sub-tab-btn ${roundsTab === 'open' ? 'active' : ''}`}
@@ -1703,44 +1861,108 @@ export default function Dealer() {
                                     >
                                         งวดที่ปิดแล้ว ({closedRounds.length})
                                     </button>
+                                    <button
+                                        className={`sub-tab-btn ${roundsTab === 'history' ? 'active' : ''}`}
+                                        onClick={() => { setRoundsTab('history'); fetchRoundHistory(); }}
+                                    >
+                                        ประวัติ
+                                    </button>
                                 </div>
 
-                                {/* Rounds List */}
-                                {loading ? (
-                                    <div className="loading-state">
-                                        <div className="spinner"></div>
-                                    </div>
-                                ) : displayedRounds.length === 0 ? (
-                                    <div className="empty-state card">
-                                        <FiCalendar className="empty-icon" />
-                                        <h3>{roundsTab === 'open' ? 'ไม่มีงวดที่เปิดอยู่' : 'ไม่มีงวดที่ปิดแล้ว'}</h3>
-                                        <p>{roundsTab === 'open' ? 'กดปุ่ม "สร้างงวดใหม่" เพื่อเริ่มต้น' : 'สลับไปที่แท็บ "งวดที่เปิดอยู่" เพื่อดูงวดที่ยังเปิดรับ'}</p>
-                                    </div>
+                                {/* Rounds List or History */}
+                                {roundsTab === 'history' ? (
+                                    // History Tab Content
+                                    historyLoading ? (
+                                        <div className="loading-state">
+                                            <div className="spinner"></div>
+                                        </div>
+                                    ) : roundHistory.length === 0 ? (
+                                        <div className="empty-state card">
+                                            <FiCalendar className="empty-icon" />
+                                            <h3>ไม่มีประวัติงวดหวย</h3>
+                                            <p>ประวัติจะแสดงเมื่อคุณลบงวดหวยที่ปิดแล้ว</p>
+                                        </div>
+                                    ) : (
+                                        <div className="history-list">
+                                            {roundHistory.map(history => (
+                                                <div key={history.id} className={`round-accordion-item ${history.lottery_type}`}>
+                                                    <div className="round-accordion-header" style={{ cursor: 'default' }}>
+                                                        <div className="round-info">
+                                                            <span className={`lottery-badge ${history.lottery_type}`}>
+                                                                {LOTTERY_TYPES[history.lottery_type] || history.lottery_type}
+                                                            </span>
+                                                            <div className="round-details">
+                                                                <span className="round-name">
+                                                                    {LOTTERY_TYPES[history.lottery_type] || history.lottery_type}
+                                                                </span>
+                                                                <span className="round-date">
+                                                                    <FiCalendar /> {formatDate(history.round_date)}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="history-stats" style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+                                                            <div style={{ textAlign: 'center' }}>
+                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ยอดรวม</div>
+                                                                <div style={{ fontWeight: '600' }}>฿{history.total_amount?.toLocaleString()}</div>
+                                                            </div>
+                                                            <div style={{ textAlign: 'center' }}>
+                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ค่าคอม</div>
+                                                                <div style={{ fontWeight: '600' }}>฿{history.total_commission?.toLocaleString()}</div>
+                                                            </div>
+                                                            <div style={{ textAlign: 'center' }}>
+                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>จ่าย</div>
+                                                                <div style={{ fontWeight: '600', color: 'var(--color-danger)' }}>฿{history.total_payout?.toLocaleString()}</div>
+                                                            </div>
+                                                            <div style={{ textAlign: 'center' }}>
+                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>กำไร</div>
+                                                                <div style={{ fontWeight: '600', color: history.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                                                    {history.profit >= 0 ? '+' : ''}฿{history.profit?.toLocaleString()}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )
                                 ) : (
-                                    <div className="rounds-list">
-                                        {displayedRounds.map(round => (
-                                            <RoundAccordionItem
-                                                key={round.id}
-                                                round={round}
-                                                isSelected={selectedRound?.id === round.id}
-                                                onSelect={setSelectedRound}
-                                                onShowSubmissions={() => { setSelectedRound(round); setShowSubmissionsModal(true); }}
-                                                onCloseRound={() => handleCloseRound(round.id)}
-                                                onEditRound={() => handleOpenEditModal(round)}
-                                                onShowNumberLimits={() => { setSelectedRound(round); setShowNumberLimitsModal(true); }}
-                                                onDeleteRound={() => handleDeleteRound(round.id, round.status)}
-                                                onShowResults={() => { setSelectedRound(round); setShowResultsModal(true); }}
-                                                getStatusBadge={(r) => getStatusBadge(r, true)}
-                                                formatDate={formatDate}
-                                                formatTime={formatTime}
-                                                user={user}
-                                                allMembers={members}
-                                                onCreditUpdate={fetchDealerCredit}
-                                                isExpanded={expandedRoundId === round.id}
-                                                onToggle={() => setExpandedRoundId(expandedRoundId === round.id ? null : round.id)}
-                                            />
-                                        ))}
-                                    </div>
+                                    // Open/Closed Rounds Content
+                                    loading ? (
+                                        <div className="loading-state">
+                                            <div className="spinner"></div>
+                                        </div>
+                                    ) : displayedRounds.length === 0 ? (
+                                        <div className="empty-state card">
+                                            <FiCalendar className="empty-icon" />
+                                            <h3>{roundsTab === 'open' ? 'ไม่มีงวดที่เปิดอยู่' : 'ไม่มีงวดที่ปิดแล้ว'}</h3>
+                                            <p>{roundsTab === 'open' ? 'กดปุ่ม "สร้างงวดใหม่" เพื่อเริ่มต้น' : 'สลับไปที่แท็บ "งวดที่เปิดอยู่" เพื่อดูงวดที่ยังเปิดรับ'}</p>
+                                        </div>
+                                    ) : (
+                                        <div className="rounds-list">
+                                            {displayedRounds.map(round => (
+                                                <RoundAccordionItem
+                                                    key={round.id}
+                                                    round={round}
+                                                    isSelected={selectedRound?.id === round.id}
+                                                    onSelect={setSelectedRound}
+                                                    onShowSubmissions={() => { setSelectedRound(round); setShowSubmissionsModal(true); }}
+                                                    onCloseRound={() => handleCloseRound(round.id)}
+                                                    onEditRound={() => handleOpenEditModal(round)}
+                                                    onShowNumberLimits={() => { setSelectedRound(round); setShowNumberLimitsModal(true); }}
+                                                    onDeleteRound={() => handleDeleteRound(round.id, round.status)}
+                                                    onShowResults={() => { setSelectedRound(round); setShowResultsModal(true); }}
+                                                    getStatusBadge={(r) => getStatusBadge(r, true)}
+                                                    formatDate={formatDate}
+                                                    formatTime={formatTime}
+                                                    user={user}
+                                                    allMembers={members}
+                                                    onCreditUpdate={fetchDealerCredit}
+                                                    isExpanded={expandedRoundId === round.id}
+                                                    onToggle={() => setExpandedRoundId(expandedRoundId === round.id ? null : round.id)}
+                                                />
+                                            ))}
+                                        </div>
+                                    )
                                 )}
                             </div>
                         )
