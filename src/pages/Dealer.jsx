@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
@@ -6,7 +6,7 @@ import { useTheme, DASHBOARDS } from '../contexts/ThemeContext'
 import { supabase } from '../lib/supabase'
 import { checkDealerCreditForBet, checkUpstreamDealerCredit, getDealerCreditSummary, updatePendingDeduction } from '../utils/creditCheck'
 import QRCode from 'react-qr-code'
-import { Html5QrcodeScanner } from 'html5-qrcode'
+import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode'
 import { jsPDF } from 'jspdf'
 import { addThaiFont } from '../utils/thaiFontLoader'
 import {
@@ -40,7 +40,8 @@ import {
     FiSlash,
     FiInfo,
     FiLink,
-    FiCreditCard
+    FiCreditCard,
+    FiImage
 } from 'react-icons/fi'
 import './Dealer.css'
 import './SettingsTabs.css'
@@ -5629,33 +5630,94 @@ function DealerProfileTab({ user, profile, subscription, formatDate }) {
 // QR Scanner Modal Component
 function QRScannerModal({ onClose, onScanSuccess }) {
     const [error, setError] = useState(null)
+    const [scanner, setScanner] = useState(null)
+    const [useFrontCamera, setUseFrontCamera] = useState(false)
+    const [isScanning, setIsScanning] = useState(false)
+    const fileInputRef = useRef(null)
+    
+    const startScanner = async (facingMode = 'environment') => {
+        try {
+            // Clear existing scanner if any
+            const existingElement = document.getElementById('qr-reader')
+            if (existingElement) {
+                existingElement.innerHTML = ''
+            }
+            
+            const html5QrCode = new Html5Qrcode('qr-reader')
+            setScanner(html5QrCode)
+            setIsScanning(true)
+            
+            await html5QrCode.start(
+                { facingMode },
+                {
+                    fps: 10,
+                    qrbox: { width: 250, height: 250 },
+                },
+                (decodedText) => {
+                    html5QrCode.stop().catch(() => {})
+                    onScanSuccess(decodedText)
+                },
+                (errorMessage) => {
+                    // Ignore scan errors
+                }
+            )
+        } catch (err) {
+            console.error('Scanner error:', err)
+            setError('ไม่สามารถเปิดกล้องได้ กรุณาอนุญาตการใช้งานกล้อง')
+            setIsScanning(false)
+        }
+    }
+    
+    const stopScanner = async () => {
+        if (scanner && isScanning) {
+            try {
+                await scanner.stop()
+                setIsScanning(false)
+            } catch (err) {
+                console.error('Stop scanner error:', err)
+            }
+        }
+    }
+    
+    const toggleCamera = async () => {
+        await stopScanner()
+        const newFacingMode = !useFrontCamera
+        setUseFrontCamera(newFacingMode)
+        setTimeout(() => {
+            startScanner(newFacingMode ? 'user' : 'environment')
+        }, 300)
+    }
+    
+    const handleFileSelect = async (e) => {
+        const file = e.target.files[0]
+        if (!file) return
+        
+        try {
+            await stopScanner()
+            const html5QrCode = new Html5Qrcode('qr-reader')
+            const result = await html5QrCode.scanFile(file, true)
+            onScanSuccess(result)
+        } catch (err) {
+            console.error('File scan error:', err)
+            setError('ไม่พบ QR Code ในรูปภาพ')
+            // Restart scanner after failed file scan
+            setTimeout(() => {
+                startScanner(useFrontCamera ? 'user' : 'environment')
+            }, 500)
+        }
+    }
     
     useEffect(() => {
-        const scanner = new Html5QrcodeScanner('qr-reader', {
-            qrbox: {
-                width: 250,
-                height: 250,
-            },
-            fps: 10,
-        })
-        
-        scanner.render(
-            (decodedText) => {
-                scanner.clear()
-                onScanSuccess(decodedText)
-            },
-            (errorMessage) => {
-                // Ignore scan errors, they happen frequently
-            }
-        )
+        // Start with back camera by default
+        startScanner('environment')
         
         return () => {
-            scanner.clear().catch(() => {})
+            stopScanner()
         }
     }, [])
     
     return (
-        <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-overlay" onClick={onClose} style={{ zIndex: 9999 }}>
             <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
                 <div className="modal-header">
                     <h3><FiGrid /> สแกน QR Code</h3>
@@ -5667,9 +5729,78 @@ function QRScannerModal({ onClose, onScanSuccess }) {
                     <p style={{ marginBottom: '1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem', textAlign: 'center' }}>
                         สแกน QR Code ของเจ้ามือที่ต้องการเชื่อมต่อ
                     </p>
-                    <div id="qr-reader" style={{ width: '100%' }}></div>
+                    
+                    {/* Scanner Container */}
+                    <div style={{ position: 'relative' }}>
+                        <div id="qr-reader" style={{ width: '100%', borderRadius: '12px', overflow: 'hidden' }}></div>
+                        
+                        {/* Camera Controls */}
+                        <div style={{
+                            display: 'flex',
+                            justifyContent: 'center',
+                            gap: '1rem',
+                            marginTop: '1rem'
+                        }}>
+                            {/* Switch Camera Button */}
+                            <button
+                                onClick={toggleCamera}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '0.5rem',
+                                    padding: '0.75rem 1.25rem',
+                                    background: 'var(--color-surface-alt)',
+                                    border: '1px solid var(--color-border)',
+                                    borderRadius: '8px',
+                                    color: 'var(--color-text)',
+                                    cursor: 'pointer',
+                                    fontSize: '0.9rem',
+                                    fontWeight: '500',
+                                    transition: 'all 0.2s'
+                                }}
+                                title={useFrontCamera ? 'สลับเป็นกล้องหลัง' : 'สลับเป็นกล้องหน้า'}
+                            >
+                                <FiRotateCcw size={18} />
+                                {useFrontCamera ? 'กล้องหลัง' : 'กล้องหน้า'}
+                            </button>
+                            
+                            {/* Select Image Button */}
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '0.5rem',
+                                    padding: '0.75rem 1.25rem',
+                                    background: 'var(--color-surface-alt)',
+                                    border: '1px solid var(--color-border)',
+                                    borderRadius: '8px',
+                                    color: 'var(--color-text)',
+                                    cursor: 'pointer',
+                                    fontSize: '0.9rem',
+                                    fontWeight: '500',
+                                    transition: 'all 0.2s'
+                                }}
+                                title="เลือกรูป QR Code"
+                            >
+                                <FiImage size={18} />
+                                เลือกรูป
+                            </button>
+                            
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                onChange={handleFileSelect}
+                                style={{ display: 'none' }}
+                            />
+                        </div>
+                    </div>
+                    
                     {error && (
-                        <p style={{ color: 'var(--color-error)', marginTop: '1rem', textAlign: 'center' }}>
+                        <p style={{ color: 'var(--color-danger)', marginTop: '1rem', textAlign: 'center', fontSize: '0.9rem' }}>
                             {error}
                         </p>
                     )}
