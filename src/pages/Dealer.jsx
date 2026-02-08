@@ -1912,7 +1912,8 @@ export default function Dealer() {
                                     border: `1px solid ${borderColor}`,
                                     borderRadius: '8px',
                                     cursor: 'pointer',
-                                    transition: 'transform 0.2s, box-shadow 0.2s'
+                                    transition: 'transform 0.2s, box-shadow 0.2s',
+                                    marginBottom: '1rem'
                                 }}
                                 onMouseEnter={(e) => {
                                     e.currentTarget.style.transform = 'scale(1.01)'
