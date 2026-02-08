@@ -39,7 +39,8 @@ import {
     FiSearch,
     FiSlash,
     FiInfo,
-    FiLink
+    FiLink,
+    FiCreditCard
 } from 'react-icons/fi'
 import './Dealer.css'
 import './SettingsTabs.css'
@@ -2977,22 +2978,38 @@ export default function Dealer() {
                             {/* Bank Account Info */}
                             {assignedBankAccount ? (
                                 <div style={{ 
-                                    background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)', 
-                                    padding: '1rem', 
-                                    borderRadius: '8px', 
-                                    marginBottom: '1rem',
-                                    border: '1px solid var(--color-primary)'
+                                    background: 'var(--color-surface-alt, linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%))', 
+                                    padding: '1.25rem', 
+                                    borderRadius: '12px', 
+                                    marginBottom: '1.5rem',
+                                    border: '2px solid var(--color-primary)',
+                                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
                                 }}>
-                                    <div style={{ fontSize: '0.85rem', color: 'var(--color-primary)', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                                        โอนเงินเข้าบัญชีนี้
+                                    <div style={{ 
+                                        fontSize: '0.8rem', 
+                                        color: 'var(--color-primary)', 
+                                        marginBottom: '0.75rem', 
+                                        fontWeight: '600',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem'
+                                    }}>
+                                        <FiCreditCard /> โอนเงินเข้าบัญชีนี้
                                     </div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: 'white' }}>
+                                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--color-text)', marginBottom: '0.25rem' }}>
                                         {assignedBankAccount.bank_name}
                                     </div>
-                                    <div style={{ fontSize: '1.25rem', fontFamily: 'monospace', color: 'var(--color-primary)', margin: '0.5rem 0' }}>
+                                    <div style={{ 
+                                        fontSize: '1.5rem', 
+                                        fontFamily: 'monospace', 
+                                        fontWeight: 'bold',
+                                        color: 'var(--color-primary)', 
+                                        margin: '0.5rem 0',
+                                        letterSpacing: '2px'
+                                    }}>
                                         {assignedBankAccount.account_number}
                                     </div>
-                                    <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+                                    <div style={{ fontSize: '0.95rem', color: 'var(--color-text-muted)', fontWeight: '500' }}>
                                         {assignedBankAccount.account_name}
                                     </div>
                                 </div>
@@ -3018,17 +3035,55 @@ export default function Dealer() {
                             {assignedBankAccount && (
                                 <>
                                     {/* Amount Input */}
-                                    <div className="form-group">
-                                        <label>จำนวนเงินที่โอน (บาท)</label>
-                                        <input
-                                            type="number"
-                                            value={topupForm.amount}
-                                            onChange={(e) => setTopupForm({ ...topupForm, amount: e.target.value })}
-                                            placeholder="0.00"
-                                            min="1"
-                                            step="0.01"
-                                            style={{ fontSize: '1.25rem', textAlign: 'center' }}
-                                        />
+                                    <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                                        <label style={{ 
+                                            display: 'block', 
+                                            marginBottom: '0.5rem', 
+                                            fontWeight: '600',
+                                            color: 'var(--color-text)'
+                                        }}>
+                                            จำนวนเงินที่โอน (บาท)
+                                        </label>
+                                        <div style={{ position: 'relative' }}>
+                                            <span style={{
+                                                position: 'absolute',
+                                                left: '1rem',
+                                                top: '50%',
+                                                transform: 'translateY(-50%)',
+                                                fontSize: '1.25rem',
+                                                fontWeight: 'bold',
+                                                color: 'var(--color-primary)'
+                                            }}>
+                                                ฿
+                                            </span>
+                                            <input
+                                                type="number"
+                                                value={topupForm.amount}
+                                                onChange={(e) => setTopupForm({ ...topupForm, amount: e.target.value })}
+                                                placeholder="0.00"
+                                                min="1"
+                                                step="0.01"
+                                                style={{ 
+                                                    fontSize: '1.5rem', 
+                                                    textAlign: 'center',
+                                                    padding: '1rem 2.5rem',
+                                                    borderRadius: '12px',
+                                                    border: '2px solid var(--color-border)',
+                                                    background: 'var(--color-surface)',
+                                                    fontWeight: 'bold',
+                                                    width: '100%',
+                                                    transition: 'border-color 0.2s, box-shadow 0.2s'
+                                                }}
+                                                onFocus={(e) => {
+                                                    e.target.style.borderColor = 'var(--color-primary)'
+                                                    e.target.style.boxShadow = '0 0 0 3px rgba(234, 179, 8, 0.2)'
+                                                }}
+                                                onBlur={(e) => {
+                                                    e.target.style.borderColor = 'var(--color-border)'
+                                                    e.target.style.boxShadow = 'none'
+                                                }}
+                                            />
+                                        </div>
                                     </div>
 
                                     {/* Slip Upload */}
@@ -3057,8 +3112,20 @@ export default function Dealer() {
                                                 </div>
                                             ) : (
                                                 <div>
-                                                    <FiPackage style={{ fontSize: '2rem', color: 'var(--color-text-muted)', marginBottom: '0.5rem' }} />
-                                                    <div style={{ color: 'var(--color-text-muted)' }}>คลิกเพื่อเลือกไฟล์สลิป</div>
+                                                    <div style={{ 
+                                                        width: '48px', 
+                                                        height: '64px', 
+                                                        margin: '0 auto 0.75rem',
+                                                        background: 'linear-gradient(180deg, var(--color-primary) 0%, #d4a106 100%)',
+                                                        borderRadius: '6px',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        boxShadow: '0 2px 8px rgba(234, 179, 8, 0.3)'
+                                                    }}>
+                                                        <FiFileText style={{ fontSize: '1.5rem', color: 'white' }} />
+                                                    </div>
+                                                    <div style={{ color: 'var(--color-text)', fontWeight: '500', marginBottom: '0.25rem' }}>คลิกเพื่อเลือกไฟล์สลิป</div>
                                                     <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                                                         รองรับ JPG, PNG, WEBP (ไม่เกิน 5MB)
                                                     </div>
