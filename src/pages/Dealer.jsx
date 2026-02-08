@@ -37,7 +37,8 @@ import {
     FiAlertCircle,
     FiSearch,
     FiSlash,
-    FiInfo
+    FiInfo,
+    FiLink
 } from 'react-icons/fi'
 import './Dealer.css'
 import './SettingsTabs.css'
@@ -1136,6 +1137,70 @@ export default function Dealer() {
         } catch (error) {
             console.error('Error blocking downstream dealer:', error)
             toast.error('เกิดข้อผิดพลาด')
+        }
+    }
+
+    // Disconnect dealer connection
+    async function handleDisconnectDealer(dealer) {
+        if (!confirm(`ยกเลิกการเชื่อมต่อกับ "${dealer.full_name || dealer.email}"?\n\nรายชื่อจะหายไปทั้ง 2 ฝ่าย`)) return
+
+        try {
+            console.log('Disconnecting dealer:', dealer)
+            console.log('Connection ID:', dealer.connection_id)
+            console.log('Is from membership:', dealer.is_from_membership)
+            console.log('User ID:', user?.id)
+            
+            let error
+            
+            if (dealer.is_from_membership) {
+                // Delete from user_dealer_memberships table
+                console.log('Deleting from user_dealer_memberships table')
+                const result = await supabase
+                    .from('user_dealer_memberships')
+                    .delete()
+                    .eq('id', dealer.connection_id)
+                
+                error = result.error
+            } else {
+                // Delete from dealer_upstream_connections table
+                console.log('Deleting from dealer_upstream_connections table')
+                
+                // Check connection details first
+                const { data: connectionData, error: checkError } = await supabase
+                    .from('dealer_upstream_connections')
+                    .select('*')
+                    .eq('id', dealer.connection_id)
+                    .single()
+                
+                if (checkError) {
+                    console.error('Error checking connection:', checkError)
+                    toast.error('ไม่พบข้อมูลการเชื่อมต่อ')
+                    return
+                }
+                
+                console.log('Connection data:', connectionData)
+                
+                // Try to delete
+                const result = await supabase
+                    .from('dealer_upstream_connections')
+                    .delete()
+                    .eq('id', dealer.connection_id)
+                
+                error = result.error
+            }
+
+            if (error) {
+                console.error('Delete error:', error)
+                toast.error('เกิดข้อผิดพลาดในการยกเลิกการเชื่อมต่อ')
+                return
+            }
+            
+            console.log('Delete successful')
+            setDownstreamDealers(prev => prev.filter(d => d.connection_id !== dealer.connection_id))
+            toast.success('ยกเลิกการเชื่อมต่อสำเร็จ')
+        } catch (error) {
+            console.error('Error disconnecting dealer:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         }
     }
 
@@ -2311,6 +2376,7 @@ export default function Dealer() {
                                                 )}
                                                 onBlock={() => member.is_dealer ? handleBlockDownstreamDealer(member) : handleBlockMember(member)}
                                                 onDelete={() => member.is_dealer ? null : handleDeleteMember(member)}
+                                                onDisconnect={member.is_dealer ? () => handleDisconnectDealer(member) : null}
                                                 dealerBankAccounts={dealerBankAccounts}
                                                 onUpdateBank={(bankAccountId) => handleUpdateMemberBank(member, bankAccountId)}
                                                 isDealer={member.is_dealer}
@@ -5347,7 +5413,7 @@ function DealerProfileTab({ user, profile, subscription, formatDate }) {
 }
 
 // Member Accordion Item Component
-function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock, onDelete, dealerBankAccounts = [], onUpdateBank, isDealer = false, onCopyCredentials }) {
+function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock, onDelete, onDisconnect, dealerBankAccounts = [], onUpdateBank, isDealer = false, onCopyCredentials }) {
     const { user } = useAuth()
     const [activeTab, setActiveTab] = useState('info') // 'info' | 'settings'
 
@@ -5493,6 +5559,28 @@ function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock
                             title="ลบสมาชิก"
                         >
                             <FiTrash2 size={14} />
+                        </button>
+                    )}
+                    {/* Disconnect button - only for dealer */}
+                    {isDealer && onDisconnect && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onDisconnect(); }}
+                            style={{ 
+                                padding: '0.5rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'transparent',
+                                border: '1px solid var(--color-error)',
+                                borderRadius: '50%',
+                                color: 'var(--color-error)',
+                                cursor: 'pointer',
+                                width: '32px',
+                                height: '32px'
+                            }}
+                            title="ยกเลิกการเชื่อมต่อ"
+                        >
+                            <FiLink size={14} />
                         </button>
                     )}
                 </div>
@@ -6287,6 +6375,7 @@ function UpstreamDealerAccordionItem({ dealer, isExpanded, onToggle, onEdit, onD
 
 // Upstream Dealers Tab - For managing dealers to transfer bets to
 function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loadingUpstream, setLoadingUpstream }) {
+    const { toast } = useToast()
     const [showAddModal, setShowAddModal] = useState(false)
     const [saving, setSaving] = useState(false)
     const [editingDealer, setEditingDealer] = useState(null)
@@ -6456,18 +6545,35 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
         }
     }
 
-    // Delete
+    // Delete / Disconnect
     async function handleDelete(dealer) {
-        if (!confirm(`ต้องการลบ "${dealer.upstream_name}" หรือไม่?`)) return
+        if (!confirm(`ต้องการยกเลิกการเชื่อมต่อกับ "${dealer.upstream_name}"?\n\nรายชื่อจะหายไปทั้ง 2 ฝ่าย`)) return
 
         try {
-            const { error } = await supabase
-                .from('dealer_upstream_connections')
-                .delete()
-                .eq('id', dealer.id)
+            let error
+            
+            if (dealer.is_from_membership) {
+                // Delete from user_dealer_memberships table
+                const result = await supabase
+                    .from('user_dealer_memberships')
+                    .delete()
+                    .eq('user_id', user.id)
+                    .eq('dealer_id', dealer.upstream_dealer_id)
+                
+                error = result.error
+            } else {
+                // Delete from dealer_upstream_connections table
+                const result = await supabase
+                    .from('dealer_upstream_connections')
+                    .delete()
+                    .eq('id', dealer.id)
+                
+                error = result.error
+            }
 
             if (error) throw error
-            toast.success('ลบสำเร็จ!')
+            
+            toast.success('ยกเลิกการเชื่อมต่อสำเร็จ!')
             fetchUpstreamDealers()
         } catch (error) {
             console.error('Error deleting upstream dealer:', error)
