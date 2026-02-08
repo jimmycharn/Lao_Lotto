@@ -5717,94 +5717,144 @@ function QRScannerModal({ onClose, onScanSuccess }) {
     }, [])
     
     return (
-        <div className="modal-overlay" onClick={onClose} style={{ zIndex: 9999 }}>
-            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
-                <div className="modal-header">
-                    <h3><FiGrid /> สแกน QR Code</h3>
-                    <button className="modal-close" onClick={onClose}>
-                        <FiX />
-                    </button>
+        <div className="modal-overlay" onClick={onClose} style={{ 
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.95)',
+            padding: 0
+        }}>
+            {/* Close Button - Top Right Corner */}
+            <button
+                onClick={onClose}
+                style={{
+                    position: 'absolute',
+                    top: '1rem',
+                    right: '1rem',
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '50%',
+                    background: 'rgba(255, 255, 255, 0.2)',
+                    border: 'none',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 10001
+                }}
+            >
+                <FiX size={24} />
+            </button>
+
+            <div onClick={e => e.stopPropagation()} style={{ 
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '1rem'
+            }}>
+                <p style={{ 
+                    marginBottom: '1.5rem', 
+                    color: '#fff', 
+                    fontSize: '1.1rem', 
+                    textAlign: 'center',
+                    fontWeight: '500'
+                }}>
+                    สแกน QR Code ของเจ้ามือที่ต้องการเชื่อมต่อ
+                </p>
+                
+                {/* Scanner Container */}
+                <div style={{ 
+                    width: '100%', 
+                    maxWidth: '350px',
+                    position: 'relative'
+                }}>
+                    <div id="qr-reader" style={{ 
+                        width: '100%', 
+                        borderRadius: '16px', 
+                        overflow: 'hidden',
+                        background: '#000'
+                    }}></div>
                 </div>
-                <div className="modal-body" style={{ padding: '1rem' }}>
-                    <p style={{ marginBottom: '1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem', textAlign: 'center' }}>
-                        สแกน QR Code ของเจ้ามือที่ต้องการเชื่อมต่อ
-                    </p>
-                    
-                    {/* Scanner Container */}
-                    <div style={{ position: 'relative' }}>
-                        <div id="qr-reader" style={{ width: '100%', borderRadius: '12px', overflow: 'hidden' }}></div>
-                        
-                        {/* Camera Controls */}
-                        <div style={{
+                
+                {/* Camera Controls */}
+                <div style={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    gap: '1rem',
+                    marginTop: '1.5rem'
+                }}>
+                    {/* Switch Camera Button */}
+                    <button
+                        onClick={toggleCamera}
+                        style={{
                             display: 'flex',
+                            alignItems: 'center',
                             justifyContent: 'center',
-                            gap: '1rem',
-                            marginTop: '1rem'
-                        }}>
-                            {/* Switch Camera Button */}
-                            <button
-                                onClick={toggleCamera}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '0.5rem',
-                                    padding: '0.75rem 1.25rem',
-                                    background: 'var(--color-surface-alt)',
-                                    border: '1px solid var(--color-border)',
-                                    borderRadius: '8px',
-                                    color: 'var(--color-text)',
-                                    cursor: 'pointer',
-                                    fontSize: '0.9rem',
-                                    fontWeight: '500',
-                                    transition: 'all 0.2s'
-                                }}
-                                title={useFrontCamera ? 'สลับเป็นกล้องหลัง' : 'สลับเป็นกล้องหน้า'}
-                            >
-                                <FiRotateCcw size={18} />
-                                {useFrontCamera ? 'กล้องหลัง' : 'กล้องหน้า'}
-                            </button>
-                            
-                            {/* Select Image Button */}
-                            <button
-                                onClick={() => fileInputRef.current?.click()}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '0.5rem',
-                                    padding: '0.75rem 1.25rem',
-                                    background: 'var(--color-surface-alt)',
-                                    border: '1px solid var(--color-border)',
-                                    borderRadius: '8px',
-                                    color: 'var(--color-text)',
-                                    cursor: 'pointer',
-                                    fontSize: '0.9rem',
-                                    fontWeight: '500',
-                                    transition: 'all 0.2s'
-                                }}
-                                title="เลือกรูป QR Code"
-                            >
-                                <FiImage size={18} />
-                                เลือกรูป
-                            </button>
-                            
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*"
-                                onChange={handleFileSelect}
-                                style={{ display: 'none' }}
-                            />
-                        </div>
-                    </div>
+                            gap: '0.5rem',
+                            padding: '0.875rem 1.5rem',
+                            background: 'rgba(255, 255, 255, 0.15)',
+                            border: '1px solid rgba(255, 255, 255, 0.3)',
+                            borderRadius: '12px',
+                            color: '#fff',
+                            cursor: 'pointer',
+                            fontSize: '0.95rem',
+                            fontWeight: '500',
+                            transition: 'all 0.2s'
+                        }}
+                        title={useFrontCamera ? 'สลับเป็นกล้องหลัง' : 'สลับเป็นกล้องหน้า'}
+                    >
+                        <FiRotateCcw size={20} />
+                        {useFrontCamera ? 'กล้องหลัง' : 'กล้องหน้า'}
+                    </button>
                     
-                    {error && (
-                        <p style={{ color: 'var(--color-danger)', marginTop: '1rem', textAlign: 'center', fontSize: '0.9rem' }}>
-                            {error}
-                        </p>
-                    )}
+                    {/* Select Image Button */}
+                    <button
+                        onClick={() => fileInputRef.current?.click()}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.5rem',
+                            padding: '0.875rem 1.5rem',
+                            background: 'rgba(255, 255, 255, 0.15)',
+                            border: '1px solid rgba(255, 255, 255, 0.3)',
+                            borderRadius: '12px',
+                            color: '#fff',
+                            cursor: 'pointer',
+                            fontSize: '0.95rem',
+                            fontWeight: '500',
+                            transition: 'all 0.2s'
+                        }}
+                        title="เลือกรูป QR Code"
+                    >
+                        <FiImage size={20} />
+                        เลือกรูป
+                    </button>
+                    
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileSelect}
+                        style={{ display: 'none' }}
+                    />
                 </div>
+                
+                {error && (
+                    <p style={{ color: '#ef4444', marginTop: '1.5rem', textAlign: 'center', fontSize: '0.95rem' }}>
+                        {error}
+                    </p>
+                )}
             </div>
         </div>
     )
