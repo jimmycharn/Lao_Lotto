@@ -376,21 +376,25 @@ export default function Dealer() {
                 let allDownstreamDealers = []
 
                 if (!downstreamError && downstreamData) {
+                    console.log('Raw downstream data:', downstreamData)
                     // Transform to match member structure
-                    const transformedDownstream = downstreamData.map(d => ({
-                        id: d.dealer_profile?.id,
-                        email: d.dealer_profile?.email,
-                        full_name: d.dealer_profile?.full_name || d.upstream_name,
-                        phone: d.dealer_profile?.phone,
-                        created_at: d.dealer_profile?.created_at,
-                        membership_id: d.id,
-                        membership_status: d.status || (d.is_blocked ? 'blocked' : 'active'),
-                        membership_created_at: d.created_at,
-                        is_dealer: true,
-                        is_linked: d.is_linked,
-                        lottery_settings: d.lottery_settings,
-                        connection_id: d.id
-                    }))
+                    const transformedDownstream = downstreamData.map(d => {
+                        console.log('Connection:', d.id, 'Status:', d.status, 'Dealer:', d.dealer_profile?.full_name)
+                        return {
+                            id: d.dealer_profile?.id,
+                            email: d.dealer_profile?.email,
+                            full_name: d.dealer_profile?.full_name || d.upstream_name,
+                            phone: d.dealer_profile?.phone,
+                            created_at: d.dealer_profile?.created_at,
+                            membership_id: d.id,
+                            membership_status: d.status || (d.is_blocked ? 'blocked' : 'active'),
+                            membership_created_at: d.created_at,
+                            is_dealer: true,
+                            is_linked: d.is_linked,
+                            lottery_settings: d.lottery_settings,
+                            connection_id: d.id
+                        }
+                    })
                     allDownstreamDealers = [...transformedDownstream]
                 }
 
@@ -984,15 +988,49 @@ export default function Dealer() {
     // Approve downstream dealer connection request
     async function handleApproveDownstreamDealer(dealer) {
         try {
-            const { error } = await supabase
-                .from('dealer_upstream_connections')
-                .update({ 
-                    status: 'active',
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', dealer.connection_id)
+            console.log('Approving dealer:', dealer)
+            console.log('Connection ID:', dealer.connection_id)
+            console.log('Is from membership:', dealer.is_from_membership)
+            
+            let data, error
+            
+            if (dealer.is_from_membership) {
+                // Update in user_dealer_memberships table
+                const result = await supabase
+                    .from('user_dealer_memberships')
+                    .update({ 
+                        status: 'active',
+                        approved_at: new Date().toISOString()
+                    })
+                    .eq('id', dealer.connection_id)
+                    .select()
+                
+                data = result.data
+                error = result.error
+                console.log('Membership update result:', { data, error })
+            } else {
+                // Update in dealer_upstream_connections table
+                const result = await supabase
+                    .from('dealer_upstream_connections')
+                    .update({ 
+                        status: 'active',
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', dealer.connection_id)
+                    .select()
+                
+                data = result.data
+                error = result.error
+                console.log('Connection update result:', { data, error })
+            }
 
             if (error) throw error
+            
+            if (!data || data.length === 0) {
+                console.error('No rows updated - RLS policy may be blocking update')
+                toast.error('ไม่สามารถอัพเดทได้ - อาจมีปัญหา RLS policy')
+                return
+            }
             
             // Update local state
             setDownstreamDealers(prev => prev.map(d => 
@@ -1004,7 +1042,7 @@ export default function Dealer() {
             toast.success(`ยืนยัน "${dealer.full_name || dealer.email}" เป็นเจ้ามือตีเข้าสำเร็จ`)
         } catch (error) {
             console.error('Error approving downstream dealer:', error)
-            toast.error('เกิดข้อผิดพลาด')
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         }
     }
 
@@ -1013,15 +1051,48 @@ export default function Dealer() {
         if (!confirm(`ต้องการปฏิเสธคำขอจาก "${dealer.full_name || dealer.email}" หรือไม่?`)) return
 
         try {
-            const { error } = await supabase
-                .from('dealer_upstream_connections')
-                .update({ 
-                    status: 'rejected',
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', dealer.connection_id)
+            console.log('Rejecting dealer:', dealer)
+            console.log('Connection ID:', dealer.connection_id)
+            console.log('Is from membership:', dealer.is_from_membership)
+            
+            let data, error
+            
+            if (dealer.is_from_membership) {
+                // Update in user_dealer_memberships table
+                const result = await supabase
+                    .from('user_dealer_memberships')
+                    .update({ 
+                        status: 'rejected'
+                    })
+                    .eq('id', dealer.connection_id)
+                    .select()
+                
+                data = result.data
+                error = result.error
+                console.log('Membership reject result:', { data, error })
+            } else {
+                // Update in dealer_upstream_connections table
+                const result = await supabase
+                    .from('dealer_upstream_connections')
+                    .update({ 
+                        status: 'rejected',
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', dealer.connection_id)
+                    .select()
+                
+                data = result.data
+                error = result.error
+                console.log('Connection reject result:', { data, error })
+            }
 
             if (error) throw error
+            
+            if (!data || data.length === 0) {
+                console.error('No rows updated - RLS policy may be blocking update')
+                toast.error('ไม่สามารถอัพเดทได้ - อาจมีปัญหา RLS policy')
+                return
+            }
             
             // Update local state
             setDownstreamDealers(prev => prev.map(d => 
@@ -1033,7 +1104,7 @@ export default function Dealer() {
             toast.success('ปฏิเสธคำขอสำเร็จ')
         } catch (error) {
             console.error('Error rejecting downstream dealer:', error)
-            toast.error('เกิดข้อผิดพลาด')
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
         }
     }
 

@@ -97,6 +97,7 @@ export default function DealerConnect() {
                     upstream_name: upstreamDealer.full_name || upstreamDealer.email,
                     upstream_contact: upstreamDealer.phone || upstreamDealer.email,
                     is_linked: true,
+                    status: 'pending',
                     notes: 'เชื่อมต่อผ่าน QR Code/Link'
                 })
 
