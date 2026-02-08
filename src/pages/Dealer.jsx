@@ -6350,13 +6350,14 @@ function UpstreamDealerAccordionItem({ dealer, isExpanded, onToggle, onEdit, onD
     const [activeTab, setActiveTab] = useState('info') // 'info' | 'settings'
     const isLinked = dealer.is_linked
     const isBlocked = dealer.is_blocked
+    const isPending = dealer.status === 'pending'
 
     return (
         <div className={`upstream-dealer-accordion-item ${isExpanded ? 'expanded' : ''}`} style={{
             background: 'var(--color-surface)',
             borderRadius: 'var(--radius-lg)',
             marginBottom: '1rem',
-            border: isLinked ? '2px solid var(--color-success)' : '1px solid var(--color-border)',
+            border: isPending ? '2px solid var(--color-warning)' : isLinked ? '2px solid var(--color-success)' : '1px solid var(--color-border)',
             overflow: 'hidden',
             transition: 'all 0.3s ease',
             opacity: isBlocked ? 0.7 : 1
@@ -6380,7 +6381,7 @@ function UpstreamDealerAccordionItem({ dealer, isExpanded, onToggle, onEdit, onD
                         width: '40px',
                         height: '40px',
                         borderRadius: '50%',
-                        background: isLinked ? 'var(--color-success)' : 'var(--color-warning)',
+                        background: isPending ? 'var(--color-warning)' : isLinked ? 'var(--color-success)' : 'var(--color-text-muted)',
                         color: '#fff',
                         display: 'flex',
                         alignItems: 'center',
@@ -6388,14 +6389,25 @@ function UpstreamDealerAccordionItem({ dealer, isExpanded, onToggle, onEdit, onD
                         fontSize: '1.2rem',
                         fontWeight: 'bold'
                     }}>
-                        {isLinked ? <FiCheck /> : <FiUser />}
+                        {isPending ? <FiClock /> : isLinked ? <FiCheck /> : <FiUser />}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <span className="dealer-name" style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '1.1rem' }}>
                                 {dealer.upstream_name || 'ไม่ระบุชื่อ'}
                             </span>
-                            {isLinked && (
+                            {isPending ? (
+                                <span style={{
+                                    background: 'var(--color-warning)',
+                                    color: '#000',
+                                    padding: '0.15rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: '600'
+                                }}>
+                                    รออนุมัติ
+                                </span>
+                            ) : isLinked && (
                                 <span style={{
                                     background: 'var(--color-success)',
                                     color: '#fff',
@@ -6845,14 +6857,37 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
                 </div>
             ) : (
                 <>
-                    {/* Linked Dealers Section */}
-                    {upstreamDealers.filter(d => d.is_linked).length > 0 && (
+                    {/* Pending Dealers Section - รออนุมัติ */}
+                    {upstreamDealers.filter(d => d.is_linked && d.status === 'pending').length > 0 && (
                         <div style={{ marginBottom: '1.5rem' }}>
-                            <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <FiCheck style={{ color: 'var(--color-success)' }} /> เจ้ามือในระบบ ({upstreamDealers.filter(d => d.is_linked).length})
+                            <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-warning)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <FiClock style={{ color: 'var(--color-warning)' }} /> รออนุมัติ ({upstreamDealers.filter(d => d.is_linked && d.status === 'pending').length})
                             </h4>
                             <div className="upstream-dealers-accordion-list">
-                                {upstreamDealers.filter(d => d.is_linked).map(dealer => (
+                                {upstreamDealers.filter(d => d.is_linked && d.status === 'pending').map(dealer => (
+                                    <UpstreamDealerAccordionItem
+                                        key={dealer.id}
+                                        dealer={dealer}
+                                        isExpanded={expandedDealerId === dealer.id}
+                                        onToggle={() => setExpandedDealerId(expandedDealerId === dealer.id ? null : dealer.id)}
+                                        onEdit={() => handleEditDealer(dealer)}
+                                        onDelete={() => handleDelete(dealer)}
+                                        onToggleBlock={() => handleToggleBlock(dealer)}
+                                        onSaveSettings={fetchUpstreamDealers}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Linked Dealers Section - เจ้ามือในระบบ (approved only) */}
+                    {upstreamDealers.filter(d => d.is_linked && d.status !== 'pending').length > 0 && (
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <FiCheck style={{ color: 'var(--color-success)' }} /> เจ้ามือในระบบ ({upstreamDealers.filter(d => d.is_linked && d.status !== 'pending').length})
+                            </h4>
+                            <div className="upstream-dealers-accordion-list">
+                                {upstreamDealers.filter(d => d.is_linked && d.status !== 'pending').map(dealer => (
                                     <UpstreamDealerAccordionItem
                                         key={dealer.id}
                                         dealer={dealer}
