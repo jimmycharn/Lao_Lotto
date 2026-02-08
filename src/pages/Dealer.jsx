@@ -6,6 +6,7 @@ import { useTheme, DASHBOARDS } from '../contexts/ThemeContext'
 import { supabase } from '../lib/supabase'
 import { checkDealerCreditForBet, checkUpstreamDealerCredit, getDealerCreditSummary, updatePendingDeduction } from '../utils/creditCheck'
 import QRCode from 'react-qr-code'
+import { Html5QrcodeScanner } from 'html5-qrcode'
 import { jsPDF } from 'jspdf'
 import { addThaiFont } from '../utils/thaiFontLoader'
 import {
@@ -112,6 +113,11 @@ export default function Dealer() {
     const [addMemberForm, setAddMemberForm] = useState({ email: '', full_name: '', phone: '' })
     const [addingMember, setAddingMember] = useState(false)
     const [newMemberCredentials, setNewMemberCredentials] = useState(null) // { email, password, url }
+    
+    // QR Code modal state
+    const [showQRModal, setShowQRModal] = useState(false)
+    const [showScannerModal, setShowScannerModal] = useState(false)
+    const [memberSearchQuery, setMemberSearchQuery] = useState('')
     
     // Credit system states
     const [dealerCredit, setDealerCredit] = useState(null)
@@ -1812,16 +1818,64 @@ export default function Dealer() {
     return (
         <div className="dealer-page">
             <div className="container">
-                <div className="page-header" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
-                        <div>
-                            <h1><FiFileText /> แดชบอร์ดเจ้ามือ</h1>
-                            <p>จัดการงวดหวยและดูรายการที่ส่งเข้ามา</p>
-                        </div>
-                    </div>
-                    
-                    {/* Credit Display - Full width, clickable to open topup modal */}
-                    {(() => {
+                <div className="page-header">
+                    <h1><FiFileText /> แดชบอร์ดเจ้ามือ</h1>
+                    <p>จัดการงวดหวยและดูรายการที่ส่งเข้ามา</p>
+                </div>
+                
+                {/* Quick Action Buttons - Split half on mobile */}
+                <div style={{ 
+                    display: 'flex', 
+                    gap: '0.5rem', 
+                    width: '100%',
+                    marginBottom: '1rem'
+                }}>
+                    <button
+                        type="button"
+                        style={{
+                            flex: 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.5rem',
+                            padding: '0.75rem 1rem',
+                            border: '2px solid var(--color-primary)',
+                            borderRadius: '8px',
+                            background: 'transparent',
+                            color: 'var(--color-primary)',
+                            fontWeight: 600,
+                            fontSize: '1rem',
+                            cursor: 'pointer'
+                        }}
+                        onClick={() => setShowScannerModal(true)}
+                    >
+                        <FiGrid size={18} /> สแกน
+                    </button>
+                    <button
+                        type="button"
+                        style={{
+                            flex: 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.5rem',
+                            padding: '0.75rem 1rem',
+                            border: '2px solid var(--color-primary)',
+                            borderRadius: '8px',
+                            background: 'transparent',
+                            color: 'var(--color-primary)',
+                            fontWeight: 600,
+                            fontSize: '1rem',
+                            cursor: 'pointer'
+                        }}
+                        onClick={() => setShowQRModal(true)}
+                    >
+                        <FiShare2 size={18} /> QR ของฉัน
+                    </button>
+                </div>
+                
+                {/* Credit Display - Full width, clickable to open topup modal */}
+                {(() => {
                         // Calculate credit level for color coding
                         const availableCredit = dealerCredit?.availableCredit || dealerCredit?.balance || 0
                         const warningThreshold = dealerCredit?.warning_threshold || 1000
@@ -1916,7 +1970,6 @@ export default function Dealer() {
                             </div>
                         )
                     })()}
-                </div>
 
                 {/* Credit Blocked Warning */}
                 {dealerCredit?.is_blocked && (
@@ -2134,44 +2187,58 @@ export default function Dealer() {
                                     justifyContent: 'center',
                                     gap: '0.5rem',
                                     width: '100%',
-                                    marginBottom: '1.5rem',
+                                    marginBottom: '1rem',
                                     padding: '0.75rem 1rem'
                                 }}
                             >
                                 <FiPlus /> เพิ่มสมาชิก
                             </button>
 
-                            {/* Referral Section - Moved to top */}
-                            <div className="referral-card card" style={{ marginBottom: '1.5rem' }}>
-                                <div className="referral-header">
-                                    <h3><FiShare2 /> ลิงก์รับสมัครสมาชิก</h3>
-                                    <p>ส่งลิงก์หรือ QR Code นี้ให้สมาชิกเพื่อเข้ากลุ่มของคุณ</p>
-                                </div>
-                                <div className="referral-content">
-                                    <div className="qr-wrapper">
-                                        <div className="qr-code-bg">
-                                            <QRCode
-                                                value={`${window.location.origin}/register?ref=${user?.id}`}
-                                                size={120}
-                                                style={{ height: "auto", maxWidth: "100%", width: "100%" }}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="link-wrapper">
-                                        <div className="referral-link">
-                                            {`${window.location.origin}/register?ref=${user?.id}`}
-                                        </div>
-                                        <button
-                                            className="btn btn-outline btn-sm"
-                                            onClick={() => {
-                                                navigator.clipboard.writeText(`${window.location.origin}/register?ref=${user?.id}`)
-                                                toast.success('คัดลอกลิงก์แล้ว!')
-                                            }}
-                                        >
-                                            <FiCopy /> คัดลอก
-                                        </button>
-                                    </div>
-                                </div>
+                            {/* Search Member Input */}
+                            <div style={{ 
+                                position: 'relative',
+                                marginBottom: '1.5rem'
+                            }}>
+                                <FiSearch style={{
+                                    position: 'absolute',
+                                    left: '1rem',
+                                    top: '50%',
+                                    transform: 'translateY(-50%)',
+                                    color: 'var(--color-text-muted)'
+                                }} />
+                                <input
+                                    type="text"
+                                    placeholder="ค้นหาสมาชิก..."
+                                    value={memberSearchQuery}
+                                    onChange={(e) => setMemberSearchQuery(e.target.value)}
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.75rem 1rem 0.75rem 2.5rem',
+                                        border: '1px solid var(--color-border)',
+                                        borderRadius: '8px',
+                                        background: 'var(--color-surface)',
+                                        color: 'var(--color-text)',
+                                        fontSize: '0.95rem'
+                                    }}
+                                />
+                                {memberSearchQuery && (
+                                    <button
+                                        onClick={() => setMemberSearchQuery('')}
+                                        style={{
+                                            position: 'absolute',
+                                            right: '0.75rem',
+                                            top: '50%',
+                                            transform: 'translateY(-50%)',
+                                            background: 'transparent',
+                                            border: 'none',
+                                            color: 'var(--color-text-muted)',
+                                            cursor: 'pointer',
+                                            padding: '0.25rem'
+                                        }}
+                                    >
+                                        <FiX size={16} />
+                                    </button>
+                                )}
                             </div>
 
                             {/* Pending Members Section */}
@@ -2331,11 +2398,21 @@ export default function Dealer() {
 
                             {(() => {
                                 const activeDownstreamDealers = downstreamDealers.filter(d => d.membership_status === 'active')
-                                const filteredMembers = memberTypeFilter === 'all' 
+                                let filteredMembers = memberTypeFilter === 'all' 
                                     ? [...members.map(m => ({ ...m, is_dealer: false })), ...activeDownstreamDealers]
                                     : memberTypeFilter === 'member' 
                                         ? members.map(m => ({ ...m, is_dealer: false }))
                                         : activeDownstreamDealers
+                                
+                                // Apply search filter
+                                if (memberSearchQuery.trim()) {
+                                    const query = memberSearchQuery.toLowerCase().trim()
+                                    filteredMembers = filteredMembers.filter(m => 
+                                        (m.full_name && m.full_name.toLowerCase().includes(query)) ||
+                                        (m.email && m.email.toLowerCase().includes(query)) ||
+                                        (m.phone && m.phone.includes(query))
+                                    )
+                                }
                                 
                                 const pendingDownstreamDealers = downstreamDealers.filter(d => d.membership_status === 'pending')
                                 
@@ -3207,6 +3284,74 @@ export default function Dealer() {
                 <SummaryModal
                     round={selectedRound}
                     onClose={() => setShowSummaryModal(false)}
+                />
+            )}
+
+            {/* QR Code Modal */}
+            {showQRModal && (
+                <div className="modal-overlay" onClick={() => setShowQRModal(false)} style={{ zIndex: 9999 }}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+                        <div className="modal-header">
+                            <h3><FiShare2 /> QR Code ของฉัน</h3>
+                            <button className="modal-close" onClick={() => setShowQRModal(false)}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="modal-body" style={{ textAlign: 'center', padding: '2rem' }}>
+                            <div style={{ 
+                                background: '#fff', 
+                                padding: '1.5rem', 
+                                borderRadius: '12px',
+                                display: 'inline-block',
+                                marginBottom: '1.5rem'
+                            }}>
+                                <QRCode
+                                    value={`${window.location.origin}/register?ref=${user?.id}`}
+                                    size={200}
+                                    style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                                />
+                            </div>
+                            <p style={{ marginBottom: '1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+                                ส่ง QR Code หรือลิงก์นี้ให้สมาชิกเพื่อเข้ากลุ่มของคุณ
+                            </p>
+                            <div style={{
+                                background: 'var(--color-surface-alt)',
+                                padding: '0.75rem 1rem',
+                                borderRadius: '8px',
+                                fontSize: '0.85rem',
+                                wordBreak: 'break-all',
+                                marginBottom: '1rem',
+                                border: '1px solid var(--color-border)'
+                            }}>
+                                {`${window.location.origin}/register?ref=${user?.id}`}
+                            </div>
+                            <button
+                                className="btn btn-primary"
+                                onClick={() => {
+                                    navigator.clipboard.writeText(`${window.location.origin}/register?ref=${user?.id}`)
+                                    toast.success('คัดลอกลิงก์แล้ว!')
+                                }}
+                                style={{ width: '100%' }}
+                            >
+                                <FiCopy /> คัดลอกลิงก์
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* QR Scanner Modal */}
+            {showScannerModal && (
+                <QRScannerModal 
+                    onClose={() => setShowScannerModal(false)}
+                    onScanSuccess={(result) => {
+                        setShowScannerModal(false)
+                        if (result.includes('/register?ref=') || result.includes('/dealer-connect?ref=')) {
+                            window.location.href = result
+                        } else {
+                            toast.error('QR Code ไม่ถูกต้อง')
+                        }
+                    }}
                 />
             )}
         </div>
@@ -4869,6 +5014,7 @@ function SubmissionsModal({ round, onClose }) {
                     </div>
                 </div>
             )}
+
         </div>
     )
 }
@@ -5408,6 +5554,59 @@ function DealerProfileTab({ user, profile, subscription, formatDate }) {
                 isOpen={showPasswordModal}
                 onClose={() => setShowPasswordModal(false)}
             />
+        </div>
+    )
+}
+
+// QR Scanner Modal Component
+function QRScannerModal({ onClose, onScanSuccess }) {
+    const [error, setError] = useState(null)
+    
+    useEffect(() => {
+        const scanner = new Html5QrcodeScanner('qr-reader', {
+            qrbox: {
+                width: 250,
+                height: 250,
+            },
+            fps: 10,
+        })
+        
+        scanner.render(
+            (decodedText) => {
+                scanner.clear()
+                onScanSuccess(decodedText)
+            },
+            (errorMessage) => {
+                // Ignore scan errors, they happen frequently
+            }
+        )
+        
+        return () => {
+            scanner.clear().catch(() => {})
+        }
+    }, [])
+    
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+                <div className="modal-header">
+                    <h3><FiGrid /> สแกน QR Code</h3>
+                    <button className="modal-close" onClick={onClose}>
+                        <FiX />
+                    </button>
+                </div>
+                <div className="modal-body" style={{ padding: '1rem' }}>
+                    <p style={{ marginBottom: '1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem', textAlign: 'center' }}>
+                        สแกน QR Code ของเจ้ามือที่ต้องการเชื่อมต่อ
+                    </p>
+                    <div id="qr-reader" style={{ width: '100%' }}></div>
+                    {error && (
+                        <p style={{ color: 'var(--color-error)', marginTop: '1rem', textAlign: 'center' }}>
+                            {error}
+                        </p>
+                    )}
+                </div>
+            </div>
         </div>
     )
 }
