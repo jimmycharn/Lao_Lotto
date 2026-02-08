@@ -2244,53 +2244,6 @@ export default function Dealer() {
                                 )}
                             </div>
 
-                            {/* Pending Members Section */}
-                            {pendingMembers.length > 0 && (
-                                <div className="pending-members-section" style={{ marginBottom: '1.5rem' }}>
-                                    <div className="section-header" style={{ marginBottom: '0.75rem' }}>
-                                        <h3 style={{ fontSize: '1rem', color: 'var(--color-warning)' }}>
-                                            <FiClock /> รอการอนุมัติ
-                                        </h3>
-                                        <span className="badge" style={{ background: 'var(--color-warning)', color: '#000' }}>
-                                            {pendingMembers.length} คน
-                                        </span>
-                                    </div>
-                                    <div className="pending-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                        {pendingMembers.map(member => (
-                                            <div key={member.id} className="pending-member-item card" style={{
-                                                padding: '0.75rem 1rem',
-                                                display: 'flex',
-                                                justifyContent: 'space-between',
-                                                alignItems: 'center',
-                                                flexWrap: 'wrap',
-                                                gap: '0.5rem'
-                                            }}>
-                                                <div className="member-info">
-                                                    <div style={{ fontWeight: 500 }}>{member.full_name || 'ไม่มีชื่อ'}</div>
-                                                    <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{member.email}</div>
-                                                </div>
-                                                <div className="member-actions" style={{ display: 'flex', gap: '0.5rem' }}>
-                                                    <button
-                                                        className="btn btn-success btn-sm"
-                                                        onClick={() => handleApproveMember(member)}
-                                                        style={{ padding: '0.35rem 0.75rem' }}
-                                                    >
-                                                        <FiCheck /> อนุมัติ
-                                                    </button>
-                                                    <button
-                                                        className="btn btn-danger btn-sm"
-                                                        onClick={() => handleRejectMember(member)}
-                                                        style={{ padding: '0.35rem 0.75rem' }}
-                                                    >
-                                                        <FiX /> ปฏิเสธ
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
                             {/* Member Type Filter */}
                             <div className="member-type-filter" style={{ 
                                 marginBottom: '1rem', 
@@ -2530,6 +2483,74 @@ export default function Dealer() {
                                     </div>
                                 )
                             })()}
+
+                            {/* Pending Members Section - Moved to bottom */}
+                            {pendingMembers.length > 0 && (
+                                <div className="pending-members-section" style={{ 
+                                    marginTop: '2rem',
+                                    padding: '1rem',
+                                    background: 'var(--color-surface)',
+                                    borderRadius: '12px',
+                                    border: '2px solid var(--color-warning)'
+                                }}>
+                                    <div className="section-header" style={{ marginBottom: '1rem' }}>
+                                        <h3 style={{ fontSize: '1.1rem', color: 'var(--color-warning)', fontWeight: '600' }}>
+                                            <FiClock /> สมาชิกที่รอการอนุมัติ
+                                        </h3>
+                                        <span className="badge" style={{ 
+                                            background: 'var(--color-warning)', 
+                                            color: '#000',
+                                            fontWeight: '600'
+                                        }}>
+                                            {pendingMembers.length} คน
+                                        </span>
+                                    </div>
+                                    <div className="pending-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                        {pendingMembers.map(member => (
+                                            <div key={member.id} className="pending-member-item card" style={{
+                                                padding: '1rem',
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                flexWrap: 'wrap',
+                                                gap: '0.75rem',
+                                                background: 'var(--color-surface-alt)',
+                                                border: '1px solid var(--color-border)',
+                                                borderRadius: '8px'
+                                            }}>
+                                                <div className="member-info">
+                                                    <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.25rem' }}>
+                                                        {member.full_name || 'ไม่มีชื่อ'}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.85rem', opacity: 0.7 }}>{member.email}</div>
+                                                </div>
+                                                <div className="member-actions" style={{ display: 'flex', gap: '0.5rem' }}>
+                                                    <button
+                                                        className="btn btn-success btn-sm"
+                                                        onClick={() => handleApproveMember(member)}
+                                                        style={{ 
+                                                            padding: '0.5rem 1rem',
+                                                            fontWeight: '500'
+                                                        }}
+                                                    >
+                                                        <FiCheck /> อนุมัติ
+                                                    </button>
+                                                    <button
+                                                        className="btn btn-danger btn-sm"
+                                                        onClick={() => handleRejectMember(member)}
+                                                        style={{ 
+                                                            padding: '0.5rem 1rem',
+                                                            fontWeight: '500'
+                                                        }}
+                                                    >
+                                                        <FiX /> ปฏิเสธ
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 
