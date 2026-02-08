@@ -61,6 +61,7 @@ import ResultsModal from '../components/dealer/ResultsModal'
 import NumberLimitsModal from '../components/dealer/NumberLimitsModal'
 import SummaryModal from '../components/dealer/SummaryModal'
 import RoundAccordionItem from '../components/dealer/RoundAccordionItem'
+import ChangePasswordModal from '../components/ChangePasswordModal'
 
 // RoundAccordionItem is now imported from separate file
 
@@ -261,7 +262,7 @@ export default function Dealer() {
             }
 
             // Fetch members from memberships table
-            const { data: membershipsData } = await supabase
+            const { data: membershipsData, error: membershipsError } = await supabase
                 .from('user_dealer_memberships')
                 .select(`
                     *,
@@ -271,12 +272,17 @@ export default function Dealer() {
                         full_name,
                         phone,
                         created_at,
-                        role
+                        role,
+                        password_changed
                     )
                 `)
                 .eq('dealer_id', user.id)
                 .neq('user_id', user.id) // Exclude self-membership
                 .order('created_at', { ascending: false })
+            
+            if (membershipsError) {
+                console.error('Error fetching memberships:', membershipsError)
+            }
 
             // Transform and categorize memberships
             const allMemberships = (membershipsData || []).map(m => ({
@@ -287,7 +293,8 @@ export default function Dealer() {
                 approved_at: m.approved_at,
                 blocked_at: m.blocked_at,
                 assigned_bank_account_id: m.assigned_bank_account_id,
-                is_dealer: m.profiles?.role === 'dealer' // Mark if member is also a dealer
+                is_dealer: m.profiles?.role === 'dealer', // Mark if member is also a dealer
+                password_changed: m.profiles?.password_changed || false // Track if user has changed password
             }))
 
             // Separate regular members from dealer members (เจ้ามือตีเข้า)
@@ -4738,6 +4745,7 @@ function DealerProfileTab({ user, profile, subscription, formatDate }) {
     const [showAddBankModal, setShowAddBankModal] = useState(false)
     const [editingBank, setEditingBank] = useState(null)
     const [toast, setToast] = useState(null)
+    const [showPasswordModal, setShowPasswordModal] = useState(false)
 
     // Local profile data
     const [profileData, setProfileData] = useState({
@@ -5091,6 +5099,24 @@ function DealerProfileTab({ user, profile, subscription, formatDate }) {
                 )}
             </div>
 
+            {/* Security Settings Card */}
+            <div className="profile-details card">
+                <h3>ความปลอดภัย</h3>
+                <div className="security-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1.5rem', background: 'var(--color-bg)', borderRadius: '0.5rem' }}>
+                    <div style={{ fontSize: '2rem', color: 'var(--color-gold)', marginBottom: '0.75rem' }}>
+                        <FiLock />
+                    </div>
+                    <h4 style={{ margin: '0 0 0.25rem', fontSize: '1rem', color: 'var(--color-text)' }}>รหัสผ่าน</h4>
+                    <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>เปลี่ยนรหัสผ่านเพื่อความปลอดภัย</p>
+                    <button
+                        className="btn btn-outline"
+                        onClick={() => setShowPasswordModal(true)}
+                    >
+                        เปลี่ยนรหัสผ่าน
+                    </button>
+                </div>
+            </div>
+
             {/* Bank Accounts Card */}
             <div className="profile-details card">
                 <div className="section-header" style={{ marginBottom: '1rem' }}>
@@ -5239,6 +5265,12 @@ function DealerProfileTab({ user, profile, subscription, formatDate }) {
                     <FiCheck /> {toast.message}
                 </div>
             )}
+
+            {/* Change Password Modal */}
+            <ChangePasswordModal
+                isOpen={showPasswordModal}
+                onClose={() => setShowPasswordModal(false)}
+            />
         </div>
     )
 }
@@ -5326,8 +5358,8 @@ function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock
                     borderTop: '1px solid var(--color-border)',
                     marginLeft: '56px'
                 }}>
-                    {/* Copy button - only for non-dealer */}
-                    {!isDealer && onCopyCredentials && (
+                    {/* Copy button - only for non-dealer and password not changed */}
+                    {!isDealer && onCopyCredentials && !member.password_changed && (
                         <button
                             onClick={(e) => { e.stopPropagation(); onCopyCredentials(member); }}
                             style={{ 

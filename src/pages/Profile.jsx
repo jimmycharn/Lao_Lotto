@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { FiUser, FiEdit2, FiSave, FiCheck } from 'react-icons/fi'
+import { FiUser, FiEdit2, FiSave, FiCheck, FiLock } from 'react-icons/fi'
+import ChangePasswordModal from '../components/ChangePasswordModal'
 import './Profile.css'
 
 export default function Profile() {
@@ -9,6 +10,7 @@ export default function Profile() {
     const [isEditing, setIsEditing] = useState(false)
     const [saving, setSaving] = useState(false)
     const [toast, setToast] = useState(null)
+    const [showPasswordModal, setShowPasswordModal] = useState(false)
 
     const [profileData, setProfileData] = useState({
         full_name: profile?.full_name || '',
@@ -179,6 +181,24 @@ export default function Profile() {
                         )}
                     </div>
 
+                    {/* Security Settings */}
+                    <div className="profile-details card">
+                        <h3>ความปลอดภัย</h3>
+                        <div className="security-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1.5rem', background: 'var(--color-bg)', borderRadius: '0.5rem' }}>
+                            <div style={{ fontSize: '2rem', color: 'var(--color-gold)', marginBottom: '0.75rem' }}>
+                                <FiLock />
+                            </div>
+                            <h4 style={{ margin: '0 0 0.25rem', fontSize: '1rem', color: 'var(--color-text)' }}>รหัสผ่าน</h4>
+                            <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>เปลี่ยนรหัสผ่านเพื่อความปลอดภัย</p>
+                            <button
+                                className="btn btn-outline"
+                                onClick={() => setShowPasswordModal(true)}
+                            >
+                                เปลี่ยนรหัสผ่าน
+                            </button>
+                        </div>
+                    </div>
+
                     {/* Bank Info */}
                     <div className="profile-details card">
                         <h3>ข้อมูลธนาคาร</h3>
@@ -255,6 +275,12 @@ export default function Profile() {
                     )}
                 </div>
             </div>
+
+            {/* Change Password Modal */}
+            <ChangePasswordModal
+                isOpen={showPasswordModal}
+                onClose={() => setShowPasswordModal(false)}
+            />
         </div>
     )
 }

@@ -35,6 +35,7 @@ import {
     FiCopy
 } from 'react-icons/fi'
 import QRCode from 'react-qr-code'
+import ChangePasswordModal from '../components/ChangePasswordModal'
 import './SuperAdmin.css'
 
 export default function SuperAdmin() {
@@ -78,6 +79,7 @@ export default function SuperAdmin() {
     const [isLoading, setIsLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState('')
     const [filterStatus, setFilterStatus] = useState('all')
+    const [showPasswordModal, setShowPasswordModal] = useState(false)
 
     // Modal States
     const [showPackageModal, setShowPackageModal] = useState(false)
@@ -2721,6 +2723,24 @@ export default function SuperAdmin() {
                     </div>
                 </div>
             </div>
+
+            {/* Security Settings */}
+            <div className="settings-section" style={{ marginTop: '1.5rem' }}>
+                <h3>ความปลอดภัย</h3>
+                <div className="security-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1.5rem', background: 'var(--color-bg)', borderRadius: '0.5rem' }}>
+                    <div style={{ fontSize: '2rem', color: 'var(--color-gold)', marginBottom: '0.75rem' }}>
+                        <FiSettings />
+                    </div>
+                    <h4 style={{ margin: '0 0 0.25rem', fontSize: '1rem', color: 'var(--color-text)' }}>รหัสผ่าน</h4>
+                    <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>เปลี่ยนรหัสผ่านเพื่อความปลอดภัย</p>
+                    <button
+                        className="btn btn-outline"
+                        onClick={() => setShowPasswordModal(true)}
+                    >
+                        เปลี่ยนรหัสผ่าน
+                    </button>
+                </div>
+            </div>
         </div>
     )
 
@@ -3420,6 +3440,12 @@ export default function SuperAdmin() {
                     </div>
                 </div>
             )}
+
+            {/* Change Password Modal */}
+            <ChangePasswordModal
+                isOpen={showPasswordModal}
+                onClose={() => setShowPasswordModal(false)}
+            />
         </div>
     )
 }

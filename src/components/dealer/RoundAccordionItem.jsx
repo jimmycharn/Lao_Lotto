@@ -369,10 +369,26 @@ export default function RoundAccordionItem({
             (m.full_name || m.email || 'ไม่ระบุ') === memberName
         )
         if (member) {
+            // Check if member has changed password - if so, dealer cannot write on their behalf
+            if (member.password_changed) {
+                toast.error('ไม่สามารถเขียนโพยแทนสมาชิกที่เปลี่ยนรหัสผ่านแล้วได้')
+                return
+            }
             setSelectedMemberForBet(member)
             setEditingBillData(null) // Clear editing data for new submission
             setShowWriteBetModal(true)
         }
+    }
+
+    // Check if selected member can have bets written on their behalf
+    const canWriteBetForSelectedMember = () => {
+        if (inlineUserFilter === 'all') return false
+        const memberName = inlineUserFilter
+        const member = allMembers.find(m => 
+            (m.full_name || m.email || 'ไม่ระบุ') === memberName
+        )
+        // Can write bet only if member exists and hasn't changed password
+        return member && !member.password_changed
     }
 
     // Edit bill - open WriteSubmissionModal with existing data
@@ -1538,7 +1554,7 @@ export default function RoundAccordionItem({
                                                             ))
                                                         )}
                                                     </select>
-                                                    {inlineUserFilter !== 'all' && isOpen && (
+                                                    {canWriteBetForSelectedMember() && isOpen && (
                                                         <button
                                                             className="btn btn-primary btn-sm"
                                                             onClick={handleOpenWriteBet}

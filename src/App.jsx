@@ -19,6 +19,7 @@ const Dealer = lazy(() => import('./pages/Dealer'))
 const Admin = lazy(() => import('./pages/Admin'))
 const SuperAdmin = lazy(() => import('./pages/SuperAdmin'))
 const UserDashboard = lazy(() => import('./pages/UserDashboard'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 
 // Loading component for Suspense
 function PageLoader() {
@@ -124,6 +125,7 @@ function AppContent() {
             <Route path="/" element={<HomeRedirect />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/invite" element={<InvitationAccept />} />
             <Route path="/dealer-connect" element={<DealerConnect />} />
           <Route
