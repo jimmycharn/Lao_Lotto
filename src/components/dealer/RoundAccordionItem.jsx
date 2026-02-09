@@ -2139,10 +2139,11 @@ export default function RoundAccordionItem({
                                                         const billsByUser = {}
                                                         sortedBills.forEach(bill => {
                                                             if (!billsByUser[bill.user_name]) {
-                                                                billsByUser[bill.user_name] = { user_name: bill.user_name, user_id: bill.user_id, bills: [], total: 0 }
+                                                                billsByUser[bill.user_name] = { user_name: bill.user_name, user_id: bill.user_id, bills: [], total: 0, totalCommission: 0 }
                                                             }
                                                             billsByUser[bill.user_name].bills.push(bill)
                                                             billsByUser[bill.user_name].total += bill.total
+                                                            billsByUser[bill.user_name].totalCommission += bill.items.reduce((sum, item) => sum + (item.commission_amount || 0), 0)
                                                         })
 
                                                         if (Object.keys(billsByUser).length === 0) {
@@ -2152,9 +2153,10 @@ export default function RoundAccordionItem({
                                                         return Object.values(billsByUser).map(userGroup => {
                                                             const userKey = userGroup.user_id || userGroup.user_name
                                                             const isUserExpanded = expandedUserGroups.includes(userKey)
-                                                            // Calculate total items, bills count, and total amount based on billDisplayMode and filter
+                                                            // Calculate total items, bills count, total amount and commission based on billDisplayMode and filter
                                                             let filteredBillsCount = 0
                                                             let filteredTotal = 0
+                                                            let filteredCommission = 0
                                                             const totalItems = userGroup.bills.reduce((sum, bill) => {
                                                                 // Filter items by bet type if selected
                                                                 let filteredItems = bill.items
@@ -2165,6 +2167,7 @@ export default function RoundAccordionItem({
                                                                 if (filteredItems.length > 0) {
                                                                     filteredBillsCount++
                                                                     filteredTotal += filteredItems.reduce((s, item) => s + item.amount, 0)
+                                                                    filteredCommission += filteredItems.reduce((s, item) => s + (item.commission_amount || 0), 0)
                                                                 }
                                                                 if (billDisplayMode === 'summary') {
                                                                     const byEntry = {}
@@ -2206,7 +2209,10 @@ export default function RoundAccordionItem({
                                                                             </div>
                                                                         </div>
                                                                     </div>
-                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                                        <span style={{ fontSize: '0.8rem', color: 'rgba(0,0,0,0.7)' }}>
+                                                                            คอม {round.currency_symbol}{(inlineBetTypeFilter === 'all' ? userGroup.totalCommission : filteredCommission).toLocaleString()}
+                                                                        </span>
                                                                         <span>{round.currency_symbol}{(inlineBetTypeFilter === 'all' ? userGroup.total : filteredTotal).toLocaleString()}</span>
                                                                         {isOpen && (
                                                                             <button 
@@ -2284,6 +2290,12 @@ export default function RoundAccordionItem({
                                                                                         </div>
                                                                                     </div>
                                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                                                            คอม {round.currency_symbol}{(() => {
+                                                                                                if (inlineBetTypeFilter === 'all') return bill.items.reduce((sum, item) => sum + (item.commission_amount || 0), 0).toLocaleString()
+                                                                                                return bill.items.filter(item => item.bet_type === inlineBetTypeFilter).reduce((sum, item) => sum + (item.commission_amount || 0), 0).toLocaleString()
+                                                                                            })()}
+                                                                                        </span>
                                                                                         <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>
                                                                                             {round.currency_symbol}{(() => {
                                                                                                 if (inlineBetTypeFilter === 'all') return bill.total.toLocaleString()

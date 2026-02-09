@@ -48,6 +48,24 @@ export default function DealerWriteSubmissionWrapper({
         const lotteryKey = round.lottery_type
         const settings = userSettings?.lottery_settings?.[lotteryKey]
         
+        // Map bet_type to settings key for Lao/Hanoi lottery
+        // In user_settings, Lao uses different keys than the actual bet_type used in submissions
+        let settingsKey = betType
+        if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+            const LAO_BET_TYPE_MAP = {
+                '3_top': '3_straight',      // 3 ตัวตรง
+                '3_tod': '3_tod_single',    // 3 ตัวโต๊ด
+                '4_top': '4_set'            // 4 ตัวตรง (ชุด)
+            }
+            settingsKey = LAO_BET_TYPE_MAP[betType] || betType
+        }
+        
+        // First check with mapped settings key
+        if (settings?.[settingsKey]?.commission !== undefined) {
+            return settings[settingsKey].commission
+        }
+        
+        // Fallback: check with original betType
         if (settings?.[betType]?.commission !== undefined) {
             return settings[betType].commission
         }
@@ -56,7 +74,7 @@ export default function DealerWriteSubmissionWrapper({
         const defaults = {
             'run_top': 15, 'run_bottom': 15,
             '2_top': 15, '2_bottom': 15, '2_front': 15, '2_center': 15, '2_run': 15,
-            '3_top': 30, '3_tod': 15, '3_straight': 30, '3_tod_single': 15,
+            '3_top': 15, '3_tod': 15, '3_straight': 15, '3_tod_single': 15,
             '4_top': 25, '4_set': 25, '4_run': 15,
             '5_run': 15
         }
