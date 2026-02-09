@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="th">
+<html lang="th" class="theme-dark" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
@@ -7,6 +7,55 @@
     <meta name="description" content="Big Lotto - ซื้อหวยออนไลน์ ง่าย สะดวก ปลอดภัย มีผลหวยทุกงวด จ่ายจริง จ่ายเร็ว" />
     <meta name="keywords" content="Big Lotto, หวยออนไลน์, ซื้อหวย, ผลหวย, เลขเด็ด" />
     <title>Big Lotto - ระบบหวยออนไลน์</title>
+    <!-- Critical CSS to prevent flash - hide until theme is applied -->
+    <style>
+      /* Default dark theme background - prevents white flash */
+      html { background-color: #0f0f1a; }
+      html.theme-light, html[data-theme="light"] { background-color: #f0f2f5; }
+      /* Hide body until React loads to prevent any flash */
+      body { opacity: 0; transition: opacity 0.1s ease; }
+      body.theme-ready { opacity: 1; }
+    </style>
+    <script>
+      // Prevent theme flash on page load - runs before React
+      (function() {
+        var THEME_PREFIX = 'lao_lotto_theme_';
+        var theme = 'dark'; // default
+        
+        // Try to detect which dashboard we're on from URL
+        var path = window.location.pathname;
+        var dashboard = 'global';
+        if (path.includes('/dealer')) dashboard = 'dealer';
+        else if (path.includes('/superadmin')) dashboard = 'superadmin';
+        else if (path.includes('/user') || path === '/') dashboard = 'user';
+        else if (path.includes('/admin')) dashboard = 'admin';
+        
+        // Get stored theme for this dashboard
+        try {
+          var stored = localStorage.getItem(THEME_PREFIX + dashboard);
+          if (stored === 'light' || stored === 'dark') {
+            theme = stored;
+          }
+        } catch (e) {}
+        
+        // Apply theme immediately to html element
+        var html = document.documentElement;
+        html.className = 'theme-' + theme;
+        html.setAttribute('data-theme', theme);
+        
+        // Show body when DOM is ready
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', function() {
+            document.body.classList.add('theme-ready');
+          });
+        } else {
+          // DOM already loaded
+          setTimeout(function() {
+            document.body.classList.add('theme-ready');
+          }, 0);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

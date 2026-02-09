@@ -639,7 +639,7 @@
     cursor: not-allowed;
 }
 
-/* Type Buttons Row - above keyboard, only show when has buttons */
+/* Type Buttons Row - above keyboard */
 .type-buttons-row {
     display: flex;
     gap: 0.4rem;
@@ -651,9 +651,26 @@
     border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* Hide row when empty (only placeholder) */
-.type-buttons-row:has(.type-placeholder) {
-    display: none;
+/* Mobile: Hide row when empty (only placeholder) */
+@media (max-width: 767px) {
+    .type-buttons-row:has(.type-placeholder) {
+        display: none;
+    }
+}
+
+/* Desktop: Fixed height for 2 rows of buttons to prevent jumping */
+@media (min-width: 768px) {
+    .type-buttons-row {
+        height: 140px; /* Fixed height: 2 rows × 52px + gap 8px + padding 16px + buffer */
+        min-height: 140px;
+        max-height: 140px;
+        align-content: flex-start;
+        box-sizing: border-box;
+    }
+    
+    .type-buttons-row:has(.type-placeholder) {
+        display: flex; /* Always show on desktop */
+    }
 }
 
 .type-placeholder {
@@ -662,6 +679,7 @@
     font-style: italic;
     width: 100%;
     text-align: center;
+    align-self: center;
 }
 
 /* Type Button in row - base style */
@@ -752,6 +770,20 @@
 
 .type-btn:active {
     transform: scale(0.98);
+}
+
+/* First button (default) - Gold/Yellow gradient to indicate Enter will select this */
+.type-btn:first-child {
+    background: linear-gradient(135deg, #f4d03f 0%, #d4af37 100%) !important;
+    border: 2px solid rgba(212, 175, 55, 0.8) !important;
+    color: #1a1a2e !important;
+    text-shadow: none !important;
+    box-shadow: 0 2px 8px rgba(212, 175, 55, 0.4);
+}
+
+.type-btn:first-child:hover {
+    background: linear-gradient(135deg, #f7dc6f 0%, #e0c04a 100%) !important;
+    box-shadow: 0 4px 16px rgba(212, 175, 55, 0.5);
 }
 
 /* บน/ตรง - Purple gradient */

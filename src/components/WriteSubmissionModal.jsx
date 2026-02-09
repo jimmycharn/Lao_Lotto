@@ -478,6 +478,15 @@ export default function WriteSubmissionModal({
                 e.preventDefault()
                 handleBackspace()
             }
+            // Ctrl+Enter (Windows) / Cmd+Enter (Mac) - save draft with default (first) type button
+            else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault()
+                const currentTypeButtons = getAvailableTypeButtons()
+                if (currentTypeButtons.length > 0) {
+                    // Click the first (default) type button
+                    handleTypeClick(currentTypeButtons[0].value, currentTypeButtons[0].autoSubmit)
+                }
+            }
             // Enter
             else if (e.key === 'Enter') {
                 e.preventDefault()
@@ -534,11 +543,22 @@ export default function WriteSubmissionModal({
                 setFocusedTypeIndex(-1)
                 handleClear()
             }
+            // Delete key - clear current input (same as C button)
+            else if (e.key === 'Delete') {
+                e.preventDefault()
+                handleClear()
+            }
+            // Spacebar - toggle บน/ล่าง (only on desktop with real keyboard)
+            else if (e.key === ' ' || e.code === 'Space') {
+                e.preventDefault()
+                playSound('click')
+                setTopBottomToggle(prev => prev === 'top' ? 'bottom' : 'top')
+            }
         }
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [isOpen, currentInput, isLocked, lockedAmount, focusedTypeIndex])
+    }, [isOpen, currentInput, isLocked, lockedAmount, focusedTypeIndex, topBottomToggle])
 
     // Prevent body scroll when modal is open
     useEffect(() => {
@@ -928,6 +948,24 @@ export default function WriteSubmissionModal({
                 playSound('click')
                 setCurrentInput(trimmed + '*')
                 return  // ไม่บันทึก รอให้ป้อนจำนวนเงินชุดที่ 2 หรือเลือก type
+            }
+        }
+
+        // Case 2.5: ถ้ามี "เลข=จำนวนเงิน*" (ลงท้ายด้วย *) กด Enter ให้ duplicate จำนวนเงินที่ 1 เป็นจำนวนเงินที่ 2
+        // ใช้ได้กับเลข 2 หลัก และ 3 หลักเท่านั้น
+        if (trimmed.includes('=') && trimmed.endsWith('*')) {
+            const eqIndex = trimmed.indexOf('=')
+            const numbers = trimmed.substring(0, eqIndex)
+            const numLen = numbers.length
+            
+            // ใช้ได้กับ 2-3 หลักเท่านั้น
+            if ((numLen === 2 || numLen === 3) && /^\d+$/.test(numbers)) {
+                const afterEq = trimmed.substring(eqIndex + 1, trimmed.length - 1) // ตัด * ออก
+                if (/^\d+$/.test(afterEq) && afterEq.length > 0) {
+                    playSound('click')
+                    setCurrentInput(`${numbers}=${afterEq}*${afterEq}`)
+                    return
+                }
             }
         }
 

@@ -76,6 +76,34 @@ export default function WriteSubmissionModal({
         setTimeout(() => numberInputRef.current?.focus(), 100)
     }, [targetUser?.id, dealerId])
 
+    // Handle keyboard shortcuts for desktop
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            const activeEl = document.activeElement
+            const isTyping = activeEl?.tagName === 'INPUT' || activeEl?.tagName === 'TEXTAREA'
+            
+            // Spacebar - toggle บน/ล่าง (2-digit reversed mode)
+            if (e.key === ' ' || e.code === 'Space') {
+                // Only toggle if not typing in a text input
+                if (!isTyping) {
+                    e.preventDefault()
+                    playAddSound()
+                    setIsReversed(prev => !prev)
+                }
+            }
+            // Delete key - clear input fields (same as C button)
+            else if (e.key === 'Delete') {
+                e.preventDefault()
+                setSubmitForm(prev => ({ ...prev, numbers: '', amount: '' }))
+                setLastClickedBetType(null)
+                numberInputRef.current?.focus()
+            }
+        }
+
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [isReversed])
+
     async function fetchUserSettings() {
         try {
             const { data } = await supabase
