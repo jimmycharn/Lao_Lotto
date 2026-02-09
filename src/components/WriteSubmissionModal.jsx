@@ -405,11 +405,84 @@ export default function WriteSubmissionModal({
     const [lockedAmount, setLockedAmount] = useState('') // จำนวนเงินที่ล็อคไว้
     const [showCloseConfirm, setShowCloseConfirm] = useState(false)
     const [focusedTypeIndex, setFocusedTypeIndex] = useState(-1) // -1 = not focused on type buttons
+    const [isCtrlPressed, setIsCtrlPressed] = useState(false) // Virtual Ctrl key state for mobile
+    const [defaultTypes, setDefaultTypes] = useState(() => {
+        // Load default types from localStorage
+        try {
+            const saved = localStorage.getItem('lao_lotto_default_types')
+            return saved ? JSON.parse(saved) : {}
+        } catch {
+            return {}
+        }
+    })
     const linesContainerRef = useRef(null)
     const noteInputRef = useRef(null)
     const modalRef = useRef(null)
     const typeButtonsRef = useRef([])
+    const longPressTimerRef = useRef(null)
     const isEditMode = !!editingData
+
+    // Save default types to localStorage when changed
+    useEffect(() => {
+        try {
+            localStorage.setItem('lao_lotto_default_types', JSON.stringify(defaultTypes))
+        } catch {
+            // Ignore localStorage errors
+        }
+    }, [defaultTypes])
+
+    // Get current digit count from input
+    const getCurrentDigitCount = useCallback(() => {
+        const input = currentInput.trim()
+        const eqIndex = input.indexOf('=')
+        if (eqIndex === -1) return 0
+        const numbers = input.substring(0, eqIndex)
+        if (/^\d+$/.test(numbers)) {
+            return numbers.length
+        }
+        return 0
+    }, [currentInput])
+
+    // Get default button index for current digit count
+    const getDefaultButtonIndex = useCallback((typeButtons) => {
+        const digitCount = getCurrentDigitCount()
+        if (digitCount === 0 || typeButtons.length === 0) return 0
+        
+        const defaultType = defaultTypes[digitCount]
+        if (!defaultType) return 0
+        
+        const index = typeButtons.findIndex(btn => btn.value === defaultType)
+        return index >= 0 ? index : 0
+    }, [defaultTypes, getCurrentDigitCount])
+
+    // Handle long press to set default type
+    const handleTypeButtonMouseDown = useCallback((btn, digitCount) => {
+        longPressTimerRef.current = setTimeout(() => {
+            // Set this button as default for current digit count
+            setDefaultTypes(prev => ({
+                ...prev,
+                [digitCount]: btn.value
+            }))
+            playSound('success')
+            // Show feedback
+            setError(`ตั้ง "${btn.label}" เป็นค่าเริ่มต้นสำหรับเลข ${digitCount} หลัก`)
+            setTimeout(() => setError(''), 2000)
+        }, 800) // 800ms long press
+    }, [])
+
+    const handleTypeButtonMouseUp = useCallback(() => {
+        if (longPressTimerRef.current) {
+            clearTimeout(longPressTimerRef.current)
+            longPressTimerRef.current = null
+        }
+    }, [])
+
+    const handleTypeButtonMouseLeave = useCallback(() => {
+        if (longPressTimerRef.current) {
+            clearTimeout(longPressTimerRef.current)
+            longPressTimerRef.current = null
+        }
+    }, [])
 
     // Handle keyboard input for desktop
     useEffect(() => {
@@ -423,34 +496,97 @@ export default function WriteSubmissionModal({
             const currentTypeButtons = getAvailableTypeButtons()
             const hasTypeButtons = currentTypeButtons.length > 0
             
-            // Arrow Down or Tab - focus on type buttons if available
-            if ((e.key === 'ArrowDown' || e.key === 'Tab') && hasTypeButtons && focusedTypeIndex === -1) {
-                e.preventDefault()
-                setFocusedTypeIndex(0)
-                typeButtonsRef.current[0]?.focus()
-                return
-            }
+            // Arrow keys for type button navigation (desktop only)
+            // Type buttons are displayed in rows of 5 on desktop
+            const BUTTONS_PER_ROW = 5
             
-            // Arrow Up - exit type buttons focus back to input
-            if (e.key === 'ArrowUp' && focusedTypeIndex >= 0) {
+            // Arrow Left - go to previous button (wrap to last if at first)
+            if (e.key === 'ArrowLeft' && hasTypeButtons) {
                 e.preventDefault()
-                setFocusedTypeIndex(-1)
-                return
-            }
-            
-            // Arrow Left/Right - navigate between type buttons
-            if (e.key === 'ArrowLeft' && focusedTypeIndex > 0) {
-                e.preventDefault()
-                const newIndex = focusedTypeIndex - 1
+                let newIndex
+                if (focusedTypeIndex === -1) {
+                    // Not focused yet - go to last button
+                    newIndex = currentTypeButtons.length - 1
+                } else if (focusedTypeIndex === 0) {
+                    // At first button - wrap to last
+                    newIndex = currentTypeButtons.length - 1
+                } else {
+                    newIndex = focusedTypeIndex - 1
+                }
                 setFocusedTypeIndex(newIndex)
                 typeButtonsRef.current[newIndex]?.focus()
                 return
             }
-            if (e.key === 'ArrowRight' && focusedTypeIndex >= 0 && focusedTypeIndex < currentTypeButtons.length - 1) {
+            
+            // Arrow Right - go to next button (wrap to first if at last)
+            if (e.key === 'ArrowRight' && hasTypeButtons) {
                 e.preventDefault()
-                const newIndex = focusedTypeIndex + 1
+                let newIndex
+                if (focusedTypeIndex === -1) {
+                    // Not focused yet - go to second button (assume first is default)
+                    newIndex = currentTypeButtons.length > 1 ? 1 : 0
+                } else if (focusedTypeIndex >= currentTypeButtons.length - 1) {
+                    // At last button - wrap to first
+                    newIndex = 0
+                } else {
+                    newIndex = focusedTypeIndex + 1
+                }
                 setFocusedTypeIndex(newIndex)
                 typeButtonsRef.current[newIndex]?.focus()
+                return
+            }
+            
+            // Arrow Down - go to first button of second row (or first button if single row)
+            if ((e.key === 'ArrowDown' || e.key === 'Tab') && hasTypeButtons) {
+                e.preventDefault()
+                let newIndex
+                if (focusedTypeIndex === -1) {
+                    // Not focused yet
+                    if (currentTypeButtons.length > BUTTONS_PER_ROW) {
+                        // Has 2 rows - go to first button of second row
+                        newIndex = BUTTONS_PER_ROW
+                    } else {
+                        // Single row - go to first button
+                        newIndex = 0
+                    }
+                } else {
+                    // Already focused - move down a row
+                    const currentRow = Math.floor(focusedTypeIndex / BUTTONS_PER_ROW)
+                    const currentCol = focusedTypeIndex % BUTTONS_PER_ROW
+                    const totalRows = Math.ceil(currentTypeButtons.length / BUTTONS_PER_ROW)
+                    
+                    if (currentRow < totalRows - 1) {
+                        // Can go down
+                        const targetIndex = (currentRow + 1) * BUTTONS_PER_ROW + currentCol
+                        newIndex = Math.min(targetIndex, currentTypeButtons.length - 1)
+                    } else {
+                        // At bottom row - wrap to top
+                        newIndex = Math.min(currentCol, currentTypeButtons.length - 1)
+                    }
+                }
+                setFocusedTypeIndex(newIndex)
+                typeButtonsRef.current[newIndex]?.focus()
+                return
+            }
+            
+            // Arrow Up - move up a row or exit focus
+            if (e.key === 'ArrowUp' && hasTypeButtons) {
+                e.preventDefault()
+                if (focusedTypeIndex === -1) {
+                    return // Not focused, do nothing
+                }
+                const currentRow = Math.floor(focusedTypeIndex / BUTTONS_PER_ROW)
+                const currentCol = focusedTypeIndex % BUTTONS_PER_ROW
+                
+                if (currentRow > 0) {
+                    // Can go up
+                    const newIndex = (currentRow - 1) * BUTTONS_PER_ROW + currentCol
+                    setFocusedTypeIndex(newIndex)
+                    typeButtonsRef.current[newIndex]?.focus()
+                } else {
+                    // At top row - exit focus
+                    setFocusedTypeIndex(-1)
+                }
                 return
             }
             
@@ -478,19 +614,29 @@ export default function WriteSubmissionModal({
                 e.preventDefault()
                 handleBackspace()
             }
-            // Ctrl+Enter (Windows) / Cmd+Enter (Mac) - save draft with default (first) type button
-            else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                e.preventDefault()
-                const currentTypeButtons = getAvailableTypeButtons()
-                if (currentTypeButtons.length > 0) {
-                    // Click the first (default) type button
-                    handleTypeClick(currentTypeButtons[0].value, currentTypeButtons[0].autoSubmit)
-                }
-            }
-            // Enter
+            // Enter key handling
+            // Ctrl+Enter (real keyboard) OR Enter with on-screen Ctrl pressed
+            // Both trigger save draft with default type when input is "number=amount"
             else if (e.key === 'Enter') {
                 e.preventDefault()
-                handleEnter()
+                const input = currentInput.trim()
+                // Pattern: digits=digits (no * and no type)
+                const ctrlEnterPattern = /^\d+=\d+$/
+                
+                // Check if Ctrl is active (real keyboard OR on-screen button)
+                const isCtrlActive = e.ctrlKey || e.metaKey || isCtrlPressed
+                
+                if (isCtrlActive && ctrlEnterPattern.test(input)) {
+                    // Ctrl+Enter with "number=amount" - save draft with default type button
+                    const currentTypeButtons = getAvailableTypeButtons()
+                    if (currentTypeButtons.length > 0) {
+                        const defaultIndex = getDefaultButtonIndex(currentTypeButtons)
+                        handleTypeClick(currentTypeButtons[defaultIndex].value, currentTypeButtons[defaultIndex].autoSubmit)
+                    }
+                } else {
+                    // Normal Enter behavior
+                    handleEnter()
+                }
             }
             // = key - มีได้ 1 อันเท่านั้น และต้องอยู่หลังเลขชุดแรก
             else if (e.key === '=') {
@@ -832,11 +978,39 @@ export default function WriteSubmissionModal({
     }
 
     // Get default bet type based on digit count, toggle state, and amount format
+    // Uses user-selected default from defaultTypes if available
     const getDefaultBetType = (numbers, hasSecondAmount) => {
         const numLen = numbers.length
         const isTop = topBottomToggle === 'top'
         const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
         
+        // Check if user has set a custom default for this digit count
+        const userDefault = defaultTypes[numLen]
+        if (userDefault) {
+            // Map bet type value to label for the line
+            const typeLabels = {
+                // 1 digit
+                'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
+                'front_top_1': 'หน้าบน', 'middle_top_1': 'กลางบน', 'back_top_1': 'หลังบน',
+                'front_bottom_1': 'หน้าล่าง', 'back_bottom_1': 'หลังล่าง',
+                // 2 digit
+                '2_top': 'บน', '2_bottom': 'ล่าง', '2_have': 'มี', '2_front': 'หน้า', '2_spread': 'ถ่าง',
+                '2_top_rev': 'บนกลับ', '2_bottom_rev': 'ล่างกลับ', '2_front_rev': 'หน้ากลับ', '2_spread_rev': 'ถ่างกลับ',
+                // 3 digit
+                '3_top': isLaoOrHanoi ? 'ตรง' : 'บน', '3_tod': 'โต๊ด', '3_bottom': 'ล่าง',
+                '3_straight_tod': 'เต็งโต๊ด', '3_perm_from_3': 'กลับ',
+                // 4 digit
+                '4_set': 'ชุด', '4_float': 'ลอยแพ',
+                // 5 digit
+                '5_float': 'ลอยแพ'
+            }
+            const label = typeLabels[userDefault]
+            if (label) {
+                return { type: label }
+            }
+        }
+        
+        // Fallback to original logic if no user default
         if (numLen === 1) {
             // 1 digit - ไม่รองรับ *
             if (hasSecondAmount) return { error: 'เลข 1 ตัวไม่รองรับจำนวนเงิน 2 ชุด' }
@@ -1520,22 +1694,31 @@ export default function WriteSubmissionModal({
                 {!success && (
                     <div className="type-buttons-row">
                         {typeButtons.length > 0 ? (
-                            typeButtons.map((btn, index) => (
-                                <button 
-                                    key={btn.value}
-                                    ref={el => typeButtonsRef.current[index] = el}
-                                    onClick={() => {
-                                        handleTypeClick(btn.value, btn.autoSubmit)
-                                        setFocusedTypeIndex(-1)
-                                    }}
-                                    onFocus={() => setFocusedTypeIndex(index)}
-                                    onBlur={() => setFocusedTypeIndex(-1)}
-                                    className={`type-btn ${btn.autoSubmit ? 'auto' : 'manual'} ${focusedTypeIndex === index ? 'focused' : ''}`}
-                                    data-type={btn.label}
-                                >
-                                    {btn.label}
-                                </button>
-                            ))
+                            (() => {
+                                const defaultIndex = getDefaultButtonIndex(typeButtons)
+                                const digitCount = getCurrentDigitCount()
+                                return typeButtons.map((btn, index) => (
+                                    <button 
+                                        key={btn.value}
+                                        ref={el => typeButtonsRef.current[index] = el}
+                                        onClick={() => {
+                                            handleTypeClick(btn.value, btn.autoSubmit)
+                                            setFocusedTypeIndex(-1)
+                                        }}
+                                        onMouseDown={() => handleTypeButtonMouseDown(btn, digitCount)}
+                                        onMouseUp={handleTypeButtonMouseUp}
+                                        onMouseLeave={handleTypeButtonMouseLeave}
+                                        onTouchStart={() => handleTypeButtonMouseDown(btn, digitCount)}
+                                        onTouchEnd={handleTypeButtonMouseUp}
+                                        onFocus={() => setFocusedTypeIndex(index)}
+                                        onBlur={() => setFocusedTypeIndex(-1)}
+                                        className={`type-btn ${btn.autoSubmit ? 'auto' : 'manual'} ${focusedTypeIndex === index ? 'focused' : ''} ${index === defaultIndex ? 'default-btn' : ''}`}
+                                        data-type={btn.label}
+                                    >
+                                        {btn.label}
+                                    </button>
+                                ))
+                            })()
                         ) : (
                             <span className="type-placeholder">ป้อนเลขเพื่อเลือกประเภท</span>
                         )}
@@ -1573,32 +1756,17 @@ export default function WriteSubmissionModal({
                                 {topBottomToggle === 'top' ? 'บน' : 'ล่าง'}
                             </button>
                             
-                            {/* Row 4: 0, =, ล็อค, Enter */}
+                            {/* Row 4: 0, Ctrl, ล็อค, Enter */}
                             <button type="button" onClick={() => handleNumberClick('0')}>0</button>
                             <button 
                                 onClick={() => {
-                                    const input = currentInput.trim()
-                                    // ไม่อนุญาตถ้ามี = อยู่แล้ว
-                                    if (input.includes('=')) {
-                                        playSound('error')
-                                        return
-                                    }
-                                    // ต้องมีตัวเลขก่อน =
-                                    if (!/^\d+$/.test(input)) {
-                                        playSound('error')
-                                        return
-                                    }
+                                    // Toggle Ctrl state on click (both desktop and mobile)
                                     playSound('click')
-                                    // ถ้าล็อคอยู่ ให้เติม = และจำนวนเงินที่ล็อคไว้
-                                    if (isLocked && lockedAmount) {
-                                        setCurrentInput(prev => prev + '=' + lockedAmount)
-                                    } else {
-                                        setCurrentInput(prev => prev + '=')
-                                    }
-                                }} 
-                                className="eq-btn"
+                                    setIsCtrlPressed(prev => !prev)
+                                }}
+                                className={`ctrl-btn ${isCtrlPressed ? 'pressed' : ''}`}
                             >
-                                =
+                                Ctrl
                             </button>
                             <button 
                                 onClick={() => {
@@ -1653,7 +1821,26 @@ export default function WriteSubmissionModal({
                             </button>
                             <button 
                                 className="enter-inline"
-                                onClick={handleEnter}
+                                onClick={() => {
+                                    // Check if Ctrl is pressed AND input matches "number=amount" format
+                                    // (no * yet, no type specified)
+                                    if (isCtrlPressed) {
+                                        const input = currentInput.trim()
+                                        // Pattern: digits=digits (no * and no type)
+                                        const ctrlEnterPattern = /^\d+=\d+$/
+                                        if (ctrlEnterPattern.test(input)) {
+                                            // Ctrl+Enter with "number=amount" - save draft with default type button
+                                            const currentTypeButtons = getAvailableTypeButtons()
+                                            if (currentTypeButtons.length > 0) {
+                                                const defaultIndex = getDefaultButtonIndex(currentTypeButtons)
+                                                handleTypeClick(currentTypeButtons[defaultIndex].value, currentTypeButtons[defaultIndex].autoSubmit)
+                                            }
+                                            return
+                                        }
+                                    }
+                                    // Normal Enter behavior
+                                    handleEnter()
+                                }}
                                 disabled={!currentInput.trim() && lines.length === 0}
                             >
                                 ↵

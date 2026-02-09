@@ -583,15 +583,22 @@
     box-shadow: none;
 }
 
-/* = button */
-.number-pad-4col button.eq-btn {
+/* Ctrl button */
+.number-pad-4col button.ctrl-btn {
     background: rgba(255, 255, 255, 0.08);
-    font-size: 1.5rem;
-    letter-spacing: 2px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 1px;
 }
 
-.number-pad-4col button.eq-btn:hover {
+.number-pad-4col button.ctrl-btn:hover {
     background: rgba(255, 255, 255, 0.15);
+}
+
+.number-pad-4col button.ctrl-btn.pressed {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.5);
 }
 
 /* Lock button */
@@ -717,30 +724,30 @@
     
     /* Reduce padding and spacing for narrow screens */
     .line-item {
-        padding: 0.3rem 0.35rem;
-        gap: 0.15rem;
+        padding: 0.4rem 0.5rem;
+        gap: 0.25rem;
     }
     
     .line-content {
-        gap: 0.15rem;
+        gap: 0.25rem;
     }
     
     .line-number {
-        min-width: 16px;
-        font-size: 0.7rem;
+        min-width: 18px;
+        font-size: 0.85rem;
     }
     
     .line-text {
-        font-size: 0.8rem;
-        letter-spacing: -0.5px;
+        font-size: 1rem;
+        letter-spacing: -0.3px;
     }
     
     /* Make type text smaller and thinner on mobile */
     .line-text .type-suffix {
-        font-size: 0.65rem;
+        font-size: 0.8rem;
         font-weight: 400;
-        opacity: 0.75;
-        margin-left: -2px;
+        opacity: 0.8;
+        margin-left: -1px;
     }
     
     .write-modal-lines {
@@ -772,8 +779,9 @@
     transform: scale(0.98);
 }
 
-/* First button (default) - Gold/Yellow gradient to indicate Enter will select this */
-.type-btn:first-child {
+/* Default button - Gold/Yellow gradient to indicate Ctrl+Enter will select this */
+/* Long-press any button to set it as default for that digit count */
+.type-btn.default-btn {
     background: linear-gradient(135deg, #f4d03f 0%, #d4af37 100%) !important;
     border: 2px solid rgba(212, 175, 55, 0.8) !important;
     color: #1a1a2e !important;
@@ -781,7 +789,7 @@
     box-shadow: 0 2px 8px rgba(212, 175, 55, 0.4);
 }
 
-.type-btn:first-child:hover {
+.type-btn.default-btn:hover {
     background: linear-gradient(135deg, #f7dc6f 0%, #e0c04a 100%) !important;
     box-shadow: 0 4px 16px rgba(212, 175, 55, 0.5);
 }
@@ -1310,9 +1318,15 @@ html.theme-light .number-pad-4col button.clear {
     color: #92700c !important;
 }
 
-[data-theme="light"] .number-pad-4col button.eq-btn,
-html.theme-light .number-pad-4col button.eq-btn {
+[data-theme="light"] .number-pad-4col button.ctrl-btn,
+html.theme-light .number-pad-4col button.ctrl-btn {
     background: rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme="light"] .number-pad-4col button.ctrl-btn.pressed,
+html.theme-light .number-pad-4col button.ctrl-btn.pressed {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    color: #fff !important;
 }
 
 [data-theme="light"] .number-pad-4col button.lock-btn.unlocked,

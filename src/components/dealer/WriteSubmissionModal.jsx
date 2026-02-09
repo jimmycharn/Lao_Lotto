@@ -1023,7 +1023,7 @@ export default function WriteSubmissionModal({
                             </div>
                         ) : (
                             <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                                <table style={{ width: '100%', fontSize: '0.9rem' }}>
+                                <table style={{ width: '100%', fontSize: '1rem' }}>
                                     <thead>
                                         <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
                                             <th style={{ textAlign: 'left', padding: '0.5rem' }}>เลข</th>
