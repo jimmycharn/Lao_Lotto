@@ -2278,6 +2278,96 @@ export default function Dealer() {
                                 </div>
                             </div>
 
+                            {/* Pending Members Section - Always visible at top */}
+                            {(() => {
+                                const pendingDownstreamDealers = downstreamDealers.filter(d => d.membership_status === 'pending')
+                                const allPending = [
+                                    ...pendingMembers.map(m => ({ ...m, is_dealer: false })),
+                                    ...pendingDownstreamDealers.map(d => ({ ...d, is_dealer: true }))
+                                ]
+                                
+                                if (allPending.length === 0) return null
+                                
+                                return (
+                                    <div className="pending-members-section" style={{ 
+                                        marginBottom: '1.5rem',
+                                        padding: '1rem',
+                                        background: 'var(--color-surface)',
+                                        borderRadius: '12px',
+                                        border: '2px solid var(--color-warning)'
+                                    }}>
+                                        <div className="section-header" style={{ marginBottom: '1rem' }}>
+                                            <h3 style={{ fontSize: '1.1rem', color: 'var(--color-warning)', fontWeight: '600' }}>
+                                                <FiClock /> สมาชิกที่รอการอนุมัติ
+                                            </h3>
+                                            <span className="badge" style={{ 
+                                                background: 'var(--color-warning)', 
+                                                color: '#000',
+                                                fontWeight: '600'
+                                            }}>
+                                                {allPending.length} คน
+                                            </span>
+                                        </div>
+                                        <div className="pending-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                            {allPending.map(member => (
+                                                <div key={member.is_dealer ? `dealer-${member.id}` : member.id} className="pending-member-item card" style={{
+                                                    padding: '1rem',
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    flexWrap: 'wrap',
+                                                    gap: '0.75rem',
+                                                    background: 'var(--color-surface-alt)',
+                                                    border: member.is_dealer ? '1px solid var(--color-info)' : '1px solid var(--color-border)',
+                                                    borderRadius: '8px'
+                                                }}>
+                                                    <div className="member-info">
+                                                        <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                            {member.full_name || 'ไม่มีชื่อ'}
+                                                            {member.is_dealer && (
+                                                                <span style={{
+                                                                    background: 'var(--color-info)',
+                                                                    color: '#fff',
+                                                                    padding: '0.1rem 0.4rem',
+                                                                    borderRadius: '4px',
+                                                                    fontSize: '0.65rem',
+                                                                    fontWeight: '600'
+                                                                }}>
+                                                                    เจ้ามือ
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div style={{ fontSize: '0.85rem', opacity: 0.7 }}>{member.email}</div>
+                                                    </div>
+                                                    <div className="member-actions" style={{ display: 'flex', gap: '0.5rem' }}>
+                                                        <button
+                                                            className="btn btn-success btn-sm"
+                                                            onClick={() => member.is_dealer ? handleApproveDownstreamDealer(member) : handleApproveMember(member)}
+                                                            style={{ 
+                                                                padding: '0.5rem 1rem',
+                                                                fontWeight: '500'
+                                                            }}
+                                                        >
+                                                            <FiCheck /> อนุมัติ
+                                                        </button>
+                                                        <button
+                                                            className="btn btn-danger btn-sm"
+                                                            onClick={() => member.is_dealer ? handleRejectDownstreamDealer(member) : handleRejectMember(member)}
+                                                            style={{ 
+                                                                padding: '0.5rem 1rem',
+                                                                fontWeight: '500'
+                                                            }}
+                                                        >
+                                                            <FiX /> ปฏิเสธ
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )
+                            })()}
+
                             {/* Members List - Accordion Style */}
                             <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -2294,63 +2384,6 @@ export default function Dealer() {
                                     </span>
                                 </div>
                             </div>
-
-                            {/* Pending Downstream Dealers Section */}
-                            {(() => {
-                                const pendingDownstreamDealers = downstreamDealers.filter(d => d.membership_status === 'pending')
-                                if (pendingDownstreamDealers.length === 0) return null
-                                
-                                return (
-                                    <div className="pending-dealers-section" style={{ marginBottom: '1.5rem' }}>
-                                        <div className="section-header" style={{ marginBottom: '0.75rem' }}>
-                                            <h3 style={{ fontSize: '1rem', color: 'var(--color-warning)' }}>
-                                                <FiSend /> คำขอเชื่อมต่อจากเจ้ามือ
-                                            </h3>
-                                            <span className="badge" style={{ background: 'var(--color-warning)', color: 'black' }}>
-                                                {pendingDownstreamDealers.length} รายการ
-                                            </span>
-                                        </div>
-                                        <div className="pending-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                            {pendingDownstreamDealers.map(dealer => (
-                                                <div key={`pending-dealer-${dealer.id}`} className="pending-dealer-item card" style={{
-                                                    padding: '1rem',
-                                                    border: '1px solid var(--color-warning)',
-                                                    background: 'rgba(245, 158, 11, 0.1)'
-                                                }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-                                                        <div>
-                                                            <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                <FiSend style={{ color: 'var(--color-info)' }} />
-                                                                {dealer.full_name || 'ไม่มีชื่อ'}
-                                                            </div>
-                                                            <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{dealer.email}</div>
-                                                            <div style={{ fontSize: '0.75rem', opacity: 0.5, marginTop: '0.25rem' }}>
-                                                                ขอเชื่อมต่อเพื่อตีออกยอดมาให้คุณ
-                                                            </div>
-                                                        </div>
-                                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                            <button
-                                                                className="btn btn-success btn-sm"
-                                                                onClick={() => handleApproveDownstreamDealer(dealer)}
-                                                                style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                                                            >
-                                                                <FiCheck /> ยืนยัน
-                                                            </button>
-                                                            <button
-                                                                className="btn btn-danger btn-sm"
-                                                                onClick={() => handleRejectDownstreamDealer(dealer)}
-                                                                style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                                                            >
-                                                                <FiX /> ปฏิเสธ
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )
-                            })()}
 
                             {(() => {
                                 const activeDownstreamDealers = downstreamDealers.filter(d => d.membership_status === 'active')
@@ -2483,74 +2516,6 @@ export default function Dealer() {
                                     </div>
                                 )
                             })()}
-
-                            {/* Pending Members Section - Moved to bottom */}
-                            {pendingMembers.length > 0 && (
-                                <div className="pending-members-section" style={{ 
-                                    marginTop: '2rem',
-                                    padding: '1rem',
-                                    background: 'var(--color-surface)',
-                                    borderRadius: '12px',
-                                    border: '2px solid var(--color-warning)'
-                                }}>
-                                    <div className="section-header" style={{ marginBottom: '1rem' }}>
-                                        <h3 style={{ fontSize: '1.1rem', color: 'var(--color-warning)', fontWeight: '600' }}>
-                                            <FiClock /> สมาชิกที่รอการอนุมัติ
-                                        </h3>
-                                        <span className="badge" style={{ 
-                                            background: 'var(--color-warning)', 
-                                            color: '#000',
-                                            fontWeight: '600'
-                                        }}>
-                                            {pendingMembers.length} คน
-                                        </span>
-                                    </div>
-                                    <div className="pending-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                        {pendingMembers.map(member => (
-                                            <div key={member.id} className="pending-member-item card" style={{
-                                                padding: '1rem',
-                                                display: 'flex',
-                                                justifyContent: 'space-between',
-                                                alignItems: 'center',
-                                                flexWrap: 'wrap',
-                                                gap: '0.75rem',
-                                                background: 'var(--color-surface-alt)',
-                                                border: '1px solid var(--color-border)',
-                                                borderRadius: '8px'
-                                            }}>
-                                                <div className="member-info">
-                                                    <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.25rem' }}>
-                                                        {member.full_name || 'ไม่มีชื่อ'}
-                                                    </div>
-                                                    <div style={{ fontSize: '0.85rem', opacity: 0.7 }}>{member.email}</div>
-                                                </div>
-                                                <div className="member-actions" style={{ display: 'flex', gap: '0.5rem' }}>
-                                                    <button
-                                                        className="btn btn-success btn-sm"
-                                                        onClick={() => handleApproveMember(member)}
-                                                        style={{ 
-                                                            padding: '0.5rem 1rem',
-                                                            fontWeight: '500'
-                                                        }}
-                                                    >
-                                                        <FiCheck /> อนุมัติ
-                                                    </button>
-                                                    <button
-                                                        className="btn btn-danger btn-sm"
-                                                        onClick={() => handleRejectMember(member)}
-                                                        style={{ 
-                                                            padding: '0.5rem 1rem',
-                                                            fontWeight: '500'
-                                                        }}
-                                                    >
-                                                        <FiX /> ปฏิเสธ
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
                         </div>
                     )}
 

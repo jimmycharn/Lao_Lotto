@@ -26,6 +26,49 @@
     color: var(--color-text-muted);
 }
 
+/* Scan QR Button */
+.scan-qr-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.875rem 1.5rem;
+    margin-bottom: 1rem;
+    background: var(--color-surface);
+    color: var(--color-primary);
+    border-top: 2px solid var(--color-primary) !important;
+    border-right: 2px solid var(--color-primary) !important;
+    border-bottom: 2px solid var(--color-primary) !important;
+    border-left: 2px solid var(--color-primary) !important;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+    position: relative;
+    z-index: 101;
+}
+
+.scan-qr-btn:hover {
+    background: var(--color-primary);
+    color: #000;
+    transform: none !important;
+}
+
+.scan-qr-btn:active,
+.scan-qr-btn:focus {
+    background: var(--color-surface);
+    color: var(--color-primary);
+    border-top: 2px solid var(--color-primary) !important;
+    border-right: 2px solid var(--color-primary) !important;
+    border-bottom: 2px solid var(--color-primary) !important;
+    border-left: 2px solid var(--color-primary) !important;
+    outline: none;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
 /* =============================================
    TABS
    ============================================= */
@@ -2393,7 +2436,7 @@
 .dealer-pill:hover {
     border-color: rgba(255, 255, 255, 0.2);
     background: rgba(255, 255, 255, 0.08);
-    transform: translateY(-1px);
+    transform: none;
 }
 
 .dealer-pill:hover .dealer-label {

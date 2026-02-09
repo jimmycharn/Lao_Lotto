@@ -2164,31 +2164,20 @@ export default function UserDashboard() {
         <div className="user-dashboard">
             <div className="container">
                 {/* Header */}
-                <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                <div className="page-header">
                     <div>
                         <h1><FiUser /> แดชบอร์ดสมาชิก</h1>
                         <p>ส่งเลขหวยให้เจ้ามือของคุณ</p>
                     </div>
-                    {/* Scan QR Button */}
-                    <button
-                        onClick={() => setShowScannerModal(true)}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5rem',
-                            padding: '0.75rem 1.25rem',
-                            background: 'var(--color-primary)',
-                            color: '#000',
-                            border: 'none',
-                            borderRadius: '8px',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            fontSize: '0.95rem'
-                        }}
-                    >
-                        <FiGrid size={18} /> สแกน QR
-                    </button>
                 </div>
+                
+                {/* Scan QR Button - Full width on mobile */}
+                <button
+                    className="scan-qr-btn"
+                    onClick={() => setShowScannerModal(true)}
+                >
+                    <FiGrid size={20} /> สแกน QR
+                </button>
 
                 {/* Create own dealer button - above dealer selector */}
                 {profile?.role !== 'dealer' && (
