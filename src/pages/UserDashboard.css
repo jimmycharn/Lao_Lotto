@@ -37,17 +37,12 @@
     margin-bottom: 1rem;
     background: var(--color-surface);
     color: var(--color-primary);
-    border-top: 2px solid var(--color-primary) !important;
-    border-right: 2px solid var(--color-primary) !important;
-    border-bottom: 2px solid var(--color-primary) !important;
-    border-left: 2px solid var(--color-primary) !important;
+    border: 2px solid var(--color-primary);
     border-radius: 8px;
     font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
     transition: background 0.2s ease, color 0.2s ease;
-    position: relative;
-    z-index: 101;
 }
 
 .scan-qr-btn:hover {
@@ -60,13 +55,8 @@
 .scan-qr-btn:focus {
     background: var(--color-surface);
     color: var(--color-primary);
-    border-top: 2px solid var(--color-primary) !important;
-    border-right: 2px solid var(--color-primary) !important;
-    border-bottom: 2px solid var(--color-primary) !important;
-    border-left: 2px solid var(--color-primary) !important;
+    border: 2px solid var(--color-primary);
     outline: none;
-    transform: none !important;
-    box-shadow: none !important;
 }
 
 /* =============================================

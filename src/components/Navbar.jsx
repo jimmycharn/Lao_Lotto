@@ -8,13 +8,11 @@ import {
     FiHome,
     FiEdit,
     FiList,
-    FiClock,
     FiUser,
     FiLogOut,
     FiUsers,
     FiSettings,
     FiGift,
-    FiSend,
     FiSun,
     FiMoon
 } from 'react-icons/fi'
@@ -46,8 +44,6 @@ export default function Navbar() {
 
     const navLinks = [
         { path: '/', label: 'หน้าแรก', icon: <FiHome />, hideForDealer: true, hideForSuperAdmin: true },
-        { path: '/dashboard', label: 'ส่งเลข', icon: <FiSend />, requireAuth: true, requireDealer: true, hideForDealer: true, hideForSuperAdmin: true },
-        { path: '/history', label: 'ประวัติ', icon: <FiClock />, requireAuth: true, requireDealer: true, hideForDealer: true, hideForSuperAdmin: true },
         { path: '/profile', label: 'โปรไฟล์', icon: <FiUser />, requireAuth: true, hideForDealer: true, hideForSuperAdmin: true },
     ]
 
