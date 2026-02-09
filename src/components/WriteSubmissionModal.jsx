@@ -694,6 +694,13 @@ export default function WriteSubmissionModal({
                 e.preventDefault()
                 handleClear()
             }
+            // Ctrl+S - Save draft (same as clicking บันทึก button)
+            else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault()
+                if (lines.length > 0 && !submitting) {
+                    handleSubmit()
+                }
+            }
             // Spacebar - toggle บน/ล่าง (only on desktop with real keyboard)
             else if (e.key === ' ' || e.code === 'Space') {
                 e.preventDefault()
