@@ -489,6 +489,16 @@ export default function WriteSubmissionModal({
         if (!isOpen) return
 
         const handleKeyDown = (e) => {
+            // Ctrl+S - Save draft (must be first to prevent browser save dialog)
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault()
+                e.stopPropagation()
+                if (lines.length > 0 && !submitting) {
+                    handleSubmit()
+                }
+                return
+            }
+            
             // Ignore if typing in note input
             if (document.activeElement === noteInputRef.current) return
             
@@ -693,13 +703,6 @@ export default function WriteSubmissionModal({
             else if (e.key === 'Delete') {
                 e.preventDefault()
                 handleClear()
-            }
-            // Ctrl+S - Save draft (same as clicking บันทึก button)
-            else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                e.preventDefault()
-                if (lines.length > 0 && !submitting) {
-                    handleSubmit()
-                }
             }
             // Spacebar - toggle บน/ล่าง (only on desktop with real keyboard)
             else if (e.key === ' ' || e.code === 'Space') {
