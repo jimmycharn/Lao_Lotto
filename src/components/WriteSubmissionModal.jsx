@@ -1318,6 +1318,8 @@ export default function WriteSubmissionModal({
                     originalBillId: editingData.billId,
                     originalItems: editingData.originalItems
                 })
+                // Edit mode - close modal after saving
+                onClose()
             } else {
                 // New submission
                 await onSubmit({
@@ -1325,19 +1327,18 @@ export default function WriteSubmissionModal({
                     billNote,
                     rawLines: lines
                 })
-            }
-
-            // เคลียร์ข้อมูลทั้งหมดและเตรียมรับข้อมูลใหม่ทันที (ไม่ปิด modal)
-            setLines([])
-            setCurrentInput('')
-            setEditingIndex(null)
-            setBillNote('')
-            setError('')
-            setIsLocked(false)
-            setLockedAmount('')
-            // Focus note input after clearing
-            if (noteInputRef.current) {
-                noteInputRef.current.focus()
+                // New mode - clear and stay open for next bill
+                setLines([])
+                setCurrentInput('')
+                setEditingIndex(null)
+                setBillNote('')
+                setError('')
+                setIsLocked(false)
+                setLockedAmount('')
+                // Focus note input after clearing
+                if (noteInputRef.current) {
+                    noteInputRef.current.focus()
+                }
             }
         } catch (err) {
             setError(err.message || 'เกิดข้อผิดพลาด')
