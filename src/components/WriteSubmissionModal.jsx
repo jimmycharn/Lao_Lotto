@@ -207,9 +207,9 @@ const parseLine = (line) => {
         } else if (typeStr.includes('4ตัวชุด') || typeStr.includes('ชุด')) {
             betType = '4_set'
         } else if (typeStr.includes('ลอยแพ') || typeStr.includes('ลอย')) {
-            betType = '4_run'
+            betType = '4_float'
         } else {
-            betType = '4_run'
+            betType = '4_float'
         }
     } else if (numLen === 5) {
         // 5 digits: ลอยแพ, คูณชุด
@@ -218,9 +218,9 @@ const parseLine = (line) => {
             betType = '3_top'
             specialType = '3xPerm'
         } else if (typeStr.includes('ลอยแพ') || typeStr.includes('ลอย')) {
-            betType = '5_run'
+            betType = '5_float'
         } else {
-            betType = '5_run'
+            betType = '5_float'
         }
     }
 
@@ -331,23 +331,17 @@ const generateEntries = (parsed, entryId, rawLine, options = {}) => {
         // โต๊ด - เลขเรียงลำดับ
         const sortedNumbers = numbers.split('').sort().join('')
         entries.push({ numbers: sortedNumbers, amount: todAmt, betType: '3_tod', entryId, displayText, displayAmount: totalAmount })
-    } else if (betType === '4_run' || betType === '5_run') {
-        // ลอยแพ 4-5 ตัว: สร้าง entries สำหรับแต่ละหลัก
-        const digits = numbers.split('')
-        entryCount = digits.length
-        totalAmount = amount * digits.length
-        
-        digits.forEach((digit, idx) => {
-            // สร้าง entry สำหรับแต่ละหลัก (วิ่งบน)
-            entries.push({ 
-                numbers: digit, 
-                amount, 
-                betType: 'run_top', 
-                entryId, 
-                displayText, 
-                displayAmount: totalAmount,
-                position: idx + 1  // ตำแหน่งหลัก
-            })
+    } else if (betType === '4_float' || betType === '5_float') {
+        // ลอยแพ 4-5 ตัว: เก็บเป็น 1 รายการ (เลขเรียงจากน้อยไปมากสำหรับ storage แต่แสดงผลตามที่ซื้อ)
+        const sortedNumbers = numbers.split('').sort().join('')
+        entries.push({ 
+            numbers: sortedNumbers,  // เก็บเลขเรียงลำดับ
+            amount, 
+            betType, 
+            entryId, 
+            displayText, 
+            displayAmount: amount,
+            display_numbers: numbers  // แสดงผลตามที่ซื้อ
         })
     } else {
         entries.push({ numbers, amount, betType, entryId, displayText, displayAmount: amount })

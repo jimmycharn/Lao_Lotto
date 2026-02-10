@@ -1976,9 +1976,10 @@ export default function UserDashboard() {
                     })
                 })
             } else if (betType === '4_float' || betType === '5_float') {
-                // Float bets
+                // Float bets - เรียงเลขจากน้อยไปมากสำหรับ storage แต่แสดงผลตามที่ซื้อ
                 const singleAmt = parseFloat(amtParts[0]) || 0
                 const commInfo = getCommissionForBetType(betType, userSettings)
+                const sortedNumbers = newNumbers.split('').sort().join('')
 
                 newSubmissions.push({
                     entry_id: entryId,
@@ -1986,11 +1987,11 @@ export default function UserDashboard() {
                     user_id: editingSubmission.user_id,
                     bill_id: billId,
                     bet_type: betType,
-                    numbers: newNumbers,
+                    numbers: sortedNumbers,  // เก็บเลขเรียงลำดับ
                     amount: singleAmt,
                     commission_rate: commInfo.rate,
                     commission_amount: commInfo.isFixed ? commInfo.rate : (singleAmt * commInfo.rate) / 100,
-                    display_numbers: newNumbers,
+                    display_numbers: newNumbers,  // แสดงผลตามที่ซื้อ
                     display_amount: singleAmt.toString(),
                     display_bet_type: BET_TYPES[betType]?.label || betType,
                     created_at: timestamp
@@ -3802,7 +3803,9 @@ function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
             '3_tod': { commission: 15, payout: 100 },
             '3_bottom': { commission: 15, payout: 135 },
             '4_run': { commission: 15, payout: 20 },
-            '5_run': { commission: 15, payout: 10 }
+            '4_float': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 },
+            '5_float': { commission: 15, payout: 10 }
         },
         lao: {
             '4_set': { 
@@ -3830,7 +3833,9 @@ function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
             '3_straight': { commission: 30, payout: 550 },
             '3_tod_single': { commission: 15, payout: 100 },
             '4_run': { commission: 15, payout: 20 },
-            '5_run': { commission: 15, payout: 10 }
+            '4_float': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 },
+            '5_float': { commission: 15, payout: 10 }
         },
         hanoi: {
             '4_set': { 
@@ -3858,7 +3863,9 @@ function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
             '3_straight': { commission: 30, payout: 550 },
             '3_tod_single': { commission: 15, payout: 100 },
             '4_run': { commission: 15, payout: 20 },
-            '5_run': { commission: 15, payout: 10 }
+            '4_float': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 },
+            '5_float': { commission: 15, payout: 10 }
         },
         stock: {
             '2_top': { commission: 15, payout: 65 },
@@ -3881,7 +3888,9 @@ function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
             '3_tod': '3 ตัวโต๊ด',
             '3_bottom': '3 ตัวล่าง',
             '4_run': '4 ตัวลอย',
-            '5_run': '5 ตัวลอย'
+            '4_float': '4 ตัวลอยแพ',
+            '5_run': '5 ตัวลอย',
+            '5_float': '5 ตัวลอยแพ'
         },
         lao: {
             '4_set': '4 ตัวชุด',
@@ -3898,7 +3907,9 @@ function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
             '3_straight': '3 ตัวตรง',
             '3_tod_single': '3 ตัวโต๊ด',
             '4_run': '4 ตัวลอย',
-            '5_run': '5 ตัวลอย'
+            '4_float': '4 ตัวลอยแพ',
+            '5_run': '5 ตัวลอย',
+            '5_float': '5 ตัวลอยแพ'
         },
         hanoi: {
             '4_set': '4 ตัวชุด',
@@ -3915,7 +3926,9 @@ function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
             '3_straight': '3 ตัวตรง',
             '3_tod_single': '3 ตัวโต๊ด',
             '4_run': '4 ตัวลอย',
-            '5_run': '5 ตัวลอย'
+            '4_float': '4 ตัวลอยแพ',
+            '5_run': '5 ตัวลอย',
+            '5_float': '5 ตัวลอยแพ'
         },
         stock: {
             '2_top': '2 ตัวบน',

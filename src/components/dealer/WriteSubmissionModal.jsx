@@ -451,6 +451,22 @@ export default function WriteSubmissionModal({
                     created_at: timestamp
                 })
             }
+        } else if (betType === '4_float' || betType === '5_float') {
+            // ลอยแพ 4-5 ตัว: เก็บเป็น 1 รายการ (เลขเรียงจากน้อยไปมากสำหรับ storage แต่แสดงผลตามที่ซื้อ)
+            const sortedNumbers = cleanNumbers.split('').sort().join('')
+            const commInfo = getCommissionForBetType(betType)
+            newDrafts.push({
+                entry_id: entryId,
+                bet_type: betType,
+                numbers: sortedNumbers,  // เก็บเลขเรียงลำดับ
+                amount: totalAmount,
+                commission_rate: commInfo.rate,
+                commission_amount: commInfo.isFixed ? commInfo.rate : (totalAmount * commInfo.rate) / 100,
+                display_numbers: cleanNumbers,  // แสดงผลตามที่ซื้อ
+                display_amount: submitForm.amount.toString(),
+                display_bet_type: displayLabel,
+                created_at: timestamp
+            })
         } else {
             // Normal single bet
             const commInfo = getCommissionForBetType(betType)
