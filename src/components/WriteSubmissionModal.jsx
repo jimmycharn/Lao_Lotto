@@ -459,6 +459,129 @@ export default function WriteSubmissionModal({
         return index >= 0 ? index : 0
     }, [defaultTypes, getCurrentDigitCount])
 
+    // Get default button index for a specific digit count (used when we can't rely on currentInput state)
+    const getDefaultButtonIndexForButtons = useCallback((typeButtons, digitCount) => {
+        if (digitCount === 0 || typeButtons.length === 0) return 0
+        
+        const defaultType = defaultTypes[digitCount]
+        if (!defaultType) return 0
+        
+        const index = typeButtons.findIndex(btn => btn.value === defaultType)
+        return index >= 0 ? index : 0
+    }, [defaultTypes])
+
+    // Get available type buttons for a specific input string (used when we can't rely on currentInput state)
+    const getAvailableTypeButtonsForInput = (inputStr) => {
+        let input = inputStr.trim()
+        let eqIndex = input.indexOf('=')
+        const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
+        
+        if (eqIndex === -1) {
+            if (isLaoOrHanoi && /^\d{4}$/.test(input)) {
+                return [{ label: '4ตัวชุด', value: '4ตัวชุด', autoSubmit: true }]
+            }
+            return []
+        }
+        
+        const numbers = input.substring(0, eqIndex)
+        const afterEq = input.substring(eqIndex + 1).trim()
+        
+        const hasSecondAmount = afterEq.includes('*')
+        let amount1 = ''
+        let amount2 = ''
+        
+        if (hasSecondAmount) {
+            const amountParts = afterEq.split('*')
+            amount1 = amountParts[0].trim()
+            amount2 = amountParts[1] ? amountParts[1].split(/\s+/)[0].trim() : ''
+        } else {
+            const parts = afterEq.split(/\s+/)
+            amount1 = parts[0] || ''
+        }
+        
+        if (!amount1 || !/^\d+$/.test(amount1)) return []
+        if (hasSecondAmount && (!amount2 || !/^\d+$/.test(amount2))) return []
+        
+        const numLen = numbers.length
+        if (!/^\d+$/.test(numbers)) return []
+
+        const buttons = []
+        const isTop = topBottomToggle === 'top'
+
+        if (numLen === 1) {
+            if (hasSecondAmount) return []
+            if (isTop) {
+                buttons.push({ label: 'ลอยบน', value: 'ลอยบน', autoSubmit: true })
+                buttons.push({ label: 'หน้าบน', value: 'หน้าบน', autoSubmit: true })
+                buttons.push({ label: 'กลางบน', value: 'กลางบน', autoSubmit: true })
+                buttons.push({ label: 'หลังบน', value: 'หลังบน', autoSubmit: true })
+            } else {
+                buttons.push({ label: 'ลอยล่าง', value: 'ลอยล่าง', autoSubmit: true })
+                buttons.push({ label: 'หน้าล่าง', value: 'หน้าล่าง', autoSubmit: true })
+                buttons.push({ label: 'หลังล่าง', value: 'หลังล่าง', autoSubmit: true })
+            }
+        } else if (numLen === 2) {
+            if (hasSecondAmount) {
+                if (isTop) {
+                    buttons.push({ label: 'บนกลับ', value: 'บนกลับ', autoSubmit: true })
+                    buttons.push({ label: 'หน้ากลับ', value: 'หน้ากลับ', autoSubmit: true })
+                    buttons.push({ label: 'ถ่างกลับ', value: 'ถ่างกลับ', autoSubmit: true })
+                } else {
+                    buttons.push({ label: 'ล่างกลับ', value: 'ล่างกลับ', autoSubmit: true })
+                }
+            } else {
+                if (isTop) {
+                    buttons.push({ label: 'บน', value: 'บน', autoSubmit: true })
+                    buttons.push({ label: 'บนกลับ', value: 'บนกลับ', autoSubmit: true })
+                    buttons.push({ label: 'ลอย', value: 'ลอย', autoSubmit: true })
+                    buttons.push({ label: 'หน้าบน', value: 'หน้าบน', autoSubmit: true })
+                    buttons.push({ label: 'หน้ากลับ', value: 'หน้ากลับ', autoSubmit: true })
+                    buttons.push({ label: 'ถ่างบน', value: 'ถ่างบน', autoSubmit: true })
+                    buttons.push({ label: 'ถ่างกลับ', value: 'ถ่างกลับ', autoSubmit: true })
+                } else {
+                    buttons.push({ label: 'ล่าง', value: 'ล่าง', autoSubmit: true })
+                    buttons.push({ label: 'ล่างกลับ', value: 'ล่างกลับ', autoSubmit: true })
+                }
+            }
+        } else if (numLen === 3) {
+            const permCount = getPermutationCount(numbers)
+            if (hasSecondAmount) {
+                if (isTop) {
+                    buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: true })
+                    if (permCount > 1) {
+                        buttons.push({ label: 'กลับ', value: 'กลับ', autoSubmit: true })
+                    }
+                }
+            } else {
+                if (isTop) {
+                    if (isLaoOrHanoi) {
+                        buttons.push({ label: 'ตรง', value: 'ตรง', autoSubmit: true })
+                    } else {
+                        buttons.push({ label: 'บน', value: 'บน', autoSubmit: true })
+                    }
+                    buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: true })
+                    buttons.push({ label: 'โต๊ด', value: 'โต๊ด', autoSubmit: true })
+                    if (permCount > 1) {
+                        buttons.push({ label: 'กลับ', value: 'กลับ', autoSubmit: true })
+                        buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                    }
+                } else {
+                    if (!isLaoOrHanoi) {
+                        buttons.push({ label: 'ล่าง', value: 'ล่าง', autoSubmit: true })
+                    }
+                }
+            }
+        } else if (numLen === 4) {
+            if (hasSecondAmount) return []
+            buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+        } else if (numLen === 5) {
+            if (hasSecondAmount) return []
+            buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+        }
+
+        return buttons
+    }
+
     // Handle long press to set default type
     const handleTypeButtonMouseDown = useCallback((btn, digitCount) => {
         longPressTimerRef.current = setTimeout(() => {
@@ -1087,40 +1210,55 @@ export default function WriteSubmissionModal({
         const isTop = topBottomToggle === 'top'
         const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
         
+        // Define which types are "top" types and which are "bottom" types
+        const topTypes = ['ลอยบน', 'หน้าบน', 'กลางบน', 'หลังบน', 'บน', 'บนกลับ', 'หน้ากลับ', 'ถ่างบน', 'ถ่างกลับ', 'ตรง', 'โต๊ด', 'เต็งโต๊ด', 'กลับ', 'ลอย', 'ลอยแพ', 'คูณชุด', '4ตัวชุด', 'ชุด', 'run_top', 'front_top_1', 'middle_top_1', 'back_top_1', '2_top', '2_top_rev', '2_front', '2_front_rev', '2_spread', '2_spread_rev', '2_have', '3_top', '3_tod', '3_straight_tod', '3_perm_from_3', '4_set', '4_float', '5_float']
+        const bottomTypes = ['ลอยล่าง', 'หน้าล่าง', 'หลังล่าง', 'ล่าง', 'ล่างกลับ', 'run_bottom', 'front_bottom_1', 'back_bottom_1', '2_bottom', '2_bottom_rev', '3_bottom']
+        
         // Check if user has set a custom default for this digit count
         const userDefault = defaultTypes[numLen]
         if (userDefault) {
-            // Map bet type value to label for the line
-            // Support both English keys (legacy) and Thai labels (from Ctrl+number selection)
-            const typeLabels = {
-                // 1 digit - English keys
-                'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
-                'front_top_1': 'หน้าบน', 'middle_top_1': 'กลางบน', 'back_top_1': 'หลังบน',
-                'front_bottom_1': 'หน้าล่าง', 'back_bottom_1': 'หลังล่าง',
-                // 2 digit - English keys
-                '2_top': 'บน', '2_bottom': 'ล่าง', '2_have': 'มี', '2_front': 'หน้า', '2_spread': 'ถ่าง',
-                '2_top_rev': 'บนกลับ', '2_bottom_rev': 'ล่างกลับ', '2_front_rev': 'หน้ากลับ', '2_spread_rev': 'ถ่างกลับ',
-                // 3 digit - English keys
-                '3_top': isLaoOrHanoi ? 'ตรง' : 'บน', '3_tod': 'โต๊ด', '3_bottom': 'ล่าง',
-                '3_straight_tod': 'เต็งโต๊ด', '3_perm_from_3': 'กลับ',
-                // 4 digit - English keys
-                '4_set': 'ชุด', '4_float': 'ลอยแพ',
-                // 5 digit - English keys
-                '5_float': 'ลอยแพ',
-                // Thai labels (from type buttons) - map to themselves
-                'ลอยบน': 'ลอยบน', 'ลอยล่าง': 'ลอยล่าง',
-                'หน้าบน': 'หน้าบน', 'กลางบน': 'กลางบน', 'หลังบน': 'หลังบน',
-                'หน้าล่าง': 'หน้าล่าง', 'หลังล่าง': 'หลังล่าง',
-                'บน': 'บน', 'ล่าง': 'ล่าง', 'มี': 'มี', 'หน้า': 'หน้า', 'ถ่าง': 'ถ่าง',
-                'บนกลับ': 'บนกลับ', 'ล่างกลับ': 'ล่างกลับ', 'หน้ากลับ': 'หน้ากลับ', 'ถ่างกลับ': 'ถ่างกลับ',
-                'ตรง': 'ตรง', 'โต๊ด': 'โต๊ด', 'เต็งโต๊ด': 'เต็งโต๊ด', 'กลับ': 'กลับ',
-                'ลอย': 'ลอย', 'ลอยแพ': 'ลอยแพ', 'คูณชุด': 'คูณชุด',
-                '4ตัวชุด': '4ตัวชุด', 'ชุด': 'ชุด'
+            // Check if userDefault matches current toggle state
+            const isUserDefaultTop = topTypes.includes(userDefault)
+            const isUserDefaultBottom = bottomTypes.includes(userDefault)
+            
+            // Only use userDefault if it matches the current toggle state
+            // Or if it's a neutral type (not in either list)
+            const matchesToggle = (isTop && isUserDefaultTop) || (!isTop && isUserDefaultBottom) || (!isUserDefaultTop && !isUserDefaultBottom)
+            
+            if (matchesToggle) {
+                // Map bet type value to label for the line
+                // Support both English keys (legacy) and Thai labels (from Ctrl+number selection)
+                const typeLabels = {
+                    // 1 digit - English keys
+                    'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
+                    'front_top_1': 'หน้าบน', 'middle_top_1': 'กลางบน', 'back_top_1': 'หลังบน',
+                    'front_bottom_1': 'หน้าล่าง', 'back_bottom_1': 'หลังล่าง',
+                    // 2 digit - English keys
+                    '2_top': 'บน', '2_bottom': 'ล่าง', '2_have': 'มี', '2_front': 'หน้า', '2_spread': 'ถ่าง',
+                    '2_top_rev': 'บนกลับ', '2_bottom_rev': 'ล่างกลับ', '2_front_rev': 'หน้ากลับ', '2_spread_rev': 'ถ่างกลับ',
+                    // 3 digit - English keys
+                    '3_top': isLaoOrHanoi ? 'ตรง' : 'บน', '3_tod': 'โต๊ด', '3_bottom': 'ล่าง',
+                    '3_straight_tod': 'เต็งโต๊ด', '3_perm_from_3': 'กลับ',
+                    // 4 digit - English keys
+                    '4_set': 'ชุด', '4_float': 'ลอยแพ',
+                    // 5 digit - English keys
+                    '5_float': 'ลอยแพ',
+                    // Thai labels (from type buttons) - map to themselves
+                    'ลอยบน': 'ลอยบน', 'ลอยล่าง': 'ลอยล่าง',
+                    'หน้าบน': 'หน้าบน', 'กลางบน': 'กลางบน', 'หลังบน': 'หลังบน',
+                    'หน้าล่าง': 'หน้าล่าง', 'หลังล่าง': 'หลังล่าง',
+                    'บน': 'บน', 'ล่าง': 'ล่าง', 'มี': 'มี', 'หน้า': 'หน้า', 'ถ่าง': 'ถ่าง',
+                    'บนกลับ': 'บนกลับ', 'ล่างกลับ': 'ล่างกลับ', 'หน้ากลับ': 'หน้ากลับ', 'ถ่างกลับ': 'ถ่างกลับ',
+                    'ตรง': 'ตรง', 'โต๊ด': 'โต๊ด', 'เต็งโต๊ด': 'เต็งโต๊ด', 'กลับ': 'กลับ',
+                    'ลอย': 'ลอย', 'ลอยแพ': 'ลอยแพ', 'คูณชุด': 'คูณชุด',
+                    '4ตัวชุด': '4ตัวชุด', 'ชุด': 'ชุด'
+                }
+                const label = typeLabels[userDefault]
+                if (label) {
+                    return { type: label }
+                }
             }
-            const label = typeLabels[userDefault]
-            if (label) {
-                return { type: label }
-            }
+            // If userDefault doesn't match toggle state, fall through to default logic
         }
         
         // Fallback to original logic if no user default
@@ -1298,21 +1436,33 @@ export default function WriteSubmissionModal({
                     }
                 }
                 
-                // Get default type
-                const defaultResult = getDefaultBetType(trimmed, lockedHasSecondAmount)
-                if (defaultResult.error) {
-                    playSound('error')
-                    setError(defaultResult.error)
-                    return
+                // Get available type buttons by simulating the input with locked amount
+                // We need to compute buttons based on the combined input
+                const simulatedInput = `${trimmed}=${lockedAmount}`
+                const currentTypeButtons = getAvailableTypeButtonsForInput(simulatedInput)
+                let defaultType = ''
+                
+                if (currentTypeButtons.length > 0) {
+                    const defaultIndex = getDefaultButtonIndexForButtons(currentTypeButtons, numLen)
+                    defaultType = currentTypeButtons[defaultIndex].value
+                } else {
+                    // Fallback to getDefaultBetType if no buttons available
+                    const defaultResult = getDefaultBetType(trimmed, lockedHasSecondAmount)
+                    if (defaultResult.error) {
+                        playSound('error')
+                        setError(defaultResult.error)
+                        return
+                    }
+                    defaultType = defaultResult.type
                 }
                 
                 // Build the line with locked amount and default type
                 // Special handling for คูณชุด - need to add *permutation
-                if (defaultResult.type === 'คูณชุด') {
+                if (defaultType === 'คูณชุด') {
                     const permCount = getPermutationCount(trimmed)
-                    trimmed = `${trimmed}=${lockedAmount}*${permCount} ${defaultResult.type}`
+                    trimmed = `${trimmed}=${lockedAmount}*${permCount} ${defaultType}`
                 } else {
-                    trimmed = `${trimmed}=${lockedAmount} ${defaultResult.type}`
+                    trimmed = `${trimmed}=${lockedAmount} ${defaultType}`
                 }
                 setCurrentInput(trimmed)
             }
@@ -1339,14 +1489,23 @@ export default function WriteSubmissionModal({
             }
             
             if (!hasType && /^\d+$/.test(numbers)) {
-                // No type specified, add default
-                const defaultResult = getDefaultBetType(numbers, hasSecondAmount)
-                if (defaultResult.error) {
-                    playSound('error')
-                    setError(defaultResult.error)
-                    return
+                // No type specified, use the default button from available type buttons
+                // This ensures we use the same default as shown in the UI
+                const currentTypeButtons = getAvailableTypeButtons()
+                if (currentTypeButtons.length > 0) {
+                    const defaultIndex = getDefaultButtonIndex(currentTypeButtons)
+                    const defaultType = currentTypeButtons[defaultIndex].value
+                    trimmed = `${trimmed} ${defaultType}`
+                } else {
+                    // Fallback to getDefaultBetType if no buttons available
+                    const defaultResult = getDefaultBetType(numbers, hasSecondAmount)
+                    if (defaultResult.error) {
+                        playSound('error')
+                        setError(defaultResult.error)
+                        return
+                    }
+                    trimmed = `${trimmed} ${defaultResult.type}`
                 }
-                trimmed = `${trimmed} ${defaultResult.type}`
             }
         }
 
