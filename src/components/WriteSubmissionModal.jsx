@@ -626,6 +626,9 @@ export default function WriteSubmissionModal({
                 const input = currentInput.trim()
                 // Pattern: digits=digits (no * and no type)
                 const ctrlEnterPattern = /^\d+=\d+$/
+                // Pattern: exactly 4 digits (for 4ตัวชุด in Lao/Hanoi)
+                const fourDigitPattern = /^\d{4}$/
+                const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
                 
                 // Check if Ctrl is active (real keyboard OR on-screen button)
                 const isCtrlActive = e.ctrlKey || e.metaKey || isCtrlPressed
@@ -637,6 +640,9 @@ export default function WriteSubmissionModal({
                         const defaultIndex = getDefaultButtonIndex(currentTypeButtons)
                         handleTypeClick(currentTypeButtons[defaultIndex].value, currentTypeButtons[defaultIndex].autoSubmit)
                     }
+                } else if (isCtrlActive && isLaoOrHanoi && fourDigitPattern.test(input)) {
+                    // Ctrl+Enter with exactly 4 digits in Lao/Hanoi - save as 4ตัวชุด
+                    handleTypeClick('4ตัวชุด', true)
                 } else {
                     // Normal Enter behavior
                     handleEnter()
@@ -687,11 +693,16 @@ export default function WriteSubmissionModal({
                 playSound('click')
                 setCurrentInput(prev => prev + '*')
             }
-            // Escape - clear current input and exit type button focus
+            // Escape - clear current input, exit type button focus, or close modal if no lines
             else if (e.key === 'Escape') {
                 e.preventDefault()
                 setFocusedTypeIndex(-1)
-                handleClear()
+                // ถ้าไม่มี lines และไม่มี currentInput ให้ปิด modal
+                if (lines.length === 0 && !currentInput) {
+                    onClose()
+                } else {
+                    handleClear()
+                }
             }
             // Delete key - clear current input (same as C button)
             else if (e.key === 'Delete') {
@@ -703,6 +714,12 @@ export default function WriteSubmissionModal({
                 e.preventDefault()
                 playSound('click')
                 setTopBottomToggle(prev => prev === 'top' ? 'bottom' : 'top')
+            }
+            // Minus key (-) - toggle lock/unlock amount (desktop only)
+            else if (e.key === '-' || e.key === 'Subtract') {
+                e.preventDefault()
+                playSound('click')
+                handleLockToggle()
             }
         }
 
@@ -842,6 +859,53 @@ export default function WriteSubmissionModal({
         setCurrentInput('')
         setError('')
         setEditingIndex(null) // Exit editing mode
+    }
+
+    // Handle lock toggle - toggle lock/unlock amount
+    const handleLockToggle = () => {
+        if (!isLocked) {
+            // เปิดล็อค - เก็บจำนวนเงินจากรายการล่าสุดที่ป้อนเสร็จ
+            if (lines.length > 0) {
+                const lastLine = lines[lines.length - 1]
+                const eqIndex = lastLine.indexOf('=')
+                if (eqIndex !== -1) {
+                    const afterEq = lastLine.substring(eqIndex + 1).trim()
+                    const typeStr = afterEq.toLowerCase()
+                    
+                    // ตรวจสอบว่าเป็น คูณชุด หรือไม่ - ถ้าใช่ให้เอาเฉพาะ amount1
+                    const isKoonChud = typeStr.includes('คูณชุด')
+                    
+                    let amountToLock = ''
+                    if (afterEq.includes('*') && !isKoonChud) {
+                        // มี * และไม่ใช่คูณชุด - เก็บ amount1*amount2
+                        const match = afterEq.match(/^(\d+\*\d+)/)
+                        if (match) {
+                            amountToLock = match[1]
+                        }
+                    } else {
+                        // ไม่มี * หรือเป็นคูณชุด - เก็บเฉพาะจำนวนเงินแรก
+                        const match = afterEq.match(/^(\d+)/)
+                        if (match) {
+                            amountToLock = match[1]
+                        }
+                    }
+                    if (amountToLock) {
+                        setLockedAmount(amountToLock)
+                        setIsLocked(true)
+                        playSound('click')
+                    }
+                }
+            } else {
+                // ไม่มีรายการ - แจ้งเตือน
+                playSound('error')
+                setError('กรุณาป้อนอย่างน้อย 1 รายการก่อนล็อค')
+            }
+        } else {
+            // ปิดล็อค
+            setIsLocked(false)
+            setLockedAmount('')
+            playSound('click')
+        }
     }
     
     // Handle clear input only - clears input but stays in editing mode
@@ -1115,14 +1179,28 @@ export default function WriteSubmissionModal({
             }
         }
 
-        // Case 2: ถ้ามี "เลข=จำนวนเงิน" (ไม่มี *) กด Enter ให้เติม * ต่อท้าย
+        // Case 2: ถ้ามี "เลข=จำนวนเงิน" (ไม่มี *) กด Enter
+        // สำหรับเลข 1, 4, 5 ตัว - บันทึก draft ด้วย default type ทันที (ไม่รองรับ 2 จำนวนเงิน)
+        // สำหรับเลข 2, 3 ตัว - เติม * ต่อท้ายเพื่อรอจำนวนเงินชุดที่ 2
         if (trimmed.includes('=') && !trimmed.includes('*')) {
             const eqIndex = trimmed.indexOf('=')
             const numbers = trimmed.substring(0, eqIndex)
             const afterEq = trimmed.substring(eqIndex + 1).trim()
+            const numLen = numbers.length
             
             // ตรวจสอบว่า afterEq เป็นตัวเลขล้วนๆ (ยังไม่มี type)
             if (/^\d+$/.test(numbers) && /^\d+$/.test(afterEq) && afterEq.length > 0) {
+                // เลข 1, 4, 5 ตัว - ไม่รองรับ 2 จำนวนเงิน ให้บันทึก draft ด้วย default type ทันที
+                if (numLen === 1 || numLen === 4 || numLen === 5) {
+                    const currentTypeButtons = getAvailableTypeButtons()
+                    if (currentTypeButtons.length > 0) {
+                        const defaultIndex = getDefaultButtonIndex(currentTypeButtons)
+                        handleTypeClick(currentTypeButtons[defaultIndex].value, currentTypeButtons[defaultIndex].autoSubmit)
+                    }
+                    return
+                }
+                
+                // เลข 2, 3 ตัว - เติม * ต่อท้าย รอจำนวนเงินชุดที่ 2
                 playSound('click')
                 setCurrentInput(trimmed + '*')
                 return  // ไม่บันทึก รอให้ป้อนจำนวนเงินชุดที่ 2 หรือเลือก type
@@ -1573,6 +1651,12 @@ export default function WriteSubmissionModal({
                         placeholder="ชื่อผู้ซื้อ / บันทึกช่วยจำ (ไม่บังคับ)"
                         value={billNote}
                         onChange={e => setBillNote(e.target.value)}
+                        onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault()
+                                e.target.blur()
+                            }
+                        }}
                         className="note-input"
                     />
                     {!success && (
@@ -1774,53 +1858,9 @@ export default function WriteSubmissionModal({
                                 Ctrl
                             </button>
                             <button 
-                                onClick={() => {
-                                    if (!isLocked) {
-                                        // เปิดล็อค - เก็บจำนวนเงินจากรายการล่าสุดที่ป้อนเสร็จ
-                                        if (lines.length > 0) {
-                                            const lastLine = lines[lines.length - 1]
-                                            const eqIndex = lastLine.indexOf('=')
-                                            if (eqIndex !== -1) {
-                                                const afterEq = lastLine.substring(eqIndex + 1).trim()
-                                                const typeStr = afterEq.toLowerCase()
-                                                
-                                                // ตรวจสอบว่าเป็น คูณชุด หรือไม่ - ถ้าใช่ให้เอาเฉพาะ amount1
-                                                const isKoonChud = typeStr.includes('คูณชุด')
-                                                
-                                                let amountToLock = ''
-                                                if (afterEq.includes('*') && !isKoonChud) {
-                                                    // มี * และไม่ใช่คูณชุด - เก็บ amount1*amount2
-                                                    const match = afterEq.match(/^(\d+\*\d+)/)
-                                                    if (match) {
-                                                        amountToLock = match[1]
-                                                    }
-                                                } else {
-                                                    // ไม่มี * หรือเป็นคูณชุด - เก็บเฉพาะจำนวนเงินแรก
-                                                    const match = afterEq.match(/^(\d+)/)
-                                                    if (match) {
-                                                        amountToLock = match[1]
-                                                    }
-                                                }
-                                                if (amountToLock) {
-                                                    setLockedAmount(amountToLock)
-                                                    setIsLocked(true)
-                                                    playSound('click')
-                                                }
-                                            }
-                                        } else {
-                                            // ไม่มีรายการ - แจ้งเตือน
-                                            playSound('error')
-                                            setError('กรุณาป้อนอย่างน้อย 1 รายการก่อนล็อค')
-                                        }
-                                    } else {
-                                        // ปิดล็อค
-                                        setIsLocked(false)
-                                        setLockedAmount('')
-                                        playSound('click')
-                                    }
-                                }}
+                                onClick={handleLockToggle}
                                 className={`lock-btn ${isLocked ? 'locked' : 'unlocked'}`}
-                                title={isLocked ? `ล็อค: ${lockedAmount}` : 'คลิกเพื่อล็อคจำนวนเงิน'}
+                                title={isLocked ? `ล็อค: ${lockedAmount} (กด - เพื่อปลดล็อค)` : 'คลิกเพื่อล็อคจำนวนเงิน (กด - บนคีย์บอร์ด)'}
                             >
                                 {isLocked ? `🔒${lockedAmount}` : '🔓'}
                             </button>
@@ -1833,6 +1873,10 @@ export default function WriteSubmissionModal({
                                         const input = currentInput.trim()
                                         // Pattern: digits=digits (no * and no type)
                                         const ctrlEnterPattern = /^\d+=\d+$/
+                                        // Pattern: exactly 4 digits (for 4ตัวชุด in Lao/Hanoi)
+                                        const fourDigitPattern = /^\d{4}$/
+                                        const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
+                                        
                                         if (ctrlEnterPattern.test(input)) {
                                             // Ctrl+Enter with "number=amount" - save draft with default type button
                                             const currentTypeButtons = getAvailableTypeButtons()
@@ -1840,6 +1884,10 @@ export default function WriteSubmissionModal({
                                                 const defaultIndex = getDefaultButtonIndex(currentTypeButtons)
                                                 handleTypeClick(currentTypeButtons[defaultIndex].value, currentTypeButtons[defaultIndex].autoSubmit)
                                             }
+                                            return
+                                        } else if (isLaoOrHanoi && fourDigitPattern.test(input)) {
+                                            // Ctrl+Enter with exactly 4 digits in Lao/Hanoi - save as 4ตัวชุด
+                                            handleTypeClick('4ตัวชุด', true)
                                             return
                                         }
                                     }

@@ -98,11 +98,18 @@ export default function WriteSubmissionModal({
                 setLastClickedBetType(null)
                 numberInputRef.current?.focus()
             }
+            // Escape - close modal if no drafts
+            else if (e.key === 'Escape') {
+                e.preventDefault()
+                if (drafts.length === 0) {
+                    onClose()
+                }
+            }
         }
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [isReversed])
+    }, [isReversed, drafts.length, onClose])
 
     async function fetchUserSettings() {
         try {
@@ -789,6 +796,12 @@ export default function WriteSubmissionModal({
                             placeholder="ชื่อผู้ซื้อ / บันทึกช่วยจำ (ไม่บังคับ)"
                             value={billNote}
                             onChange={e => setBillNote(e.target.value)}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    e.target.blur()
+                                }
+                            }}
                         />
                     </div>
 
