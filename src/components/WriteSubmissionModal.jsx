@@ -867,17 +867,17 @@ export default function WriteSubmissionModal({
                 e.preventDefault()
                 handleClear()
             }
-            // Spacebar - toggle บน/ล่าง (only on desktop with real keyboard)
+            // Spacebar - toggle lock/unlock amount (desktop only)
             else if (e.key === ' ' || e.code === 'Space') {
                 e.preventDefault()
                 playSound('click')
-                setTopBottomToggle(prev => prev === 'top' ? 'bottom' : 'top')
+                handleLockToggle()
             }
-            // Minus key (-) - toggle lock/unlock amount (desktop only)
+            // Minus key (-) - toggle บน/ล่าง (only on desktop with real keyboard)
             else if (e.key === '-' || e.key === 'Subtract') {
                 e.preventDefault()
                 playSound('click')
-                handleLockToggle()
+                setTopBottomToggle(prev => prev === 'top' ? 'bottom' : 'top')
             }
         }
 
@@ -2077,7 +2077,7 @@ export default function WriteSubmissionModal({
                             <button 
                                 onClick={handleLockToggle}
                                 className={`lock-btn ${isLocked ? 'locked' : 'unlocked'}`}
-                                title={isLocked ? `ล็อค: ${lockedAmount} (กด - เพื่อปลดล็อค)` : 'คลิกเพื่อล็อคจำนวนเงิน (กด - บนคีย์บอร์ด)'}
+                                title={isLocked ? `ล็อค: ${lockedAmount} (กด Space เพื่อปลดล็อค)` : 'คลิกเพื่อล็อคจำนวนเงิน (กด Space บนคีย์บอร์ด)'}
                             >
                                 {isLocked ? `🔒${lockedAmount}` : '🔓'}
                             </button>
