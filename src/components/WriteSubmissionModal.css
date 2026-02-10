@@ -706,6 +706,16 @@
     min-height: 44px;
 }
 
+/* Button number indicator (Ctrl+1, Ctrl+2, etc.) */
+.type-btn .btn-number {
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-right: 0.2rem;
+    opacity: 0.85;
+    min-width: 0.9rem;
+    text-align: center;
+}
+
 /* Mobile: First row buttons match height with tallest button */
 @media (max-width: 767px) {
     .type-buttons-row {

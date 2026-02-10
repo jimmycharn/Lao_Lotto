@@ -429,13 +429,23 @@ export default function WriteSubmissionModal({
     const getCurrentDigitCount = useCallback(() => {
         const input = currentInput.trim()
         const eqIndex = input.indexOf('=')
-        if (eqIndex === -1) return 0
-        const numbers = input.substring(0, eqIndex)
-        if (/^\d+$/.test(numbers)) {
-            return numbers.length
+        
+        // If has =, get digit count from before =
+        if (eqIndex !== -1) {
+            const numbers = input.substring(0, eqIndex)
+            if (/^\d+$/.test(numbers)) {
+                return numbers.length
+            }
+            return 0
         }
+        
+        // If locked and input is only numbers, use input length as digit count
+        if (isLocked && lockedAmount && /^\d+$/.test(input) && input.length >= 1 && input.length <= 5) {
+            return input.length
+        }
+        
         return 0
-    }, [currentInput])
+    }, [currentInput, isLocked, lockedAmount])
 
     // Get default button index for current digit count
     const getDefaultButtonIndex = useCallback((typeButtons) => {
@@ -608,7 +618,32 @@ export default function WriteSubmissionModal({
                 return
             }
             
-            // Number keys 0-9
+            // Ctrl+1-9 - select type button by number AND set as default (desktop only) - MUST be before number keys check
+            // Use e.code to handle both Digit1-9 and Numpad1-9
+            const digitMatch = e.code.match(/^(Digit|Numpad)([1-9])$/)
+            if ((e.ctrlKey || e.metaKey) && digitMatch) {
+                e.preventDefault()
+                const buttonIndex = parseInt(digitMatch[2]) - 1
+                const currentTypeButtons = getAvailableTypeButtons()
+                if (buttonIndex < currentTypeButtons.length) {
+                    const btn = currentTypeButtons[buttonIndex]
+                    const digitCount = getCurrentDigitCount()
+                    
+                    // Set this button as default for current digit count
+                    if (digitCount >= 1 && digitCount <= 5) {
+                        setDefaultTypes(prev => ({
+                            ...prev,
+                            [digitCount]: btn.value
+                        }))
+                    }
+                    
+                    // Click the button
+                    handleTypeClick(btn.value, btn.autoSubmit)
+                }
+                return
+            }
+            
+            // Number keys 0-9 (without Ctrl)
             if (/^[0-9]$/.test(e.key)) {
                 e.preventDefault()
                 handleNumberClick(e.key)
@@ -1056,21 +1091,31 @@ export default function WriteSubmissionModal({
         const userDefault = defaultTypes[numLen]
         if (userDefault) {
             // Map bet type value to label for the line
+            // Support both English keys (legacy) and Thai labels (from Ctrl+number selection)
             const typeLabels = {
-                // 1 digit
+                // 1 digit - English keys
                 'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
                 'front_top_1': 'หน้าบน', 'middle_top_1': 'กลางบน', 'back_top_1': 'หลังบน',
                 'front_bottom_1': 'หน้าล่าง', 'back_bottom_1': 'หลังล่าง',
-                // 2 digit
+                // 2 digit - English keys
                 '2_top': 'บน', '2_bottom': 'ล่าง', '2_have': 'มี', '2_front': 'หน้า', '2_spread': 'ถ่าง',
                 '2_top_rev': 'บนกลับ', '2_bottom_rev': 'ล่างกลับ', '2_front_rev': 'หน้ากลับ', '2_spread_rev': 'ถ่างกลับ',
-                // 3 digit
+                // 3 digit - English keys
                 '3_top': isLaoOrHanoi ? 'ตรง' : 'บน', '3_tod': 'โต๊ด', '3_bottom': 'ล่าง',
                 '3_straight_tod': 'เต็งโต๊ด', '3_perm_from_3': 'กลับ',
-                // 4 digit
+                // 4 digit - English keys
                 '4_set': 'ชุด', '4_float': 'ลอยแพ',
-                // 5 digit
-                '5_float': 'ลอยแพ'
+                // 5 digit - English keys
+                '5_float': 'ลอยแพ',
+                // Thai labels (from type buttons) - map to themselves
+                'ลอยบน': 'ลอยบน', 'ลอยล่าง': 'ลอยล่าง',
+                'หน้าบน': 'หน้าบน', 'กลางบน': 'กลางบน', 'หลังบน': 'หลังบน',
+                'หน้าล่าง': 'หน้าล่าง', 'หลังล่าง': 'หลังล่าง',
+                'บน': 'บน', 'ล่าง': 'ล่าง', 'มี': 'มี', 'หน้า': 'หน้า', 'ถ่าง': 'ถ่าง',
+                'บนกลับ': 'บนกลับ', 'ล่างกลับ': 'ล่างกลับ', 'หน้ากลับ': 'หน้ากลับ', 'ถ่างกลับ': 'ถ่างกลับ',
+                'ตรง': 'ตรง', 'โต๊ด': 'โต๊ด', 'เต็งโต๊ด': 'เต็งโต๊ด', 'กลับ': 'กลับ',
+                'ลอย': 'ลอย', 'ลอยแพ': 'ลอยแพ', 'คูณชุด': 'คูณชุด',
+                '4ตัวชุด': '4ตัวชุด', 'ชุด': 'ชุด'
             }
             const label = typeLabels[userDefault]
             if (label) {
@@ -1803,8 +1848,9 @@ export default function WriteSubmissionModal({
                                         onBlur={() => setFocusedTypeIndex(-1)}
                                         className={`type-btn ${btn.autoSubmit ? 'auto' : 'manual'} ${focusedTypeIndex === index ? 'focused' : ''} ${index === defaultIndex ? 'default-btn' : ''}`}
                                         data-type={btn.label}
+                                        title={`Ctrl+${index + 1}`}
                                     >
-                                        {btn.label}
+                                        <span className="btn-number">{index + 1}</span>{btn.label}
                                     </button>
                                 ))
                             })()
