@@ -1307,7 +1307,13 @@ export default function WriteSubmissionModal({
                 }
                 
                 // Build the line with locked amount and default type
-                trimmed = `${trimmed}=${lockedAmount} ${defaultResult.type}`
+                // Special handling for คูณชุด - need to add *permutation
+                if (defaultResult.type === 'คูณชุด') {
+                    const permCount = getPermutationCount(trimmed)
+                    trimmed = `${trimmed}=${lockedAmount}*${permCount} ${defaultResult.type}`
+                } else {
+                    trimmed = `${trimmed}=${lockedAmount} ${defaultResult.type}`
+                }
                 setCurrentInput(trimmed)
             }
         }
@@ -1503,17 +1509,16 @@ export default function WriteSubmissionModal({
         const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
         
         // Special case: 4 digits in Lao/Hanoi without = shows 4ตัวชุด button
+        // BUT if locked, show full button set instead
         if (eqIndex === -1) {
-            // Check if input is exactly 4 digits for Lao/Hanoi
-            if (isLaoOrHanoi && /^\d{4}$/.test(input)) {
-                return [{ label: '4ตัวชุด', value: '4ตัวชุด', autoSubmit: true }]
-            }
-            
-            // If locked and input is only numbers, simulate with locked amount
+            // If locked and input is only numbers, simulate with locked amount (priority over 4ตัวชุด shortcut)
             if (isLocked && lockedAmount && /^\d+$/.test(input) && input.length >= 1 && input.length <= 5) {
                 // Simulate input with locked amount to show appropriate buttons
                 input = `${input}=${lockedAmount}`
                 eqIndex = input.indexOf('=')
+            } else if (isLaoOrHanoi && /^\d{4}$/.test(input)) {
+                // Check if input is exactly 4 digits for Lao/Hanoi (only when not locked)
+                return [{ label: '4ตัวชุด', value: '4ตัวชุด', autoSubmit: true }]
             } else {
                 return []
             }
@@ -1836,6 +1841,13 @@ export default function WriteSubmissionModal({
                                         key={btn.value}
                                         ref={el => typeButtonsRef.current[index] = el}
                                         onClick={() => {
+                                            // Set this button as default for current digit count
+                                            if (digitCount >= 1 && digitCount <= 5) {
+                                                setDefaultTypes(prev => ({
+                                                    ...prev,
+                                                    [digitCount]: btn.value
+                                                }))
+                                            }
                                             handleTypeClick(btn.value, btn.autoSubmit)
                                             setFocusedTypeIndex(-1)
                                         }}
