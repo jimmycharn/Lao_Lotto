@@ -7,7 +7,9 @@ import {
     FiTrash2,
     FiCheck,
     FiX,
-    FiFileText
+    FiFileText,
+    FiVolume2,
+    FiVolumeX
 } from 'react-icons/fi'
 import {
     LOTTERY_TYPES,
@@ -45,9 +47,29 @@ export default function WriteSubmissionModal({
     const [pasteText, setPasteText] = useState('')
     const [lastClickedBetType, setLastClickedBetType] = useState(null) // Track last clicked bet type button
     const [showCloseConfirm, setShowCloseConfirm] = useState(false) // Confirm before closing modal
+    const [soundEnabled, setSoundEnabled] = useState(() => {
+        try {
+            const saved = localStorage.getItem('lao_lotto_sound_enabled')
+            return saved !== 'false' // default to true
+        } catch {
+            return true
+        }
+    })
+
+    // Toggle sound on/off
+    const toggleSound = () => {
+        setSoundEnabled(prev => {
+            const newValue = !prev
+            try {
+                localStorage.setItem('lao_lotto_sound_enabled', newValue ? 'true' : 'false')
+            } catch {}
+            return newValue
+        })
+    }
 
     // Play sound when adding to draft
     function playAddSound() {
+        if (!soundEnabled) return
         try {
             if (!audioContextRef.current) {
                 audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
@@ -777,6 +799,26 @@ export default function WriteSubmissionModal({
                     <div className="header-title">
                         <h3><FiFileText /> เขียนโพยให้ {targetUser?.full_name || targetUser?.email}</h3>
                     </div>
+                    <button 
+                        className="sound-toggle-btn"
+                        onClick={toggleSound}
+                        title={soundEnabled ? 'ปิดเสียง' : 'เปิดเสียง'}
+                        style={{
+                            background: 'rgba(255, 255, 255, 0.1)',
+                            border: 'none',
+                            color: soundEnabled ? '#22c55e' : '#ef4444',
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            marginRight: '0.5rem'
+                        }}
+                    >
+                        {soundEnabled ? <FiVolume2 /> : <FiVolumeX />}
+                    </button>
                     <button className="modal-close" onClick={handleCloseAttempt}>
                         <FiX />
                     </button>

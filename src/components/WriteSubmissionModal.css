@@ -142,6 +142,33 @@
     font-weight: 500;
 }
 
+.write-modal-header .sound-toggle-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: #fff;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 1rem;
+}
+
+.write-modal-header .sound-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.write-modal-header .sound-toggle-btn.on {
+    color: #22c55e;
+}
+
+.write-modal-header .sound-toggle-btn.off {
+    color: #ef4444;
+}
+
 .write-modal-header .close-btn {
     background: rgba(255, 255, 255, 0.1);
     border: none;

@@ -1,20 +1,33 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { FiX, FiTrash2, FiEdit2, FiPlus, FiCheck, FiRefreshCw } from 'react-icons/fi'
+import { FiX, FiTrash2, FiEdit2, FiPlus, FiCheck, FiRefreshCw, FiVolume2, FiVolumeX } from 'react-icons/fi'
 import { getPermutations } from '../constants/lotteryTypes'
 import './WriteSubmissionModal.css'
 
-// Sound effects using Web Audio API
-const createAudioContext = () => {
-    if (typeof window !== 'undefined' && window.AudioContext) {
-        return new (window.AudioContext || window.webkitAudioContext)()
+// Shared AudioContext for low-latency sound playback
+let sharedAudioContext = null
+let soundEnabledGlobal = true
+
+const getAudioContext = () => {
+    if (!sharedAudioContext && typeof window !== 'undefined') {
+        try {
+            sharedAudioContext = new (window.AudioContext || window.webkitAudioContext)()
+        } catch (e) {
+            console.log('AudioContext not supported')
+        }
     }
-    return null
+    // Resume if suspended (browser autoplay policy)
+    if (sharedAudioContext && sharedAudioContext.state === 'suspended') {
+        sharedAudioContext.resume()
+    }
+    return sharedAudioContext
 }
 
-// Play a beep sound with specified frequency and duration
+// Play a beep sound with specified frequency and duration - optimized for low latency
 const playSound = (type) => {
+    if (!soundEnabledGlobal) return
+    
     try {
-        const audioCtx = createAudioContext()
+        const audioCtx = getAudioContext()
         if (!audioCtx) return
         
         const oscillator = audioCtx.createOscillator()
@@ -23,40 +36,37 @@ const playSound = (type) => {
         oscillator.connect(gainNode)
         gainNode.connect(audioCtx.destination)
         
+        const now = audioCtx.currentTime
+        
         // Different sounds for different events
         if (type === 'click') {
             // Short click sound - high pitch, very short
-            oscillator.frequency.value = 800
+            oscillator.frequency.setValueAtTime(800, now)
             oscillator.type = 'sine'
-            gainNode.gain.value = 0.1
-            oscillator.start()
-            oscillator.stop(audioCtx.currentTime + 0.05)
+            gainNode.gain.setValueAtTime(0.1, now)
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.05)
+            oscillator.start(now)
+            oscillator.stop(now + 0.05)
         } else if (type === 'success') {
             // Success sound - pleasant two-tone
-            oscillator.frequency.value = 600
+            oscillator.frequency.setValueAtTime(600, now)
+            oscillator.frequency.setValueAtTime(800, now + 0.1)
             oscillator.type = 'sine'
-            gainNode.gain.value = 0.15
-            oscillator.start()
-            setTimeout(() => {
-                oscillator.frequency.value = 800
-            }, 100)
-            oscillator.stop(audioCtx.currentTime + 0.2)
+            gainNode.gain.setValueAtTime(0.15, now)
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.2)
+            oscillator.start(now)
+            oscillator.stop(now + 0.2)
         } else if (type === 'error') {
             // Error sound - low buzz
-            oscillator.frequency.value = 200
+            oscillator.frequency.setValueAtTime(200, now)
             oscillator.type = 'square'
-            gainNode.gain.value = 0.1
-            oscillator.start()
-            oscillator.stop(audioCtx.currentTime + 0.15)
-        }
-        
-        // Clean up
-        oscillator.onended = () => {
-            audioCtx.close()
+            gainNode.gain.setValueAtTime(0.1, now)
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.15)
+            oscillator.start(now)
+            oscillator.stop(now + 0.15)
         }
     } catch (e) {
         // Silently fail if audio not supported
-        console.log('Audio not supported')
     }
 }
 
@@ -399,6 +409,17 @@ export default function WriteSubmissionModal({
     const [lockedAmount, setLockedAmount] = useState('') // จำนวนเงินที่ล็อคไว้
     const [showCloseConfirm, setShowCloseConfirm] = useState(false)
     const [focusedTypeIndex, setFocusedTypeIndex] = useState(-1) // -1 = not focused on type buttons
+    const [soundEnabled, setSoundEnabled] = useState(() => {
+        // Load sound preference from localStorage
+        try {
+            const saved = localStorage.getItem('lao_lotto_sound_enabled')
+            const enabled = saved !== 'false' // default to true
+            soundEnabledGlobal = enabled
+            return enabled
+        } catch {
+            return true
+        }
+    })
     const [isCtrlPressed, setIsCtrlPressed] = useState(false) // Virtual Ctrl key state for mobile
     const [defaultTypes, setDefaultTypes] = useState(() => {
         // Load default types from localStorage
@@ -424,6 +445,21 @@ export default function WriteSubmissionModal({
             // Ignore localStorage errors
         }
     }, [defaultTypes])
+
+    // Sync soundEnabled with global variable and save to localStorage
+    useEffect(() => {
+        soundEnabledGlobal = soundEnabled
+        try {
+            localStorage.setItem('lao_lotto_sound_enabled', soundEnabled ? 'true' : 'false')
+        } catch {
+            // Ignore localStorage errors
+        }
+    }, [soundEnabled])
+
+    // Toggle sound on/off
+    const toggleSound = useCallback(() => {
+        setSoundEnabled(prev => !prev)
+    }, [])
 
     // Get current digit count from input
     const getCurrentDigitCount = useCallback(() => {
@@ -1998,6 +2034,13 @@ export default function WriteSubmissionModal({
                     {isEditMode && editingData?.billId && (
                         <span className="bill-badge">{editingData.billId}</span>
                     )}
+                    <button 
+                        className={`sound-toggle-btn ${soundEnabled ? 'on' : 'off'}`}
+                        onClick={toggleSound}
+                        title={soundEnabled ? 'ปิดเสียง' : 'เปิดเสียง'}
+                    >
+                        {soundEnabled ? <FiVolume2 /> : <FiVolumeX />}
+                    </button>
                     <button className="close-btn" onClick={handleClose}>
                         <FiX />
                     </button>
