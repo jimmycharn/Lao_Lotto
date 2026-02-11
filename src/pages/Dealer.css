@@ -3730,6 +3730,38 @@
     color: var(--color-danger);
 }
 
+.round-summary-stats .stat-value.success {
+    color: var(--color-success);
+}
+
+/* Outgoing row styling */
+.round-summary-stats .summary-row.outgoing-row {
+    border-top: 1px dashed var(--color-border);
+    padding-top: 0.5rem;
+    margin-top: 0.25rem;
+}
+
+/* Total row styling */
+.round-summary-stats .summary-row.total-row {
+    border-top: 1px solid var(--color-border);
+    padding-top: 0.5rem;
+    margin-top: 0.25rem;
+}
+
+.round-summary-stats .stat-item.total-profit {
+    min-width: 100px;
+}
+
+.round-summary-stats .stat-item.total-profit .stat-label {
+    font-weight: 600;
+    font-size: 0.75rem;
+}
+
+.round-summary-stats .stat-item.total-profit .stat-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
 /* Desktop: All stats in one row */
 @media (min-width: 769px) {
     .round-summary-stats {
