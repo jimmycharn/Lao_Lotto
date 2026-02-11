@@ -3656,9 +3656,9 @@ function SubmissionsModal({ round, onClose }) {
                         return sum
                     }, 0)
                 
-                // Calculate transferred sets for 3_set
+                // Calculate transferred sets for 3_set (3_set transfers have 4-digit numbers, match by last 3 digits)
                 const transferred3Set = transfers
-                    .filter(t => t.bet_type === '3_set' && t.numbers === group3.last3Digits)
+                    .filter(t => t.bet_type === '3_set' && t.numbers?.slice(-3) === group3.last3Digits)
                     .reduce((sum, t) => sum + Math.floor((t.amount || 0) / setPrice), 0)
                 
                 // Process 4_set excess first (exact 4-digit match)
@@ -3696,13 +3696,14 @@ function SubmissionsModal({ round, onClose }) {
                     }
                 })
                 
-                // Now calculate 3_set excess (different 4-digit numbers with same last 3 digits)
-                // Count unique 4-digit numbers with same last 3 digits
+                // Now calculate excess for numbers with same last 3 digits
+                // Rule: Total sets across ALL numbers with same last 3 digits must not exceed limit3Set
+                // If total exceeds limit3Set, the excess comes from later numbers (FIFO)
                 const uniqueNumbers = Object.keys(group3.exactMatches)
                 
                 if (uniqueNumbers.length > 1) {
                     // There are multiple different 4-digit numbers with same last 3 digits
-                    // These count toward 3_set limit (excluding the first one that matches 4_set)
+                    // Total sets across all these numbers must not exceed limit3Set
                     
                     // Sort unique numbers by their earliest submission time
                     const sortedNumbers = uniqueNumbers.sort((a, b) => {
@@ -3711,55 +3712,42 @@ function SubmissionsModal({ round, onClose }) {
                         return aTime - bTime
                     })
                     
-                    // The first number's sets (up to 4_set limit) don't count toward 3_set
-                    // Remaining different numbers count toward 3_set limit
-                    let remaining3SetLimit = limit3Set + transferred3Set
+                    // Calculate total transferred for all numbers with same last 3 digits (as 3_digit_match type)
+                    const totalTransferred3Set = transfers
+                        .filter(t => (t.bet_type === '4_set' || t.bet_type === '3_set') && t.numbers?.slice(-3) === group3.last3Digits)
+                        .reduce((sum, t) => sum + Math.floor((t.amount || 0) / setPrice), 0)
+                    
+                    // Remaining limit for 3-digit match = limit3Set + transferred
+                    let remaining3SetLimit = limit3Set + totalTransferred3Set
                     
                     sortedNumbers.forEach((num, idx) => {
                         const exactGroup = group3.exactMatches[num]
                         
-                        if (idx === 0) {
-                            // First number - already handled by 4_set limit
-                            return
-                        }
+                        // Calculate transferred sets for this specific 4-digit number
+                        const transferredForThisNum = transfers
+                            .filter(t => (t.bet_type === '4_set' || t.bet_type === '3_set') && t.numbers === num)
+                            .reduce((sum, t) => sum + Math.floor((t.amount || 0) / setPrice), 0)
                         
-                        // This is a different 4-digit number with same last 3 digits
-                        // It counts toward 3_set limit
-                        if (remaining3SetLimit > 0) {
-                            const setsToKeep = Math.min(exactGroup.setCount, remaining3SetLimit)
-                            remaining3SetLimit -= setsToKeep
-                            
-                            const excess3 = exactGroup.setCount - setsToKeep
-                            if (excess3 > 0) {
-                                excessItems.push({
-                                    bet_type: '3_set',
-                                    numbers: num,
-                                    displayNumbers: `${num} (3ตัวหลัง: ${group3.last3Digits})`,
-                                    total: excess3 * setPrice,
-                                    setCount: exactGroup.setCount,
-                                    submissions: exactGroup.submissions.slice(-excess3),
-                                    limit: limit3Set,
-                                    excess: excess3,
-                                    transferredAmount: transferred3Set,
-                                    isSetBased: true,
-                                    excessType: '3_set',
-                                    last3Digits: group3.last3Digits
-                                })
-                            }
-                        } else {
-                            // All remaining sets are excess
+                        // How many sets can we keep from this number?
+                        const setsToKeep = Math.min(exactGroup.setCount, remaining3SetLimit)
+                        remaining3SetLimit -= setsToKeep
+                        
+                        // Excess = total sets - sets we can keep - already transferred
+                        const excessSets = exactGroup.setCount - setsToKeep
+                        
+                        if (excessSets > 0) {
                             excessItems.push({
-                                bet_type: '3_set',
+                                bet_type: '4_set', // Display as 4_set since it's still a 4-digit number
                                 numbers: num,
                                 displayNumbers: `${num} (3ตัวหลัง: ${group3.last3Digits})`,
-                                total: exactGroup.setCount * setPrice,
+                                total: excessSets * setPrice,
                                 setCount: exactGroup.setCount,
-                                submissions: exactGroup.submissions,
+                                submissions: exactGroup.submissions.slice(-excessSets),
                                 limit: limit3Set,
-                                excess: exactGroup.setCount,
-                                transferredAmount: transferred3Set,
+                                excess: excessSets,
+                                transferredAmount: transferredForThisNum,
                                 isSetBased: true,
-                                excessType: '3_set',
+                                excessType: '3_digit_match', // Mark as 3-digit match excess
                                 last3Digits: group3.last3Digits
                             })
                         }
@@ -4080,7 +4068,7 @@ function SubmissionsModal({ round, onClose }) {
     }
 
     // Generate transfer text for copy/share
-    const generateTransferText = () => {
+    const generateTransferText = async () => {
         const items = filteredTransfers
         if (items.length === 0) return ''
 
@@ -4089,39 +4077,107 @@ function SubmissionsModal({ round, onClose }) {
             : `ครั้งที่ ${uniqueBatches.indexOf(selectedBatch) + 1}`
         const totalAmount = items.reduce((sum, t) => sum + (t.amount || 0), 0)
         const targetDealer = items[0]?.target_dealer_name || '-'
+        const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
+        
+        // Get set price from target dealer's settings if available
+        let setPrice = round?.set_prices?.['4_top'] || 120
+        const targetDealerId = items[0]?.upstream_dealer_id
+        if (targetDealerId) {
+            try {
+                const { data: targetSettings } = await supabase
+                    .from('user_settings')
+                    .select('lottery_settings')
+                    .eq('user_id', targetDealerId)
+                    .single()
+                
+                if (targetSettings?.lottery_settings) {
+                    const lotteryKey = round.lottery_type
+                    const targetSetPrice = targetSettings.lottery_settings[lotteryKey]?.['4_set']?.setPrice
+                    if (targetSetPrice) {
+                        setPrice = targetSetPrice
+                    }
+                }
+            } catch (err) {
+                console.log('Could not fetch target dealer settings, using default')
+            }
+        }
+
+        // Format date in Thai
+        const roundDate = new Date(round.round_date)
+        const thaiMonths = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
+        const thaiYear = roundDate.getFullYear() + 543
+        const formattedDate = `${roundDate.getDate()} ${thaiMonths[roundDate.getMonth()]} ${thaiYear}`
+
+        // Group by bet type and count sets
+        const byType = {}
+        let totalSetCount = 0
+        items.forEach(t => {
+            const betType = t.bet_type
+            const typeName = BET_TYPES[betType] || betType
+            const isSetType = betType === '4_set' || betType === '4_top' || betType === '3_set' || betType === '3_straight_set'
+            if (!byType[typeName]) byType[typeName] = { items: [], betType, isSetType }
+            byType[typeName].items.push(t)
+            
+            // Count sets for set-based types
+            if (isSetBasedLottery && isSetType) {
+                totalSetCount += Math.ceil((t.amount || 0) / setPrice)
+            }
+        })
 
         let text = `📤 ยอดตีออก - ${round.lottery_name}\n`
+        text += `📅 วันที่ ${formattedDate}\n`
         text += `📅 ${batchLabel} (${items.length} รายการ)\n`
         text += `👤 ตีออกให้: ${targetDealer}\n`
         text += `💰 ยอดรวม: ${round.currency_symbol}${totalAmount.toLocaleString()}\n`
+        if (isSetBasedLottery && totalSetCount > 0) {
+            text += `💰 รวมเลขชุด: ${totalSetCount} ชุด\n`
+        }
         text += `━━━━━━━━━━━━━━━━\n`
 
-        // Group by bet type
-        const groupedByType = {}
-        items.forEach(t => {
-            if (!groupedByType[t.bet_type]) {
-                groupedByType[t.bet_type] = []
+        // Separate set types and regular types
+        const regularTypes = {}
+        const setTypes = {}
+        Object.entries(byType).forEach(([typeName, typeData]) => {
+            if (isSetBasedLottery && typeData.isSetType) {
+                setTypes[typeName] = typeData
+            } else {
+                regularTypes[typeName] = typeData
             }
-            groupedByType[t.bet_type].push(t)
         })
 
-        // Output each group
-        Object.entries(groupedByType).forEach(([betType, typeItems]) => {
-            text += `${BET_TYPES[betType]}\n`
-            typeItems.forEach(t => {
-                text += `${t.numbers}=${t.amount?.toLocaleString()}\n`
+        // Output regular types first
+        Object.entries(regularTypes).forEach(([typeName, typeData]) => {
+            text += `${typeName}\n`
+            typeData.items.forEach(t => { text += `${t.numbers}=${t.amount?.toLocaleString()}\n` })
+            text += `-----------------\n`
+        })
+
+        // Output set types with special format (only set count, no amount)
+        Object.entries(setTypes).forEach(([typeName, typeData]) => {
+            text += `${typeName}\n`
+            const grouped = {}
+            typeData.items.forEach(t => {
+                if (!grouped[t.numbers]) {
+                    grouped[t.numbers] = { amount: 0, count: 0 }
+                }
+                grouped[t.numbers].amount += t.amount || 0
+                grouped[t.numbers].count += 1
             })
-            text += `━━━━━━━━━━━━━━━━\n`
+            Object.entries(grouped).forEach(([numbers, data]) => {
+                const setCount = Math.ceil(data.amount / setPrice)
+                text += `${numbers}= (${setCount} ชุด)\n`
+            })
+            text += `-----------------\n`
         })
 
-        text += `รวม: ${round.currency_symbol}${totalAmount.toLocaleString()}`
+        text += `━━━━━━━━━━━━━━━━\n`
 
         return text
     }
 
     // Copy transfers to clipboard
     const handleCopyTransfers = async () => {
-        const text = generateTransferText()
+        const text = await generateTransferText()
         if (!text) return
 
         try {

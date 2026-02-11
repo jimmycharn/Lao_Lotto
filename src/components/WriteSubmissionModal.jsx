@@ -408,6 +408,8 @@ export default function WriteSubmissionModal({
     const [isLocked, setIsLocked] = useState(false) // ล็อคราคา/รูปแบบ
     const [lockedAmount, setLockedAmount] = useState('') // จำนวนเงินที่ล็อคไว้
     const [showCloseConfirm, setShowCloseConfirm] = useState(false)
+    const [showPasteModal, setShowPasteModal] = useState(false)
+    const [pasteText, setPasteText] = useState('')
     const [focusedTypeIndex, setFocusedTypeIndex] = useState(-1) // -1 = not focused on type buttons
     const [soundEnabled, setSoundEnabled] = useState(() => {
         // Load sound preference from localStorage
@@ -1635,6 +1637,40 @@ export default function WriteSubmissionModal({
         setError('')
     }
 
+    // Handle paste numbers - parse 4-digit numbers from clipboard text
+    const handlePasteNumbers = () => {
+        if (!pasteText.trim()) {
+            setError('กรุณาวางข้อมูลก่อน')
+            return
+        }
+
+        const textLines = pasteText.split('\n')
+        const newLines = []
+        let addedCount = 0
+
+        textLines.forEach(textLine => {
+            // Find all 4-digit sequences in the line
+            const matches = textLine.match(/\d{4}/g)
+            if (matches) {
+                matches.forEach(numbers => {
+                    // Format as "1234=1 4ตัวชุด" (1 set of 4-digit)
+                    const formattedLine = `${numbers}=1 4ตัวชุด`
+                    newLines.push(formattedLine)
+                    addedCount++
+                })
+            }
+        })
+
+        if (newLines.length > 0) {
+            setLines(prev => [...prev, ...newLines])
+            setShowPasteModal(false)
+            setPasteText('')
+            playSound('success')
+        } else {
+            setError('ไม่พบเลข 4 ตัวในข้อความ')
+        }
+    }
+
     // Handle submit
     const handleSubmit = async () => {
         if (lines.length === 0) {
@@ -2048,10 +2084,17 @@ export default function WriteSubmissionModal({
 
                 {/* Bill Note + Save Button Row */}
                 <div className="write-modal-note-row">
+                    <button 
+                        className="paste-btn-inline"
+                        onClick={() => setShowPasteModal(true)}
+                        title="วางเลข 4 ตัว"
+                    >
+                        <FiPlus />
+                    </button>
                     <input
                         ref={noteInputRef}
                         type="text"
-                        placeholder="ชื่อผู้ซื้อ / บันทึกช่วยจำ (ไม่บังคับ)"
+                        placeholder="บันทึกช่วยจำ (ไม่บังคับ)"
                         value={billNote}
                         onChange={e => setBillNote(e.target.value)}
                         onKeyDown={e => {
@@ -2337,6 +2380,55 @@ export default function WriteSubmissionModal({
                                 <button className="confirm-btn ok" onClick={confirmClose}>
                                     ปิดเลย
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Paste Numbers Modal */}
+                {showPasteModal && (
+                    <div className="confirm-dialog-overlay" onClick={() => setShowPasteModal(false)}>
+                        <div className="paste-modal" onClick={e => e.stopPropagation()}>
+                            <div className="paste-modal-header">
+                                <h3>วางเลข 4 ตัว</h3>
+                                <button className="close-btn" onClick={() => setShowPasteModal(false)}>
+                                    <FiX />
+                                </button>
+                            </div>
+                            <div className="paste-modal-body">
+                                <p className="paste-hint">วางข้อความที่มีเลข 4 ตัว ระบบจะเพิ่มอัตโนมัติ</p>
+                                <textarea
+                                    className="paste-textarea"
+                                    rows={6}
+                                    placeholder="วางข้อความที่นี่ (Ctrl+V)..."
+                                    autoFocus
+                                    onPaste={e => {
+                                        e.preventDefault()
+                                        const text = e.clipboardData.getData('text')
+                                        if (!text.trim()) return
+                                        
+                                        const textLines = text.split('\n')
+                                        const newLines = []
+                                        
+                                        textLines.forEach(textLine => {
+                                            const matches = textLine.match(/\d{4}/g)
+                                            if (matches) {
+                                                matches.forEach(numbers => {
+                                                    newLines.push(`${numbers}=1 4ตัวชุด`)
+                                                })
+                                            }
+                                        })
+                                        
+                                        if (newLines.length > 0) {
+                                            setLines(prev => [...prev, ...newLines])
+                                            setShowPasteModal(false)
+                                            playSound('success')
+                                        } else {
+                                            setError('ไม่พบเลข 4 ตัวในข้อความ')
+                                            setShowPasteModal(false)
+                                        }
+                                    }}
+                                />
                             </div>
                         </div>
                     </div>

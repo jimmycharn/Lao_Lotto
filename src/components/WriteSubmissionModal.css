@@ -245,6 +245,96 @@
     cursor: not-allowed;
 }
 
+/* Paste Button */
+.paste-btn-inline {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.paste-btn-inline:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+}
+
+/* Paste Modal */
+.paste-modal {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-radius: 16px;
+    width: 90%;
+    max-width: 400px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+}
+
+.paste-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.paste-modal-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: #fff;
+}
+
+.paste-modal-body {
+    padding: 1.25rem;
+}
+
+.paste-hint {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 1rem;
+    line-height: 1.5;
+}
+
+.paste-textarea {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    padding: 0.75rem;
+    color: #fff;
+    font-size: 0.95rem;
+    resize: vertical;
+    min-height: 120px;
+}
+
+.paste-textarea:focus {
+    outline: none;
+    border-color: #667eea;
+    background: rgba(102, 126, 234, 0.1);
+}
+
+.paste-textarea::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.paste-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
 /* Lines Display - flex to fill available space */
 .write-modal-lines {
     flex: 1 1 auto;
@@ -1588,4 +1678,50 @@ html.theme-light .write-modal-note-row .note-input::placeholder {
         color: #333333 !important;
         font-weight: 600 !important;
     }
+}
+
+/* Light theme - Paste Modal */
+[data-theme="light"] .paste-modal,
+html.theme-light .paste-modal {
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
+}
+
+[data-theme="light"] .paste-modal-header,
+html.theme-light .paste-modal-header {
+    background: rgba(0, 0, 0, 0.03) !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-theme="light"] .paste-modal-header h3,
+html.theme-light .paste-modal-header h3 {
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .paste-hint,
+html.theme-light .paste-hint {
+    color: rgba(0, 0, 0, 0.6) !important;
+}
+
+[data-theme="light"] .paste-textarea,
+html.theme-light .paste-textarea {
+    background: rgba(0, 0, 0, 0.03) !important;
+    border: 1px solid rgba(0, 0, 0, 0.15) !important;
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .paste-textarea:focus,
+html.theme-light .paste-textarea:focus {
+    border-color: #667eea !important;
+    background: rgba(102, 126, 234, 0.05) !important;
+}
+
+[data-theme="light"] .paste-textarea::placeholder,
+html.theme-light .paste-textarea::placeholder {
+    color: rgba(0, 0, 0, 0.4) !important;
+}
+
+[data-theme="light"] .paste-modal-footer,
+html.theme-light .paste-modal-footer {
+    background: rgba(0, 0, 0, 0.03) !important;
+    border-top: 1px solid rgba(0, 0, 0, 0.08) !important;
 }
