@@ -2057,6 +2057,7 @@ export default function WriteSubmissionModal({
                         onKeyDown={e => {
                             if (e.key === 'Enter') {
                                 e.preventDefault()
+                                e.stopPropagation()
                                 e.target.blur()
                             }
                         }}
