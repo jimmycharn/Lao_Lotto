@@ -1089,8 +1089,9 @@ export default function WriteSubmissionModal({
     }
 
     // Handle type button click - format: 123=50 ล่าง or 123=50*30 บนกลับ
-    const handleTypeClick = (type, autoSubmit = false) => {
-        let input = currentInput.trim()
+    // inputOverride: optional parameter to override currentInput (used when state hasn't updated yet)
+    const handleTypeClick = (type, autoSubmit = false, inputOverride = null) => {
+        let input = inputOverride !== null ? inputOverride.trim() : currentInput.trim()
         let eqIndex = input.indexOf('=')
         const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
         
@@ -1136,8 +1137,14 @@ export default function WriteSubmissionModal({
         
         if (eqIndex !== -1) {
             const numbers = input.substring(0, eqIndex)
-            const afterEq = input.substring(eqIndex + 1).trim()
+            let afterEq = input.substring(eqIndex + 1).trim()
             const numLen = numbers.length
+            
+            // If no amount after = and locked amount is available, use locked amount
+            if ((!afterEq || !/^\d/.test(afterEq)) && isLocked && lockedAmount) {
+                afterEq = lockedAmount
+            }
+            
             const hasSecondAmount = afterEq.includes('*')
             
             let amount1 = ''
@@ -1368,11 +1375,35 @@ export default function WriteSubmissionModal({
         if (trimmed.includes('=') && !trimmed.includes('*')) {
             const eqIndex = trimmed.indexOf('=')
             const numbers = trimmed.substring(0, eqIndex)
-            const afterEq = trimmed.substring(eqIndex + 1).trim()
+            let afterEq = trimmed.substring(eqIndex + 1).trim()
             const numLen = numbers.length
             
-            // ตรวจสอบว่า afterEq เป็นตัวเลขล้วนๆ (ยังไม่มี type)
-            if (/^\d+$/.test(numbers) && /^\d+$/.test(afterEq) && afterEq.length > 0) {
+            // ถ้าไม่มีจำนวนเงินหลัง = และมี lockedAmount ให้ใช้ lockedAmount
+            if ((!afterEq || !/^\d/.test(afterEq)) && isLocked && lockedAmount) {
+                afterEq = lockedAmount
+                trimmed = `${numbers}=${afterEq}`
+                // Update currentInput และเรียก handleTypeClick โดยส่ง input โดยตรง
+                setCurrentInput(trimmed)
+                const currentTypeButtons = getAvailableTypeButtonsForInput(trimmed)
+                if (currentTypeButtons.length > 0) {
+                    const defaultIndex = getDefaultButtonIndexForButtons(currentTypeButtons, numbers.length)
+                    handleTypeClick(currentTypeButtons[defaultIndex].value, currentTypeButtons[defaultIndex].autoSubmit, trimmed)
+                }
+                return
+            }
+            
+            // ตรวจสอบว่า afterEq เป็นตัวเลขล้วนๆ หรือมี * (ยังไม่มี type)
+            const isValidAmount = /^\d+$/.test(afterEq) || /^\d+\*\d+$/.test(afterEq)
+            if (/^\d+$/.test(numbers) && isValidAmount && afterEq.length > 0) {
+                // ถ้า afterEq มี * ให้ไปที่ handleTypeClick โดยตรง
+                if (afterEq.includes('*')) {
+                    const currentTypeButtons = getAvailableTypeButtons()
+                    if (currentTypeButtons.length > 0) {
+                        const defaultIndex = getDefaultButtonIndex(currentTypeButtons)
+                        handleTypeClick(currentTypeButtons[defaultIndex].value, currentTypeButtons[defaultIndex].autoSubmit)
+                    }
+                    return
+                }
                 // เลข 1, 4, 5 ตัว - ไม่รองรับ 2 จำนวนเงิน ให้บันทึก draft ด้วย default type ทันที
                 if (numLen === 1 || numLen === 4 || numLen === 5) {
                     const currentTypeButtons = getAvailableTypeButtons()
@@ -1660,6 +1691,107 @@ export default function WriteSubmissionModal({
         setShowCloseConfirm(false)
     }
 
+    // Helper function to get buttons based on amounts (used when locked amount has *)
+    const getButtonsForAmounts = (numbers, amount1, amount2, hasSecondAmount, isLaoOrHanoi, toggle) => {
+        const numLen = numbers.length
+        if (!/^\d+$/.test(numbers)) return []
+        
+        const buttons = []
+        const isTop = toggle === 'top'
+        
+        if (numLen === 1) {
+            // 1 digit - ไม่รองรับ * ในจำนวนเงิน
+            if (hasSecondAmount) return []
+            if (isTop) {
+                buttons.push({ label: 'ลอยบน', value: 'ลอยบน', autoSubmit: true })
+                buttons.push({ label: 'หน้าบน', value: 'หน้าบน', autoSubmit: true })
+                buttons.push({ label: 'กลางบน', value: 'กลางบน', autoSubmit: true })
+                buttons.push({ label: 'หลังบน', value: 'หลังบน', autoSubmit: true })
+            } else {
+                buttons.push({ label: 'ลอยล่าง', value: 'ลอยล่าง', autoSubmit: true })
+                buttons.push({ label: 'หน้าล่าง', value: 'หน้าล่าง', autoSubmit: true })
+                buttons.push({ label: 'หลังล่าง', value: 'หลังล่าง', autoSubmit: true })
+            }
+        } else if (numLen === 2) {
+            if (hasSecondAmount) {
+                if (isTop) {
+                    buttons.push({ label: 'บนกลับ', value: 'บนกลับ', autoSubmit: true })
+                    buttons.push({ label: 'หน้ากลับ', value: 'หน้ากลับ', autoSubmit: true })
+                    buttons.push({ label: 'ถ่างกลับ', value: 'ถ่างกลับ', autoSubmit: true })
+                } else {
+                    buttons.push({ label: 'ล่างกลับ', value: 'ล่างกลับ', autoSubmit: true })
+                }
+            } else {
+                if (isTop) {
+                    buttons.push({ label: 'บน', value: 'บน', autoSubmit: true })
+                    buttons.push({ label: 'บนกลับ', value: 'บนกลับ', autoSubmit: true })
+                    buttons.push({ label: 'ลอย', value: 'ลอย', autoSubmit: true })
+                    buttons.push({ label: 'หน้าบน', value: 'หน้าบน', autoSubmit: true })
+                    buttons.push({ label: 'หน้ากลับ', value: 'หน้ากลับ', autoSubmit: true })
+                    buttons.push({ label: 'ถ่างบน', value: 'ถ่างบน', autoSubmit: true })
+                    buttons.push({ label: 'ถ่างกลับ', value: 'ถ่างกลับ', autoSubmit: true })
+                } else {
+                    buttons.push({ label: 'ล่าง', value: 'ล่าง', autoSubmit: true })
+                    buttons.push({ label: 'ล่างกลับ', value: 'ล่างกลับ', autoSubmit: true })
+                }
+            }
+        } else if (numLen === 3) {
+            const permCount = getPermutationCount(numbers)
+            if (hasSecondAmount) {
+                if (isTop) {
+                    buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: true })
+                    if (permCount > 1) {
+                        buttons.push({ label: 'กลับ', value: 'กลับ', autoSubmit: true })
+                    }
+                }
+            } else {
+                if (isTop) {
+                    if (isLaoOrHanoi) {
+                        buttons.push({ label: 'ตรง', value: 'ตรง', autoSubmit: true })
+                    } else {
+                        buttons.push({ label: 'บน', value: 'บน', autoSubmit: true })
+                    }
+                    buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: true })
+                    buttons.push({ label: 'โต๊ด', value: 'โต๊ด', autoSubmit: true })
+                    if (permCount > 1) {
+                        buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                    }
+                } else {
+                    if (!isLaoOrHanoi) {
+                        buttons.push({ label: 'ล่าง', value: 'ล่าง', autoSubmit: true })
+                    }
+                }
+            }
+        } else if (numLen === 4) {
+            if (hasSecondAmount) return []
+            const permCount = getPermutationCount(numbers)
+            if (isLaoOrHanoi) {
+                const amountNum = parseInt(amount1)
+                if (amountNum <= 99) {
+                    buttons.push({ label: '4ตัวชุด', value: '4ตัวชุด', autoSubmit: true })
+                }
+                buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+                if (permCount > 1) {
+                    buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                }
+            } else {
+                buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+                if (permCount > 1) {
+                    buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                }
+            }
+        } else if (numLen === 5) {
+            if (hasSecondAmount) return []
+            const permCount = getPermutationCount(numbers)
+            buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+            if (permCount > 1) {
+                buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+            }
+        }
+        
+        return buttons
+    }
+
     // Get available type buttons based on current input and toggle state
     const getAvailableTypeButtons = () => {
         // Parse input: format is "123=50" or "123=50*30" or "123=50 ล่าง"
@@ -1700,8 +1832,27 @@ export default function WriteSubmissionModal({
             amount1 = parts[0] || ''
         }
         
-        // Must have first amount entered after =
-        if (!amount1 || !/^\d+$/.test(amount1)) return []
+        // Must have first amount entered after = (or use locked amount if available)
+        if (!amount1 || !/^\d+$/.test(amount1)) {
+            // If locked and no valid amount after =, use locked amount
+            if (isLocked && lockedAmount) {
+                // Check if locked amount has * (two amounts like "20*20")
+                if (lockedAmount.includes('*')) {
+                    const lockedParts = lockedAmount.split('*')
+                    amount1 = lockedParts[0].trim()
+                    amount2 = lockedParts[1] ? lockedParts[1].trim() : ''
+                    // Override hasSecondAmount based on locked amount
+                    if (amount2 && /^\d+$/.test(amount2)) {
+                        // We need to recalculate hasSecondAmount - set a flag
+                        return getButtonsForAmounts(numbers, amount1, amount2, true, isLaoOrHanoi, topBottomToggle)
+                    }
+                } else {
+                    amount1 = lockedAmount
+                }
+            } else {
+                return []
+            }
+        }
         // If has *, must have second amount too
         if (hasSecondAmount && (!amount2 || !/^\d+$/.test(amount2))) return []
         
