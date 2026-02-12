@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+﻿import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useTheme, DASHBOARDS } from '../contexts/ThemeContext'
@@ -38,6 +38,8 @@ import {
 import './UserDashboard.css'
 import './ViewToggle.css'
 import WriteSubmissionModal from '../components/WriteSubmissionModal'
+import DealerInfoTab from '../components/user/DealerInfoTab'
+import UserQRScannerModal from '../components/user/UserQRScannerModal'
 
 // Import constants from centralized file
 import {
@@ -54,7 +56,7 @@ export default function UserDashboard() {
     const { user, profile } = useAuth()
     const { toast } = useToast()
     const { setActiveDashboard } = useTheme()
-    
+
     // Set active dashboard for theme on mount
     useEffect(() => {
         setActiveDashboard(DASHBOARDS.USER)
@@ -132,7 +134,7 @@ export default function UserDashboard() {
         const orderKey = `digit_${digitCount}`
         const savedOrder = betTypeOrder[orderKey] || []
         if (savedOrder.length === 0) return items
-        
+
         return [...items].sort((a, b) => {
             const keyA = typeof a === 'string' ? a : a.id
             const keyB = typeof b === 'string' ? b : b.id
@@ -177,17 +179,17 @@ export default function UserDashboard() {
         const currentOrder = items.map(i => typeof i === 'string' ? i : i.id)
         const dragIndex = currentOrder.indexOf(draggedBetType.key)
         const targetIndex = currentOrder.indexOf(targetKey)
-        
+
         if (dragIndex !== -1 && targetIndex !== -1) {
             currentOrder.splice(dragIndex, 1)
             currentOrder.splice(targetIndex, 0, draggedBetType.key)
-            
+
             const orderKey = `digit_${digitCount}`
             const updated = { ...betTypeOrder, [orderKey]: currentOrder }
             setBetTypeOrder(updated)
             localStorage.setItem('betTypeOrder', JSON.stringify(updated))
         }
-        
+
         setDraggedBetType(null)
     }
 
@@ -200,14 +202,14 @@ export default function UserDashboard() {
             const ctx = audioContextRef.current
             const oscillator = ctx.createOscillator()
             const gainNode = ctx.createGain()
-            
+
             oscillator.connect(gainNode)
             gainNode.connect(ctx.destination)
-            
+
             oscillator.frequency.value = 800 // Hz
             oscillator.type = 'sine'
             gainNode.gain.value = 0.1 // Volume
-            
+
             oscillator.start(ctx.currentTime)
             oscillator.stop(ctx.currentTime + 0.08) // 80ms beep
         } catch (e) {
@@ -323,16 +325,16 @@ export default function UserDashboard() {
                 if (upstreamConnections.length > 0) {
                     await supabase
                         .from('dealer_upstream_connections')
-                        .upsert(upstreamConnections, { 
+                        .upsert(upstreamConnections, {
                             onConflict: 'dealer_id,upstream_dealer_id',
-                            ignoreDuplicates: true 
+                            ignoreDuplicates: true
                         })
                 }
             }
 
             setShowDealerConfirmModal(false)
             toast.success('สร้างบัญชีเจ้ามือสำเร็จ!')
-            
+
             // Redirect to dealer dashboard
             window.location.href = '/dealer'
         } catch (error) {
@@ -620,7 +622,7 @@ export default function UserDashboard() {
 
         const currentSettings = settingsOverride || userSettings
         const lotteryKey = getLotteryKeyForDraft(selectedRound.lottery_type)
-        
+
         // Map bet_type to settings key for Lao/Hanoi lottery
         // In settings, Lao uses different keys than the actual bet_type used in submissions
         let settingsKey = betType
@@ -632,7 +634,7 @@ export default function UserDashboard() {
             }
             settingsKey = LAO_BET_TYPE_MAP[betType] || betType
         }
-        
+
         const settings = currentSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
 
         console.log('getCommissionForBetType:', {
@@ -721,12 +723,12 @@ export default function UserDashboard() {
         console.log('Using userSettings:', freshUserSettings)
         console.log('lottery_settings:', freshUserSettings?.lottery_settings)
         const betType = betTypeOverride || submitForm.bet_type
-        
+
         // Track last clicked bet type for highlighting
         if (betTypeOverride) {
             setLastClickedBetType(betTypeOverride)
         }
-        
+
         // Clean numbers by removing spaces
         const cleanNumbers = (submitForm.numbers || '').replace(/\s/g, '')
         console.log('cleanNumbers:', cleanNumbers, 'betType:', betType)
@@ -837,7 +839,7 @@ export default function UserDashboard() {
                 straightAmt = totalAmount
                 todAmt = totalAmount
             }
-            
+
             if (straightAmt > 0) {
                 const commInfo = getCommissionForBetType('3_top', freshUserSettings)
                 newDrafts.push({
@@ -913,7 +915,7 @@ export default function UserDashboard() {
             const baseBetType = betType.replace('_rev', '')
             const reversedNumbers = cleanNumbers.split('').reverse().join('')
             const hasStarInAmount = submitForm.amount.toString().includes('*')
-            
+
             let amt1, amt2
             if (hasStarInAmount && amountParts.length === 2) {
                 amt1 = amountParts[0]
@@ -1039,11 +1041,11 @@ export default function UserDashboard() {
         const lotteryKey = selectedRound.lottery_type
         const setSettings = userSettings?.lottery_settings?.[lotteryKey]?.['4_set']
         const setPrice = setSettings?.setPrice || selectedRound?.set_prices?.['4_top'] || 120
-        
+
         // Use same logic as normal 4_set input - getCommissionForBetType('4_set')
         const commInfo = getCommissionForBetType('4_set', userSettings)
         const commissionPerSet = commInfo.rate
-        
+
         console.log('Paste numbers - commInfo:', commInfo, 'commissionPerSet:', commissionPerSet)
 
         const lines = pasteText.split('\n')
@@ -1057,7 +1059,7 @@ export default function UserDashboard() {
             if (matches) {
                 matches.forEach(numbers => {
                     const entryId = generateUUID()
-                    
+
                     newDrafts.push({
                         entry_id: entryId,
                         round_id: selectedRound.id,
@@ -1085,7 +1087,7 @@ export default function UserDashboard() {
                 const shortId = 'B-' + Math.random().toString(36).substring(2, 8).toUpperCase()
                 setCurrentBillId(shortId)
             }
-            
+
             setDrafts(prev => [...prev, ...newDrafts])
             playAddSound() // Play sound feedback
             setShowPasteModal(false)
@@ -1107,7 +1109,7 @@ export default function UserDashboard() {
                 .select('is_active')
                 .eq('id', selectedDealer.id)
                 .single()
-            
+
             if (dealerProfile?.is_active === false) {
                 toast.error('เจ้ามือถูกระงับการใช้งาน ไม่สามารถส่งเลขได้')
                 return
@@ -1116,7 +1118,7 @@ export default function UserDashboard() {
             // Check dealer's credit for percentage billing
             const totalBetAmount = drafts.reduce((sum, d) => sum + (d.amount || 0), 0)
             const creditCheck = await checkDealerCreditForBet(selectedDealer.id, selectedRound.id, totalBetAmount)
-            
+
             if (!creditCheck.allowed) {
                 toast.error(`ไม่สามารถบันทึกได้: ${creditCheck.message}`)
                 return
@@ -1171,7 +1173,7 @@ export default function UserDashboard() {
             console.log('user.id:', user.id)
             console.log('selectedDealer?.id:', selectedDealer?.id)
             console.log('dealerIdForCredit:', dealerIdForCredit)
-            
+
             if (dealerIdForCredit) {
                 console.log('Calling updatePendingDeduction for dealer:', dealerIdForCredit)
                 try {
@@ -1211,7 +1213,7 @@ export default function UserDashboard() {
                 .select('is_active')
                 .eq('id', selectedDealer.id)
                 .single()
-            
+
             if (dealerProfile?.is_active === false) {
                 throw new Error('เจ้ามือถูกระงับการใช้งาน ไม่สามารถส่งเลขได้')
             }
@@ -1226,7 +1228,7 @@ export default function UserDashboard() {
         const submissionsToInsert = entries.map((entry, index) => {
             const commInfo = getCommissionForBetType(entry.betType, userSettings)
             const commissionAmount = Math.round(entry.amount * commInfo.rate / 100)
-            
+
             // Add milliseconds offset to preserve order (each entry gets +1ms)
             const entryTimestamp = new Date(baseTimestamp.getTime() + index).toISOString()
 
@@ -1282,7 +1284,7 @@ export default function UserDashboard() {
                 .from('submissions')
                 .update({ is_deleted: true, deleted_at: new Date().toISOString() })
                 .in('id', originalIds)
-            
+
             if (deleteError) throw deleteError
         }
 
@@ -1291,7 +1293,7 @@ export default function UserDashboard() {
         const submissionsToInsert = entries.map((entry, index) => {
             const commInfo = getCommissionForBetType(entry.betType, userSettings)
             const commissionAmount = Math.round(entry.amount * commInfo.rate / 100)
-            
+
             // Add milliseconds offset to preserve order (each entry gets +1ms)
             const entryTimestamp = new Date(baseTimestamp.getTime() + index).toISOString()
 
@@ -1366,7 +1368,7 @@ export default function UserDashboard() {
 
             // Update pending deduction for dealer's credit
             if (selectedDealer?.id) {
-                updatePendingDeduction(selectedDealer.id).catch(err => 
+                updatePendingDeduction(selectedDealer.id).catch(err =>
                     console.log('Error updating pending deduction:', err)
                 )
             }
@@ -1394,7 +1396,7 @@ export default function UserDashboard() {
 
             // Update pending deduction for dealer's credit
             if (selectedDealer?.id) {
-                updatePendingDeduction(selectedDealer.id).catch(err => 
+                updatePendingDeduction(selectedDealer.id).catch(err =>
                     console.log('Error updating pending deduction:', err)
                 )
             }
@@ -1410,7 +1412,7 @@ export default function UserDashboard() {
     // Edit bill - open WriteSubmissionModal with existing data
     function handleEditBill(billId, billItems) {
         // Sort items by created_at to maintain original order
-        const sortedItems = [...billItems].sort((a, b) => 
+        const sortedItems = [...billItems].sort((a, b) =>
             new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         )
 
@@ -1432,16 +1434,16 @@ export default function UserDashboard() {
         // Reconstruct original lines from grouped entries (Map preserves insertion order)
         const originalLines = Array.from(entryGroups.values()).map(group => {
             const firstItem = group.items[0]
-            
+
             // If we have the original line stored, use it directly
             if (group.originalLine) {
                 return group.originalLine
             }
-            
+
             // Fallback: reconstruct from individual fields (for old data)
             const numbers = firstItem.numbers
             const amount = firstItem.amount
-            
+
             // Simple format for fallback
             return `${numbers}=${amount}`
         })
@@ -1708,7 +1710,7 @@ export default function UserDashboard() {
 
             // Update pending deduction for dealer's credit
             if (selectedDealer?.id) {
-                updatePendingDeduction(selectedDealer.id).catch(err => 
+                updatePendingDeduction(selectedDealer.id).catch(err =>
                     console.log('Error updating pending deduction:', err)
                 )
             }
@@ -2029,7 +2031,7 @@ export default function UserDashboard() {
 
             // Update pending deduction for dealer's credit
             if (selectedDealer?.id) {
-                updatePendingDeduction(selectedDealer.id).catch(err => 
+                updatePendingDeduction(selectedDealer.id).catch(err =>
                     console.log('Error updating pending deduction:', err)
                 )
             }
@@ -2094,7 +2096,7 @@ export default function UserDashboard() {
         }
 
         const lotteryKey = getLotteryTypeKey(round?.lottery_type)
-        
+
         // Map bet_type to settings key (Lao/Hanoi use different keys in settings)
         let settingsKey = sub.bet_type
         if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
@@ -2104,7 +2106,7 @@ export default function UserDashboard() {
             }
             settingsKey = LAO_BET_TYPE_MAP[sub.bet_type] || sub.bet_type
         }
-        
+
         const settings = userSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
 
         if (settings && settings.payout !== undefined) {
@@ -2171,7 +2173,7 @@ export default function UserDashboard() {
                         <p>ส่งเลขหวยให้เจ้ามือของคุณ</p>
                     </div>
                 </div>
-                
+
                 {/* Scan QR Button - Full width on mobile */}
                 <button
                     className="scan-qr-btn"
@@ -2403,16 +2405,16 @@ export default function UserDashboard() {
                                                             >
                                                                 <FiLayers /> <span>แยกใบโพย</span>
                                                             </button>
-                                                            
+
                                                             {/* Sort toggle buttons - different for grouped vs non-grouped */}
                                                             {isGroupByBill ? (
                                                                 <>
                                                                     {/* Bill sort by time */}
-                                                                    <div style={{ 
-                                                                        display: 'flex', 
-                                                                        gap: '2px', 
-                                                                        background: 'var(--color-surface)', 
-                                                                        borderRadius: '8px', 
+                                                                    <div style={{
+                                                                        display: 'flex',
+                                                                        gap: '2px',
+                                                                        background: 'var(--color-surface)',
+                                                                        borderRadius: '8px',
                                                                         padding: '3px',
                                                                         marginLeft: '0.5rem'
                                                                     }}>
@@ -2435,11 +2437,11 @@ export default function UserDashboard() {
                                                                         </button>
                                                                     </div>
                                                                     {/* Item sort inside bills - 2 toggle buttons */}
-                                                                    <div style={{ 
-                                                                        display: 'flex', 
-                                                                        gap: '2px', 
-                                                                        background: 'var(--color-surface)', 
-                                                                        borderRadius: '8px', 
+                                                                    <div style={{
+                                                                        display: 'flex',
+                                                                        gap: '2px',
+                                                                        background: 'var(--color-surface)',
+                                                                        borderRadius: '8px',
                                                                         padding: '3px',
                                                                         marginLeft: '0.25rem'
                                                                     }}>
@@ -2480,11 +2482,11 @@ export default function UserDashboard() {
                                                                     </div>
                                                                 </>
                                                             ) : (
-                                                                <div style={{ 
-                                                                    display: 'flex', 
-                                                                    gap: '2px', 
-                                                                    background: 'var(--color-surface)', 
-                                                                    borderRadius: '8px', 
+                                                                <div style={{
+                                                                    display: 'flex',
+                                                                    gap: '2px',
+                                                                    background: 'var(--color-surface)',
+                                                                    borderRadius: '8px',
                                                                     padding: '3px',
                                                                     marginLeft: '0.5rem'
                                                                 }}>
@@ -2549,26 +2551,26 @@ export default function UserDashboard() {
                                                                             return acc
                                                                         }, {})
                                                                         const uniqueSubs = Object.values(uniqueByEntry)
-                                                                        
+
                                                                         const grouped = {}
                                                                         uniqueSubs.forEach(sub => {
                                                                             const betType = sub.display_bet_type || BET_TYPES[sub.bet_type]?.label || sub.bet_type
                                                                             if (!grouped[betType]) grouped[betType] = []
                                                                             grouped[betType].push(sub)
                                                                         })
-                                                                        
+
                                                                         const betTypeOrder = ['4 ตัวชุด', '4 ตัวโต๊ด', '3 ตัวบน', '3 ตัวโต๊ด', 'เต็ง-โต๊ด', '2 ตัวบน', '2 ตัวล่าง', '2 ตัวบนกลับ', '2 ตัวล่างกลับ', '1 ตัวบน', '1 ตัวล่าง']
                                                                         const sortedTypes = Object.keys(grouped).sort((a, b) => {
                                                                             const idxA = betTypeOrder.indexOf(a)
                                                                             const idxB = betTypeOrder.indexOf(b)
                                                                             return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB)
                                                                         })
-                                                                        
+
                                                                         const totalAmount = submissions.reduce((sum, s) => sum + s.amount, 0)
                                                                         const now = new Date()
                                                                         const dateStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
                                                                         const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
-                                                                        
+
                                                                         let text = `📋 ${round.lottery_name || LOTTERY_TYPES[round.lottery_type]}\n`
                                                                         text += `📅 ${dateStr} ${timeStr}\n`
                                                                         text += `👤 ผู้ส่ง: ${profile?.full_name || profile?.email || '-'}\n`
@@ -2576,7 +2578,7 @@ export default function UserDashboard() {
                                                                         text += `👤 เจ้ามือ: ${selectedRound?.dealer_name || '-'}\n`
                                                                         text += `💰 ยอดรวม: ${round.currency_symbol}${totalAmount.toLocaleString()}\n`
                                                                         text += `━━━━━━━━━━━━━━━━\n`
-                                                                        
+
                                                                         sortedTypes.forEach(betType => {
                                                                             text += `${betType}\n`
                                                                             const items = grouped[betType].sort((a, b) => {
@@ -2591,7 +2593,7 @@ export default function UserDashboard() {
                                                                             })
                                                                         })
                                                                         text += `━━━━━━━━━━━━━━━━`
-                                                                        
+
                                                                         try {
                                                                             await navigator.clipboard.writeText(text)
                                                                             toast.success('คัดลอกแล้ว!')
@@ -2650,7 +2652,7 @@ export default function UserDashboard() {
                                                                     const processItems = (items) => {
                                                                         if (displayMode === 'detailed') return items
                                                                         // Sort by created_at first to ensure correct grouping order
-                                                                        const sortedItems = [...items].sort((a, b) => 
+                                                                        const sortedItems = [...items].sort((a, b) =>
                                                                             new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
                                                                         )
                                                                         return sortedItems.reduce((acc, sub) => {
@@ -2699,21 +2701,21 @@ export default function UserDashboard() {
                                                                                     })
                                                                                     const isExpandedBill = expandedBills.includes(billId)
                                                                                     const processedBillItems = processItems(billItems)
-                                                                                    
+
                                                                                     // Count unique entry_ids for actual line count (not expanded count)
                                                                                     const uniqueEntryIds = new Set(billItems.map(item => item.entry_id).filter(Boolean))
                                                                                     const actualLineCount = uniqueEntryIds.size > 0 ? uniqueEntryIds.size : processedBillItems.length
-                                                                                    
+
                                                                                     // Sort items inside bill based on itemSortMode
                                                                                     const sortedBillItems = (() => {
                                                                                         if (itemSortMode === 'original') {
                                                                                             // Sort by created_at ascending (oldest first)
-                                                                                            return [...processedBillItems].sort((a, b) => 
+                                                                                            return [...processedBillItems].sort((a, b) =>
                                                                                                 new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
                                                                                             )
                                                                                         } else if (itemSortMode === 'original_rev') {
                                                                                             // Sort by created_at descending (newest first)
-                                                                                            return [...processedBillItems].sort((a, b) => 
+                                                                                            return [...processedBillItems].sort((a, b) =>
                                                                                                 new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
                                                                                             )
                                                                                         } else {
@@ -2732,7 +2734,7 @@ export default function UserDashboard() {
                                                                                     const handleCopyBill = async (e) => {
                                                                                         e.stopPropagation()
                                                                                         const billName = billItems[0]?.bill_note || billId
-                                                                                        
+
                                                                                         // กลุ่มตาม entry_id ก่อนเพื่อไม่ให้ซ้ำ
                                                                                         const uniqueByEntry = processedBillItems.reduce((acc, sub) => {
                                                                                             const key = sub.entry_id || sub.id
@@ -2742,7 +2744,7 @@ export default function UserDashboard() {
                                                                                             return acc
                                                                                         }, {})
                                                                                         const uniqueItems = Object.values(uniqueByEntry)
-                                                                                        
+
                                                                                         // จัดกลุ่มตามประเภทเลข
                                                                                         const grouped = {}
                                                                                         uniqueItems.forEach(sub => {
@@ -2750,7 +2752,7 @@ export default function UserDashboard() {
                                                                                             if (!grouped[betType]) grouped[betType] = []
                                                                                             grouped[betType].push(sub)
                                                                                         })
-                                                                                        
+
                                                                                         // เรียงลำดับประเภทเลข
                                                                                         const betTypeOrder = ['4 ตัวชุด', '4 ตัวโต๊ด', '3 ตัวบน', '3 ตัวโต๊ด', 'เต็ง-โต๊ด', '2 ตัวบน', '2 ตัวล่าง', '2 ตัวบนกลับ', '2 ตัวล่างกลับ', '1 ตัวบน', '1 ตัวล่าง']
                                                                                         const sortedTypes = Object.keys(grouped).sort((a, b) => {
@@ -2758,14 +2760,14 @@ export default function UserDashboard() {
                                                                                             const idxB = betTypeOrder.indexOf(b)
                                                                                             return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB)
                                                                                         })
-                                                                                        
+
                                                                                         let text = `📋 ${round.lottery_name || LOTTERY_TYPES[round.lottery_type]}\n`
                                                                                         text += `🎫 ${billName}\n`
                                                                                         text += `📅 ${billDate} ${billTime}\n`
                                                                                         text += `📊 ทั้งหมด (${uniqueItems.length} รายการ)\n`
                                                                                         text += `💰 ยอดรวม: ${round.currency_symbol}${billTotal.toLocaleString()}\n`
                                                                                         text += `━━━━━━━━━━━━━━━━\n`
-                                                                                        
+
                                                                                         sortedTypes.forEach(betType => {
                                                                                             text += `${betType}\n`
                                                                                             // เรียงเลขจากน้อยไปมาก
@@ -2781,7 +2783,7 @@ export default function UserDashboard() {
                                                                                             })
                                                                                         })
                                                                                         text += `━━━━━━━━━━━━━━━━`
-                                                                                        
+
                                                                                         try {
                                                                                             await navigator.clipboard.writeText(text)
                                                                                             toast.success('คัดลอกแล้ว!')
@@ -2836,40 +2838,40 @@ export default function UserDashboard() {
 
                                                                                             {/* Bill Items - Collapsible */}
                                                                                             {isExpandedBill && (
-                                                                                            <div className="bill-items-list">
-                                                                                                {sortedBillItems.map(sub => (
-                                                                                                    <div
-                                                                                                        key={sub.id || sub.entry_id}
-                                                                                                        className={`bill-item-row ${canDelete(sub) ? 'editable' : ''}`}
-                                                                                                        onClick={() => handleEditSubmission(sub)}
-                                                                                                    >
-                                                                                                        {displayMode === 'summary' && sub.display_numbers ? (
-                                                                                                            <>
-                                                                                                                <span className="bill-display-text">
-                                                                                                                    {sub.display_numbers}
-                                                                                                                </span>
-                                                                                                                <span className="bill-item-amount">
-                                                                                                                    {round.currency_symbol}{sub.display_amount || sub.amount?.toLocaleString()}
-                                                                                                                </span>
-                                                                                                            </>
-                                                                                                        ) : (
-                                                                                                            <>
-                                                                                                                <div className="bill-item-left">
-                                                                                                                    <span className="bill-bet-type">
-                                                                                                                        {BET_TYPES[sub.bet_type]?.label}
+                                                                                                <div className="bill-items-list">
+                                                                                                    {sortedBillItems.map(sub => (
+                                                                                                        <div
+                                                                                                            key={sub.id || sub.entry_id}
+                                                                                                            className={`bill-item-row ${canDelete(sub) ? 'editable' : ''}`}
+                                                                                                            onClick={() => handleEditSubmission(sub)}
+                                                                                                        >
+                                                                                                            {displayMode === 'summary' && sub.display_numbers ? (
+                                                                                                                <>
+                                                                                                                    <span className="bill-display-text">
+                                                                                                                        {sub.display_numbers}
                                                                                                                     </span>
-                                                                                                                    <span className="bill-number">
-                                                                                                                        {sub.numbers}
+                                                                                                                    <span className="bill-item-amount">
+                                                                                                                        {round.currency_symbol}{sub.display_amount || sub.amount?.toLocaleString()}
                                                                                                                     </span>
-                                                                                                                </div>
-                                                                                                                <span className="bill-item-amount">
-                                                                                                                    {round.currency_symbol}{sub.amount?.toLocaleString()}
-                                                                                                                </span>
-                                                                                                            </>
-                                                                                                        )}
-                                                                                                    </div>
-                                                                                                ))}
-                                                                                            </div>
+                                                                                                                </>
+                                                                                                            ) : (
+                                                                                                                <>
+                                                                                                                    <div className="bill-item-left">
+                                                                                                                        <span className="bill-bet-type">
+                                                                                                                            {BET_TYPES[sub.bet_type]?.label}
+                                                                                                                        </span>
+                                                                                                                        <span className="bill-number">
+                                                                                                                            {sub.numbers}
+                                                                                                                        </span>
+                                                                                                                    </div>
+                                                                                                                    <span className="bill-item-amount">
+                                                                                                                        {round.currency_symbol}{sub.amount?.toLocaleString()}
+                                                                                                                    </span>
+                                                                                                                </>
+                                                                                                            )}
+                                                                                                        </div>
+                                                                                                    ))}
+                                                                                                </div>
                                                                                             )}
 
                                                                                             {/* Bill Actions - For editing/deleting */}
@@ -2942,16 +2944,16 @@ export default function UserDashboard() {
                                                                                                         {displayMode === 'summary' ? (sub.display_numbers || sub.numbers) : sub.numbers}
                                                                                                     </span>
                                                                                                     <span className="sub-type">
-                                                                                                        {displayMode === 'summary' 
-                                                                                                            ? (sub.display_bet_type && sub.display_bet_type !== sub.display_numbers 
-                                                                                                                ? sub.display_bet_type 
-                                                                                                                : BET_TYPES[sub.bet_type]?.label) 
+                                                                                                        {displayMode === 'summary'
+                                                                                                            ? (sub.display_bet_type && sub.display_bet_type !== sub.display_numbers
+                                                                                                                ? sub.display_bet_type
+                                                                                                                : BET_TYPES[sub.bet_type]?.label)
                                                                                                             : BET_TYPES[sub.bet_type]?.label}
                                                                                                     </span>
                                                                                                 </div>
                                                                                             </td>
-                                                                                            <td>{round.currency_symbol}{displayMode === 'summary' 
-                                                                                                ? (typeof sub.display_amount === 'string' ? sub.display_amount : sub.amount?.toLocaleString()) 
+                                                                                            <td>{round.currency_symbol}{displayMode === 'summary'
+                                                                                                ? (typeof sub.display_amount === 'string' ? sub.display_amount : sub.amount?.toLocaleString())
                                                                                                 : sub.amount?.toLocaleString()}</td>
                                                                                             <td className="commission-cell">
                                                                                                 {round.currency_symbol}{sub.commission_amount?.toLocaleString()}
@@ -3255,13 +3257,13 @@ export default function UserDashboard() {
                                                                 const billNote = items[0]?.bill_note
                                                                 const billCreatedAt = items[0]?.created_at
                                                                 const isResultBillExpanded = expandedBills.includes(`result-${billId}`)
-                                                                
+
                                                                 // For 'all' mode: collapsible bills, default collapsed
                                                                 // For 'winners' mode: always show items with note and time
                                                                 if (resultViewMode === 'all') {
                                                                     return (
                                                                         <div key={billId} className={`result-bill-group card ${isResultBillExpanded ? 'expanded' : ''}`}>
-                                                                            <div 
+                                                                            <div
                                                                                 className="result-bill-header clickable"
                                                                                 onClick={() => toggleBill(`result-${billId}`)}
                                                                                 style={{ cursor: 'pointer' }}
@@ -3463,11 +3465,11 @@ export default function UserDashboard() {
                             <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎯</div>
                             <h4 style={{ marginBottom: '1rem', color: 'var(--color-text)' }}>คุณต้องการเป็นเจ้ามือเองหรือไม่?</h4>
                             <p style={{ color: 'var(--color-text-muted)', marginBottom: '1rem' }}>
-                                เมื่อยืนยันแล้ว คุณจะสามารถรับเลขจากสมาชิกได้<br/>
+                                เมื่อยืนยันแล้ว คุณจะสามารถรับเลขจากสมาชิกได้<br />
                                 และสามารถส่งต่อเลขให้เจ้ามือส่งออกได้
                             </p>
-                            <div style={{ 
-                                background: 'rgba(212, 175, 55, 0.1)', 
+                            <div style={{
+                                background: 'rgba(212, 175, 55, 0.1)',
                                 border: '1px solid rgba(212, 175, 55, 0.3)',
                                 borderRadius: 'var(--radius-md)',
                                 padding: '1rem',
@@ -3708,1034 +3710,3 @@ export default function UserDashboard() {
     )
 }
 
-// Dealer Info Tab Component - Shows selected dealer's information
-function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
-    const { user } = useAuth()
-    const [dealerProfile, setDealerProfile] = useState(null)
-    const [dealerBankAccounts, setDealerBankAccounts] = useState([])
-    const [assignedBankAccountId, setAssignedBankAccountId] = useState(null)
-    const [loading, setLoading] = useState(true)
-    const [subTab, setSubTab] = useState(isOwnDealer ? 'rounds' : 'profile') // Different default tabs
-    const [ratesTab, setRatesTab] = useState('thai') // lottery type tab for rates
-
-    useEffect(() => {
-        if (dealer?.id) {
-            fetchDealerInfo()
-        }
-    }, [dealer?.id])
-
-    async function fetchDealerInfo() {
-        setLoading(true)
-        try {
-            // Fetch dealer profile
-            const { data: profileData } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', dealer.id)
-                .single()
-
-            if (profileData) {
-                setDealerProfile(profileData)
-            }
-
-            // Fetch dealer bank accounts
-            const { data: bankData } = await supabase
-                .from('dealer_bank_accounts')
-                .select('*')
-                .eq('dealer_id', dealer.id)
-                .order('is_default', { ascending: false })
-
-            if (bankData) {
-                setDealerBankAccounts(bankData)
-            }
-
-            // Fetch membership to get assigned_bank_account_id
-            if (user?.id) {
-                const { data: membershipData } = await supabase
-                    .from('user_dealer_memberships')
-                    .select('assigned_bank_account_id')
-                    .eq('user_id', user.id)
-                    .eq('dealer_id', dealer.id)
-                    .eq('status', 'active')
-                    .single()
-
-                if (membershipData) {
-                    setAssignedBankAccountId(membershipData.assigned_bank_account_id)
-                }
-            }
-        } catch (error) {
-            console.error('Error fetching dealer info:', error)
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    // Get assigned bank account or default/first bank account
-    const primaryBank = assignedBankAccountId
-        ? dealerBankAccounts.find(b => b.id === assignedBankAccountId)
-        : (dealerBankAccounts.find(b => b.is_default) || dealerBankAccounts[0])
-
-    // Commission and payout rates from user settings
-    const commissionRates = userSettings?.commission_rates || {}
-    const payoutRates = userSettings?.payout_rates || {}
-
-    if (loading) {
-        return (
-            <div className="loading-state">
-                <div className="spinner"></div>
-            </div>
-        )
-    }
-
-    // Default settings and labels for rates display
-    const getDefaultSettings = () => ({
-        thai: {
-            'run_top': { commission: 15, payout: 3 },
-            'run_bottom': { commission: 15, payout: 4 },
-            'pak_top': { commission: 15, payout: 8 },
-            'pak_bottom': { commission: 15, payout: 6 },
-            '2_top': { commission: 15, payout: 65 },
-            '2_front': { commission: 15, payout: 65 },
-            '2_center': { commission: 15, payout: 65 },
-            '2_run': { commission: 15, payout: 10 },
-            '2_bottom': { commission: 15, payout: 65 },
-            '3_top': { commission: 30, payout: 550 },
-            '3_tod': { commission: 15, payout: 100 },
-            '3_bottom': { commission: 15, payout: 135 },
-            '4_run': { commission: 15, payout: 20 },
-            '4_float': { commission: 15, payout: 20 },
-            '5_run': { commission: 15, payout: 10 },
-            '5_float': { commission: 15, payout: 10 }
-        },
-        lao: {
-            '4_set': { 
-                commission: 25, 
-                setPrice: 120,
-                isSet: true,
-                prizes: {
-                    '4_straight_set': 100000,
-                    '4_tod_set': 4000,
-                    '3_straight_set': 30000,
-                    '3_tod_set': 3000,
-                    '2_front_set': 1000,
-                    '2_back_set': 1000
-                }
-            },
-            'run_top': { commission: 15, payout: 3 },
-            'run_bottom': { commission: 15, payout: 4 },
-            'pak_top': { commission: 15, payout: 8 },
-            'pak_bottom': { commission: 15, payout: 6 },
-            '2_top': { commission: 15, payout: 65 },
-            '2_front': { commission: 15, payout: 65 },
-            '2_center': { commission: 15, payout: 65 },
-            '2_run': { commission: 15, payout: 10 },
-            '2_bottom': { commission: 15, payout: 65 },
-            '3_straight': { commission: 30, payout: 550 },
-            '3_tod_single': { commission: 15, payout: 100 },
-            '4_run': { commission: 15, payout: 20 },
-            '4_float': { commission: 15, payout: 20 },
-            '5_run': { commission: 15, payout: 10 },
-            '5_float': { commission: 15, payout: 10 }
-        },
-        hanoi: {
-            '4_set': { 
-                commission: 25, 
-                setPrice: 120,
-                isSet: true,
-                prizes: {
-                    '4_straight_set': 100000,
-                    '4_tod_set': 4000,
-                    '3_straight_set': 30000,
-                    '3_tod_set': 3000,
-                    '2_front_set': 1000,
-                    '2_back_set': 1000
-                }
-            },
-            'run_top': { commission: 15, payout: 3 },
-            'run_bottom': { commission: 15, payout: 4 },
-            'pak_top': { commission: 15, payout: 8 },
-            'pak_bottom': { commission: 15, payout: 6 },
-            '2_top': { commission: 15, payout: 65 },
-            '2_front': { commission: 15, payout: 65 },
-            '2_center': { commission: 15, payout: 65 },
-            '2_run': { commission: 15, payout: 10 },
-            '2_bottom': { commission: 15, payout: 65 },
-            '3_straight': { commission: 30, payout: 550 },
-            '3_tod_single': { commission: 15, payout: 100 },
-            '4_run': { commission: 15, payout: 20 },
-            '4_float': { commission: 15, payout: 20 },
-            '5_run': { commission: 15, payout: 10 },
-            '5_float': { commission: 15, payout: 10 }
-        },
-        stock: {
-            '2_top': { commission: 15, payout: 65 },
-            '2_bottom': { commission: 15, payout: 65 }
-        }
-    })
-
-    const BET_LABELS = {
-        thai: {
-            'run_top': 'ลอยบน',
-            'run_bottom': 'ลอยล่าง',
-            'pak_top': 'ปักบน',
-            'pak_bottom': 'ปักล่าง',
-            '2_top': '2 ตัวบน',
-            '2_front': '2 ตัวหน้า',
-            '2_center': '2 ตัวถ่าง',
-            '2_run': '2 ตัวลอย',
-            '2_bottom': '2 ตัวล่าง',
-            '3_top': '3 ตัวบน',
-            '3_tod': '3 ตัวโต๊ด',
-            '3_bottom': '3 ตัวล่าง',
-            '4_run': '4 ตัวลอย',
-            '4_float': '4 ตัวลอยแพ',
-            '5_run': '5 ตัวลอย',
-            '5_float': '5 ตัวลอยแพ'
-        },
-        lao: {
-            '4_set': '4 ตัวชุด',
-            'run_top': 'ลอยบน',
-            'run_bottom': 'ลอยล่าง',
-            'pak_top': 'ปักบน',
-            'pak_bottom': 'ปักล่าง',
-            '2_top': '2 ตัวบน',
-            '2_front': '2 ตัวหน้า',
-            '2_center': '2 ตัวถ่าง',
-            '2_run': '2 ตัวลอย',
-            '2_bottom': '2 ตัวล่าง',
-            '3_top': '3 ตัวตรง',
-            '3_straight': '3 ตัวตรง',
-            '3_tod_single': '3 ตัวโต๊ด',
-            '4_run': '4 ตัวลอย',
-            '4_float': '4 ตัวลอยแพ',
-            '5_run': '5 ตัวลอย',
-            '5_float': '5 ตัวลอยแพ'
-        },
-        hanoi: {
-            '4_set': '4 ตัวชุด',
-            'run_top': 'ลอยบน',
-            'run_bottom': 'ลอยล่าง',
-            'pak_top': 'ปักบน',
-            'pak_bottom': 'ปักล่าง',
-            '2_top': '2 ตัวบน',
-            '2_front': '2 ตัวหน้า',
-            '2_center': '2 ตัวถ่าง',
-            '2_run': '2 ตัวลอย',
-            '2_bottom': '2 ตัวล่าง',
-            '3_top': '3 ตัวตรง',
-            '3_straight': '3 ตัวตรง',
-            '3_tod_single': '3 ตัวโต๊ด',
-            '4_run': '4 ตัวลอย',
-            '4_float': '4 ตัวลอยแพ',
-            '5_run': '5 ตัวลอย',
-            '5_float': '5 ตัวลอยแพ'
-        },
-        stock: {
-            '2_top': '2 ตัวบน',
-            '2_bottom': '2 ตัวล่าง'
-        }
-    }
-
-    const SET_PRIZE_LABELS = {
-        '4_straight_set': '4 ตัวตรงชุด',
-        '4_tod_set': '4 ตัวโต๊ดชุด',
-        '3_straight_set': '3 ตัวตรงชุด',
-        '3_tod_set': '3 ตัวโต๊ดชุด',
-        '2_front_set': '2 ตัวหน้าชุด',
-        '2_back_set': '2 ตัวหลังชุด'
-    }
-
-    const LOTTERY_TABS = [
-        { key: 'thai', label: 'หวยไทย' },
-        { key: 'lao', label: 'หวยลาว' },
-        { key: 'hanoi', label: 'หวยฮานอย' },
-        { key: 'stock', label: 'หวยหุ้น' }
-    ]
-
-    // Merge user settings with defaults
-    const getMergedSettings = () => {
-        const defaults = getDefaultSettings()
-        if (!userSettings?.lottery_settings) return defaults
-        
-        const merged = { ...defaults }
-        Object.keys(userSettings.lottery_settings).forEach(tab => {
-            if (merged[tab]) {
-                Object.keys(userSettings.lottery_settings[tab]).forEach(key => {
-                    if (merged[tab][key]) {
-                        merged[tab][key] = { ...merged[tab][key], ...userSettings.lottery_settings[tab][key] }
-                    }
-                })
-            }
-        })
-        return merged
-    }
-
-    const settings = getMergedSettings()
-
-    return (
-        <div className="dealer-info-section">
-            {/* Sub-tabs */}
-            <div className="sub-tabs">
-                {isOwnDealer ? (
-                    // Own dealer tabs: งวดที่เปิด | ผลรางวัล | โปรไฟล์
-                    <>
-                        <button
-                            className={`sub-tab-btn ${subTab === 'rounds' ? 'active' : ''}`}
-                            onClick={() => setSubTab('rounds')}
-                        >
-                            <FiCalendar /> งวดที่เปิด
-                        </button>
-                        <button
-                            className={`sub-tab-btn ${subTab === 'results' ? 'active' : ''}`}
-                            onClick={() => setSubTab('results')}
-                        >
-                            <FiAward /> ผลรางวัล
-                        </button>
-                        <button
-                            className={`sub-tab-btn ${subTab === 'profile' ? 'active' : ''}`}
-                            onClick={() => setSubTab('profile')}
-                        >
-                            <FiUser /> โปรไฟล์
-                        </button>
-                    </>
-                ) : (
-                    // Other dealer tabs: งวดที่เปิด | ผลรางวัล | เจ้ามือ
-                    <>
-                        <button
-                            className={`sub-tab-btn ${subTab === 'profile' ? 'active' : ''}`}
-                            onClick={() => setSubTab('profile')}
-                        >
-                            <FiUser /> โปรไฟล์เจ้ามือ
-                        </button>
-                        <button
-                            className={`sub-tab-btn ${subTab === 'rates' ? 'active' : ''}`}
-                            onClick={() => setSubTab('rates')}
-                        >
-                            <FiDollarSign /> ค่าคอม/อัตราจ่าย
-                        </button>
-                    </>
-                )}
-            </div>
-
-            {subTab === 'profile' ? (
-                <>
-                    {/* Dealer Info Card */}
-                    <div className="profile-card card">
-                        <div className="profile-header">
-                            <div className="profile-avatar dealer-avatar">
-                                <FiUser />
-                            </div>
-                            <div className="profile-info">
-                                <h2>{dealerProfile?.full_name || dealer.full_name || 'ไม่ระบุชื่อ'}</h2>
-                                <p className="email">{dealerProfile?.email || dealer.email}</p>
-                                <span className="role-badge role-dealer">เจ้ามือ</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Contact Info */}
-                    <div className="profile-details card">
-                        <h3>ข้อมูลติดต่อ</h3>
-                        <div className="profile-info-list">
-                            <div className="info-row">
-                                <span className="info-label">ชื่อ</span>
-                                <span className="info-value">{dealerProfile?.full_name || '-'}</span>
-                            </div>
-                            <div className="info-row">
-                                <span className="info-label">อีเมล</span>
-                                <span className="info-value">{dealerProfile?.email || '-'}</span>
-                            </div>
-                            <div className="info-row">
-                                <span className="info-label">เบอร์โทร</span>
-                                <span className="info-value">{dealerProfile?.phone || '-'}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Bank Account for Transfer */}
-                    <div className="profile-details card">
-                        <h3>บัญชีธนาคาร (สำหรับโอนเงิน)</h3>
-                        {primaryBank ? (
-                            <div className="profile-info-list">
-                                <div className="info-row">
-                                    <span className="info-label">ธนาคาร</span>
-                                    <span className="info-value">{primaryBank.bank_name}</span>
-                                </div>
-                                <div className="info-row">
-                                    <span className="info-label">ชื่อบัญชี</span>
-                                    <span className="info-value">{primaryBank.account_name || '-'}</span>
-                                </div>
-                                <div className="info-row">
-                                    <span className="info-label">เลขบัญชี</span>
-                                    <span className="info-value bank-account-number">{primaryBank.bank_account}</span>
-                                </div>
-                                {primaryBank.is_default && (
-                                    <div className="default-badge">
-                                        <FiCheck /> บัญชีหลัก
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="empty-state small">
-                                <p>ยังไม่มีข้อมูลบัญชีธนาคาร</p>
-                            </div>
-                        )}
-                    </div>
-                </>
-            ) : (
-                <>
-                    {/* Commission and Payout Rates */}
-                    <div className="rates-section card">
-                        <h3><FiDollarSign /> ค่าคอมมิชชั่นและอัตราจ่าย</h3>
-                        <p className="rates-description">อัตราที่เจ้ามือกำหนดให้กับคุณ</p>
-                        
-                        {/* Lottery Type Tabs */}
-                        <div className="rates-tabs">
-                            {LOTTERY_TABS.map(tab => (
-                                <button
-                                    key={tab.key}
-                                    className={`rates-tab ${ratesTab === tab.key ? 'active' : ''}`}
-                                    onClick={() => setRatesTab(tab.key)}
-                                >
-                                    {tab.label}
-                                </button>
-                            ))}
-                        </div>
-
-                        {/* 4 ตัวชุด Section for Lao or Hanoi */}
-                        {(ratesTab === 'lao' || ratesTab === 'hanoi') && settings[ratesTab]?.['4_set'] && (
-                            <div className="set-rates-section" style={{ marginBottom: '1.5rem' }}>
-                                <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-primary)', fontSize: '1rem' }}>
-                                    4 ตัวชุด (ราคาชุดละ {settings[ratesTab]['4_set'].setPrice || 120} บาท)
-                                </h4>
-                                <div className="info-row" style={{ marginBottom: '0.75rem' }}>
-                                    <span className="info-label">ค่าคอม:</span>
-                                    <span className="info-value" style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
-                                        {settings[ratesTab]['4_set'].commission} ฿/ชุด
-                                    </span>
-                                </div>
-                                <table className="rates-table">
-                                    <thead>
-                                        <tr>
-                                            <th>ประเภทรางวัล</th>
-                                            <th>เงินรางวัล</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {Object.entries(settings[ratesTab]['4_set'].prizes || {}).map(([prizeKey, prizeAmount]) => (
-                                            <tr key={prizeKey}>
-                                                <td className="type-cell">{SET_PRIZE_LABELS[prizeKey] || prizeKey}</td>
-                                                <td className="rate-cell">
-                                                    <span className="rate-value">{prizeAmount?.toLocaleString()}</span>
-                                                    <span className="rate-unit">บาท/ชุด</span>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-
-                        {/* Regular Rates Table */}
-                        <div className="rates-table-container">
-                            <table className="rates-table">
-                                <thead>
-                                    <tr>
-                                        <th>ประเภทเลข</th>
-                                        <th>ค่าคอม</th>
-                                        <th>อัตราจ่าย</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {Object.entries(settings[ratesTab] || {})
-                                        .filter(([key]) => key !== '4_set')
-                                        .map(([key, value]) => (
-                                        <tr key={key}>
-                                            <td className="type-cell">{BET_LABELS[ratesTab]?.[key] || key}</td>
-                                            <td className="rate-cell">
-                                                <span className="rate-value">{value.commission}</span>
-                                                <span className="rate-unit">%</span>
-                                            </td>
-                                            <td className="rate-cell">
-                                                <span className="rate-value">{value.payout?.toLocaleString()}</span>
-                                                <span className="rate-unit">เท่า</span>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </>
-            )}
-        </div>
-    )
-}
-
-// History Tab Component
-function HistoryTab({ user, profile }) {
-    const [submissions, setSubmissions] = useState([])
-    const [loading, setLoading] = useState(true)
-
-    useEffect(() => {
-        fetchHistory()
-    }, [])
-
-    async function fetchHistory() {
-        setLoading(true)
-        try {
-            const { data, error } = await supabase
-                .from('submissions')
-                .select(`
-                    *,
-                    lottery_rounds (
-                        lottery_name,
-                        lottery_type,
-                        round_date,
-                        is_result_announced,
-                        currency_symbol
-                    )
-                `)
-                .eq('user_id', user.id)
-                .eq('is_deleted', false)
-                .order('created_at', { ascending: false })
-                .limit(50)
-
-            if (!error) setSubmissions(data || [])
-        } catch (error) {
-            console.error('Error:', error)
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    const totalWon = submissions.filter(s => s.is_winner).reduce((sum, s) => sum + (s.prize_amount || 0), 0)
-    const totalSpent = submissions.reduce((sum, s) => sum + (s.amount || 0), 0)
-
-    return (
-        <div className="history-section">
-            <div className="stats-row">
-                <div className="stat-card">
-                    <span className="stat-value">{submissions.length}</span>
-                    <span className="stat-label">รายการทั้งหมด</span>
-                </div>
-                <div className="stat-card">
-                    <span className="stat-value">฿{totalSpent.toLocaleString()}</span>
-                    <span className="stat-label">ยอดรวม</span>
-                </div>
-                <div className="stat-card highlight">
-                    <span className="stat-value">฿{totalWon.toLocaleString()}</span>
-                    <span className="stat-label">รางวัลที่ได้</span>
-                </div>
-            </div>
-
-            {loading ? (
-                <div className="loading-state">
-                    <div className="spinner"></div>
-                </div>
-            ) : (
-                <div className="history-list">
-                    {submissions.map(sub => (
-                        <div key={sub.id} className={`history-card card ${sub.is_winner ? 'winner' : ''}`}>
-                            <div className="history-header">
-                                <span className={`lottery-badge ${sub.lottery_rounds?.lottery_type}`}>
-                                    {sub.lottery_rounds?.lottery_name}
-                                </span>
-                                <span className="history-date">
-                                    {new Date(sub.lottery_rounds?.round_date).toLocaleDateString('th-TH')}
-                                </span>
-                            </div>
-                            <div className="history-content">
-                                <span className="type-badge">{BET_TYPES[sub.bet_type]?.label}</span>
-                                <span className="number-cell">{sub.numbers}</span>
-                                <span className="amount">
-                                    {sub.lottery_rounds?.currency_symbol}{sub.amount?.toLocaleString()}
-                                </span>
-                            </div>
-                            <div className="history-status">
-                                {sub.lottery_rounds?.is_result_announced ? (
-                                    sub.is_winner ? (
-                                        <span className="status-badge won">
-                                            <FiCheck /> ถูกรางวัล +{sub.lottery_rounds?.currency_symbol}{sub.prize_amount?.toLocaleString()}
-                                        </span>
-                                    ) : (
-                                        <span className="status-badge lost">ไม่ถูกรางวัล</span>
-                                    )
-                                ) : (
-                                    <span className="status-badge pending"><FiClock /> รอผล</span>
-                                )}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    )
-}
-
-// Profile Tab Component
-function ProfileTab({ user, profile }) {
-    const { toast } = useToast()
-    const [isEditing, setIsEditing] = useState(false)
-    const [saving, setSaving] = useState(false)
-    // Use local state for profile data that can be updated without page reload
-    const [profileData, setProfileData] = useState({
-        full_name: profile?.full_name || '',
-        phone: profile?.phone || '',
-        bank_name: profile?.bank_name || '',
-        bank_account: profile?.bank_account || '',
-        role: profile?.role || 'user'
-    })
-    const [formData, setFormData] = useState({
-        full_name: profile?.full_name || '',
-        phone: profile?.phone || '',
-        bank_name: profile?.bank_name || '',
-        bank_account: profile?.bank_account || ''
-    })
-
-    // Update local state when profile prop changes (initial load)
-    useEffect(() => {
-        if (profile) {
-            setProfileData({
-                full_name: profile.full_name || '',
-                phone: profile.phone || '',
-                bank_name: profile.bank_name || '',
-                bank_account: profile.bank_account || '',
-                role: profile.role || 'user'
-            })
-            setFormData({
-                full_name: profile.full_name || '',
-                phone: profile.phone || '',
-                bank_name: profile.bank_name || '',
-                bank_account: profile.bank_account || ''
-            })
-        }
-    }, [profile])
-
-    const handleSave = async () => {
-        setSaving(true)
-        try {
-            const { error } = await supabase
-                .from('profiles')
-                .update({
-                    full_name: formData.full_name,
-                    phone: formData.phone,
-                    bank_name: formData.bank_name,
-                    bank_account: formData.bank_account
-                })
-                .eq('id', user.id)
-
-            if (error) throw error
-
-            // Update local profile data to reflect saved changes
-            setProfileData({
-                ...profileData,
-                full_name: formData.full_name,
-                phone: formData.phone,
-                bank_name: formData.bank_name,
-                bank_account: formData.bank_account
-            })
-
-            setIsEditing(false)
-            toast.success('บันทึกข้อมูลสำเร็จ!')
-        } catch (error) {
-            console.error('Error saving profile:', error)
-            toast.error('เกิดข้อผิดพลาด: ' + error.message)
-        } finally {
-            setSaving(false)
-        }
-    }
-
-    const bankOptions = [
-        'ธนาคารกรุงเทพ',
-        'ธนาคารกสิกรไทย',
-        'ธนาคารกรุงไทย',
-        'ธนาคารไทยพาณิชย์',
-        'ธนาคารกรุงศรีอยุธยา',
-        'ธนาคารทหารไทยธนชาต',
-        'ธนาคารออมสิน',
-        'ธนาคารเพื่อการเกษตรฯ (ธกส.)',
-        'ธนาคารอาคารสงเคราะห์',
-        'ธนาคารซีไอเอ็มบี',
-        'ธนาคารยูโอบี',
-        'ธนาคารแลนด์ แอนด์ เฮ้าส์',
-        'ธนาคารเกียรตินาคินภัทร',
-        'อื่นๆ'
-    ]
-
-    return (
-        <div className="profile-section">
-            {/* User Info Card */}
-            <div className="profile-card card">
-                <div className="profile-header">
-                    <div className="profile-avatar">
-                        <FiUser />
-                    </div>
-                    <div className="profile-info">
-                        <h2>{profileData.full_name || 'ไม่ระบุชื่อ'}</h2>
-                        <p className="email">{user?.email}</p>
-                        <span className={`role-badge role-${profileData.role}`}>
-                            {profileData.role === 'dealer' ? 'เจ้ามือ' :
-                                profileData.role === 'superadmin' ? 'Admin' : 'สมาชิก'}
-                        </span>
-                    </div>
-                    {!isEditing && (
-                        <button
-                            className="btn btn-outline edit-btn"
-                            onClick={() => setIsEditing(true)}
-                        >
-                            <FiEdit2 /> แก้ไข
-                        </button>
-                    )}
-                </div>
-            </div>
-
-            {/* Profile Details */}
-            <div className="profile-details card">
-                <h3>ข้อมูลส่วนตัว</h3>
-
-                {isEditing ? (
-                    <div className="profile-form">
-                        <div className="form-group">
-                            <label className="form-label">ชื่อ-นามสกุล</label>
-                            <input
-                                type="text"
-                                className="form-input"
-                                value={formData.full_name}
-                                onChange={e => setFormData({ ...formData, full_name: e.target.value })}
-                                placeholder="ชื่อ-นามสกุล"
-                            />
-                        </div>
-                        <div className="form-group">
-                            <label className="form-label">เบอร์โทรศัพท์</label>
-                            <input
-                                type="tel"
-                                className="form-input"
-                                value={formData.phone}
-                                onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                                placeholder="0xx-xxx-xxxx"
-                            />
-                        </div>
-                    </div>
-                ) : (
-                    <div className="profile-info-list">
-                        <div className="info-row">
-                            <span className="info-label">ชื่อ-นามสกุล</span>
-                            <span className="info-value">{profileData.full_name || '-'}</span>
-                        </div>
-                        <div className="info-row">
-                            <span className="info-label">อีเมล</span>
-                            <span className="info-value">{user?.email || '-'}</span>
-                        </div>
-                        <div className="info-row">
-                            <span className="info-label">เบอร์โทรศัพท์</span>
-                            <span className="info-value">{profileData.phone || '-'}</span>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* Bank Info */}
-            <div className="profile-details card">
-                <h3>ข้อมูลธนาคาร</h3>
-
-                {isEditing ? (
-                    <div className="profile-form">
-                        <div className="form-group">
-                            <label className="form-label">ธนาคาร</label>
-                            <select
-                                className="form-input"
-                                value={formData.bank_name}
-                                onChange={e => setFormData({ ...formData, bank_name: e.target.value })}
-                            >
-                                <option value="">เลือกธนาคาร</option>
-                                {bankOptions.map(bank => (
-                                    <option key={bank} value={bank}>{bank}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div className="form-group">
-                            <label className="form-label">เลขบัญชี</label>
-                            <input
-                                type="text"
-                                className="form-input"
-                                value={formData.bank_account}
-                                onChange={e => setFormData({ ...formData, bank_account: e.target.value })}
-                                placeholder="xxx-x-xxxxx-x"
-                            />
-                        </div>
-
-                        <div className="form-actions">
-                            <button
-                                className="btn btn-secondary"
-                                onClick={() => {
-                                    setIsEditing(false)
-                                    setFormData({
-                                        full_name: profileData.full_name || '',
-                                        phone: profileData.phone || '',
-                                        bank_name: profileData.bank_name || '',
-                                        bank_account: profileData.bank_account || ''
-                                    })
-                                }}
-                            >
-                                ยกเลิก
-                            </button>
-                            <button
-                                className="btn btn-primary"
-                                onClick={handleSave}
-                                disabled={saving}
-                            >
-                                {saving ? 'กำลังบันทึก...' : <><FiSave /> บันทึก</>}
-                            </button>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="profile-info-list">
-                        <div className="info-row">
-                            <span className="info-label">ธนาคาร</span>
-                            <span className="info-value">{profileData.bank_name || '-'}</span>
-                        </div>
-                        <div className="info-row">
-                            <span className="info-label">เลขบัญชี</span>
-                            <span className="info-value">{profileData.bank_account || '-'}</span>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-        </div>
-    )
-}
-
-// QR Scanner Modal Component for User Dashboard
-function UserQRScannerModal({ onClose, onScanSuccess, toast }) {
-    const [error, setError] = useState(null)
-    const [scanner, setScanner] = useState(null)
-    const [useFrontCamera, setUseFrontCamera] = useState(false)
-    const [isScanning, setIsScanning] = useState(false)
-    const fileInputRef = useRef(null)
-    
-    const startScanner = async (facingMode = 'environment') => {
-        try {
-            // Clear existing scanner if any
-            const existingElement = document.getElementById('user-qr-reader')
-            if (existingElement) {
-                existingElement.innerHTML = ''
-            }
-            
-            const html5QrCode = new Html5Qrcode('user-qr-reader')
-            setScanner(html5QrCode)
-            setIsScanning(true)
-            
-            await html5QrCode.start(
-                { facingMode },
-                {
-                    fps: 10,
-                    qrbox: { width: 250, height: 250 },
-                },
-                (decodedText) => {
-                    html5QrCode.stop().catch(() => {})
-                    onScanSuccess(decodedText)
-                },
-                (errorMessage) => {
-                    // Ignore scan errors
-                }
-            )
-        } catch (err) {
-            console.error('Scanner error:', err)
-            setError('ไม่สามารถเปิดกล้องได้ กรุณาอนุญาตการใช้งานกล้อง')
-            setIsScanning(false)
-        }
-    }
-    
-    const stopScanner = async () => {
-        if (scanner && isScanning) {
-            try {
-                await scanner.stop()
-                setIsScanning(false)
-            } catch (err) {
-                console.error('Stop scanner error:', err)
-            }
-        }
-    }
-    
-    const toggleCamera = async () => {
-        await stopScanner()
-        const newFacingMode = !useFrontCamera
-        setUseFrontCamera(newFacingMode)
-        setTimeout(() => {
-            startScanner(newFacingMode ? 'user' : 'environment')
-        }, 300)
-    }
-    
-    const handleFileSelect = async (e) => {
-        const file = e.target.files[0]
-        if (!file) return
-        
-        try {
-            await stopScanner()
-            const html5QrCode = new Html5Qrcode('user-qr-reader')
-            const result = await html5QrCode.scanFile(file, true)
-            onScanSuccess(result)
-        } catch (err) {
-            console.error('File scan error:', err)
-            setError('ไม่พบ QR Code ในรูปภาพ')
-            // Restart scanner after failed file scan
-            setTimeout(() => {
-                startScanner(useFrontCamera ? 'user' : 'environment')
-            }, 500)
-        }
-    }
-    
-    useEffect(() => {
-        // Start with back camera by default
-        startScanner('environment')
-        
-        return () => {
-            stopScanner()
-        }
-    }, [])
-    
-    return (
-        <div className="modal-overlay" onClick={onClose} style={{ 
-            zIndex: 9999,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.95)',
-            padding: 0
-        }}>
-            {/* Close Button - Top Right Corner */}
-            <button
-                onClick={onClose}
-                style={{
-                    position: 'absolute',
-                    top: '1rem',
-                    right: '1rem',
-                    width: '44px',
-                    height: '44px',
-                    borderRadius: '50%',
-                    background: 'rgba(255, 255, 255, 0.2)',
-                    border: 'none',
-                    color: '#fff',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 10001
-                }}
-            >
-                <FiX size={24} />
-            </button>
-
-            <div onClick={e => e.stopPropagation()} style={{ 
-                width: '100%',
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '1rem'
-            }}>
-                <p style={{ 
-                    marginBottom: '1.5rem', 
-                    color: '#fff', 
-                    fontSize: '1.1rem', 
-                    textAlign: 'center',
-                    fontWeight: '500'
-                }}>
-                    สแกน QR Code ของเจ้ามือเพื่อสมัครเป็นสมาชิก
-                </p>
-                
-                {/* Scanner Container */}
-                <div style={{ 
-                    width: '100%', 
-                    maxWidth: '350px',
-                    position: 'relative'
-                }}>
-                    <div id="user-qr-reader" style={{ 
-                        width: '100%', 
-                        borderRadius: '16px', 
-                        overflow: 'hidden',
-                        background: '#000'
-                    }}></div>
-                </div>
-                
-                {/* Camera Controls */}
-                <div style={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    gap: '1rem',
-                    marginTop: '1.5rem'
-                }}>
-                    {/* Switch Camera Button */}
-                    <button
-                        onClick={toggleCamera}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '0.5rem',
-                            padding: '0.875rem 1.5rem',
-                            background: 'rgba(255, 255, 255, 0.15)',
-                            border: '1px solid rgba(255, 255, 255, 0.3)',
-                            borderRadius: '12px',
-                            color: '#fff',
-                            cursor: 'pointer',
-                            fontSize: '0.95rem',
-                            fontWeight: '500',
-                            transition: 'all 0.2s'
-                        }}
-                        title={useFrontCamera ? 'สลับเป็นกล้องหลัง' : 'สลับเป็นกล้องหน้า'}
-                    >
-                        <FiRotateCcw size={20} />
-                        {useFrontCamera ? 'กล้องหลัง' : 'กล้องหน้า'}
-                    </button>
-                    
-                    {/* Select Image Button */}
-                    <button
-                        onClick={() => fileInputRef.current?.click()}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '0.5rem',
-                            padding: '0.875rem 1.5rem',
-                            background: 'rgba(255, 255, 255, 0.15)',
-                            border: '1px solid rgba(255, 255, 255, 0.3)',
-                            borderRadius: '12px',
-                            color: '#fff',
-                            cursor: 'pointer',
-                            fontSize: '0.95rem',
-                            fontWeight: '500',
-                            transition: 'all 0.2s'
-                        }}
-                        title="เลือกรูป QR Code"
-                    >
-                        <FiImage size={20} />
-                        เลือกรูป
-                    </button>
-                    
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileSelect}
-                        style={{ display: 'none' }}
-                    />
-                </div>
-                
-                {error && (
-                    <p style={{ color: '#ef4444', marginTop: '1.5rem', textAlign: 'center', fontSize: '0.95rem' }}>
-                        {error}
-                    </p>
-                )}
-            </div>
-        </div>
-    )
-}

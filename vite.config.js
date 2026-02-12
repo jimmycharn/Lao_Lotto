@@ -7,6 +7,9 @@ export default defineConfig({
   server: {
     host: true
   },
+  esbuild: {
+    drop: ['console', 'debugger'],
+  },
   build: {
     rollupOptions: {
       output: {

@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ToastProvider } from './contexts/ToastContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import Navbar from './components/Navbar'
+import ErrorBoundary from './components/ErrorBoundary'
 import './index.css'
 
 // Lazy load pages - โหลดเฉพาะหน้าที่ใช้
@@ -120,74 +121,76 @@ function AppContent() {
     <Router>
       <Navbar />
       <main className="main-content">
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
-            <Route path="/" element={<HomeRedirect />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/invite" element={<InvitationAccept />} />
-            <Route path="/dealer-connect" element={<DealerConnect />} />
-          <Route
-            path="/profile"
-            element={
-              <ProtectedRoute requireAuth>
-                <Profile />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/buy"
-            element={
-              <ProtectedRoute requireAuth>
-                <BuyLottery />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute requireAuth>
-                <UserDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/history"
-            element={
-              <ProtectedRoute requireAuth>
-                <History />
-              </ProtectedRoute>
-            }
-          />
+        <ErrorBoundary>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/" element={<HomeRedirect />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/invite" element={<InvitationAccept />} />
+              <Route path="/dealer-connect" element={<DealerConnect />} />
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute requireAuth>
+                    <Profile />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/buy"
+                element={
+                  <ProtectedRoute requireAuth>
+                    <BuyLottery />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute requireAuth>
+                    <UserDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/history"
+                element={
+                  <ProtectedRoute requireAuth>
+                    <History />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route
-            path="/dealer"
-            element={
-              <ProtectedRoute requireAuth requireDealer>
-                <Dealer />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute requireAuth requireAdmin>
-                <Admin />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/superadmin"
-            element={
-              <ProtectedRoute requireAuth requireAdmin>
-                <SuperAdmin />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Suspense>
+              <Route
+                path="/dealer"
+                element={
+                  <ProtectedRoute requireAuth requireDealer>
+                    <Dealer />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute requireAuth requireAdmin>
+                    <Admin />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/superadmin"
+                element={
+                  <ProtectedRoute requireAuth requireAdmin>
+                    <SuperAdmin />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
       </main>
     </Router>
   )
