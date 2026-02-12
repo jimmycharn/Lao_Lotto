@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useTheme, DASHBOARDS } from '../contexts/ThemeContext'
 import { supabase } from '../lib/supabase'
+import { processTopup } from '../services/creditService'
 import { checkDealerCreditForBet, checkUpstreamDealerCredit, getDealerCreditSummary, updatePendingDeduction } from '../utils/creditCheck'
 import QRCode from 'react-qr-code'
 import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode'
@@ -654,89 +655,22 @@ export default function Dealer() {
                         return
                     }
 
-                    // Create approved topup request
-                    const { data: topupRequest, error: topupError } = await supabase
-                        .from('credit_topup_requests')
-                        .insert({
-                            dealer_id: user.id,
-                            bank_account_id: assignedBankAccount.id,
-                            amount: verifiedAmount,
-                            slip_image_url: slipImageUrl,
-                            slip_data: slipData.data,
-                            trans_ref: transRef,
-                            sender_name: slipData.data.sender?.displayName,
-                            receiver_name: slipData.data.receiver?.displayName,
-                            status: 'approved',
-                            verified_at: new Date().toISOString()
-                        })
-                        .select()
-                        .single()
-
-                    if (topupError) throw topupError
-
-                    // Record used slip
-                    await supabase.from('used_slips').insert({
-                        trans_ref: transRef,
-                        topup_request_id: topupRequest.id,
-                        dealer_id: user.id,
-                        amount: verifiedAmount
-                    })
-
-                    // Update dealer credit
-                    const { data: creditData, error: creditFetchError } = await supabase
-                        .from('dealer_credits')
-                        .select('*')
-                        .eq('dealer_id', user.id)
-                        .maybeSingle()
-
-                    console.log('Current credit data:', creditData, 'Error:', creditFetchError)
-                    console.log('Verified amount to add:', verifiedAmount)
-
-                    if (creditData) {
-                        const newBalance = (creditData.balance || 0) + verifiedAmount
-                        console.log('Updating balance from', creditData.balance, 'to', newBalance)
-
-                        const { error: updateError } = await supabase
-                            .from('dealer_credits')
-                            .update({
-                                balance: newBalance,
-                                is_blocked: false,
-                                updated_at: new Date().toISOString()
-                            })
-                            .eq('dealer_id', user.id)
-
-                        if (updateError) {
-                            console.error('Error updating credit:', updateError)
-                        } else {
-                            console.log('Credit updated successfully to:', newBalance)
-                        }
-                    } else {
-                        console.log('No existing credit, creating new record with balance:', verifiedAmount)
-                        const { error: insertError } = await supabase
-                            .from('dealer_credits')
-                            .insert({
-                                dealer_id: user.id,
-                                balance: verifiedAmount
-                            })
-
-                        if (insertError) {
-                            console.error('Error inserting credit:', insertError)
-                        }
-                    }
-
-                    // Record transaction
-                    const newBalance = (creditData?.balance || 0) + verifiedAmount
-                    const { error: transError } = await supabase.from('credit_transactions').insert({
-                        dealer_id: user.id,
-                        transaction_type: 'topup',
+                    // Use creditService to process topup
+                    const { success, error, newBalance } = await processTopup({
+                        dealerId: user.id,
+                        bankAccountId: assignedBankAccount.id,
                         amount: verifiedAmount,
-                        balance_after: newBalance,
-                        description: 'เติมเครดิตจากสลิป (อัตโนมัติ)'
+                        slipUrl: slipImageUrl,
+                        slipData: slipData.data,
+                        transRef: transRef
                     })
 
-                    if (transError) {
-                        console.error('Error recording transaction:', transError)
+                    if (!success) {
+                        console.error('Error processing topup:', error)
+                        throw error
                     }
+
+                    console.log('Credit updated successfully to:', newBalance)
 
                     toast.success(`เติมเครดิต ฿${verifiedAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} สำเร็จ!`)
                     fetchDealerCredit()
@@ -1244,14 +1178,7 @@ export default function Dealer() {
     // Redirect if not dealer or admin (after hooks)
     if (!profile) {
         return (
-            <div className="loading-screen" style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                minHeight: '100vh',
-                width: '100%'
-            }}>
+            <div className="loading-screen">
                 <div className="spinner"></div>
                 <p>กำลังโหลด...</p>
             </div>

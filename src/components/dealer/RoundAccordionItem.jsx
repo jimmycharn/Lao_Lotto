@@ -3083,42 +3083,40 @@ export default function RoundAccordionItem({
 
                                                 return (
                                                     <>
-                                                        <div className="inline-summary" style={{ marginBottom: '1rem' }}>
-                                                            <div className="summary-item">
-                                                                <span className="label">จำนวน</span>
-                                                                <span className="value">{filteredIncoming.length} รายการ</span>
+                                                        <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', background: 'var(--color-surface)', borderRadius: '8px' }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                                                <span style={{ color: 'var(--color-text-muted)', flex: 1 }}>รายการ</span>
+                                                                <span style={{ color: 'var(--color-text-muted)', flex: 1, textAlign: 'center' }}>ยอดรวม</span>
+                                                                <span style={{ color: 'var(--color-text-muted)', flex: 1, textAlign: 'right' }}>ค่าคอม</span>
                                                             </div>
-                                                            <div className="summary-item">
-                                                                <span className="label">ยอดรวม</span>
-                                                                <span className="value" style={{ color: 'var(--color-success)' }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                <span style={{ fontWeight: 600, flex: 1 }}>{filteredIncoming.length}</span>
+                                                                <span style={{ fontWeight: 600, color: 'var(--color-success)', flex: 1, textAlign: 'center' }}>
                                                                     {round.currency_symbol}{filteredIncoming.reduce((sum, s) => sum + s.amount, 0).toLocaleString()}
                                                                 </span>
-                                                            </div>
-                                                            <div className="summary-item">
-                                                                <span className="label">ค่าคอม</span>
-                                                                <span className="value" style={{ color: 'var(--color-danger)' }}>
+                                                                <span style={{ fontWeight: 600, color: 'var(--color-danger)', flex: 1, textAlign: 'right' }}>
                                                                     -{round.currency_symbol}{Object.values(inlineIncomingCommissions).reduce((sum, c) => sum + (c.totalCommission || 0), 0).toLocaleString()}
                                                                 </span>
                                                             </div>
                                                         </div>
 
                                                         {/* Bulk actions for returning transfers */}
-                                                        <div className="bulk-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-surface)', borderRadius: '8px', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                                            <label className="checkbox-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', padding: '0.75rem 1rem', background: 'var(--color-surface)', borderRadius: '8px' }}>
+                                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                                                                 <input 
                                                                     type="checkbox" 
                                                                     checked={incomingIds.length > 0 && incomingIds.every(id => selectedIncomingItems[id])} 
                                                                     onChange={() => toggleSelectAllIncoming(incomingIds)} 
                                                                     style={{ width: '18px', height: '18px', accentColor: 'var(--color-danger)' }} 
                                                                 />
-                                                                <span>เลือกทั้งหมด ({filteredIncoming.length})</span>
+                                                                <span>เลือก ({filteredIncoming.length})</span>
                                                             </label>
                                                             <button 
                                                                 className="btn btn-danger" 
                                                                 onClick={(e) => { e.stopPropagation(); handleReturnIncomingTransfers(incomingIds); }} 
                                                                 disabled={getSelectedIncomingCount(incomingIds) === 0 || returningIncoming}
                                                             >
-                                                                <FiRotateCcw /> {returningIncoming ? 'กำลังคืน...' : `คืนเลข (${getSelectedIncomingCount(incomingIds)})`}
+                                                                <FiRotateCcw /> {returningIncoming ? 'กำลังคืน...' : `คืนทั้งหมด (${getSelectedIncomingCount(incomingIds)})`}
                                                             </button>
                                                         </div>
 
@@ -3149,30 +3147,30 @@ export default function RoundAccordionItem({
                                                                 <div key={group.dealerKey} style={{ marginBottom: '1rem', border: '1px solid var(--color-border)', borderRadius: '8px', overflow: 'hidden' }}>
                                                                     {/* Dealer Header */}
                                                                     <div style={{ 
-                                                                        display: 'flex', 
-                                                                        justifyContent: 'space-between', 
-                                                                        alignItems: 'center',
                                                                         padding: '0.75rem 1rem',
                                                                         backgroundColor: 'rgba(16, 185, 129, 0.1)',
                                                                         borderBottom: '1px solid var(--color-border)'
                                                                     }}>
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                        {/* Row 1: Dealer Name */}
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                                                                             <FiSend style={{ color: 'var(--color-success)', transform: 'rotate(180deg)' }} />
                                                                             <span style={{ fontWeight: 600 }}>{group.dealerName}</span>
                                                                         </div>
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                                                            {inlineIncomingCommissions[group.dealerKey] && (
-                                                                                <div style={{ textAlign: 'right', padding: '0.25rem 0.5rem', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '4px' }}>
-                                                                                    <div style={{ fontWeight: 600, color: 'var(--color-danger)', fontSize: '0.85rem' }}>-{round.currency_symbol}{inlineIncomingCommissions[group.dealerKey].totalCommission.toLocaleString()}</div>
-                                                                                    <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>ค่าคอม</div>
-                                                                                </div>
+                                                                        {/* Row 2: Labels */}
+                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                                                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', flex: 1 }}>รายการ</span>
+                                                                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', flex: 1, textAlign: 'center' }}>ยอดรวม</span>
+                                                                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', flex: 1, textAlign: 'right' }}>ค่าคอม</span>
+                                                                        </div>
+                                                                        {/* Row 3: Values */}
+                                                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                            <span style={{ fontWeight: 600, flex: 1 }}>{group.items.length}</span>
+                                                                            <span style={{ fontWeight: 600, color: 'var(--color-success)', flex: 1, textAlign: 'center' }}>{round.currency_symbol}{group.totalAmount.toLocaleString()}</span>
+                                                                            {inlineIncomingCommissions[group.dealerKey] ? (
+                                                                                <span style={{ fontWeight: 600, color: 'var(--color-danger)', flex: 1, textAlign: 'right' }}>-{round.currency_symbol}{inlineIncomingCommissions[group.dealerKey].totalCommission.toLocaleString()}</span>
+                                                                            ) : (
+                                                                                <span style={{ fontWeight: 600, color: 'var(--color-danger)', flex: 1, textAlign: 'right' }}>-</span>
                                                                             )}
-                                                                            <span style={{ fontWeight: 600, color: 'var(--color-success)' }}>
-                                                                                {round.currency_symbol}{group.totalAmount.toLocaleString()}
-                                                                            </span>
-                                                                            <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                                                                                {group.items.length} รายการ
-                                                                            </span>
                                                                         </div>
                                                                     </div>
                                                                     {/* Items Table */}
