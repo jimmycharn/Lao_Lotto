@@ -69,6 +69,8 @@ export default function RoundAccordionItem({
     const [inlineTypeLimits, setInlineTypeLimits] = useState({})
     const [inlineNumberLimits, setInlineNumberLimits] = useState([])
     const [inlineTransfers, setInlineTransfers] = useState([])
+    const [inlineTransferCommissions, setInlineTransferCommissions] = useState({}) // { dealerId: { totalCommission, ... } }
+    const [inlineIncomingCommissions, setInlineIncomingCommissions] = useState({}) // { dealerEmail: { totalCommission, ... } }
     const [inlineLoading, setInlineLoading] = useState(false)
     const [inlineUserFilter, setInlineUserFilter] = useState('all')
     const [inlineBetTypeFilter, setInlineBetTypeFilter] = useState('all')
@@ -149,12 +151,12 @@ export default function RoundAccordionItem({
         }
     }, [user?.id])
 
-    // Fetch upstream summaries for announced rounds (needed for header stats and outgoing tab)
+    // Fetch upstream summaries for closed/announced rounds (needed for header stats and outgoing tab)
     useEffect(() => {
-        if (isAnnounced && upstreamSummaries.dealers.length === 0 && !upstreamSummaries.loading) {
+        if ((isClosed || isAnnounced) && upstreamSummaries.dealers.length === 0 && !upstreamSummaries.loading) {
             fetchUpstreamSummaries()
         }
-    }, [isAnnounced])
+    }, [isClosed, isAnnounced])
 
     async function fetchUpstreamDealers() {
         try {
@@ -383,6 +385,40 @@ export default function RoundAccordionItem({
                 dealer.isAnnounced = upstreamRound?.status === 'announced' && upstreamRound?.is_result_announced
                 dealer.currencySymbol = upstreamRound?.currency_symbol || round.currency_symbol
 
+                // Always calculate commission for transfers (not just when announced)
+                // Fetch user_settings for commission calculation
+                // Commission we receive = settings that upstream dealer set for us
+                // This is stored as: user_id = our profile id, dealer_id = upstream dealer's profile id
+                const { data: settings } = await supabase
+                    .from('user_settings')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .eq('dealer_id', dealerId)
+                    .maybeSingle()
+
+                const lotteryKey = getLotteryTypeKey(round.lottery_type)
+                
+                // Helper to get settings key for bet type
+                const getBetSettingsKey = (betType, lKey) => {
+                    if (lKey === 'lao' || lKey === 'hanoi') {
+                        const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
+                        return LAO_MAP[betType] || betType
+                    }
+                    return betType
+                }
+
+                // Calculate commission for each transfer
+                dealer.transfers.forEach(t => {
+                    const settingsKey = getBetSettingsKey(t.bet_type, lotteryKey)
+                    const betSettings = settings?.lottery_settings?.[lotteryKey]?.[settingsKey]
+                    const commissionRate = betSettings?.commission !== undefined 
+                        ? betSettings.commission 
+                        : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
+                    const commissionAmount = (t.amount || 0) * (commissionRate / 100)
+                    dealer.totalCommission += commissionAmount
+                })
+
+                // Only fetch win data if announced
                 if (dealer.isAnnounced) {
                     // Fetch submissions from the upstream round that match our target_submission_ids
                     const targetSubmissionIds = dealer.transfers
@@ -404,40 +440,6 @@ export default function RoundAccordionItem({
                                 }
                             })
                         }
-                    }
-
-                    // Fetch user_settings for commission calculation (our settings with upstream dealer)
-                    const { data: settings } = await supabase
-                        .from('user_settings')
-                        .select('*')
-                        .eq('user_id', user.id)
-                        .eq('dealer_id', dealerId)
-                        .maybeSingle()
-
-                    if (settings?.lottery_settings) {
-                        const lotteryKey = getLotteryTypeKey(round.lottery_type)
-                        // Helper to get settings key for bet type
-                        const getBetSettingsKey = (betType, lKey) => {
-                            if (lKey === 'lao' || lKey === 'hanoi') {
-                                const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
-                                return LAO_MAP[betType] || betType
-                            }
-                            return betType
-                        }
-                        dealer.transfers.forEach(t => {
-                            const settingsKey = getBetSettingsKey(t.bet_type, lotteryKey)
-                            const betSettings = settings.lottery_settings?.[lotteryKey]?.[settingsKey]
-                            if (betSettings?.commission !== undefined) {
-                                dealer.totalCommission += (t.amount || 0) * (betSettings.commission / 100)
-                            } else {
-                                dealer.totalCommission += (t.amount || 0) * ((DEFAULT_COMMISSIONS[t.bet_type] || 0) / 100)
-                            }
-                        })
-                    } else {
-                        // Use default commissions
-                        dealer.transfers.forEach(t => {
-                            dealer.totalCommission += (t.amount || 0) * ((DEFAULT_COMMISSIONS[t.bet_type] || 0) / 100)
-                        })
                     }
                 }
             }
@@ -494,14 +496,179 @@ export default function RoundAccordionItem({
             setInlineTypeLimits(limitsObj)
 
             setInlineNumberLimits(numLimitsResult.data || [])
-            console.log('Fetched bet_transfers:', transfersResult.data)
             setInlineTransfers(transfersResult.data || [])
+            
+            // Calculate commissions for transfers
+            if (transfersResult.data && transfersResult.data.length > 0) {
+                calculateInlineTransferCommissions(transfersResult.data)
+            }
+            
+            // Calculate commissions for incoming transfers (submissions with source='transfer')
+            const incomingTransfers = subsResult.data?.filter(s => s.source === 'transfer') || []
+            if (incomingTransfers.length > 0) {
+                calculateInlineIncomingCommissions(incomingTransfers)
+            }
         } catch (error) {
             clearTimeout(timeoutId)
             console.error('Error fetching inline submissions:', error)
         } finally {
             setInlineLoading(false)
         }
+    }
+
+    // Calculate commissions for inline transfers
+    async function calculateInlineTransferCommissions(transfersData) {
+        if (!user?.id || !transfersData || transfersData.length === 0) return
+
+        const lotteryKey = getLotteryTypeKey(round.lottery_type)
+        
+        // Helper to get settings key for bet type
+        const getBetSettingsKey = (betType, lKey) => {
+            if (lKey === 'lao' || lKey === 'hanoi') {
+                const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
+                return LAO_MAP[betType] || betType
+            }
+            return betType
+        }
+
+        // Group transfers by upstream_dealer_id
+        const dealerTransfers = {}
+        transfersData.forEach(t => {
+            const dealerId = t.upstream_dealer_id
+            if (!dealerId) return
+            if (!dealerTransfers[dealerId]) {
+                dealerTransfers[dealerId] = []
+            }
+            dealerTransfers[dealerId].push(t)
+        })
+
+        const commissions = {}
+
+        // For each upstream dealer, fetch their settings and calculate commission
+        for (const dealerId of Object.keys(dealerTransfers)) {
+            // Fetch user_settings: settings that upstream dealer set for us
+            const { data: settings } = await supabase
+                .from('user_settings')
+                .select('*')
+                .eq('user_id', user.id)
+                .eq('dealer_id', dealerId)
+                .maybeSingle()
+
+            let totalCommission = 0
+            const transfersList = dealerTransfers[dealerId]
+
+            transfersList.forEach(t => {
+                const settingsKey = getBetSettingsKey(t.bet_type, lotteryKey)
+                const betSettings = settings?.lottery_settings?.[lotteryKey]?.[settingsKey]
+                const commissionRate = betSettings?.commission !== undefined 
+                    ? betSettings.commission 
+                    : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
+                const commissionAmount = (t.amount || 0) * (commissionRate / 100)
+                totalCommission += commissionAmount
+            })
+
+            commissions[dealerId] = {
+                totalCommission,
+                transferCount: transfersList.length,
+                totalAmount: transfersList.reduce((sum, t) => sum + (t.amount || 0), 0)
+            }
+        }
+
+        setInlineTransferCommissions(commissions)
+    }
+
+    // Calculate commissions for incoming transfers (what we pay to downstream dealers)
+    async function calculateInlineIncomingCommissions(incomingData) {
+        if (!user?.id || !incomingData || incomingData.length === 0) return
+
+        const lotteryKey = getLotteryTypeKey(round.lottery_type)
+        
+        // Helper to get settings key for bet type
+        const getBetSettingsKey = (betType, lKey) => {
+            if (lKey === 'lao' || lKey === 'hanoi') {
+                const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
+                return LAO_MAP[betType] || betType
+            }
+            return betType
+        }
+
+        // Extract email from bill_note (format: "ตีออกจาก email")
+        const extractEmail = (billNote) => {
+            if (!billNote) return null
+            return billNote.replace(/^ตีออกจาก\s*/, '')
+        }
+
+        // Group by bill_note (which contains dealer email)
+        const dealerGroups = {}
+        incomingData.forEach(sub => {
+            const dealerKey = sub.bill_note || 'ไม่ระบุ'
+            if (!dealerGroups[dealerKey]) {
+                dealerGroups[dealerKey] = []
+            }
+            dealerGroups[dealerKey].push(sub)
+        })
+
+        const commissions = {}
+
+        // For each downstream dealer, fetch their settings and calculate commission we pay them
+        for (const billNote of Object.keys(dealerGroups)) {
+            const dealerEmail = extractEmail(billNote)
+            
+            // Find the downstream dealer's user_id and full_name from their email
+            const { data: dealerProfile } = await supabase
+                .from('profiles')
+                .select('id, full_name')
+                .eq('email', dealerEmail)
+                .maybeSingle()
+
+            if (!dealerProfile?.id) {
+                // If we can't find the dealer, use default commission
+                let totalCommission = 0
+                dealerGroups[billNote].forEach(sub => {
+                    const commissionRate = DEFAULT_COMMISSIONS[sub.bet_type] || 15
+                    totalCommission += (sub.amount || 0) * (commissionRate / 100)
+                })
+                commissions[billNote] = {
+                    totalCommission,
+                    itemCount: dealerGroups[billNote].length,
+                    totalAmount: dealerGroups[billNote].reduce((sum, s) => sum + (s.amount || 0), 0),
+                    dealerName: dealerEmail || 'ไม่ระบุ'
+                }
+                continue
+            }
+
+            // Fetch user_settings: settings that we (as dealer) set for the downstream dealer
+            const { data: settings } = await supabase
+                .from('user_settings')
+                .select('*')
+                .eq('user_id', dealerProfile.id)
+                .eq('dealer_id', user.id)
+                .maybeSingle()
+
+            let totalCommission = 0
+            const itemsList = dealerGroups[billNote]
+
+            itemsList.forEach(sub => {
+                const settingsKey = getBetSettingsKey(sub.bet_type, lotteryKey)
+                const betSettings = settings?.lottery_settings?.[lotteryKey]?.[settingsKey]
+                const commissionRate = betSettings?.commission !== undefined 
+                    ? betSettings.commission 
+                    : (DEFAULT_COMMISSIONS[sub.bet_type] || 15)
+                const commissionAmount = (sub.amount || 0) * (commissionRate / 100)
+                totalCommission += commissionAmount
+            })
+
+            commissions[billNote] = {
+                totalCommission,
+                itemCount: itemsList.length,
+                totalAmount: itemsList.reduce((sum, s) => sum + (s.amount || 0), 0),
+                dealerName: dealerProfile.full_name || dealerEmail || 'ไม่ระบุ'
+            }
+            console.log('Incoming commission for', billNote, ':', { dealerEmail, fullName: dealerProfile.full_name, dealerName: commissions[billNote].dealerName })
+        }
+
+        console.log('Final inlineIncomingCommissions:', commissions)
+        setInlineIncomingCommissions(commissions)
     }
 
     const handleHeaderClick = () => {
@@ -1536,94 +1703,168 @@ export default function RoundAccordionItem({
     return (
         <div className={`round-accordion-item ${round.lottery_type} ${isExpanded ? 'expanded' : ''}`}>
             <div className="round-accordion-header card" onClick={handleHeaderClick} style={{ cursor: 'pointer' }}>
-                <div className="round-header-left">
-                    <span className={`lottery-badge ${round.lottery_type}`}>{LOTTERY_TYPES[round.lottery_type]}</span>
-                    {getStatusBadge(round)}
-                </div>
-                <div className="round-header-center">
-                    <h3>{round.lottery_name || LOTTERY_TYPES[round.lottery_type]}</h3>
-                    <div className="round-meta">
-                        <span><FiCalendar /> {formatDate(round.open_time)} {formatTime(round.open_time)} - {formatDate(round.close_time)} {formatTime(round.close_time)}</span>
-                    </div>
-                    {/* Summary stats - responsive layout */}
-                    {!summaryData.loading && (
-                        <div className="round-summary-stats">
-                            {/* Row 1: รายการรับ - รายการ, ยอดรวม, ค่าคอม */}
-                            <div className="summary-row">
-                                <span className="stat-item">
-                                    <span className="stat-label">รายการรับ</span>
-                                    <span className="stat-value">{summaryData.submissions?.length || 0}</span>
-                                </span>
-                                <span className="stat-item">
-                                    <span className="stat-label">ยอดรวม</span>
-                                    <span className="stat-value">{round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
-                                </span>
-                                <span className="stat-item">
-                                    <span className="stat-label">ค่าคอม</span>
-                                    <span className="stat-value warning">{round.currency_symbol}{Math.round(grandTotalCommission).toLocaleString()}</span>
-                                </span>
+                {/* New Layout for Closed/Announced Rounds */}
+                {(isClosed || isAnnounced) && !isOpen ? (
+                    <div className="closed-round-layout">
+                        {/* Top Row: Logo, Name, Status, Actions, Chevron */}
+                        <div className="closed-round-top">
+                            <div className="closed-round-header-row">
+                                <span className={`lottery-badge ${round.lottery_type}`}>{LOTTERY_TYPES[round.lottery_type]}</span>
+                                <h3 className="lottery-title">{round.lottery_name || LOTTERY_TYPES[round.lottery_type]}</h3>
+                                {getStatusBadge(round)}
+                            </div>
+                            <div className="closed-round-meta">
+                                <FiCalendar /> {formatDate(round.open_time)} {formatTime(round.open_time)} - {formatDate(round.close_time)} {formatTime(round.close_time)}
+                            </div>
+                            <div className="closed-round-actions-row">
+                                <div className="action-buttons-left">
+                                    <button className="icon-btn-sm" onClick={(e) => { e.stopPropagation(); onEditRound(); }} title="แก้ไข"><FiEdit2 /></button>
+                                    <button className="icon-btn-sm warning" onClick={(e) => { e.stopPropagation(); onShowNumberLimits(); }} title="เลขอั้น"><FiAlertTriangle /></button>
+                                    <button className="icon-btn-sm danger" onClick={(e) => { e.stopPropagation(); onDeleteRound(); }} title="ลบ"><FiTrash2 /></button>
+                                    <button className="icon-btn-sm" onClick={(e) => { e.stopPropagation(); fetchSummaryData(); }} title="รีเฟรช"><FiRefreshCw /></button>
+                                </div>
+                                <svg className={`chevron ${isExpanded ? 'rotated' : ''}`} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </div>
+                        </div>
+                        
+                        {/* Stats Section */}
+                        {!summaryData.loading && (
+                            <div className="closed-round-stats">
+                                {/* ยอดรับ Row */}
+                                <div className="stats-row incoming-stats">
+                                    <div className="stats-section">
+                                        <span className="section-label">ยอดรับ</span>
+                                        <div className="stats-items">
+                                            <span className="stat-box">
+                                                <span className="stat-label">รายการ</span>
+                                                <span className="stat-value">{summaryData.submissions?.length || 0}</span>
+                                            </span>
+                                            <span className="stat-box">
+                                                <span className="stat-label">ยอดรวม</span>
+                                                <span className="stat-value">{round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
+                                            </span>
+                                            <span className="stat-box">
+                                                <span className="stat-label">ค่าคอม</span>
+                                                <span className="stat-value warning">{round.currency_symbol}{Math.round(grandTotalCommission).toLocaleString()}</span>
+                                            </span>
+                                            {isAnnounced && (
+                                                <>
+                                                    <span className="stat-box">
+                                                        <span className="stat-label">จ่าย</span>
+                                                        <span className="stat-value danger">{round.currency_symbol}{grandTotalWin.toLocaleString()}</span>
+                                                    </span>
+                                                    <span className="stat-box">
+                                                        <span className="stat-label">กำไร</span>
+                                                        <span className={`stat-value ${dealerProfit >= 0 ? 'success' : 'danger'}`}>
+                                                            {dealerProfit >= 0 ? '+' : '-'}{round.currency_symbol}{Math.abs(Math.round(dealerProfit)).toLocaleString()}
+                                                        </span>
+                                                    </span>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                {/* ยอดส่ง Row - only show if there are outgoing transfers */}
+                                {isAnnounced && outgoingTicketCount > 0 && (
+                                    <div className="stats-row outgoing-stats">
+                                        <div className="stats-section">
+                                            <span className="section-label">ยอดส่ง</span>
+                                            <div className="stats-items">
+                                                <span className="stat-box">
+                                                    <span className="stat-label">รายการ</span>
+                                                    <span className="stat-value">{outgoingTicketCount}</span>
+                                                </span>
+                                                <span className="stat-box">
+                                                    <span className="stat-label">ยอดรวม</span>
+                                                    <span className="stat-value danger">-{round.currency_symbol}{outgoingTotalBet.toLocaleString()}</span>
+                                                </span>
+                                                <span className="stat-box">
+                                                    <span className="stat-label">ค่าคอม</span>
+                                                    <span className="stat-value success">+{round.currency_symbol}{Math.round(outgoingTotalCommission).toLocaleString()}</span>
+                                                </span>
+                                                <span className="stat-box">
+                                                    <span className="stat-label">รับ</span>
+                                                    <span className={`stat-value ${outgoingTotalWin > 0 ? 'success' : ''}`}>{outgoingTotalWin > 0 ? '+' : ''}{round.currency_symbol}{outgoingTotalWin.toLocaleString()}</span>
+                                                </span>
+                                                <span className="stat-box">
+                                                    <span className="stat-label">กำไร</span>
+                                                    <span className={`stat-value ${outgoingProfit >= 0 ? 'success' : 'danger'}`}>
+                                                        {outgoingProfit >= 0 ? '+' : '-'}{round.currency_symbol}{Math.abs(Math.round(outgoingProfit)).toLocaleString()}
+                                                    </span>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                {/* กำไรรวม Row */}
                                 {isAnnounced && (
-                                    <>
-                                        <span className="stat-item">
-                                            <span className="stat-label">จ่าย</span>
-                                            <span className="stat-value danger">{round.currency_symbol}{grandTotalWin.toLocaleString()}</span>
-                                        </span>
-                                        <span className={`stat-item ${dealerProfit >= 0 ? 'profit-positive' : 'profit-negative'}`}>
-                                            <span className="stat-label">กำไร</span>
-                                            <span className="stat-value">{dealerProfit >= 0 ? '+' : '-'}{round.currency_symbol}{Math.abs(Math.round(dealerProfit)).toLocaleString()}</span>
-                                        </span>
-                                    </>
+                                    <div className="stats-row total-stats">
+                                        <div className="total-profit-display">
+                                            <span className="total-label">กำไรรวม</span>
+                                            <span className={`total-value ${totalCombinedProfit >= 0 ? 'profit-positive' : 'profit-negative'}`}>
+                                                {totalCombinedProfit >= 0 ? '+' : '-'}{round.currency_symbol}{Math.abs(Math.round(totalCombinedProfit)).toLocaleString()}
+                                            </span>
+                                        </div>
+                                    </div>
                                 )}
                             </div>
-                            {/* Row 2: รายการส่ง (ตีออก) - only show if there are outgoing transfers */}
-                            {isAnnounced && outgoingTicketCount > 0 && (
-                                <div className="summary-row outgoing-row">
-                                    <span className="stat-item">
-                                        <span className="stat-label">รายการส่ง</span>
-                                        <span className="stat-value">{outgoingTicketCount}</span>
-                                    </span>
-                                    <span className="stat-item">
-                                        <span className="stat-label">ยอดรวม</span>
-                                        <span className="stat-value">-{round.currency_symbol}{outgoingTotalBet.toLocaleString()}</span>
-                                    </span>
-                                    <span className="stat-item">
-                                        <span className="stat-label">ค่าคอม</span>
-                                        <span className="stat-value success">+{round.currency_symbol}{Math.round(outgoingTotalCommission).toLocaleString()}</span>
-                                    </span>
-                                    <span className="stat-item">
-                                        <span className="stat-label">รับ</span>
-                                        <span className="stat-value success">{round.currency_symbol}{outgoingTotalWin.toLocaleString()}</span>
-                                    </span>
-                                    <span className={`stat-item ${outgoingProfit >= 0 ? 'profit-positive' : 'profit-negative'}`}>
-                                        <span className="stat-label">กำไร</span>
-                                        <span className="stat-value">{outgoingProfit >= 0 ? '+' : '-'}{round.currency_symbol}{Math.abs(Math.round(outgoingProfit)).toLocaleString()}</span>
-                                    </span>
-                                </div>
-                            )}
-                            {/* Row 3: กำไรรวม - only show if there are outgoing transfers */}
-                            {isAnnounced && outgoingTicketCount > 0 && (
-                                <div className="summary-row total-row">
-                                    <span className={`stat-item total-profit ${totalCombinedProfit >= 0 ? 'profit-positive' : 'profit-negative'}`}>
-                                        <span className="stat-label">กำไรรวม</span>
-                                        <span className="stat-value">{totalCombinedProfit >= 0 ? '+' : '-'}{round.currency_symbol}{Math.abs(Math.round(totalCombinedProfit)).toLocaleString()}</span>
-                                    </span>
+                        )}
+                        {summaryData.loading && (
+                            <div className="stats-loading">
+                                <div className="spinner-sm"></div>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    /* Original Layout for Open Rounds */
+                    <>
+                        <div className="round-header-left">
+                            <span className={`lottery-badge ${round.lottery_type}`}>{LOTTERY_TYPES[round.lottery_type]}</span>
+                            {getStatusBadge(round)}
+                        </div>
+                        <div className="round-header-center">
+                            <h3>{round.lottery_name || LOTTERY_TYPES[round.lottery_type]}</h3>
+                            <div className="round-meta">
+                                <span><FiCalendar /> {formatDate(round.open_time)} {formatTime(round.open_time)} - {formatDate(round.close_time)} {formatTime(round.close_time)}</span>
+                            </div>
+                            {/* Summary stats for open rounds */}
+                            {!summaryData.loading && (
+                                <div className="round-summary-stats">
+                                    <div className="summary-row">
+                                        <span className="stat-item">
+                                            <span className="stat-label">รายการรับ</span>
+                                            <span className="stat-value">{summaryData.submissions?.length || 0}</span>
+                                        </span>
+                                        <span className="stat-item">
+                                            <span className="stat-label">ยอดรวม</span>
+                                            <span className="stat-value">{round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
+                                        </span>
+                                        <span className="stat-item">
+                                            <span className="stat-label">ค่าคอม</span>
+                                            <span className="stat-value warning">{round.currency_symbol}{Math.round(grandTotalCommission).toLocaleString()}</span>
+                                        </span>
+                                    </div>
                                 </div>
                             )}
                         </div>
-                    )}
-                </div>
-                <div className="round-header-right">
-                    <div className="round-actions">
-                        <button className="icon-btn" onClick={(e) => { e.stopPropagation(); onEditRound(); }} title="แก้ไขงวด"><FiEdit2 /></button>
-                        {round.status === 'open' && <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onCloseRound(); }} title="ปิดงวด"><FiLock /></button>}
-                        <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onShowNumberLimits(); }} title="ตั้งค่าเลขอั้น"><FiAlertTriangle /></button>
-                        <button className="icon-btn danger" onClick={(e) => { e.stopPropagation(); onDeleteRound(); }} title="ลบ"><FiTrash2 /></button>
-                        <button className="icon-btn" onClick={(e) => { e.stopPropagation(); fetchSummaryData(); }} title="รีเฟรช"><FiRefreshCw /></button>
-                    </div>
-                    <svg className={`chevron ${isExpanded ? 'rotated' : ''}`} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="6 9 12 15 18 9"></polyline>
-                    </svg>
-                </div>
+                        <div className="round-header-right">
+                            <div className="round-actions">
+                                <button className="icon-btn" onClick={(e) => { e.stopPropagation(); onEditRound(); }} title="แก้ไขงวด"><FiEdit2 /></button>
+                                {round.status === 'open' && <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onCloseRound(); }} title="ปิดงวด"><FiLock /></button>}
+                                <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onShowNumberLimits(); }} title="ตั้งค่าเลขอั้น"><FiAlertTriangle /></button>
+                                <button className="icon-btn danger" onClick={(e) => { e.stopPropagation(); onDeleteRound(); }} title="ลบ"><FiTrash2 /></button>
+                                <button className="icon-btn" onClick={(e) => { e.stopPropagation(); fetchSummaryData(); }} title="รีเฟรช"><FiRefreshCw /></button>
+                            </div>
+                            <svg className={`chevron ${isExpanded ? 'rotated' : ''}`} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </div>
+                    </>
+                )}
             </div>
 
             {isExpanded && (
@@ -2853,6 +3094,12 @@ export default function RoundAccordionItem({
                                                                     {round.currency_symbol}{filteredIncoming.reduce((sum, s) => sum + s.amount, 0).toLocaleString()}
                                                                 </span>
                                                             </div>
+                                                            <div className="summary-item">
+                                                                <span className="label">ค่าคอม</span>
+                                                                <span className="value" style={{ color: 'var(--color-danger)' }}>
+                                                                    -{round.currency_symbol}{Object.values(inlineIncomingCommissions).reduce((sum, c) => sum + (c.totalCommission || 0), 0).toLocaleString()}
+                                                                </span>
+                                                            </div>
                                                         </div>
 
                                                         {/* Bulk actions for returning transfers */}
@@ -2875,66 +3122,114 @@ export default function RoundAccordionItem({
                                                             </button>
                                                         </div>
 
-                                                        <div className="inline-table-wrap">
-                                                            <table className="inline-table">
-                                                                <thead>
-                                                                    <tr>
-                                                                        <th style={{ width: '40px' }}></th>
-                                                                        <th>เลข</th>
-                                                                        <th>จำนวน</th>
-                                                                        <th>จาก</th>
-                                                                        <th>เวลา</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    {(() => {
-                                                                        const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
-                                                                        const setPrice = round?.set_prices?.['4_top'] || 120
+                                                        {/* Group incoming by source dealer (bill_note contains dealer info) */}
+                                                        {(() => {
+                                                            const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
+                                                            const setPrice = round?.set_prices?.['4_top'] || 120
+                                                            
+                                                            // Group by bill_note (which contains dealer email/name)
+                                                            const groupedByDealer = {}
+                                                            filteredIncoming.forEach(sub => {
+                                                                const dealerKey = sub.bill_note || 'ไม่ระบุ'
+                                                                // Get dealer name from inlineIncomingCommissions (fetched from profiles.full_name)
+                                                                const dealerDisplayName = inlineIncomingCommissions[dealerKey]?.dealerName || 'ไม่ระบุ'
+                                                                if (!groupedByDealer[dealerKey]) {
+                                                                    groupedByDealer[dealerKey] = {
+                                                                        dealerName: dealerDisplayName,
+                                                                        dealerKey: dealerKey,
+                                                                        items: [],
+                                                                        totalAmount: 0
+                                                                    }
+                                                                }
+                                                                groupedByDealer[dealerKey].items.push(sub)
+                                                                groupedByDealer[dealerKey].totalAmount += sub.amount || 0
+                                                            })
 
-                                                                        return filteredIncoming.map(sub => {
-                                                                            const isSelected = selectedIncomingItems[sub.id]
-                                                                            const isSet4Digit = sub.bet_type === '4_set' || sub.bet_type === '4_top'
-                                                                            const setCount = isSetBasedLottery && isSet4Digit ? Math.ceil(sub.amount / setPrice) : 0
-
-                                                                            return (
-                                                                                <tr 
-                                                                                    key={sub.id} 
-                                                                                    onClick={() => toggleIncomingItem(sub.id)}
-                                                                                    style={{ 
-                                                                                        cursor: 'pointer', 
-                                                                                        background: isSelected ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
-                                                                                        transition: 'background 0.2s ease'
-                                                                                    }}
-                                                                                >
-                                                                                    <td style={{ textAlign: 'center' }}>
-                                                                                        <input 
-                                                                                            type="checkbox" 
-                                                                                            checked={isSelected || false} 
-                                                                                            onChange={() => {}} 
-                                                                                            style={{ width: '16px', height: '16px', accentColor: 'var(--color-danger)' }} 
-                                                                                        />
-                                                                                    </td>
-                                                                                    <td className="number-cell">
-                                                                                        <div className="number-value">{sub.numbers}</div>
-                                                                                        <div className="type-sub-label">{BET_TYPES_BY_LOTTERY[round.lottery_type]?.[sub.bet_type]?.label || BET_TYPES[sub.bet_type] || sub.bet_type}</div>
-                                                                                    </td>
-                                                                                    <td>
-                                                                                        {round.currency_symbol}{sub.amount.toLocaleString()}
-                                                                                        {isSetBasedLottery && isSet4Digit && setCount > 0 && (
-                                                                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>({setCount} ชุด)</div>
-                                                                                        )}
-                                                                                    </td>
-                                                                                    <td className="source-cell" style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                                                                                        {sub.bill_note || 'ไม่ระบุ'}
-                                                                                    </td>
-                                                                                    <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>
+                                                            return Object.values(groupedByDealer).map(group => (
+                                                                <div key={group.dealerKey} style={{ marginBottom: '1rem', border: '1px solid var(--color-border)', borderRadius: '8px', overflow: 'hidden' }}>
+                                                                    {/* Dealer Header */}
+                                                                    <div style={{ 
+                                                                        display: 'flex', 
+                                                                        justifyContent: 'space-between', 
+                                                                        alignItems: 'center',
+                                                                        padding: '0.75rem 1rem',
+                                                                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                                                        borderBottom: '1px solid var(--color-border)'
+                                                                    }}>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                            <FiSend style={{ color: 'var(--color-success)', transform: 'rotate(180deg)' }} />
+                                                                            <span style={{ fontWeight: 600 }}>{group.dealerName}</span>
+                                                                        </div>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                                            {inlineIncomingCommissions[group.dealerKey] && (
+                                                                                <div style={{ textAlign: 'right', padding: '0.25rem 0.5rem', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '4px' }}>
+                                                                                    <div style={{ fontWeight: 600, color: 'var(--color-danger)', fontSize: '0.85rem' }}>-{round.currency_symbol}{inlineIncomingCommissions[group.dealerKey].totalCommission.toLocaleString()}</div>
+                                                                                    <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>ค่าคอม</div>
+                                                                                </div>
+                                                                            )}
+                                                                            <span style={{ fontWeight: 600, color: 'var(--color-success)' }}>
+                                                                                {round.currency_symbol}{group.totalAmount.toLocaleString()}
+                                                                            </span>
+                                                                            <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                                                {group.items.length} รายการ
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                    {/* Items Table */}
+                                                                    <div className="inline-table-wrap">
+                                                                        <table className="inline-table">
+                                                                            <thead>
+                                                                                <tr>
+                                                                                    <th style={{ width: '40px' }}></th>
+                                                                                    <th>เลข</th>
+                                                                                    <th>จำนวน</th>
+                                                                                    <th>เวลา</th>
                                                                                 </tr>
-                                                                            )
-                                                                        })
-                                                                    })()}
-                                                                </tbody>
-                                                            </table>
-                                                        </div>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                {group.items.map(sub => {
+                                                                                    const isSelected = selectedIncomingItems[sub.id]
+                                                                                    const isSet4Digit = sub.bet_type === '4_set' || sub.bet_type === '4_top'
+                                                                                    const setCount = isSetBasedLottery && isSet4Digit ? Math.ceil(sub.amount / setPrice) : 0
+
+                                                                                    return (
+                                                                                        <tr 
+                                                                                            key={sub.id} 
+                                                                                            onClick={() => toggleIncomingItem(sub.id)}
+                                                                                            style={{ 
+                                                                                                cursor: 'pointer', 
+                                                                                                background: isSelected ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
+                                                                                                transition: 'background 0.2s ease'
+                                                                                            }}
+                                                                                        >
+                                                                                            <td style={{ textAlign: 'center' }}>
+                                                                                                <input 
+                                                                                                    type="checkbox" 
+                                                                                                    checked={isSelected || false} 
+                                                                                                    onChange={() => {}} 
+                                                                                                    style={{ width: '16px', height: '16px', accentColor: 'var(--color-danger)' }} 
+                                                                                                />
+                                                                                            </td>
+                                                                                            <td className="number-cell">
+                                                                                                <div className="number-value">{sub.numbers}</div>
+                                                                                                <div className="type-sub-label">{BET_TYPES_BY_LOTTERY[round.lottery_type]?.[sub.bet_type]?.label || BET_TYPES[sub.bet_type] || sub.bet_type}</div>
+                                                                                            </td>
+                                                                                            <td>
+                                                                                                {round.currency_symbol}{sub.amount.toLocaleString()}
+                                                                                                {isSetBasedLottery && isSet4Digit && setCount > 0 && (
+                                                                                                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>({setCount} ชุด)</div>
+                                                                                                )}
+                                                                                            </td>
+                                                                                            <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>
+                                                                                        </tr>
+                                                                                    )
+                                                                                })}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                </div>
+                                                            ))
+                                                        })()}
                                                     </>
                                                 )
                                             })()}
@@ -3182,11 +3477,15 @@ export default function RoundAccordionItem({
                                                     const batchesWithReturns = batchList.filter(b => (b.returnedItems?.length || 0) > 0)
                                                     const returnedItems = batchesWithReturns.flatMap(b => b.returnedItems || [])
 
+                                                    // Calculate total commission
+                                                    const totalCommission = Object.values(inlineTransferCommissions).reduce((sum, c) => sum + (c.totalCommission || 0), 0)
+
                                                     return (
                                                         <>
                                                             <div className="inline-summary" style={{ marginBottom: '1rem' }}>
                                                                 <div className="summary-item"><span className="label">จำนวนครั้ง</span><span className="value">{batchList.length} ครั้ง</span></div>
                                                                 <div className="summary-item"><span className="label">รวมทั้งหมด</span><span className="value">{round.currency_symbol}{grandTotal.toLocaleString()}</span></div>
+                                                                <div className="summary-item"><span className="label">ค่าคอมรวม</span><span className="value" style={{ color: 'var(--color-success)' }}>+{round.currency_symbol}{totalCommission.toLocaleString()}</span></div>
                                                             </div>
 
                                                             {revertableBatches.length > 0 && (
@@ -3242,6 +3541,9 @@ export default function RoundAccordionItem({
                                                                     const allReturned = activeCount === 0 && hasReturned
                                                                     const partialReturned = hasReturned && activeCount > 0
                                                                     const canRevert = !batch.is_linked && !allReturned
+                                                                    // Get commission for this batch's dealer
+                                                                    const batchDealerId = batch.items[0]?.upstream_dealer_id
+                                                                    const batchCommission = batchDealerId ? inlineTransferCommissions[batchDealerId]?.totalCommission || 0 : 0
                                                                     return (
                                                                         <div key={batch.id} onClick={() => canRevert && toggleTransferBatch(batch.id)} style={{ background: allReturned ? 'rgba(239, 68, 68, 0.05)' : isSelected ? 'rgba(239, 68, 68, 0.1)' : 'var(--color-surface)', border: allReturned ? '2px dashed var(--color-danger)' : partialReturned ? '2px solid var(--color-warning)' : isSelected ? '2px solid var(--color-danger)' : '1px solid var(--color-border)', borderRadius: '8px', overflow: 'hidden', cursor: canRevert ? 'pointer' : 'default', transition: 'all 0.2s ease', opacity: allReturned ? 0.7 : batch.is_linked ? 0.85 : 1 }}>
                                                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', background: allReturned ? 'rgba(239, 68, 68, 0.15)' : partialReturned ? 'rgba(255, 193, 7, 0.15)' : isSelected ? 'rgba(239, 68, 68, 0.15)' : batch.is_linked ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255, 193, 7, 0.1)', borderBottom: '1px solid var(--color-border)' }}>
@@ -3269,6 +3571,12 @@ export default function RoundAccordionItem({
                                                                                     </div>
                                                                                 </div>
                                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                                                    {batchCommission > 0 && (
+                                                                                        <div style={{ textAlign: 'right', padding: '0.25rem 0.5rem', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '4px' }}>
+                                                                                            <div style={{ fontWeight: 600, color: 'var(--color-success)', fontSize: '0.85rem' }}>+{round.currency_symbol}{batchCommission.toLocaleString()}</div>
+                                                                                            <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>ค่าคอม</div>
+                                                                                        </div>
+                                                                                    )}
                                                                                     <div style={{ textAlign: 'right' }}>
                                                                                         <div style={{ fontWeight: 600, color: allReturned ? 'var(--color-danger)' : 'var(--color-warning)' }}>{round.currency_symbol}{batch.totalAmount.toLocaleString()}</div>
                                                                                         <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{batch.items.length} รายการ</div>

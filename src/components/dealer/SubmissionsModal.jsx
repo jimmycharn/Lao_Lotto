@@ -20,7 +20,9 @@ import {
 } from 'react-icons/fi'
 import {
     BET_TYPES,
-    generateBatchId
+    generateBatchId,
+    DEFAULT_COMMISSIONS,
+    getLotteryTypeKey
 } from '../../constants/lotteryTypes'
 import '../../pages/Dealer.css'
 import '../../pages/SettingsTabs.css'
@@ -34,6 +36,7 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
     const [typeLimits, setTypeLimits] = useState({})
     const [numberLimits, setNumberLimits] = useState([])
     const [transfers, setTransfers] = useState([])
+    const [transferCommissions, setTransferCommissions] = useState({}) // { dealerId: { totalCommission, settings } }
     const [loading, setLoading] = useState(true)
     const [selectedUser, setSelectedUser] = useState('all')
     const [betTypeFilter, setBetTypeFilter] = useState('all')
@@ -173,11 +176,77 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
 
             setTransfers(transfersData || [])
 
+            // Calculate commissions for transfers
+            if (transfersData && transfersData.length > 0) {
+                await calculateTransferCommissions(transfersData)
+            }
+
         } catch (error) {
             console.error('Error fetching data:', error)
         } finally {
             setLoading(false)
         }
+    }
+
+    // Calculate commissions for transfers based on user_settings from upstream dealers
+    async function calculateTransferCommissions(transfersData) {
+        if (!user?.id || !transfersData || transfersData.length === 0) return
+
+        const lotteryKey = getLotteryTypeKey(round.lottery_type)
+        
+        // Helper to get settings key for bet type
+        const getBetSettingsKey = (betType, lKey) => {
+            if (lKey === 'lao' || lKey === 'hanoi') {
+                const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
+                return LAO_MAP[betType] || betType
+            }
+            return betType
+        }
+
+        // Group transfers by upstream_dealer_id
+        const dealerTransfers = {}
+        transfersData.forEach(t => {
+            const dealerId = t.upstream_dealer_id
+            if (!dealerId) return
+            if (!dealerTransfers[dealerId]) {
+                dealerTransfers[dealerId] = []
+            }
+            dealerTransfers[dealerId].push(t)
+        })
+
+        const commissions = {}
+
+        // For each upstream dealer, fetch their settings and calculate commission
+        for (const dealerId of Object.keys(dealerTransfers)) {
+            // Fetch user_settings: settings that upstream dealer set for us
+            const { data: settings } = await supabase
+                .from('user_settings')
+                .select('*')
+                .eq('user_id', user.id)
+                .eq('dealer_id', dealerId)
+                .maybeSingle()
+
+            let totalCommission = 0
+            const transfersList = dealerTransfers[dealerId]
+
+            transfersList.forEach(t => {
+                const settingsKey = getBetSettingsKey(t.bet_type, lotteryKey)
+                const betSettings = settings?.lottery_settings?.[lotteryKey]?.[settingsKey]
+                const commissionRate = betSettings?.commission !== undefined 
+                    ? betSettings.commission 
+                    : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
+                const commissionAmount = (t.amount || 0) * (commissionRate / 100)
+                totalCommission += commissionAmount
+            })
+
+            commissions[dealerId] = {
+                totalCommission,
+                transferCount: transfersList.length,
+                totalAmount: transfersList.reduce((sum, t) => sum + (t.amount || 0), 0)
+            }
+        }
+
+        setTransferCommissions(commissions)
     }
 
     // Calculate excess items
@@ -1356,6 +1425,12 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
                                             </span>
                                             <span className="summary-label">ตีออกรวม</span>
                                         </div>
+                                        <div className="summary-card" style={{ backgroundColor: 'var(--color-success-bg, rgba(34, 197, 94, 0.1))' }}>
+                                            <span className="summary-value" style={{ color: 'var(--color-success)' }}>
+                                                +{round.currency_symbol}{Object.values(transferCommissions).reduce((sum, c) => sum + (c.totalCommission || 0), 0).toLocaleString()}
+                                            </span>
+                                            <span className="summary-label">ค่าคอมรวม</span>
+                                        </div>
                                         {selectedBatch !== 'all' && (
                                             <div className="summary-card highlight">
                                                 <span className="summary-value">
@@ -1426,46 +1501,96 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
                                         <div className="empty-state">
                                             <p>ยังไม่มีรายการตีออก</p>
                                         </div>
-                                    ) : (
-                                        <div className="table-wrap">
-                                            <table className="data-table">
-                                                <thead>
-                                                    <tr>
-                                                        <th>ประเภท</th>
-                                                        <th>เลข</th>
-                                                        <th>จำนวน</th>
-                                                        <th>ตีออกให้</th>
-                                                        <th>เวลา</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {filteredTransfers.map(transfer => (
-                                                        <tr key={transfer.id}>
-                                                            <td>
-                                                                <span className="type-badge">{BET_TYPES[transfer.bet_type]}</span>
-                                                            </td>
-                                                            <td className="number-cell">{transfer.numbers}</td>
-                                                            <td>{round.currency_symbol}{transfer.amount?.toLocaleString()}</td>
-                                                            <td>
-                                                                <div className="dealer-info">
-                                                                    <span>{transfer.target_dealer_name}</span>
-                                                                    {transfer.target_dealer_contact && (
-                                                                        <small>{transfer.target_dealer_contact}</small>
-                                                                    )}
-                                                                </div>
-                                                            </td>
-                                                            <td className="time-cell">
-                                                                {new Date(transfer.created_at).toLocaleTimeString('th-TH', {
-                                                                    hour: '2-digit',
-                                                                    minute: '2-digit'
-                                                                })}
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )}
+                                    ) : (() => {
+                                        // Group transfers by upstream_dealer_id
+                                        const groupedByDealer = {}
+                                        filteredTransfers.forEach(t => {
+                                            const dealerId = t.upstream_dealer_id || 'manual'
+                                            if (!groupedByDealer[dealerId]) {
+                                                groupedByDealer[dealerId] = {
+                                                    dealerId,
+                                                    dealerName: t.target_dealer_name || 'ไม่ระบุชื่อ',
+                                                    dealerContact: t.target_dealer_contact || '',
+                                                    transfers: [],
+                                                    totalAmount: 0
+                                                }
+                                            }
+                                            groupedByDealer[dealerId].transfers.push(t)
+                                            groupedByDealer[dealerId].totalAmount += t.amount || 0
+                                        })
+
+                                        return Object.values(groupedByDealer).map(group => (
+                                            <div key={group.dealerId} className="dealer-transfer-group" style={{ marginBottom: '1.5rem' }}>
+                                                {/* Dealer Header with Commission */}
+                                                <div className="dealer-group-header" style={{ 
+                                                    display: 'flex', 
+                                                    justifyContent: 'space-between', 
+                                                    alignItems: 'center',
+                                                    padding: '0.75rem 1rem',
+                                                    backgroundColor: 'var(--color-bg-secondary)',
+                                                    borderRadius: '0.5rem 0.5rem 0 0',
+                                                    borderBottom: '1px solid var(--color-border)'
+                                                }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                        <FiCheck style={{ color: 'var(--color-success)' }} />
+                                                        <span style={{ fontWeight: 600 }}>{group.dealerName}</span>
+                                                        {group.dealerContact && (
+                                                            <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                                {group.dealerContact}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                        {transferCommissions[group.dealerId] && (
+                                                            <span style={{ 
+                                                                color: 'var(--color-success)', 
+                                                                fontWeight: 600,
+                                                                fontSize: '0.9rem'
+                                                            }}>
+                                                                ค่าคอม +{round.currency_symbol}{transferCommissions[group.dealerId].totalCommission.toLocaleString()}
+                                                            </span>
+                                                        )}
+                                                        <span style={{ fontWeight: 600 }}>
+                                                            {round.currency_symbol}{group.totalAmount.toLocaleString()}
+                                                        </span>
+                                                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                            {group.transfers.length} รายการ
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                {/* Transfers Table */}
+                                                <div className="table-wrap" style={{ borderRadius: '0 0 0.5rem 0.5rem' }}>
+                                                    <table className="data-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>ประเภท</th>
+                                                                <th>เลข</th>
+                                                                <th>จำนวน</th>
+                                                                <th>เวลา</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {group.transfers.map(transfer => (
+                                                                <tr key={transfer.id}>
+                                                                    <td>
+                                                                        <span className="type-badge">{BET_TYPES[transfer.bet_type]}</span>
+                                                                    </td>
+                                                                    <td className="number-cell">{transfer.numbers}</td>
+                                                                    <td>{round.currency_symbol}{transfer.amount?.toLocaleString()}</td>
+                                                                    <td className="time-cell">
+                                                                        {new Date(transfer.created_at).toLocaleTimeString('th-TH', {
+                                                                            hour: '2-digit',
+                                                                            minute: '2-digit'
+                                                                        })}
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        ))
+                                    })()}
                                 </>
                             )}
                         </>
