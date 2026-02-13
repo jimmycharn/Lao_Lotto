@@ -54,8 +54,15 @@ export function ThemeProvider({ children }) {
     [DASHBOARDS.GLOBAL]: getStoredTheme(DASHBOARDS.GLOBAL)
   }))
 
-  // Current active dashboard
-  const [activeDashboard, setActiveDashboard] = useState(DASHBOARDS.GLOBAL)
+  // Detect initial dashboard from URL path (same logic as index.html inline script)
+  const [activeDashboard, setActiveDashboard] = useState(() => {
+    const path = window.location.pathname
+    if (path.includes('/dealer')) return DASHBOARDS.DEALER
+    if (path.includes('/superadmin')) return DASHBOARDS.SUPERADMIN
+    if (path.includes('/user') || path === '/') return DASHBOARDS.USER
+    if (path.includes('/admin')) return DASHBOARDS.ADMIN
+    return DASHBOARDS.GLOBAL
+  })
 
   // Get current theme based on active dashboard
   const currentTheme = themes[activeDashboard] || THEMES.DARK

@@ -78,7 +78,7 @@ import UpstreamDealerSettings from '../components/dealer/UpstreamDealerSettings'
 import MemberSettings from '../components/dealer/MemberSettings'
 
 export default function Dealer() {
-    const { user, profile, isDealer, isSuperAdmin, isAccountSuspended } = useAuth()
+    const { user, profile, loading: authLoading, isDealer, isSuperAdmin, isAccountSuspended } = useAuth()
     const { toast } = useToast()
     const { setActiveDashboard, getTheme } = useTheme()
     const [searchParams] = useSearchParams()
@@ -219,6 +219,7 @@ export default function Dealer() {
         if (!profile?.id) return
 
         if (user?.id && (isDealer || isSuperAdmin)) {
+            fetchDealerCredit() // Load credit first (parallel with fetchData)
             fetchData()
         } else {
             // User is logged in but not a dealer - stop loading
@@ -435,8 +436,7 @@ export default function Dealer() {
             setLoading(false)
         }
 
-        // Fetch dealer credit and bank account
-        fetchDealerCredit()
+        // Fetch bank account and topup history (credit already loaded in parallel)
         fetchAssignedBankAccount()
         fetchTopupHistory()
     }
@@ -468,26 +468,16 @@ export default function Dealer() {
         if (!user?.id) return
         setCreditLoading(true)
         try {
-            // First, recalculate pending_deduction to ensure it's up-to-date
-            console.log('fetchDealerCredit: Recalculating pending_deduction...')
-            await updatePendingDeduction(user.id)
-
-            // Then fetch the updated credit data
+            // Step 1: Fetch credit data immediately (fast - show to user ASAP)
             const { data: creditData, error: creditError } = await supabase
                 .from('dealer_credits')
                 .select('*')
                 .eq('dealer_id', user.id)
                 .maybeSingle()
 
-            console.log('fetchDealerCredit - data:', creditData, 'error:', creditError)
-
             if (creditData) {
                 const pendingDeduction = creditData.pending_deduction || 0
                 const availableCredit = creditData.balance - pendingDeduction
-                console.log('=== Dealer Credit Display ===')
-                console.log('balance:', creditData.balance)
-                console.log('pending_deduction:', pendingDeduction)
-                console.log('availableCredit:', availableCredit)
                 setDealerCredit({
                     balance: creditData.balance,
                     pendingDeduction: pendingDeduction,
@@ -497,6 +487,32 @@ export default function Dealer() {
                     warning_threshold: creditData.warning_threshold,
                     has_sufficient_credit: availableCredit > 0 && !creditData.is_blocked,
                     is_low_credit: availableCredit <= creditData.warning_threshold
+                })
+            }
+            setCreditLoading(false)
+
+            // Step 2: Recalculate pending_deduction in background (slow)
+            await updatePendingDeduction(user.id)
+
+            // Step 3: Re-fetch with updated pending_deduction
+            const { data: updatedData } = await supabase
+                .from('dealer_credits')
+                .select('*')
+                .eq('dealer_id', user.id)
+                .maybeSingle()
+
+            if (updatedData) {
+                const pendingDeduction = updatedData.pending_deduction || 0
+                const availableCredit = updatedData.balance - pendingDeduction
+                setDealerCredit({
+                    balance: updatedData.balance,
+                    pendingDeduction: pendingDeduction,
+                    availableCredit: availableCredit,
+                    is_blocked: updatedData.is_blocked,
+                    blocked_reason: updatedData.blocked_reason,
+                    warning_threshold: updatedData.warning_threshold,
+                    has_sufficient_credit: availableCredit > 0 && !updatedData.is_blocked,
+                    is_low_credit: availableCredit <= updatedData.warning_threshold
                 })
             }
 
@@ -1177,12 +1193,17 @@ export default function Dealer() {
 
     // Redirect if not dealer or admin (after hooks)
     if (!profile) {
-        return (
-            <div className="loading-screen">
-                <div className="spinner"></div>
-                <p>กำลังโหลด...</p>
-            </div>
-        )
+        // Still loading auth - show spinner briefly
+        if (authLoading) {
+            return (
+                <div className="loading-screen">
+                    <div className="spinner"></div>
+                    <p>กำลังโหลด...</p>
+                </div>
+            )
+        }
+        // Auth finished but no profile = not logged in, redirect to login
+        return <Navigate to="/login" replace />
     }
 
     if (!isDealer && !isSuperAdmin) {
@@ -1867,9 +1888,9 @@ export default function Dealer() {
                                 <div style={{
                                     fontSize: '1.35rem',
                                     fontWeight: 'bold',
-                                    color: textColor
+                                    color: creditLoading ? 'var(--color-text-muted)' : textColor
                                 }}>
-                                    ฿{availableCredit.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                    {creditLoading ? '...' : `฿${availableCredit.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`}
                                 </div>
                                 {dealerCredit?.pendingDeduction > 0 && (
                                     <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginTop: '0.1rem' }}>
@@ -2910,7 +2931,7 @@ export default function Dealer() {
                             {/* Bank Account Info */}
                             {assignedBankAccount ? (
                                 <div style={{
-                                    background: 'var(--color-surface-alt, linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%))',
+                                    background: 'var(--color-surface)',
                                     padding: '1.25rem',
                                     borderRadius: '12px',
                                     marginBottom: '1.5rem',
@@ -2932,14 +2953,69 @@ export default function Dealer() {
                                         {assignedBankAccount.bank_name}
                                     </div>
                                     <div style={{
-                                        fontSize: '1.5rem',
-                                        fontFamily: 'monospace',
-                                        fontWeight: 'bold',
-                                        color: 'var(--color-primary)',
-                                        margin: '0.5rem 0',
-                                        letterSpacing: '2px'
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        margin: '0.5rem 0'
                                     }}>
-                                        {assignedBankAccount.account_number}
+                                        <span style={{
+                                            fontSize: '1.5rem',
+                                            fontFamily: 'monospace',
+                                            fontWeight: 'bold',
+                                            color: 'var(--color-primary)',
+                                            letterSpacing: '2px'
+                                        }}>
+                                            {assignedBankAccount.account_number}
+                                        </span>
+                                        <button
+                                            onClick={async (e) => {
+                                                e.stopPropagation()
+                                                const text = assignedBankAccount.account_number
+                                                let copied = false
+                                                try {
+                                                    if (navigator.clipboard && window.isSecureContext) {
+                                                        await navigator.clipboard.writeText(text)
+                                                        copied = true
+                                                    }
+                                                } catch (_) {}
+                                                if (!copied) {
+                                                    // Fallback for HTTP / mobile browsers
+                                                    const el = document.createElement('input')
+                                                    el.value = text
+                                                    el.setAttribute('readonly', '')
+                                                    el.style.position = 'absolute'
+                                                    el.style.left = '-9999px'
+                                                    el.style.opacity = '0'
+                                                    document.body.appendChild(el)
+                                                    // iOS specific
+                                                    const range = document.createRange()
+                                                    el.contentEditable = 'true'
+                                                    el.readOnly = false
+                                                    el.focus()
+                                                    el.select()
+                                                    el.setSelectionRange(0, text.length)
+                                                    try {
+                                                        copied = document.execCommand('copy')
+                                                    } catch (_) {}
+                                                    document.body.removeChild(el)
+                                                }
+                                                toast.success(copied ? 'คัดลอกเลขบัญชีแล้ว' : 'กดค้างที่เลขบัญชีเพื่อคัดลอก')
+                                            }}
+                                            style={{
+                                                background: 'none',
+                                                border: '1px solid var(--color-border)',
+                                                borderRadius: '6px',
+                                                padding: '0.3rem',
+                                                cursor: 'pointer',
+                                                color: 'var(--color-text-muted)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                transition: 'color 0.2s'
+                                            }}
+                                            title="คัดลอกเลขบัญชี"
+                                        >
+                                            <FiCopy size={16} />
+                                        </button>
                                     </div>
                                     <div style={{ fontSize: '0.95rem', color: 'var(--color-text-muted)', fontWeight: '500' }}>
                                         {assignedBankAccount.account_name}

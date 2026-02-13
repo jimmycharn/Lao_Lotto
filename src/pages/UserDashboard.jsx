@@ -54,7 +54,7 @@ import {
 
 export default function UserDashboard() {
 
-    const { user, profile } = useAuth()
+    const { user, profile, loading: authLoading } = useAuth()
     const { toast } = useToast()
     const { setActiveDashboard } = useTheme()
 
@@ -236,8 +236,11 @@ export default function UserDashboard() {
     useEffect(() => {
         if (user) {
             fetchDealerMemberships()
+        } else if (!authLoading) {
+            // Auth finished but no user - stop loading
+            setDealersLoading(false)
         }
-    }, [user])
+    }, [user, authLoading])
 
     async function fetchDealerMemberships() {
         setDealersLoading(true)
@@ -3101,19 +3104,27 @@ export default function UserDashboard() {
                                                         <div className="header-summary results-header-summary">
                                                             <span className="summary-item">
                                                                 <span className="label">ยอดส่งรวม</span>
-                                                                {round.currency_symbol || '฿'}{summary.totalAmount?.toLocaleString()}
+                                                                <span style={{ color: 'var(--color-danger)', fontWeight: 600 }}>
+                                                                    -{round.currency_symbol || '฿'}{Math.abs(summary.totalAmount || 0).toLocaleString()}
+                                                                </span>
                                                             </span>
                                                             <span className="summary-item">
                                                                 <span className="label">ค่าคอม</span>
-                                                                {round.currency_symbol || '฿'}{summary.totalCommission?.toLocaleString()}
+                                                                <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>
+                                                                    +{round.currency_symbol || '฿'}{Math.abs(summary.totalCommission || 0).toLocaleString()}
+                                                                </span>
                                                             </span>
-                                                            <span className="summary-item highlight">
+                                                            <span className="summary-item">
                                                                 <span className="label">รางวัลที่ได้</span>
-                                                                <span style={{ color: 'var(--color-success)' }}>{round.currency_symbol || '฿'}{summary.totalPrize?.toLocaleString()}</span>
+                                                                <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>
+                                                                    +{round.currency_symbol || '฿'}{Math.abs(summary.totalPrize || 0).toLocaleString()}
+                                                                </span>
                                                             </span>
-                                                            <span className={`summary-item profit ${summary.netResult >= 0 ? 'positive' : 'negative'}`}>
+                                                            <span className={`summary-item profit ${(summary.netResult || 0) >= 0 ? 'positive' : 'negative'}`}>
                                                                 <span className="label">ผลกำไร/ขาดทุน</span>
-                                                                {summary.netResult >= 0 ? '+' : ''}{round.currency_symbol || '฿'}{summary.netResult?.toLocaleString()}
+                                                                <span style={{ fontWeight: 700 }}>
+                                                                    {(summary.netResult || 0) >= 0 ? '+' : '-'}{round.currency_symbol || '฿'}{Math.abs(summary.netResult || 0).toLocaleString()}
+                                                                </span>
                                                             </span>
                                                         </div>
                                                     )}
@@ -3122,26 +3133,33 @@ export default function UserDashboard() {
 
                                             {isExpanded && (
                                                 <div className="round-accordion-content">
-                                                    {/* Winning Numbers Display */}
+                                                    {/* Winning Numbers Display - same style as Dealer Dashboard */}
                                                     {Object.keys(winningNumbers).length > 0 && (
-                                                        <div className="winning-numbers-section">
-                                                            <h4><FiAward /> ผลรางวัลที่ออก</h4>
-                                                            <div className="winning-numbers-grid">
-                                                                {/* Different display order based on lottery type */}
+                                                        <div style={{
+                                                            background: 'var(--color-surface)',
+                                                            border: '2px solid var(--color-primary)',
+                                                            borderRadius: 'var(--radius-lg)',
+                                                            padding: '1rem 1.25rem',
+                                                            marginBottom: '1rem'
+                                                        }}>
+                                                            <h4 style={{ margin: '0 0 0.75rem 0', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
+                                                                🏆 ผลรางวัล
+                                                            </h4>
+                                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
                                                                 {(() => {
-                                                                    // Lao/Hanoi: 4 ตัว, 3 ตัวบน, 2 ตัวบน, 2 ตัวล่าง
                                                                     const isLaoHanoi = ['lao', 'hanoi'].includes(round.lottery_type)
+                                                                    const isThai = round.lottery_type === 'thai'
                                                                     const displayOrder = isLaoHanoi
                                                                         ? ['4_set', '3_top', '2_top', '2_bottom']
-                                                                        : ['6_top', '3_top', '2_bottom', '3_bottom']
+                                                                        : isThai
+                                                                            ? ['6_top', '3_bottom', '2_bottom']
+                                                                            : ['6_top', '3_top', '2_bottom', '3_bottom']
 
                                                                     const betTypeLabels = {
                                                                         '6_top': 'รางวัลที่ 1',
                                                                         '4_set': 'เลขชุด 4 ตัว',
-                                                                        '4_top': 'เลขชุด 4 ตัว',
                                                                         '3_top': '3 ตัวบน',
                                                                         '3_bottom': '3 ตัวล่าง',
-                                                                        '3_tod': '3 ตัวโต๊ด',
                                                                         '2_top': '2 ตัวบน',
                                                                         '2_bottom': '2 ตัวล่าง',
                                                                         'run_top': 'วิ่งบน',
@@ -3153,11 +3171,18 @@ export default function UserDashboard() {
                                                                         if (!number) return null
                                                                         const label = betTypeLabels[betType] || betType
                                                                         const displayNumber = Array.isArray(number) ? number.join(', ') : number
+                                                                        const isMain = ['6_top', '4_set', 'first_prize'].includes(betType)
 
                                                                         return (
-                                                                            <div key={betType} className="winning-number-item">
-                                                                                <span className="winning-label">{label}</span>
-                                                                                <span className="winning-value">{displayNumber}</span>
+                                                                            <div key={betType} style={{ textAlign: 'center' }}>
+                                                                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{label}</div>
+                                                                                <div style={{
+                                                                                    fontSize: isMain ? '1.5rem' : '1.25rem',
+                                                                                    fontWeight: isMain ? 700 : 600,
+                                                                                    color: isMain ? 'var(--color-primary)' : 'var(--color-text)',
+                                                                                    fontFamily: 'monospace',
+                                                                                    letterSpacing: '0.1em'
+                                                                                }}>{displayNumber}</div>
                                                                             </div>
                                                                         )
                                                                     })
@@ -3170,26 +3195,26 @@ export default function UserDashboard() {
                                                     {hasSummary && (
                                                         <div className="submissions-summary results-summary">
                                                             <div className="summary-card">
-                                                                <span className="summary-value">
-                                                                    {round.currency_symbol || '฿'}{summary.totalAmount?.toLocaleString()}
+                                                                <span className="summary-value" style={{ color: 'var(--color-danger)' }}>
+                                                                    -{round.currency_symbol || '฿'}{Math.abs(summary.totalAmount || 0).toLocaleString()}
                                                                 </span>
                                                                 <span className="summary-label">ยอดส่งรวม</span>
                                                             </div>
                                                             <div className="summary-card">
-                                                                <span className="summary-value">
-                                                                    {round.currency_symbol || '฿'}{summary.totalCommission?.toLocaleString()}
+                                                                <span className="summary-value" style={{ color: 'var(--color-success)' }}>
+                                                                    +{round.currency_symbol || '฿'}{Math.abs(summary.totalCommission || 0).toLocaleString()}
                                                                 </span>
                                                                 <span className="summary-label">ค่าคอม</span>
                                                             </div>
-                                                            <div className="summary-card highlight">
-                                                                <span className="summary-value">
-                                                                    {round.currency_symbol || '฿'}{summary.totalPrize?.toLocaleString()}
+                                                            <div className="summary-card">
+                                                                <span className="summary-value" style={{ color: 'var(--color-success)' }}>
+                                                                    +{round.currency_symbol || '฿'}{Math.abs(summary.totalPrize || 0).toLocaleString()}
                                                                 </span>
                                                                 <span className="summary-label">รางวัลที่ได้</span>
                                                             </div>
-                                                            <div className={`summary-card ${summary.netResult >= 0 ? 'profit' : 'loss'}`}>
-                                                                <span className="summary-value">
-                                                                    {summary.netResult >= 0 ? '+' : ''}{round.currency_symbol || '฿'}{summary.netResult?.toLocaleString()}
+                                                            <div className={`summary-card ${(summary.netResult || 0) >= 0 ? 'profit' : 'loss'}`}>
+                                                                <span className="summary-value" style={{ color: (summary.netResult || 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                                                    {(summary.netResult || 0) >= 0 ? '+' : '-'}{round.currency_symbol || '฿'}{Math.abs(summary.netResult || 0).toLocaleString()}
                                                                 </span>
                                                                 <span className="summary-label">ผลกำไร/ขาดทุน</span>
                                                             </div>
@@ -3402,19 +3427,27 @@ export default function UserDashboard() {
                                                 <div className="header-summary results-header-summary" style={{ marginTop: '0.5rem' }}>
                                                     <span className="summary-item">
                                                         <span className="label">ยอดส่ง</span>
-                                                        ฿{item.total_amount?.toLocaleString()}
+                                                        <span style={{ color: 'var(--color-danger)', fontWeight: 600 }}>
+                                                            -฿{Math.abs(item.total_amount || 0).toLocaleString()}
+                                                        </span>
                                                     </span>
                                                     <span className="summary-item">
                                                         <span className="label">ค่าคอม</span>
-                                                        ฿{item.total_commission?.toLocaleString()}
+                                                        <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>
+                                                            +฿{Math.abs(item.total_commission || 0).toLocaleString()}
+                                                        </span>
                                                     </span>
                                                     <span className="summary-item">
                                                         <span className="label">รางวัล</span>
-                                                        <span style={{ color: 'var(--color-success)' }}>฿{item.total_winnings?.toLocaleString()}</span>
+                                                        <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>
+                                                            +฿{Math.abs(item.total_winnings || 0).toLocaleString()}
+                                                        </span>
                                                     </span>
-                                                    <span className={`summary-item profit ${item.profit_loss >= 0 ? 'positive' : 'negative'}`}>
+                                                    <span className={`summary-item profit ${(item.profit_loss || 0) >= 0 ? 'positive' : 'negative'}`}>
                                                         <span className="label">กำไร/ขาดทุน</span>
-                                                        {item.profit_loss >= 0 ? '+' : ''}฿{item.profit_loss?.toLocaleString()}
+                                                        <span style={{ fontWeight: 700 }}>
+                                                            {(item.profit_loss || 0) >= 0 ? '+' : '-'}฿{Math.abs(item.profit_loss || 0).toLocaleString()}
+                                                        </span>
                                                     </span>
                                                 </div>
                                             </div>

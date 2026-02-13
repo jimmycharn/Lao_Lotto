@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ToastProvider } from './contexts/ToastContext'
 import { ThemeProvider } from './contexts/ThemeContext'
@@ -35,9 +35,18 @@ function PageLoader() {
 // Protected Route Component
 function ProtectedRoute({ children, requireAuth = false, requireDealer = false, requireAdmin = false }) {
   const { user, loading, isDealer, isSuperAdmin, profile } = useAuth()
+  const [profileTimeout, setProfileTimeout] = useState(false)
+
+  // Timeout for waiting on profile - prevent infinite spinner
+  useEffect(() => {
+    if (user && !profile && !loading) {
+      const timer = setTimeout(() => setProfileTimeout(true), 5000)
+      return () => clearTimeout(timer)
+    }
+    if (profile) setProfileTimeout(false)
+  }, [user, profile, loading])
 
   // Only show loading if we don't have user info yet AND still loading
-  // If we have user but no profile yet, still show the page (profile will load in background)
   if (loading && !user) {
     return (
       <div className="loading-screen">
@@ -52,8 +61,12 @@ function ProtectedRoute({ children, requireAuth = false, requireDealer = false, 
   }
 
   // For dealer/admin checks, if we have user but no profile yet, wait for profile to load
-  // This prevents redirect to "/" before we know the user's role
+  // But with a timeout to prevent infinite spinner
   if ((requireDealer || requireAdmin) && user && !profile) {
+    if (profileTimeout) {
+      // Profile took too long - redirect to login
+      return <Navigate to="/login" replace />
+    }
     return (
       <div className="loading-screen">
         <div className="spinner"></div>
@@ -76,6 +89,16 @@ function ProtectedRoute({ children, requireAuth = false, requireDealer = false, 
 // Home Redirect Component - Redirects Super Admin/Dealer/User to their respective dashboards
 function HomeRedirect() {
   const { user, profile, loading, isDealer, isSuperAdmin } = useAuth()
+  const [profileTimeout, setProfileTimeout] = useState(false)
+
+  // Timeout for waiting on profile
+  useEffect(() => {
+    if (user && !profile && !loading) {
+      const timer = setTimeout(() => setProfileTimeout(true), 5000)
+      return () => clearTimeout(timer)
+    }
+    if (profile) setProfileTimeout(false)
+  }, [user, profile, loading])
 
   // Only show loading if we don't have user info yet
   if (loading && !user) {
@@ -95,6 +118,11 @@ function HomeRedirect() {
         <p>กำลังโหลด...</p>
       </div>
     )
+  }
+
+  // Profile took too long after auth loaded - user may have stale session
+  if (user && !profile && profileTimeout) {
+    return <Navigate to="/login" replace />
   }
 
   // Redirect Super Admin to Super Admin dashboard

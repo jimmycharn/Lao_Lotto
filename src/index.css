@@ -517,6 +517,35 @@ select.form-input option:checked {
   }
 }
 
+/* Loading Screen - must be in index.css for App.jsx spinner before lazy CSS loads */
+.loading-screen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  width: 100%;
+  position: fixed;
+  top: 0;
+  left: 0;
+  background: var(--color-bg, #0f0f1a);
+  z-index: 9999;
+}
+
+.loading-screen p {
+  margin-top: 1rem;
+  color: var(--color-text-muted, #888);
+  font-size: 0.9rem;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 3rem;
+}
+
 /* Loading Spinner */
 .spinner {
   width: 40px;

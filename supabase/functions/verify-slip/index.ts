@@ -5,6 +5,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Get SlipOK credentials from environment variables
+const SLIPOK_URL = Deno.env.get('SLIPOK_URL') || ''
+const SLIPOK_API_KEY = Deno.env.get('SLIPOK_API_KEY') || ''
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -31,10 +35,18 @@ serve(async (req) => {
     }
     slipFormData.append('log', 'true')
 
-    const slipResponse = await fetch('https://api.slipok.com/api/line/apikey/59644', {
+    // Validate environment variables
+    if (!SLIPOK_URL || !SLIPOK_API_KEY) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'SlipOK credentials not configured' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      )
+    }
+
+    const slipResponse = await fetch(SLIPOK_URL, {
       method: 'POST',
       headers: {
-        'x-authorization': 'SLIPOKQDTRH3P'
+        'x-authorization': SLIPOK_API_KEY
       },
       body: slipFormData
     })
