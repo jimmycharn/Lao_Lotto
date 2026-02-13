@@ -1074,7 +1074,8 @@ export default function RoundAccordionItem({
                         if (betSettings?.commission !== undefined) {
                             commissionAmount = betSettings.isFixed ? betSettings.commission : amount * (betSettings.commission / 100)
                         } else {
-                            commissionAmount = amount * ((DEFAULT_COMMISSIONS[item.bet_type] || 0) / 100)
+                            // Use default commission rate (15% if not specified)
+                            commissionAmount = amount * ((DEFAULT_COMMISSIONS[item.bet_type] || 15) / 100)
                         }
                         return {
                             round_id: targetRoundId,
@@ -1636,7 +1637,6 @@ export default function RoundAccordionItem({
     const getCommission = (sub) => {
         // Use commission_amount that was recorded when submission was made
         // This ensures consistency between dealer and user dashboards
-        // But for transfer submissions with 0 commission, recalculate based on settings
         if (sub.commission_amount !== undefined && sub.commission_amount !== null && sub.commission_amount > 0) {
             return sub.commission_amount
         }
@@ -1647,7 +1647,10 @@ export default function RoundAccordionItem({
         if (settings?.commission !== undefined) {
             return settings.isFixed ? settings.commission : sub.amount * (settings.commission / 100)
         }
-        return sub.amount * ((DEFAULT_COMMISSIONS[sub.bet_type] || 15) / 100)
+        // For transfer submissions, always calculate commission using default rates
+        // This ensures commission is shown even if settings weren't saved during transfer
+        const defaultRate = DEFAULT_COMMISSIONS[sub.bet_type] || 15
+        return sub.amount * (defaultRate / 100)
     }
 
     const getExpectedPayout = (sub) => {
@@ -1735,25 +1738,21 @@ export default function RoundAccordionItem({
                                 {/* ยอดรับ Row */}
                                 <div className="stats-row incoming-stats">
                                     <div className="stats-section">
-                                        <span className="section-label">ยอดรับ</span>
+                                        <span className="section-label">ยอดรับ  {summaryData.submissions?.length || 0} รายการ</span>
                                         <div className="stats-items">
                                             <span className="stat-box">
-                                                <span className="stat-label">รายการ</span>
-                                                <span className="stat-value">{summaryData.submissions?.length || 0}</span>
-                                            </span>
-                                            <span className="stat-box">
                                                 <span className="stat-label">ยอดรวม</span>
-                                                <span className="stat-value">{round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
+                                                <span className="stat-value success">+{round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
                                             </span>
                                             <span className="stat-box">
                                                 <span className="stat-label">ค่าคอม</span>
-                                                <span className="stat-value warning">{round.currency_symbol}{Math.round(grandTotalCommission).toLocaleString()}</span>
+                                                <span className="stat-value danger">-{round.currency_symbol}{Math.round(grandTotalCommission).toLocaleString()}</span>
                                             </span>
                                             {isAnnounced && (
                                                 <>
                                                     <span className="stat-box">
                                                         <span className="stat-label">จ่าย</span>
-                                                        <span className="stat-value danger">{round.currency_symbol}{grandTotalWin.toLocaleString()}</span>
+                                                        <span className={`stat-value ${grandTotalWin > 0 ? 'danger' : ''}`}>{grandTotalWin > 0 ? '-' : ''}{round.currency_symbol}{grandTotalWin.toLocaleString()}</span>
                                                     </span>
                                                     <span className="stat-box">
                                                         <span className="stat-label">กำไร</span>
@@ -1771,12 +1770,8 @@ export default function RoundAccordionItem({
                                 {isAnnounced && outgoingTicketCount > 0 && (
                                     <div className="stats-row outgoing-stats">
                                         <div className="stats-section">
-                                            <span className="section-label">ยอดส่ง</span>
+                                            <span className="section-label">ยอดส่ง  {outgoingTicketCount} รายการ</span>
                                             <div className="stats-items">
-                                                <span className="stat-box">
-                                                    <span className="stat-label">รายการ</span>
-                                                    <span className="stat-value">{outgoingTicketCount}</span>
-                                                </span>
                                                 <span className="stat-box">
                                                     <span className="stat-label">ยอดรวม</span>
                                                     <span className="stat-value danger">-{round.currency_symbol}{outgoingTotalBet.toLocaleString()}</span>
@@ -1871,13 +1866,7 @@ export default function RoundAccordionItem({
                 <div className="round-accordion-content">
                     {/* For CLOSED rounds (not open): Show tabs for submissions and results */}
                     {!isOpen && (
-                        <div className="closed-round-tabs" style={{ 
-                            display: 'flex', 
-                            gap: '0.5rem', 
-                            marginBottom: '1rem',
-                            borderBottom: '1px solid var(--color-border)',
-                            paddingBottom: '0.5rem'
-                        }}>
+                        <div className="closed-round-tabs">
                             <button
                                 className={`btn btn-sm ${closedRoundTab === 'submissions' ? 'btn-primary' : 'btn-outline'}`}
                                 onClick={() => setClosedRoundTab('submissions')}
@@ -1902,15 +1891,100 @@ export default function RoundAccordionItem({
                     {/* Results Tab Content for closed rounds */}
                     {!isOpen && closedRoundTab === 'results' && (
                         <div className="results-tab-content">
-                            {/* Action buttons for results */}
-                            <div className="accordion-actions" style={{ marginBottom: '1rem' }}>
-                                {!isAnnounced && (
-                                    <button className="btn btn-accent" onClick={onShowResults}><FiCheck /> ใส่ผลรางวัล</button>
-                                )}
-                                {isAnnounced && (
-                                    <button className="btn btn-outline" onClick={onShowResults}><FiEdit2 /> แก้ไขผลรางวัล</button>
-                                )}
-                            </div>
+                            {/* Winning Numbers Display - แสดงเสมอถ้ามี winning_numbers */}
+                            {round.winning_numbers && (
+                                <div className="winning-numbers-display" style={{
+                                    background: 'var(--color-surface)',
+                                    border: '2px solid var(--color-primary)',
+                                    borderRadius: 'var(--radius-lg)',
+                                    padding: '1rem',
+                                    marginBottom: '1rem'
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                        <h4 style={{ margin: 0, color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            🏆 ผลรางวัล
+                                        </h4>
+                                        <button className="btn btn-sm btn-outline" onClick={onShowResults}>
+                                            <FiEdit2 /> แก้ไข
+                                        </button>
+                                    </div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+                                        {round.lottery_type === 'thai' && (
+                                            <>
+                                                {round.winning_numbers.first_prize && (
+                                                    <div style={{ textAlign: 'center' }}>
+                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>รางวัลที่ 1</div>
+                                                        <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-primary)', fontFamily: 'monospace', letterSpacing: '0.1em' }}>{round.winning_numbers.first_prize}</div>
+                                                    </div>
+                                                )}
+                                                {round.winning_numbers.last_3_digits && round.winning_numbers.last_3_digits.length > 0 && (
+                                                    <div style={{ textAlign: 'center' }}>
+                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>3 ตัวล่าง</div>
+                                                        <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--color-text)', fontFamily: 'monospace' }}>{round.winning_numbers.last_3_digits.join(', ')}</div>
+                                                    </div>
+                                                )}
+                                                {round.winning_numbers.last_2_digits && (
+                                                    <div style={{ textAlign: 'center' }}>
+                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>2 ตัวล่าง</div>
+                                                        <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--color-text)', fontFamily: 'monospace' }}>{round.winning_numbers.last_2_digits}</div>
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                        {(round.lottery_type === 'lao' || round.lottery_type === 'hanoi') && (
+                                            <>
+                                                {round.winning_numbers['4_set'] && (
+                                                    <div style={{ textAlign: 'center' }}>
+                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>เลขชุด 4 ตัว</div>
+                                                        <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-primary)', fontFamily: 'monospace', letterSpacing: '0.1em' }}>{round.winning_numbers['4_set']}</div>
+                                                    </div>
+                                                )}
+                                                {round.winning_numbers['3_top'] && (
+                                                    <div style={{ textAlign: 'center' }}>
+                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>3 ตัวบน</div>
+                                                        <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--color-text)', fontFamily: 'monospace' }}>{round.winning_numbers['3_top']}</div>
+                                                    </div>
+                                                )}
+                                                {round.winning_numbers['2_top'] && (
+                                                    <div style={{ textAlign: 'center' }}>
+                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>2 ตัวบน</div>
+                                                        <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--color-text)', fontFamily: 'monospace' }}>{round.winning_numbers['2_top']}</div>
+                                                    </div>
+                                                )}
+                                                {round.winning_numbers['2_bottom'] && (
+                                                    <div style={{ textAlign: 'center' }}>
+                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>2 ตัวล่าง</div>
+                                                        <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--color-text)', fontFamily: 'monospace' }}>{round.winning_numbers['2_bottom']}</div>
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                        {round.lottery_type === 'yeekee' && round.winning_numbers.result && (
+                                            <div style={{ textAlign: 'center' }}>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>ผลยี่กี</div>
+                                                <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-primary)', fontFamily: 'monospace', letterSpacing: '0.1em' }}>{round.winning_numbers.result}</div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ถ้ายังไม่มีผลรางวัล แสดงข้อความและปุ่มใส่ผลรางวัล */}
+                            {!round.winning_numbers && (
+                                <div style={{
+                                    background: 'var(--color-surface)',
+                                    border: '2px dashed var(--color-border)',
+                                    borderRadius: 'var(--radius-lg)',
+                                    padding: '2rem',
+                                    marginBottom: '1rem',
+                                    textAlign: 'center'
+                                }}>
+                                    <p style={{ color: 'var(--color-text-muted)', marginBottom: '1rem' }}>ยังไม่ได้ใส่ผลรางวัล</p>
+                                    <button className="btn btn-accent" onClick={onShowResults}>
+                                        <FiCheck /> ใส่ผลรางวัล
+                                    </button>
+                                </div>
+                            )}
 
                             {/* User summaries for announced rounds */}
                             {isAnnounced && (

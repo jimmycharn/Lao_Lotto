@@ -153,7 +153,13 @@ export default function ResultsModal({ round, onClose }) {
                 ? `อัปเดตผลรางวัลสำเร็จ! มีผู้ถูกรางวัล ${winCount} รายการ`
                 : `ประกาศผลสำเร็จ! มีผู้ถูกรางวัล ${winCount} รายการ`
             toast.success(message)
-            onClose()
+            // ส่ง updatedRound กลับไปเพื่อ update state โดยไม่ต้อง refresh ทั้งหมด
+            onClose({
+                id: round.id,
+                winning_numbers: winningNumbers,
+                is_result_announced: true,
+                status: 'announced'
+            })
         } catch (error) {
             console.error('Error announcing:', error)
             toast.error('เกิดข้อผิดพลาด: ' + (error.message || 'Unknown error'))

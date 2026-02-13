@@ -565,11 +565,36 @@
     color: #4a4a5a;
 }
 
+/* Button primary - Light Theme */
+:root.theme-light .btn-primary,
+[data-theme="light"] .btn-primary {
+    background: linear-gradient(135deg, #b8960c 0%, #d4af37 100%);
+    color: #ffffff !important;
+    border: none;
+}
+
+:root.theme-light .btn-primary:hover,
+[data-theme="light"] .btn-primary:hover {
+    background: linear-gradient(135deg, #a08000 0%, #c9a227 100%);
+    color: #ffffff !important;
+    box-shadow: 0 4px 15px rgba(184, 150, 12, 0.4);
+}
+
+:root.theme-light .btn-primary:focus,
+:root.theme-light .btn-primary:active,
+[data-theme="light"] .btn-primary:focus,
+[data-theme="light"] .btn-primary:active {
+    background: linear-gradient(135deg, #a08000 0%, #c9a227 100%) !important;
+    color: #1a1a2e !important;
+    box-shadow: 0 0 0 3px rgba(184, 150, 12, 0.4) !important;
+    outline: none;
+}
+
 /* Button outline - Light Theme */
 :root.theme-light .btn-outline,
 [data-theme="light"] .btn-outline {
     background: transparent;
-    color: var(--color-primary);
+    color: #1a1a2e;
     border: 2px solid var(--color-primary);
 }
 
