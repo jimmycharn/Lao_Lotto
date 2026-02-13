@@ -4510,3 +4510,86 @@ html.theme-light .icon-btn-sm:hover {
 .stat-value.warning {
     color: var(--color-warning, #f59e0b) !important;
 }
+
+/* Open Round Layout */
+.open-round-layout {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.open-round-header-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.open-round-header-row .round-name {
+    font-weight: 600;
+    color: var(--color-text);
+    font-size: 0.9rem;
+}
+
+.open-round-actions-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.open-round-actions-row .round-actions {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.open-round-datetime {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+}
+
+.open-round-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
+
+.stats-block {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    padding: 0.5rem;
+}
+
+.stats-block-header {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: 0.25rem;
+}
+
+.stats-block-items {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.25rem;
+}
+
+.stats-block-items .stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.stats-block-items .stat-item .stat-label {
+    font-size: 0.65rem;
+    color: var(--color-text-muted);
+}
+
+.stats-block-items .stat-item .stat-value {
+    font-size: 0.85rem;
+    font-weight: 600;
+}

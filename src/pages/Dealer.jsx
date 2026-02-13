@@ -2019,37 +2019,44 @@ export default function Dealer() {
                                         <div className="history-list">
                                             {roundHistory.map(history => (
                                                 <div key={history.id} className={`round-accordion-item ${history.lottery_type}`}>
-                                                    <div className="round-accordion-header" style={{ cursor: 'default' }}>
-                                                        <div className="round-info">
-                                                            <span className={`lottery-badge ${history.lottery_type}`}>
-                                                                {LOTTERY_TYPES[history.lottery_type] || history.lottery_type}
-                                                            </span>
-                                                            <div className="round-details">
-                                                                <span className="round-name">
+                                                    <div className="round-accordion-header card" style={{ cursor: 'default' }}>
+                                                        <div className="open-round-layout">
+                                                            {/* Row 1: Logo, Name */}
+                                                            <div className="open-round-header-row">
+                                                                <span className={`lottery-badge ${history.lottery_type}`}>
                                                                     {LOTTERY_TYPES[history.lottery_type] || history.lottery_type}
                                                                 </span>
-                                                                <span className="round-date">
-                                                                    <FiCalendar /> {formatDate(history.round_date)}
-                                                                </span>
+                                                                <span className="round-name">{history.lottery_name || LOTTERY_TYPES[history.lottery_type]}</span>
                                                             </div>
-                                                        </div>
-                                                        <div className="history-stats" style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
-                                                            <div style={{ textAlign: 'center' }}>
-                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ยอดรวม</div>
-                                                                <div style={{ fontWeight: '600' }}>฿{history.total_amount?.toLocaleString()}</div>
+                                                            
+                                                            {/* Row 2: Date/Time */}
+                                                            <div className="open-round-datetime">
+                                                                <FiCalendar /> {formatDate(history.open_time || history.round_date)} {formatTime(history.open_time || history.round_date)} - {formatDate(history.close_time || history.round_date)} {formatTime(history.close_time || history.round_date)}
                                                             </div>
-                                                            <div style={{ textAlign: 'center' }}>
-                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ค่าคอม</div>
-                                                                <div style={{ fontWeight: '600' }}>฿{history.total_commission?.toLocaleString()}</div>
-                                                            </div>
-                                                            <div style={{ textAlign: 'center' }}>
-                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>จ่าย</div>
-                                                                <div style={{ fontWeight: '600', color: 'var(--color-danger)' }}>฿{history.total_payout?.toLocaleString()}</div>
-                                                            </div>
-                                                            <div style={{ textAlign: 'center' }}>
-                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>กำไร</div>
-                                                                <div style={{ fontWeight: '600', color: history.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                                                                    {history.profit >= 0 ? '+' : ''}฿{history.profit?.toLocaleString()}
+                                                            
+                                                            {/* Row 3: Summary Stats */}
+                                                            <div className="open-round-stats">
+                                                                <div className="stats-block incoming">
+                                                                    <div className="stats-block-items">
+                                                                        <div className="stat-item">
+                                                                            <span className="stat-label">ยอดรวม</span>
+                                                                            <span className="stat-value">฿{history.total_amount?.toLocaleString()}</span>
+                                                                        </div>
+                                                                        <div className="stat-item">
+                                                                            <span className="stat-label">ค่าคอม</span>
+                                                                            <span className="stat-value success">-฿{history.total_commission?.toLocaleString()}</span>
+                                                                        </div>
+                                                                        <div className="stat-item">
+                                                                            <span className="stat-label">จ่าย</span>
+                                                                            <span className="stat-value danger">-฿{history.total_payout?.toLocaleString()}</span>
+                                                                        </div>
+                                                                        <div className="stat-item">
+                                                                            <span className="stat-label">กำไร</span>
+                                                                            <span className={`stat-value ${history.profit >= 0 ? 'success' : 'danger'}`}>
+                                                                                {history.profit >= 0 ? '+' : ''}฿{history.profit?.toLocaleString()}
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -2857,9 +2864,12 @@ export default function Dealer() {
             {showResultsModal && selectedRound && (
                 <ResultsModal
                     round={selectedRound}
-                    onClose={() => {
+                    onClose={(updatedRound) => {
                         setShowResultsModal(false)
-                        fetchData()
+                        // Update only the specific round in state instead of refreshing all data
+                        if (updatedRound) {
+                            setRounds(prev => prev.map(r => r.id === updatedRound.id ? { ...r, ...updatedRound } : r))
+                        }
                     }}
                 />
             )}

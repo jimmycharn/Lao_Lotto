@@ -40,6 +40,7 @@ import './ViewToggle.css'
 import WriteSubmissionModal from '../components/WriteSubmissionModal'
 import DealerInfoTab from '../components/user/DealerInfoTab'
 import UserQRScannerModal from '../components/user/UserQRScannerModal'
+import { createBill } from '../services/submissionService'
 
 // Import constants from centralized file
 import {
@@ -394,6 +395,13 @@ export default function UserDashboard() {
         }
     }, [selectedResultRound, resultViewMode])
 
+    // Fetch history when switching to history tab
+    useEffect(() => {
+        if (activeTab === 'history') {
+            fetchUserHistory()
+        }
+    }, [activeTab])
+
     async function fetchRounds() {
         if (!selectedDealer) return
         setLoading(true)
@@ -408,7 +416,7 @@ export default function UserDashboard() {
                 .eq('dealer_id', selectedDealer.id)
                 .in('status', ['open', 'closed'])
                 .order('round_date', { ascending: false })
-                .limit(10)
+                .limit(50)
 
             if (!error) {
                 setRounds(data || [])
@@ -1161,7 +1169,8 @@ export default function UserDashboard() {
                 }
             })
 
-            const { error } = await supabase.from('submissions').insert(inserts)
+            // Use submissionService to create bill
+            const { error } = await createBill(inserts)
             if (error) throw error
 
             // Update pending deduction for dealer's credit
@@ -2277,24 +2286,13 @@ export default function UserDashboard() {
                                                 className={`round-accordion-header card clickable ${isExpanded ? 'expanded-header' : ''}`}
                                                 onClick={() => setSelectedRound(isExpanded ? null : round)}
                                             >
-                                                <div className="round-header-main">
-                                                    <div className="round-header-info">
+                                                <div className="user-round-layout">
+                                                    {/* Row 1: Logo, Name, Status */}
+                                                    <div className="user-round-header-row">
                                                         <span className={`lottery-badge ${round.lottery_type}`}>
                                                             {LOTTERY_TYPES[round.lottery_type]}
                                                         </span>
-                                                        <div className="round-title-group">
-                                                            <h3>{round.lottery_name}</h3>
-                                                            <span className="round-date">
-                                                                {new Date(round.round_date).toLocaleDateString('th-TH', {
-                                                                    weekday: 'long',
-                                                                    day: 'numeric',
-                                                                    month: 'long',
-                                                                    year: 'numeric'
-                                                                })}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="round-header-status">
+                                                        <span className="round-name">{round.lottery_name}</span>
                                                         {round.status === 'open' ? (
                                                             <div className="time-remaining">
                                                                 {formatTimeRemaining(round.close_time)}
@@ -2302,34 +2300,31 @@ export default function UserDashboard() {
                                                         ) : (
                                                             <span className="round-status closed">ปิดรับแล้ว</span>
                                                         )}
+                                                    </div>
+                                                    
+                                                    {/* Row 2: Date/Time */}
+                                                    <div className="user-round-datetime">
+                                                        <FiCalendar /> {new Date(round.open_time).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })} {new Date(round.open_time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} - {new Date(round.close_time).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })} {new Date(round.close_time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+                                                    </div>
+                                                    
+                                                    {/* Row 3: Write button (left) + Chevron (right) */}
+                                                    <div className="user-round-actions-row">
+                                                        <div className="round-actions">
+                                                            {canSubmit() && (
+                                                                <button
+                                                                    className="btn btn-write-poy btn-sm"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setShowWriteModal(true)
+                                                                    }}
+                                                                >
+                                                                    <FiEdit /> เขียนโพย
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                         {isExpanded ? <FiChevronUp /> : <FiChevronDown />}
                                                     </div>
                                                 </div>
-                                                {isExpanded && (
-                                                    <div className="round-header-detail">
-                                                        <div className="time-grid">
-                                                            <div className="time-item">
-                                                                <FiClock />
-                                                                <span>เปิดรับ: {new Date(round.open_time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
-                                                            </div>
-                                                            <div className="time-item">
-                                                                <FiClock />
-                                                                <span>ปิดรับ: {new Date(round.close_time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
-                                                            </div>
-                                                        </div>
-                                                        {canSubmit() && (
-                                                            <button
-                                                                className="btn btn-write-poy"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    setShowWriteModal(true)
-                                                                }}
-                                                            >
-                                                                <FiEdit /> เขียนโพย
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                )}
                                             </div>
 
                                             {isExpanded && (
@@ -3051,98 +3046,78 @@ export default function UserDashboard() {
                                             <div
                                                 className={`round-accordion-header card clickable ${isExpanded ? 'expanded-header' : ''}`}
                                                 onClick={() => setSelectedResultRound(isExpanded ? null : round)}
-                                                style={{ position: 'relative' }}
                                             >
-                                                <div className="round-header-main">
-                                                    <div className="round-header-info">
+                                                <div className="user-round-layout">
+                                                    {/* Row 1: Logo, Name, Status */}
+                                                    <div className="user-round-header-row">
                                                         <span className={`lottery-badge ${round.lottery_type}`}>
-                                                            {round.lottery_name || round.lottery_type}
+                                                            {LOTTERY_TYPES[round.lottery_type]}
                                                         </span>
-                                                        <div className="round-title-group">
-                                                            <h3>{round.lottery_name || getLotteryTypeName(round.lottery_type)}</h3>
-                                                            <span className="round-date">
-                                                                {new Date(round.round_date).toLocaleDateString('th-TH', {
-                                                                    weekday: 'short',
-                                                                    day: 'numeric',
-                                                                    month: 'short',
-                                                                    year: 'numeric'
-                                                                })}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="round-header-status">
+                                                        <span className="round-name">{round.lottery_name || getLotteryTypeName(round.lottery_type)}</span>
                                                         <span className="status-badge announced">
                                                             <FiCheck /> ประกาศผลแล้ว
                                                         </span>
+                                                    </div>
+                                                    
+                                                    {/* Row 2: Date/Time */}
+                                                    <div className="user-round-datetime">
+                                                        <FiCalendar /> {new Date(round.open_time).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })} {new Date(round.open_time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} - {new Date(round.close_time).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })} {new Date(round.close_time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+                                                    </div>
+                                                    
+                                                    {/* Row 3: Refresh button (left) + Chevron (right) */}
+                                                    <div className="user-round-actions-row">
+                                                        <div className="round-actions">
+                                                            <button
+                                                                className="btn btn-icon btn-sm"
+                                                                onClick={async (e) => {
+                                                                    e.stopPropagation()
+                                                                    await fetchResultsRounds()
+                                                                    if (isExpanded) {
+                                                                        const { data } = await supabase
+                                                                            .from('submissions')
+                                                                            .select('*')
+                                                                            .eq('round_id', round.id)
+                                                                            .eq('is_deleted', false)
+                                                                            .order('created_at', { ascending: false })
+                                                                        if (data) {
+                                                                            setAllResultSubmissions(data)
+                                                                            if (resultViewMode === 'winners') {
+                                                                                setResultSubmissions(data.filter(s => s.is_winner))
+                                                                            } else {
+                                                                                setResultSubmissions(data)
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }}
+                                                                title="รีเฟรช"
+                                                            >
+                                                                <FiRefreshCw size={14} />
+                                                            </button>
+                                                        </div>
                                                         <FiChevronDown className={isExpanded ? 'rotated' : ''} />
                                                     </div>
-                                                    {/* Refresh Button - Top Right Corner */}
-                                                    <button
-                                                        className="btn btn-icon btn-sm"
-                                                        onClick={async (e) => {
-                                                            e.stopPropagation()
-                                                            // Refresh both summary and submissions for this round
-                                                            await fetchResultsRounds()
-                                                            // Also refresh submissions if this round is expanded
-                                                            if (isExpanded) {
-                                                                const { data } = await supabase
-                                                                    .from('submissions')
-                                                                    .select('*')
-                                                                    .eq('round_id', round.id)
-                                                                    .eq('is_deleted', false)
-                                                                    .order('created_at', { ascending: false })
-                                                                if (data) {
-                                                                    setAllResultSubmissions(data)
-                                                                    // Apply current filter (winners only or all)
-                                                                    if (resultViewMode === 'winners') {
-                                                                        setResultSubmissions(data.filter(s => s.is_winner))
-                                                                    } else {
-                                                                        setResultSubmissions(data)
-                                                                    }
-                                                                }
-                                                            }
-                                                        }}
-                                                        title="รีเฟรชข้อมูลงวดนี้"
-                                                        style={{
-                                                            padding: '0.35rem 0.6rem',
-                                                            fontSize: '0.75rem',
-                                                            background: 'var(--color-bg-tertiary)',
-                                                            border: '1px solid var(--color-border)',
-                                                            borderRadius: '6px',
-                                                            cursor: 'pointer',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            gap: '0.25rem',
-                                                            color: 'var(--color-text-muted)',
-                                                            position: 'absolute',
-                                                            top: '0.5rem',
-                                                            right: '0.5rem'
-                                                        }}
-                                                    >
-                                                        <FiRefreshCw size={12} />
-                                                    </button>
+                                                    {/* Summary in Header */}
+                                                    {hasSummary && (
+                                                        <div className="header-summary results-header-summary">
+                                                            <span className="summary-item">
+                                                                <span className="label">ยอดส่งรวม</span>
+                                                                {round.currency_symbol || '฿'}{summary.totalAmount?.toLocaleString()}
+                                                            </span>
+                                                            <span className="summary-item">
+                                                                <span className="label">ค่าคอม</span>
+                                                                {round.currency_symbol || '฿'}{summary.totalCommission?.toLocaleString()}
+                                                            </span>
+                                                            <span className="summary-item highlight">
+                                                                <span className="label">รางวัลที่ได้</span>
+                                                                <span style={{ color: 'var(--color-success)' }}>{round.currency_symbol || '฿'}{summary.totalPrize?.toLocaleString()}</span>
+                                                            </span>
+                                                            <span className={`summary-item profit ${summary.netResult >= 0 ? 'positive' : 'negative'}`}>
+                                                                <span className="label">ผลกำไร/ขาดทุน</span>
+                                                                {summary.netResult >= 0 ? '+' : ''}{round.currency_symbol || '฿'}{summary.netResult?.toLocaleString()}
+                                                            </span>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                                {/* Summary in Header */}
-                                                {hasSummary && (
-                                                    <div className="header-summary results-header-summary">
-                                                        <span className="summary-item">
-                                                            <span className="label">ยอดส่งรวม</span>
-                                                            {round.currency_symbol || '฿'}{summary.totalAmount?.toLocaleString()}
-                                                        </span>
-                                                        <span className="summary-item">
-                                                            <span className="label">ค่าคอม</span>
-                                                            {round.currency_symbol || '฿'}{summary.totalCommission?.toLocaleString()}
-                                                        </span>
-                                                        <span className="summary-item highlight">
-                                                            <span className="label">รางวัลที่ได้</span>
-                                                            <span style={{ color: 'var(--color-success)' }}>{round.currency_symbol || '฿'}{summary.totalPrize?.toLocaleString()}</span>
-                                                        </span>
-                                                        <span className={`summary-item profit ${summary.netResult >= 0 ? 'positive' : 'negative'}`}>
-                                                            <span className="label">ผลกำไร/ขาดทุน</span>
-                                                            {summary.netResult >= 0 ? '+' : ''}{round.currency_symbol || '฿'}{summary.netResult?.toLocaleString()}
-                                                        </span>
-                                                    </div>
-                                                )}
                                             </div>
 
                                             {isExpanded && (
@@ -3409,31 +3384,36 @@ export default function UserDashboard() {
                                 <div className="history-list">
                                     {userHistory.map(item => (
                                         <div key={item.id} className="card" style={{ marginBottom: '0.75rem', padding: '1rem' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                                                <span className={`lottery-badge ${item.lottery_type}`}>
-                                                    {LOTTERY_TYPES[item.lottery_type] || item.lottery_type}
-                                                </span>
-                                                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-                                                    <FiCalendar style={{ marginRight: '0.25rem' }} />
-                                                    {new Date(item.round_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                                </span>
-                                            </div>
-                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem', background: 'rgba(0,0,0,0.05)', borderRadius: '0.5rem' }}>
-                                                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>ยอดส่ง</span>
-                                                    <span style={{ fontWeight: '600' }}>฿{item.total_amount?.toLocaleString()}</span>
+                                            <div className="user-round-layout">
+                                                {/* Row 1: Logo, Name */}
+                                                <div className="user-round-header-row">
+                                                    <span className={`lottery-badge ${item.lottery_type}`}>
+                                                        {LOTTERY_TYPES[item.lottery_type] || item.lottery_type}
+                                                    </span>
+                                                    <span className="round-name">{item.lottery_name || LOTTERY_TYPES[item.lottery_type]}</span>
                                                 </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem', background: 'rgba(0,0,0,0.05)', borderRadius: '0.5rem' }}>
-                                                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>ค่าคอม</span>
-                                                    <span style={{ fontWeight: '600' }}>฿{item.total_commission?.toLocaleString()}</span>
+                                                
+                                                {/* Row 2: Date/Time */}
+                                                <div className="user-round-datetime">
+                                                    <FiCalendar /> {new Date(item.open_time || item.round_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })} {new Date(item.open_time || item.round_date).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} - {new Date(item.close_time || item.round_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })} {new Date(item.close_time || item.round_date).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
                                                 </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem', background: 'rgba(0,0,0,0.05)', borderRadius: '0.5rem' }}>
-                                                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>รางวัล</span>
-                                                    <span style={{ fontWeight: '600', color: 'var(--color-success)' }}>฿{item.total_winnings?.toLocaleString()}</span>
-                                                </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem', background: item.profit_loss >= 0 ? 'rgba(46,204,113,0.1)' : 'rgba(231,76,60,0.1)', borderRadius: '0.5rem' }}>
-                                                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>กำไร/ขาดทุน</span>
-                                                    <span style={{ fontWeight: '600', color: item.profit_loss >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                                
+                                                {/* Summary Stats */}
+                                                <div className="header-summary results-header-summary" style={{ marginTop: '0.5rem' }}>
+                                                    <span className="summary-item">
+                                                        <span className="label">ยอดส่ง</span>
+                                                        ฿{item.total_amount?.toLocaleString()}
+                                                    </span>
+                                                    <span className="summary-item">
+                                                        <span className="label">ค่าคอม</span>
+                                                        ฿{item.total_commission?.toLocaleString()}
+                                                    </span>
+                                                    <span className="summary-item">
+                                                        <span className="label">รางวัล</span>
+                                                        <span style={{ color: 'var(--color-success)' }}>฿{item.total_winnings?.toLocaleString()}</span>
+                                                    </span>
+                                                    <span className={`summary-item profit ${item.profit_loss >= 0 ? 'positive' : 'negative'}`}>
+                                                        <span className="label">กำไร/ขาดทุน</span>
                                                         {item.profit_loss >= 0 ? '+' : ''}฿{item.profit_loss?.toLocaleString()}
                                                     </span>
                                                 </div>

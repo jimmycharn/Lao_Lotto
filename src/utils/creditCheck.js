@@ -265,15 +265,6 @@ export async function getDealerCreditSummary(dealerId) {
  */
 export async function updatePendingDeduction(dealerId) {
     try {
-        console.log('updatePendingDeduction called for dealer:', dealerId)
-        
-        // First, debug: get ALL subscriptions for this dealer to see what's there
-        const { data: allSubs } = await supabase
-            .from('dealer_subscriptions')
-            .select('id, dealer_id, status, billing_model, package_id')
-            .eq('dealer_id', dealerId)
-        console.log('ALL subscriptions for dealer:', allSubs)
-
         // Get dealer's subscription (include both active and trial status)
         // Use order by created_at desc and limit 1 to get the latest subscription
         const { data: subscriptions, error: subError } = await supabase
@@ -296,24 +287,13 @@ export async function updatePendingDeduction(dealerId) {
             .order('created_at', { ascending: false })
             .limit(1)
         
-        console.log('Filtered subscriptions (active/trial):', subscriptions, 'Count:', subscriptions?.length)
         const subscription = subscriptions?.[0] || null
-
-        console.log('=== updatePendingDeduction DEBUG ===')
-        console.log('dealer_subscriptions.billing_model:', subscription?.billing_model)
-        console.log('subscription_packages.billing_model:', subscription?.subscription_packages?.billing_model)
-        console.log('subscription_packages.name:', subscription?.subscription_packages?.name)
-        console.log('subscription_packages.percentage_rate:', subscription?.subscription_packages?.percentage_rate)
-        console.log('subscription_packages.min_amount_before_charge:', subscription?.subscription_packages?.min_amount_before_charge)
-        console.log('Full subscription data:', JSON.stringify(subscription, null, 2))
-        console.log('Error:', subError)
 
         // Use billing_model from dealer_subscriptions (updated when package is assigned)
         // Fall back to subscription_packages if not set
         const billingModel = subscription?.billing_model || subscription?.subscription_packages?.billing_model
         
         if (!subscription || billingModel !== 'percentage') {
-            console.log('No percentage subscription, skipping. billing_model:', billingModel)
             return
         }
 
@@ -323,8 +303,6 @@ export async function updatePendingDeduction(dealerId) {
         const minDeduction = subscription.subscription_packages?.min_deduction || 0
         const maxDeduction = subscription.subscription_packages?.max_deduction || 100000
 
-        console.log('[NEW v2] Percentage rate:', percentageRate, 'Min amount:', minAmount, 'Min deduction:', minDeduction, 'Max deduction:', maxDeduction)
-
         // Get all open rounds for this dealer (only status = 'open', not 'closed')
         // Closed rounds have already been charged, so don't include them in pending
         const { data: rounds } = await supabase
@@ -332,8 +310,6 @@ export async function updatePendingDeduction(dealerId) {
             .select('id')
             .eq('dealer_id', dealerId)
             .eq('status', 'open') // Only open rounds, closed rounds are already charged
-
-        console.log('Open rounds (status=open only):', rounds?.length || 0)
 
         if (!rounds || rounds.length === 0) {
             // No open rounds, clear pending deduction
@@ -352,7 +328,6 @@ export async function updatePendingDeduction(dealerId) {
             .eq('status', 'active')
 
         const memberIds = new Set((memberships || []).map(m => m.user_id))
-        console.log('Member count:', memberIds.size)
 
         // Get downstream dealers (dealers who send bets TO this dealer)
         // Include both active status and records without status (backward compatibility)
@@ -366,22 +341,17 @@ export async function updatePendingDeduction(dealerId) {
             (d.status === 'active' || !d.status) && !d.is_blocked
         )
         const downstreamDealerIds = new Set(activeDownstream.map(d => d.dealer_id))
-        console.log('Downstream dealer count:', downstreamDealerIds.size, 'All connections:', downstreamConnections?.length, 'Error:', downstreamError)
 
         // Calculate total pending for all open rounds
         let totalPending = 0
 
         for (const round of rounds) {
-            console.log(`\n=== Processing Round ${round.id} ===`)
-            
             // Get all submissions for this round
             const { data: allSubs, error: subError } = await supabase
                 .from('submissions')
                 .select('id, amount, user_id, source')
                 .eq('round_id', round.id)
                 .eq('is_deleted', false)
-
-            console.log(`Round ${round.id}: fetched ${allSubs?.length || 0} submissions, error:`, subError)
 
             // Get bet_transfers FROM this round (outgoing transfers - these amounts should NOT be charged)
             const { data: outgoingTransfers, error: outTransferError } = await supabase
@@ -394,11 +364,6 @@ export async function updatePendingDeduction(dealerId) {
 
             // Calculate total amount that was transferred OUT (should not be charged)
             const transferredOutAmount = activeTransfers.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0)
-            
-            console.log(`[NEW v2] Round ${round.id}: TRANSFERS - total=${outgoingTransfers?.length || 0}, active=${activeTransfers.length}, transferredOutAmount=${transferredOutAmount}, error=${outTransferError}`)
-            if (activeTransfers.length > 0) {
-                console.log(`[NEW v2] Round ${round.id}: transfer details:`, activeTransfers.map(t => ({ numbers: t.numbers, amount: t.amount, status: t.status })))
-            }
 
             // Separate dealer's own volume, member volume, and downstream dealer volume
             let dealerVolume = 0
@@ -411,19 +376,13 @@ export async function updatePendingDeduction(dealerId) {
                 if (sub.source === 'transfer') {
                     // This is an incoming transfer from downstream dealer
                     downstreamVolume += amount
-                    console.log(`  Sub ${sub.id}: source=transfer, amount=${amount} -> downstreamVolume`)
                 } else if (sub.user_id === dealerId) {
                     dealerVolume += amount
-                    console.log(`  Sub ${sub.id}: user_id=dealer, amount=${amount} -> dealerVolume`)
                 } else if (memberIds.has(sub.user_id)) {
                     memberVolume += amount
-                    console.log(`  Sub ${sub.id}: user_id=member, amount=${amount} -> memberVolume`)
                 } else if (downstreamDealerIds.has(sub.user_id)) {
                     // This is a submission from a downstream dealer (not marked as transfer)
                     downstreamVolume += amount
-                    console.log(`  Sub ${sub.id}: user_id=downstream, amount=${amount} -> downstreamVolume`)
-                } else {
-                    console.log(`  Sub ${sub.id}: user_id=${sub.user_id} NOT COUNTED (not dealer, member, or downstream)`)
                 }
             }
 
@@ -433,9 +392,6 @@ export async function updatePendingDeduction(dealerId) {
             let remainingTransfer = Math.max(0, transferredOutAmount - memberVolume)
             let netDealerVolume = Math.max(0, dealerVolume - remainingTransfer)
 
-            console.log(`[NEW v2] Round ${round.id}: VOLUMES - dealerVolume=${dealerVolume}, memberVolume=${memberVolume}, downstreamVolume=${downstreamVolume}`)
-            console.log(`[NEW v2] Round ${round.id}: NET VOLUMES - netMemberVolume=${netMemberVolume}, netDealerVolume=${netDealerVolume}`)
-
             // Calculate chargeable volume - NEW CODE v2
             // Total volume from dealer's own bets + member bets is subject to minAmount threshold
             // Only the amount EXCEEDING minAmount is charged
@@ -443,35 +399,24 @@ export async function updatePendingDeduction(dealerId) {
             const totalOwnVolume = netDealerVolume + netMemberVolume
             let chargeableVolume = downstreamVolume
             
-            console.log(`[NEW v2] Round ${round.id}: totalOwnVolume=${totalOwnVolume}, minAmount=${minAmount}, downstreamVolume=${downstreamVolume}`)
-            
             if (totalOwnVolume > minAmount) {
                 const excessAmount = totalOwnVolume - minAmount
                 chargeableVolume += excessAmount
-                console.log(`[NEW v2] Round ${round.id}: CHARGING excess ${excessAmount} (totalOwnVolume ${totalOwnVolume} > minAmount ${minAmount})`)
-            } else {
-                console.log(`[NEW v2] Round ${round.id}: NOT CHARGING own volume (totalOwnVolume ${totalOwnVolume} <= minAmount ${minAmount})`)
             }
 
             // Calculate pending fee for this round
             const roundPending = chargeableVolume * (percentageRate / 100)
             totalPending += roundPending
-            
-            console.log(`[NEW v2] Round ${round.id}: chargeableVolume=${chargeableVolume}, roundPending=${roundPending}`)
         }
 
         // Apply min/max deduction limits
         let finalPending = totalPending
         if (finalPending > 0 && finalPending < minDeduction) {
-            console.log(`[NEW v2] Applying min deduction: ${totalPending} -> ${minDeduction}`)
             finalPending = minDeduction
         }
         if (finalPending > maxDeduction) {
-            console.log(`[NEW v2] Applying max deduction: ${totalPending} -> ${maxDeduction}`)
             finalPending = maxDeduction
         }
-
-        console.log('Total pending deduction:', totalPending, '-> Final (with min/max):', finalPending)
 
         // Update pending deduction (upsert to handle case where record doesn't exist)
         const { data: existingCredit } = await supabase
@@ -499,8 +444,6 @@ export async function updatePendingDeduction(dealerId) {
                     warning_threshold: 1000
                 })
         }
-        
-        console.log('Pending deduction updated successfully')
 
     } catch (error) {
         console.error('Error updating pending deduction:', error)

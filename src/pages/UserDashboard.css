@@ -273,12 +273,12 @@
 }
 
 .time-remaining {
-    background: var(--color-success);
-    color: #000;
-    padding: 0.5rem 1rem;
-    border-radius: var(--radius-full);
+    background: #34C759;
+    color: #fff;
+    padding: 0.35rem 0.75rem;
+    border-radius: var(--radius-md);
     font-weight: 600;
-    font-size: 0.9rem;
+    font-size: 0.8rem;
 }
 
 /* Lottery Badge */
@@ -4635,4 +4635,64 @@ html.theme-light .dealer-pill.active .dealer-label {
 [data-theme="light"] .dealer-pill.active .dealer-name,
 html.theme-light .dealer-pill.active .dealer-name {
     color: var(--color-primary-dark) !important;
+}
+
+/* =============================================
+   USER ROUND LAYOUT (New Mobile-First Design)
+   ============================================= */
+
+.user-round-layout {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.user-round-header-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.user-round-header-row .round-name {
+    font-weight: 600;
+    color: var(--color-text);
+    font-size: 0.9rem;
+}
+
+.user-round-datetime {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+}
+
+.user-round-actions-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.user-round-actions-row .round-actions {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.user-round-actions-row svg {
+    color: var(--color-text-muted);
+    transition: transform 0.2s ease;
+}
+
+.user-round-actions-row svg.rotated {
+    transform: rotate(180deg);
+}
+
+/* Light theme - time-remaining badge */
+[data-theme="light"] .time-remaining,
+html.theme-light .time-remaining {
+    background: #4ade80 !important;
+    color: #000 !important;
+    font-weight: 700;
 }
