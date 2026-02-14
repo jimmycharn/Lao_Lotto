@@ -41,6 +41,7 @@ import WriteSubmissionModal from '../components/WriteSubmissionModal'
 import DealerInfoTab from '../components/user/DealerInfoTab'
 import UserQRScannerModal from '../components/user/UserQRScannerModal'
 import { createBill } from '../services/submissionService'
+import { formatCopyText, copyToClipboard } from '../utils/copyFormat'
 
 // Import constants from centralized file
 import {
@@ -462,7 +463,8 @@ export default function UserDashboard() {
                 .select('*')
                 .eq('dealer_id', selectedDealer.id)
                 .eq('is_result_announced', true)
-                .order('round_date', { ascending: false })
+                .order('close_time', { ascending: false })
+                .order('created_at', { ascending: false })
                 .limit(20)
 
             if (!error && data) {
@@ -2542,70 +2544,13 @@ export default function UserDashboard() {
                                                                 <button
                                                                     className="bill-copy-btn"
                                                                     onClick={async () => {
-                                                                        // กลุ่มตาม entry_id ก่อนเพื่อไม่ให้ซ้ำ
-                                                                        const uniqueByEntry = submissions.reduce((acc, sub) => {
-                                                                            const key = sub.entry_id || sub.id
-                                                                            if (!acc[key]) acc[key] = sub
-                                                                            return acc
-                                                                        }, {})
-                                                                        const uniqueSubs = Object.values(uniqueByEntry)
-
-                                                                        const grouped = {}
-                                                                        uniqueSubs.forEach(sub => {
-                                                                            const betType = sub.display_bet_type || BET_TYPES[sub.bet_type]?.label || sub.bet_type
-                                                                            if (!grouped[betType]) grouped[betType] = []
-                                                                            grouped[betType].push(sub)
+                                                                        const text = formatCopyText({
+                                                                            submissions,
+                                                                            round,
+                                                                            userName: profile?.full_name || profile?.email || '-'
                                                                         })
-
-                                                                        const betTypeOrder = ['4 ตัวชุด', '4 ตัวโต๊ด', '3 ตัวบน', '3 ตัวโต๊ด', 'เต็ง-โต๊ด', '2 ตัวบน', '2 ตัวล่าง', '2 ตัวบนกลับ', '2 ตัวล่างกลับ', '1 ตัวบน', '1 ตัวล่าง']
-                                                                        const sortedTypes = Object.keys(grouped).sort((a, b) => {
-                                                                            const idxA = betTypeOrder.indexOf(a)
-                                                                            const idxB = betTypeOrder.indexOf(b)
-                                                                            return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB)
-                                                                        })
-
-                                                                        const totalAmount = submissions.reduce((sum, s) => sum + s.amount, 0)
-                                                                        const now = new Date()
-                                                                        const dateStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
-                                                                        const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
-
-                                                                        let text = `📋 ${round.lottery_name || LOTTERY_TYPES[round.lottery_type]}\n`
-                                                                        text += `📅 ${dateStr} ${timeStr}\n`
-                                                                        text += `👤 ผู้ส่ง: ${profile?.full_name || profile?.email || '-'}\n`
-                                                                        text += `📊 ทั้งหมด (${uniqueSubs.length} รายการ)\n`
-                                                                        text += `👤 เจ้ามือ: ${selectedRound?.dealer_name || '-'}\n`
-                                                                        text += `💰 ยอดรวม: ${round.currency_symbol}${totalAmount.toLocaleString()}\n`
-                                                                        text += `━━━━━━━━━━━━━━━━\n`
-
-                                                                        sortedTypes.forEach(betType => {
-                                                                            text += `${betType}\n`
-                                                                            const items = grouped[betType].sort((a, b) => {
-                                                                                const numA = a.display_numbers || a.numbers
-                                                                                const numB = b.display_numbers || b.numbers
-                                                                                return numA.localeCompare(numB, undefined, { numeric: true })
-                                                                            })
-                                                                            items.forEach(sub => {
-                                                                                const nums = sub.display_numbers || sub.numbers
-                                                                                const amt = sub.display_amount || sub.amount
-                                                                                text += `${nums}=${amt}\n`
-                                                                            })
-                                                                        })
-                                                                        text += `━━━━━━━━━━━━━━━━`
-
-                                                                        try {
-                                                                            await navigator.clipboard.writeText(text)
-                                                                            toast.success('คัดลอกแล้ว!')
-                                                                        } catch (err) {
-                                                                            const textArea = document.createElement('textarea')
-                                                                            textArea.value = text
-                                                                            textArea.style.position = 'fixed'
-                                                                            textArea.style.left = '-9999px'
-                                                                            document.body.appendChild(textArea)
-                                                                            textArea.select()
-                                                                            document.execCommand('copy')
-                                                                            document.body.removeChild(textArea)
-                                                                            toast.success('คัดลอกแล้ว!')
-                                                                        }
+                                                                        await copyToClipboard(text)
+                                                                        toast.success('คัดลอกแล้ว!')
                                                                     }}
                                                                     title="คัดลอกทั้งหมด"
                                                                 >
@@ -2731,71 +2676,14 @@ export default function UserDashboard() {
                                                                                     // Copy bill function
                                                                                     const handleCopyBill = async (e) => {
                                                                                         e.stopPropagation()
-                                                                                        const billName = billItems[0]?.bill_note || billId
-
-                                                                                        // กลุ่มตาม entry_id ก่อนเพื่อไม่ให้ซ้ำ
-                                                                                        const uniqueByEntry = processedBillItems.reduce((acc, sub) => {
-                                                                                            const key = sub.entry_id || sub.id
-                                                                                            if (!acc[key]) {
-                                                                                                acc[key] = sub
-                                                                                            }
-                                                                                            return acc
-                                                                                        }, {})
-                                                                                        const uniqueItems = Object.values(uniqueByEntry)
-
-                                                                                        // จัดกลุ่มตามประเภทเลข
-                                                                                        const grouped = {}
-                                                                                        uniqueItems.forEach(sub => {
-                                                                                            const betType = displayMode === 'summary' ? (sub.display_bet_type || BET_TYPES[sub.bet_type]?.label) : BET_TYPES[sub.bet_type]?.label
-                                                                                            if (!grouped[betType]) grouped[betType] = []
-                                                                                            grouped[betType].push(sub)
+                                                                                        const text = formatCopyText({
+                                                                                            submissions: processedBillItems,
+                                                                                            round,
+                                                                                            userName: profile?.full_name || profile?.email || '-',
+                                                                                            billName: billItems[0]?.bill_note || billId
                                                                                         })
-
-                                                                                        // เรียงลำดับประเภทเลข
-                                                                                        const betTypeOrder = ['4 ตัวชุด', '4 ตัวโต๊ด', '3 ตัวบน', '3 ตัวโต๊ด', 'เต็ง-โต๊ด', '2 ตัวบน', '2 ตัวล่าง', '2 ตัวบนกลับ', '2 ตัวล่างกลับ', '1 ตัวบน', '1 ตัวล่าง']
-                                                                                        const sortedTypes = Object.keys(grouped).sort((a, b) => {
-                                                                                            const idxA = betTypeOrder.indexOf(a)
-                                                                                            const idxB = betTypeOrder.indexOf(b)
-                                                                                            return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB)
-                                                                                        })
-
-                                                                                        let text = `📋 ${round.lottery_name || LOTTERY_TYPES[round.lottery_type]}\n`
-                                                                                        text += `🎫 ${billName}\n`
-                                                                                        text += `📅 ${billDate} ${billTime}\n`
-                                                                                        text += `📊 ทั้งหมด (${uniqueItems.length} รายการ)\n`
-                                                                                        text += `💰 ยอดรวม: ${round.currency_symbol}${billTotal.toLocaleString()}\n`
-                                                                                        text += `━━━━━━━━━━━━━━━━\n`
-
-                                                                                        sortedTypes.forEach(betType => {
-                                                                                            text += `${betType}\n`
-                                                                                            // เรียงเลขจากน้อยไปมาก
-                                                                                            const items = grouped[betType].sort((a, b) => {
-                                                                                                const numA = displayMode === 'summary' ? (a.display_numbers || a.numbers) : a.numbers
-                                                                                                const numB = displayMode === 'summary' ? (b.display_numbers || b.numbers) : b.numbers
-                                                                                                return numA.localeCompare(numB, undefined, { numeric: true })
-                                                                                            })
-                                                                                            items.forEach(sub => {
-                                                                                                const nums = displayMode === 'summary' ? (sub.display_numbers || sub.numbers) : sub.numbers
-                                                                                                const amt = displayMode === 'summary' ? (sub.display_amount || sub.amount) : sub.amount
-                                                                                                text += `${nums}=${amt}\n`
-                                                                                            })
-                                                                                        })
-                                                                                        text += `━━━━━━━━━━━━━━━━`
-
-                                                                                        try {
-                                                                                            await navigator.clipboard.writeText(text)
-                                                                                            toast.success('คัดลอกแล้ว!')
-                                                                                        } catch (err) {
-                                                                                            const textArea = document.createElement('textarea')
-                                                                                            textArea.value = text
-                                                                                            textArea.style.position = 'fixed'
-                                                                                            textArea.style.left = '-9999px'
-                                                                                            document.body.appendChild(textArea)
-                                                                                            textArea.select()
-                                                                                            document.execCommand('copy')
-                                                                                            document.body.removeChild(textArea)
-                                                                                            toast.success('คัดลอกแล้ว!')
-                                                                                        }
+                                                                                        await copyToClipboard(text)
+                                                                                        toast.success('คัดลอกแล้ว!')
                                                                                     }
 
                                                                                     return (
@@ -2836,7 +2724,7 @@ export default function UserDashboard() {
 
                                                                                             {/* Bill Items - Collapsible */}
                                                                                             {isExpandedBill && (
-                                                                                                <div className="bill-items-list">
+                                                                                                <div className="bill-items-list" style={{ borderTop: '1.5px solid rgba(128, 128, 128, 0.35)' }}>
                                                                                                     {sortedBillItems.map(sub => (
                                                                                                         <div
                                                                                                             key={sub.id || sub.entry_id}
@@ -3286,7 +3174,7 @@ export default function UserDashboard() {
                                                                                 </div>
                                                                             </div>
                                                                             {/* Note, Prize, and Time on same line */}
-                                                                            <div className="bill-info-row" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                                            <div className="bill-info-row" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)', borderTop: '1.5px solid rgba(128, 128, 128, 0.3)', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                                                                                 {billNote && (
                                                                                     <span style={{ display: 'flex', alignItems: 'center' }}>
                                                                                         <FiFileText style={{ marginRight: '0.25rem' }} />
@@ -3346,7 +3234,7 @@ export default function UserDashboard() {
                                                                                 </span>
                                                                             </div>
                                                                             {billNote && (
-                                                                                <div className="bill-note-display" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)' }}>
+                                                                                <div className="bill-note-display" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)', borderTop: '1.5px solid rgba(128, 128, 128, 0.3)' }}>
                                                                                     <FiFileText style={{ marginRight: '0.5rem' }} />
                                                                                     {billNote}
                                                                                 </div>

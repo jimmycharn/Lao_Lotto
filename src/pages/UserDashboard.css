@@ -2186,9 +2186,9 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0;
     padding-bottom: 0.75rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(128,128,128,0.3);
 }
 
 .result-bill-header .bill-label {
@@ -2209,6 +2209,10 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    border-top: 1.5px solid rgba(128, 128, 128, 0.3);
+    padding-top: 0.5rem;
+    margin: 0 0.75rem;
+    padding-bottom: 0.5rem;
 }
 
 .result-item {
@@ -4010,6 +4014,8 @@
 /* Bill Items List */
 .bill-items-list {
     padding: 0.5rem 1.25rem 1rem;
+    border-top: 1.5px solid rgba(128, 128, 128, 0.3);
+    margin-top: 1rem;
 }
 
 .bill-item-row {

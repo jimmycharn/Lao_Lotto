@@ -126,12 +126,26 @@ export default function InvitationAccept() {
                 }
             } else {
                 // Regular user joining dealer
+                // Auto-assign default bank account if available
+                let defaultBankId = null
+                const { data: userBanks } = await supabase
+                    .from('user_bank_accounts')
+                    .select('id')
+                    .eq('user_id', user.id)
+                    .eq('is_default', true)
+                    .limit(1)
+
+                if (userBanks && userBanks.length > 0) {
+                    defaultBankId = userBanks[0].id
+                }
+
                 const { error } = await supabase
                     .from('user_dealer_memberships')
                     .insert({
                         user_id: user.id,
                         dealer_id: dealerId,
-                        status: 'pending'
+                        status: 'pending',
+                        member_bank_account_id: defaultBankId
                     })
 
                 if (error) {

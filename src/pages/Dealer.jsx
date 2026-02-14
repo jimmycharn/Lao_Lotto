@@ -302,18 +302,48 @@ export default function Dealer() {
                 console.error('Error fetching memberships:', membershipsError)
             }
 
+            // Fetch user bank accounts for all members
+            const memberIds = (membershipsData || []).map(m => m.user_id).filter(Boolean)
+            let memberBankAccountsMap = {}
+            if (memberIds.length > 0) {
+                const { data: memberBanks } = await supabase
+                    .from('user_bank_accounts')
+                    .select('*')
+                    .in('user_id', memberIds)
+                    .order('is_default', { ascending: false })
+
+                if (memberBanks) {
+                    memberBanks.forEach(bank => {
+                        if (!memberBankAccountsMap[bank.user_id]) {
+                            memberBankAccountsMap[bank.user_id] = []
+                        }
+                        memberBankAccountsMap[bank.user_id].push(bank)
+                    })
+                }
+            }
+
             // Transform and categorize memberships
-            const allMemberships = (membershipsData || []).map(m => ({
-                ...m.profiles,
-                membership_id: m.id,
-                membership_status: m.status,
-                membership_created_at: m.created_at,
-                approved_at: m.approved_at,
-                blocked_at: m.blocked_at,
-                assigned_bank_account_id: m.assigned_bank_account_id,
-                is_dealer: m.profiles?.role === 'dealer', // Mark if member is also a dealer
-                password_changed: m.profiles?.password_changed || false // Track if user has changed password
-            }))
+            const allMemberships = (membershipsData || []).map(m => {
+                const userBanks = memberBankAccountsMap[m.user_id] || []
+                // Determine which bank account the member assigned for this dealer
+                const memberBank = m.member_bank_account_id
+                    ? userBanks.find(b => b.id === m.member_bank_account_id)
+                    : (userBanks.find(b => b.is_default) || userBanks[0])
+
+                return {
+                    ...m.profiles,
+                    membership_id: m.id,
+                    membership_status: m.status,
+                    membership_created_at: m.created_at,
+                    approved_at: m.approved_at,
+                    blocked_at: m.blocked_at,
+                    assigned_bank_account_id: m.assigned_bank_account_id,
+                    member_bank_account_id: m.member_bank_account_id,
+                    member_bank: memberBank || null,
+                    is_dealer: m.profiles?.role === 'dealer', // Mark if member is also a dealer
+                    password_changed: m.profiles?.password_changed || false // Track if user has changed password
+                }
+            })
 
             // Separate regular members from dealer members (เจ้ามือตีเข้า)
             const regularMembers = allMemberships.filter(m => !m.is_dealer)
@@ -1984,7 +2014,12 @@ export default function Dealer() {
                     {activeTab === 'rounds' && (() => {
                         // Filter rounds based on selected tab
                         const openRounds = rounds.filter(r => isRoundOpen(r))
-                        const closedRounds = rounds.filter(r => !isRoundOpen(r))
+                        const closedRounds = rounds.filter(r => !isRoundOpen(r)).sort((a, b) => {
+                            const closeA = new Date(a.close_time).getTime()
+                            const closeB = new Date(b.close_time).getTime()
+                            if (closeB !== closeA) return closeB - closeA
+                            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                        })
                         const displayedRounds = roundsTab === 'open' ? openRounds : closedRounds
 
                         return (

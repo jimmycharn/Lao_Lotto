@@ -5,7 +5,6 @@ import { useTheme, THEMES, DASHBOARDS } from '../contexts/ThemeContext'
 import {
     FiMenu,
     FiX,
-    FiHome,
     FiEdit,
     FiList,
     FiUser,
@@ -43,7 +42,7 @@ export default function Navbar() {
     const hasDealer = profile?.dealer_id
 
     const navLinks = [
-        { path: '/', label: 'หน้าแรก', icon: <FiHome />, hideForDealer: true, hideForSuperAdmin: true },
+        { path: '/dashboard', label: 'ส่งเลข', icon: <FiEdit />, requireAuth: true, hideForDealer: true, hideForSuperAdmin: true },
         { path: '/profile', label: 'โปรไฟล์', icon: <FiUser />, requireAuth: true, hideForDealer: true, hideForSuperAdmin: true },
     ]
 
@@ -134,9 +133,6 @@ export default function Navbar() {
                             <div className="auth-buttons">
                                 <Link to="/login" className="btn btn-secondary btn-sm">
                                     เข้าสู่ระบบ
-                                </Link>
-                                <Link to="/register" className="btn btn-primary btn-sm">
-                                    สมัครสมาชิก
                                 </Link>
                             </div>
                         )}
@@ -229,13 +225,6 @@ export default function Navbar() {
                                     onClick={() => setIsOpen(false)}
                                 >
                                     เข้าสู่ระบบ
-                                </Link>
-                                <Link
-                                    to="/register"
-                                    className="btn btn-primary mobile-auth-btn"
-                                    onClick={() => setIsOpen(false)}
-                                >
-                                    สมัครสมาชิก
                                 </Link>
                             </>
                         )}

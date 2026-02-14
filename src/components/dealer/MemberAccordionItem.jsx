@@ -248,11 +248,17 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                                     </div>
                                     <div className="info-item">
                                         <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>ธนาคาร</label>
-                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{member.bank_name || '-'}</div>
+                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{member.member_bank?.bank_name || member.bank_name || '-'}</div>
                                     </div>
+                                    {member.member_bank?.account_name && (
+                                        <div className="info-item">
+                                            <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>ชื่อบัญชี</label>
+                                            <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{member.member_bank.account_name}</div>
+                                        </div>
+                                    )}
                                     <div className="info-item">
                                         <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>เลขบัญชี</label>
-                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{member.bank_account || '-'}</div>
+                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{member.member_bank?.bank_account || member.bank_account || '-'}</div>
                                     </div>
                                     <div className="info-item">
                                         <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>วันที่สมัคร</label>

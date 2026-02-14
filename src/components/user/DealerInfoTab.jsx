@@ -6,7 +6,9 @@ import {
     FiAward,
     FiUser,
     FiDollarSign,
-    FiCheck
+    FiCheck,
+    FiCreditCard,
+    FiStar
 } from 'react-icons/fi'
 
 // Dealer Info Tab Component - Shows selected dealer's information
@@ -18,6 +20,11 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
     const [loading, setLoading] = useState(true)
     const [subTab, setSubTab] = useState(isOwnDealer ? 'rounds' : 'profile') // Different default tabs
     const [ratesTab, setRatesTab] = useState('thai') // lottery type tab for rates
+
+    // User's own bank accounts
+    const [userBankAccounts, setUserBankAccounts] = useState([])
+    const [memberBankAccountId, setMemberBankAccountId] = useState(null)
+    const [savingBank, setSavingBank] = useState(false)
 
     useEffect(() => {
         if (dealer?.id) {
@@ -50,11 +57,11 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
                 setDealerBankAccounts(bankData)
             }
 
-            // Fetch membership to get assigned_bank_account_id
+            // Fetch membership to get assigned_bank_account_id and member_bank_account_id
             if (user?.id) {
                 const { data: membershipData } = await supabase
                     .from('user_dealer_memberships')
-                    .select('assigned_bank_account_id')
+                    .select('assigned_bank_account_id, member_bank_account_id')
                     .eq('user_id', user.id)
                     .eq('dealer_id', dealer.id)
                     .eq('status', 'active')
@@ -62,6 +69,19 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
 
                 if (membershipData) {
                     setAssignedBankAccountId(membershipData.assigned_bank_account_id)
+                    setMemberBankAccountId(membershipData.member_bank_account_id)
+                }
+
+                // Fetch user's own bank accounts
+                const { data: userBanks } = await supabase
+                    .from('user_bank_accounts')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .order('is_default', { ascending: false })
+                    .order('created_at', { ascending: true })
+
+                if (userBanks) {
+                    setUserBankAccounts(userBanks)
                 }
             }
         } catch (error) {
@@ -75,6 +95,31 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
     const primaryBank = assignedBankAccountId
         ? dealerBankAccounts.find(b => b.id === assignedBankAccountId)
         : (dealerBankAccounts.find(b => b.is_default) || dealerBankAccounts[0])
+
+    // Get the user bank account currently assigned to this dealer
+    const currentMemberBank = memberBankAccountId
+        ? userBankAccounts.find(b => b.id === memberBankAccountId)
+        : (userBankAccounts.find(b => b.is_default) || userBankAccounts[0])
+
+    // Update which user bank account is visible to this dealer
+    async function handleUpdateMemberBank(bankAccountId) {
+        setSavingBank(true)
+        try {
+            const { error } = await supabase
+                .from('user_dealer_memberships')
+                .update({ member_bank_account_id: bankAccountId || null })
+                .eq('user_id', user.id)
+                .eq('dealer_id', dealer.id)
+                .eq('status', 'active')
+
+            if (error) throw error
+            setMemberBankAccountId(bankAccountId || null)
+        } catch (error) {
+            console.error('Error updating member bank:', error)
+        } finally {
+            setSavingBank(false)
+        }
+    }
 
     // Commission and payout rates from user settings
     const commissionRates = userSettings?.commission_rates || {}
@@ -353,9 +398,9 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
                         </div>
                     </div>
 
-                    {/* Bank Account for Transfer */}
+                    {/* Dealer's Bank Account for Transfer */}
                     <div className="profile-details card">
-                        <h3>บัญชีธนาคาร (สำหรับโอนเงิน)</h3>
+                        <h3>บัญชีเจ้ามือ (สำหรับโอนเงิน)</h3>
                         {primaryBank ? (
                             <div className="profile-info-list">
                                 <div className="info-row">
@@ -382,6 +427,81 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
                             </div>
                         )}
                     </div>
+
+                    {/* My Bank Account visible to this dealer */}
+                    {!isOwnDealer && (
+                        <div className="profile-details card">
+                            <h3><FiCreditCard style={{ verticalAlign: 'text-bottom', marginRight: '0.35rem' }} />บัญชีของฉันที่เจ้ามือเห็น</h3>
+                            {userBankAccounts.length > 0 ? (
+                                <>
+                                    {/* Current assigned bank display */}
+                                    {currentMemberBank && (
+                                        <div style={{
+                                            background: 'rgba(212, 175, 55, 0.08)',
+                                            border: '2px solid var(--color-primary)',
+                                            borderRadius: 'var(--radius-md)',
+                                            padding: '0.75rem 1rem',
+                                            marginBottom: '0.75rem'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                                                <FiStar style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                                                <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
+                                                    {currentMemberBank.bank_name}
+                                                </span>
+                                            </div>
+                                            {currentMemberBank.account_name && (
+                                                <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginLeft: '1.5rem' }}>
+                                                    {currentMemberBank.account_name}
+                                                </div>
+                                            )}
+                                            <div style={{ fontSize: '1rem', fontFamily: 'monospace', letterSpacing: '0.05em', color: 'var(--color-text)', marginLeft: '1.5rem' }}>
+                                                {currentMemberBank.bank_account}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Dropdown to change */}
+                                    <div style={{ marginTop: '0.5rem' }}>
+                                        <label style={{
+                                            display: 'block',
+                                            color: 'var(--color-text-muted)',
+                                            fontSize: '0.85rem',
+                                            marginBottom: '0.35rem',
+                                            fontWeight: 500
+                                        }}>
+                                            เลือกบัญชีที่ต้องการให้เจ้ามือเห็น:
+                                        </label>
+                                        <select
+                                            className="form-input"
+                                            value={memberBankAccountId || ''}
+                                            onChange={(e) => handleUpdateMemberBank(e.target.value || null)}
+                                            disabled={savingBank}
+                                            style={{ width: '100%', fontSize: '0.9rem' }}
+                                        >
+                                            <option value="">ใช้บัญชีหลัก (Default)</option>
+                                            {userBankAccounts.map(bank => (
+                                                <option key={bank.id} value={bank.id}>
+                                                    {bank.bank_name} - {bank.bank_account}
+                                                    {bank.is_default ? ' (หลัก)' : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {savingBank && (
+                                            <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.25rem', display: 'block' }}>
+                                                กำลังบันทึก...
+                                            </span>
+                                        )}
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="empty-state small">
+                                    <p style={{ color: 'var(--color-text-muted)' }}>
+                                        ยังไม่มีบัญชีธนาคาร กรุณาเพิ่มบัญชีที่หน้าโปรไฟล์ก่อน
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </>
             ) : (
                 <>

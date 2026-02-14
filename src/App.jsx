@@ -140,8 +140,8 @@ function HomeRedirect() {
     return <Navigate to="/dashboard" replace />
   }
 
-  // Guests see the Home page
-  return <Home />
+  // Guests go to login page directly
+  return <Navigate to="/login" replace />
 }
 
 function AppContent() {
@@ -215,7 +215,7 @@ function AppContent() {
                   </ProtectedRoute>
                 }
               />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
           </Suspense>
         </ErrorBoundary>
