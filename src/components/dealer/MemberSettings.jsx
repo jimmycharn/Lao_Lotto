@@ -35,9 +35,7 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
             '3_top': { commission: 30, payout: 550 },
             '3_tod': { commission: 15, payout: 100 },
             '3_bottom': { commission: 15, payout: 135 },
-            '4_run': { commission: 15, payout: 20 },
             '4_float': { commission: 15, payout: 20 },
-            '5_run': { commission: 15, payout: 10 },
             '5_float': { commission: 15, payout: 10 }
         },
         lao: {
@@ -65,9 +63,7 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
             '2_bottom': { commission: 15, payout: 65 },
             '3_straight': { commission: 30, payout: 550 },
             '3_tod_single': { commission: 15, payout: 100 },
-            '4_run': { commission: 15, payout: 20 },
             '4_float': { commission: 15, payout: 20 },
-            '5_run': { commission: 15, payout: 10 },
             '5_float': { commission: 15, payout: 10 }
         },
         hanoi: {
@@ -95,9 +91,7 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
             '2_bottom': { commission: 15, payout: 65 },
             '3_straight': { commission: 30, payout: 550 },
             '3_tod_single': { commission: 15, payout: 100 },
-            '4_run': { commission: 15, payout: 20 },
             '4_float': { commission: 15, payout: 20 },
-            '5_run': { commission: 15, payout: 10 },
             '5_float': { commission: 15, payout: 10 }
         },
         stock: {
@@ -123,8 +117,8 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
             '3_top': '3 ตัวบน',
             '3_tod': '3 ตัวโต๊ด',
             '3_bottom': '3 ตัวล่าง',
-            '4_run': '4 ตัวลอย',
-            '5_run': '5 ตัวลอย'
+            '4_float': '4 ตัวลอย',
+            '5_float': '5 ตัวลอย'
         },
         lao: {
             '4_set': '4 ตัวชุด',
@@ -140,8 +134,8 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
             '3_top': '3 ตัวตรง',
             '3_straight': '3 ตัวตรง',
             '3_tod_single': '3 ตัวโต๊ด',
-            '4_run': '4 ตัวลอย',
-            '5_run': '5 ตัวลอย'
+            '4_float': '4 ตัวลอย',
+            '5_float': '5 ตัวลอย'
         },
         hanoi: {
             '4_set': '4 ตัวชุด',
@@ -157,8 +151,8 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
             '3_top': '3 ตัวตรง',
             '3_straight': '3 ตัวตรง',
             '3_tod_single': '3 ตัวโต๊ด',
-            '4_run': '4 ตัวลอย',
-            '5_run': '5 ตัวลอย'
+            '4_float': '4 ตัวลอย',
+            '5_float': '5 ตัวลอย'
         },
         stock: {
             '2_top': '2 ตัวบน',

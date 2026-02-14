@@ -379,8 +379,8 @@ const getBetTypeLabel = (betType) => {
         '3_tod': '3 ตัวโต๊ด',
         '3_bottom': '3 ตัวล่าง',
         '4_set': '4 ตัวชุด',
-        '4_run': 'ลอยแพ',
-        '5_run': 'ลอยแพ'
+        '4_float': '4 ตัวลอย',
+        '5_float': '5 ตัวลอย'
     }
     return labels[betType] || betType
 }

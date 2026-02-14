@@ -23,8 +23,8 @@ export const BET_TYPES_BY_LOTTERY = {
         '3_top': { label: '3 ตัวบน', defaultLimit: 500 },
         '3_tod': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
         '3_bottom': { label: '3 ตัวล่าง', defaultLimit: 500 },
-        '4_run': { label: '4 ตัวลอย', defaultLimit: 200 },
-        '5_run': { label: '5 ตัวลอย', defaultLimit: 100 }
+        '4_float': { label: '4 ตัวลอย', defaultLimit: 200 },
+        '5_float': { label: '5 ตัวลอย', defaultLimit: 100 }
     },
     lao: {
         '4_set': { 
@@ -59,8 +59,8 @@ export const BET_TYPES_BY_LOTTERY = {
         '2_run': { label: '2 ตัวลอย', defaultLimit: 1000 },
         '3_top': { label: '3 ตัวตรง', defaultLimit: 500 },
         '3_tod': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
-        '4_run': { label: '4 ตัวลอย', defaultLimit: 200 },
-        '5_run': { label: '5 ตัวลอย', defaultLimit: 100 }
+        '4_float': { label: '4 ตัวลอย', defaultLimit: 200 },
+        '5_float': { label: '5 ตัวลอย', defaultLimit: 100 }
     },
     hanoi: {
         '4_set': { 
@@ -95,8 +95,8 @@ export const BET_TYPES_BY_LOTTERY = {
         '2_run': { label: '2 ตัวลอย', defaultLimit: 1000 },
         '3_top': { label: '3 ตัวตรง', defaultLimit: 500 },
         '3_tod': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
-        '4_run': { label: '4 ตัวลอย', defaultLimit: 200 },
-        '5_run': { label: '5 ตัวลอย', defaultLimit: 100 }
+        '4_float': { label: '4 ตัวลอย', defaultLimit: 200 },
+        '5_float': { label: '5 ตัวลอย', defaultLimit: 100 }
     },
     stock: {
         '2_top': { label: '2 ตัวบน', defaultLimit: 1000 },
@@ -155,7 +155,6 @@ export const BET_TYPES = {
     '4_top': '4 ตัวตรง',
     '4_tod': '4 ตัวโต๊ด',
     '4_float': '4 ตัวลอย',
-    '4_run': '4 ตัวลอย',
     
     // 4 ตัวชุด Prize Types
     '3_straight_set': '3 ตัวตรงชุด',
@@ -165,7 +164,6 @@ export const BET_TYPES = {
 
     // 5 Digits
     '5_float': '5 ตัวลอย',
-    '5_run': '5 ตัวลอย',
 
     // 6 Digits
     '6_top': '6 ตัว (รางวัลที่ 1)'
@@ -208,7 +206,7 @@ export const BET_TYPES_WITH_DIGITS = {
 }
 
 // Bet types that should normalize numbers (order doesn't matter)
-export const PERMUTATION_BET_TYPES = ['2_run', '2_spread', '3_tod', '3_tod_single', '4_run', '4_tod', '4_float', '5_run', '5_float']
+export const PERMUTATION_BET_TYPES = ['2_run', '2_spread', '3_tod', '3_tod_single', '4_tod', '4_float', '5_float']
 
 // Default commission rates per bet type (percentage)
 export const DEFAULT_COMMISSIONS = {
@@ -216,7 +214,7 @@ export const DEFAULT_COMMISSIONS = {
     'pak_top': 15, 'pak_bottom': 15,
     '2_top': 15, '2_front': 15, '2_center': 15, '2_spread': 15, '2_run': 15, '2_bottom': 15,
     '3_top': 15, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
-    '4_run': 15, '4_tod': 15, '4_set': 15, '4_float': 15, '5_run': 15, '5_float': 15, '6_top': 15
+    '4_tod': 15, '4_set': 15, '4_float': 15, '5_float': 15, '6_top': 15
 }
 
 // Default payout rates per bet type
@@ -225,7 +223,7 @@ export const DEFAULT_PAYOUTS = {
     'pak_top': 8, 'pak_bottom': 6,
     '2_top': 65, '2_front': 65, '2_center': 65, '2_run': 10, '2_bottom': 65,
     '3_top': 550, '3_tod': 100, '3_bottom': 135, '3_front': 100, '3_back': 135,
-    '4_run': 20, '4_tod': 100, '5_run': 10, '6_top': 1000000
+    '4_float': 20, '4_tod': 100, '5_float': 10, '6_top': 1000000
 }
 
 // Helper to get default limits for a lottery type

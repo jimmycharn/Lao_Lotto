@@ -30,8 +30,8 @@ describe('normalizeNumber', () => {
         expect(normalizeNumber('4321', '4_float')).toBe('1234')
     })
 
-    it('sorts digits for 5_run', () => {
-        expect(normalizeNumber('54321', '5_run')).toBe('12345')
+    it('sorts digits for 5_float', () => {
+        expect(normalizeNumber('54321', '5_float')).toBe('12345')
     })
 
     it('does NOT sort for non-permutation types (3_top)', () => {
@@ -372,7 +372,7 @@ describe('constants integrity', () => {
         expect(PERMUTATION_BET_TYPES).toContain('2_run')
         expect(PERMUTATION_BET_TYPES).toContain('3_tod')
         expect(PERMUTATION_BET_TYPES).toContain('4_float')
-        expect(PERMUTATION_BET_TYPES).toContain('5_run')
+        expect(PERMUTATION_BET_TYPES).toContain('5_float')
         // Should NOT contain ordered types
         expect(PERMUTATION_BET_TYPES).not.toContain('2_top')
         expect(PERMUTATION_BET_TYPES).not.toContain('3_top')

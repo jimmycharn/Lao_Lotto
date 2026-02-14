@@ -4014,7 +4014,6 @@
 /* Bill Items List */
 .bill-items-list {
     padding: 0.5rem 1.25rem 1rem;
-    border-top: 1.5px solid rgba(128, 128, 128, 0.3);
     margin-top: 1rem;
 }
 
@@ -4278,6 +4277,11 @@
     background: var(--color-surface);
     color: var(--color-text-muted);
     font-size: 0.8rem;
+    text-align: center;
+}
+
+.rates-table th:first-child {
+    text-align: left;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -4300,13 +4304,12 @@
     font-weight: 600;
     color: var(--color-primary);
     font-size: 1rem;
-    display: block;
 }
 
 .rates-table .rate-unit {
     color: var(--color-text-muted);
-    font-size: 0.75rem;
-    display: block;
+    font-size: 0.85rem;
+    margin-left: 2px;
 }
 
 .rates-table .fixed-row {

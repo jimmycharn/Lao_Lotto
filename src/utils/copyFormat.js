@@ -21,9 +21,7 @@ const BET_TYPE_ORDER = [
     '3_tod',          // 3 ตัวโต๊ด
     'koon_chud',      // คูณชุด (virtual type)
     '3_bottom',       // 3 ตัวล่าง
-    '4_run',          // 4 ตัวลอย
     '4_float',        // 4 ตัวลอย
-    '5_run',          // 5 ตัวลอย
     '5_float',        // 5 ตัวลอย
     '4_set',          // 4 ตัวชุด
 ]

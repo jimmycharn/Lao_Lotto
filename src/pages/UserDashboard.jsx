@@ -519,7 +519,7 @@ export default function UserDashboard() {
                                 'run_top': 3, 'run_bottom': 4, 'pak_top': 8, 'pak_bottom': 6,
                                 '2_top': 65, '2_front': 65, '2_center': 65, '2_spread': 65, '2_run': 10, '2_bottom': 65,
                                 '3_top': 550, '3_tod': 100, '3_bottom': 135, '3_front': 100, '3_back': 135,
-                                '4_run': 20, '4_tod': 100, '4_float': 20, '5_float': 10, '6_top': 1000000
+                                '4_float': 20, '4_tod': 100, '5_float': 10, '6_top': 1000000
                             }
                             return sum + (s.amount * (defaultPayouts[s.bet_type] || 1))
                         }, 0)
@@ -617,7 +617,7 @@ export default function UserDashboard() {
         'pak_top': 15, 'pak_bottom': 15,
         '2_top': 15, '2_front': 15, '2_center': 15, '2_spread': 15, '2_run': 15, '2_bottom': 15,
         '3_top': 30, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
-        '4_run': 15, '4_tod': 15, '4_set': 15, '4_float': 15, '5_run': 15, '5_float': 15, '6_top': 15
+        '4_tod': 15, '4_set': 15, '4_float': 15, '5_float': 15, '6_top': 15
     }
 
     // Get lottery type key for settings lookup
@@ -2089,7 +2089,7 @@ export default function UserDashboard() {
         'pak_top': 8, 'pak_bottom': 6,
         '2_top': 65, '2_front': 65, '2_center': 65, '2_spread': 65, '2_run': 10, '2_bottom': 65,
         '3_top': 550, '3_tod': 100, '3_bottom': 135, '3_front': 100, '3_back': 135,
-        '4_run': 20, '4_tod': 100, '4_set': 100, '4_float': 20, '5_float': 10, '6_top': 1000000
+        '4_float': 20, '4_tod': 100, '4_set': 100, '5_float': 10, '6_top': 1000000
     }
 
     // Get lottery type category for settings lookup
@@ -2138,7 +2138,7 @@ export default function UserDashboard() {
         'pak_top': 15, 'pak_bottom': 15,
         '2_top': 15, '2_front': 15, '2_center': 15, '2_spread': 15, '2_run': 15, '2_bottom': 15,
         '3_top': 15, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
-        '4_run': 15, '4_tod': 15, '4_set': 15, '4_float': 15, '5_run': 15, '5_float': 15, '6_top': 15
+        '4_tod': 15, '4_set': 15, '4_float': 15, '5_float': 15, '6_top': 15
     }
 
     // Calculate commission for a submission - use recorded commission_amount for consistency
