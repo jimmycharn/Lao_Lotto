@@ -59,7 +59,7 @@ export function ThemeProvider({ children }) {
     const path = window.location.pathname
     if (path.includes('/dealer')) return DASHBOARDS.DEALER
     if (path.includes('/superadmin')) return DASHBOARDS.SUPERADMIN
-    if (path.includes('/user') || path === '/') return DASHBOARDS.USER
+    if (path.includes('/user') || path.includes('/dashboard') || path === '/') return DASHBOARDS.USER
     if (path.includes('/admin')) return DASHBOARDS.ADMIN
     return DASHBOARDS.GLOBAL
   })

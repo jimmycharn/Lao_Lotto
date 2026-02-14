@@ -27,7 +27,7 @@
         var dashboard = 'global';
         if (path.includes('/dealer')) dashboard = 'dealer';
         else if (path.includes('/superadmin')) dashboard = 'superadmin';
-        else if (path.includes('/user') || path === '/') dashboard = 'user';
+        else if (path.includes('/user') || path.includes('/dashboard') || path === '/') dashboard = 'user';
         else if (path.includes('/admin')) dashboard = 'admin';
         
         // Get stored theme for this dashboard

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme, THEMES, DASHBOARDS } from '../contexts/ThemeContext'
@@ -20,9 +20,20 @@ import './Navbar.css'
 export default function Navbar() {
     const [isOpen, setIsOpen] = useState(false)
     const { user, profile, signOut, isSuperAdmin, isDealer } = useAuth()
-    const { themes, toggleTheme, activeDashboard } = useTheme()
+    const { themes, toggleTheme, activeDashboard, setActiveDashboard } = useTheme()
     const navigate = useNavigate()
     const location = useLocation()
+
+    // Sync activeDashboard when route changes (so theme toggle saves to correct key)
+    useEffect(() => {
+        const path = location.pathname
+        let dashboard = DASHBOARDS.GLOBAL
+        if (path.includes('/dealer')) dashboard = DASHBOARDS.DEALER
+        else if (path.includes('/superadmin')) dashboard = DASHBOARDS.SUPERADMIN
+        else if (path.includes('/user') || path.includes('/dashboard')) dashboard = DASHBOARDS.USER
+        else if (path.includes('/admin')) dashboard = DASHBOARDS.ADMIN
+        setActiveDashboard(dashboard)
+    }, [location.pathname, setActiveDashboard])
     
     // Get current theme based on active dashboard or global
     const currentTheme = themes[activeDashboard] || themes[DASHBOARDS.GLOBAL] || THEMES.DARK
