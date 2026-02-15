@@ -1635,20 +1635,15 @@ export default function RoundAccordionItem({
     }
 
     const getCommission = (sub) => {
-        // Use commission_amount that was recorded when submission was made
-        // This ensures consistency between dealer and user dashboards
-        if (sub.commission_amount !== undefined && sub.commission_amount !== null && sub.commission_amount > 0) {
-            return sub.commission_amount
-        }
-        // Fallback to calculation if commission_amount not recorded or is 0
+        // Always calculate commission from settings to ensure consistency with user dashboard
+        // This fixes the issue where stored commission_amount may have been calculated with wrong rates
         const lotteryKey = getLotteryTypeKey(round.lottery_type)
         const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
         const settings = summaryData.userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
         if (settings?.commission !== undefined) {
             return settings.isFixed ? settings.commission : sub.amount * (settings.commission / 100)
         }
-        // For transfer submissions, always calculate commission using default rates
-        // This ensures commission is shown even if settings weren't saved during transfer
+        // Use default rates if no settings found
         const defaultRate = DEFAULT_COMMISSIONS[sub.bet_type] || 15
         return sub.amount * (defaultRate / 100)
     }
@@ -2636,7 +2631,7 @@ export default function RoundAccordionItem({
                                                     if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
                                                     if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
                                                     return true
-                                                }).reduce((sum, s) => sum + (s.commission_amount || 0), 0).toLocaleString()}</span>
+                                                }).reduce((sum, s) => sum + getCommission(s), 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
                                             </div>
 
                                             {/* View Mode: ทั้งหมด (รวมเลข) */}
@@ -2863,7 +2858,7 @@ export default function RoundAccordionItem({
                                                             }
                                                             billsByUser[bill.user_name].bills.push(bill)
                                                             billsByUser[bill.user_name].total += bill.total
-                                                            billsByUser[bill.user_name].totalCommission += bill.items.reduce((sum, item) => sum + (item.commission_amount || 0), 0)
+                                                            billsByUser[bill.user_name].totalCommission += bill.items.reduce((sum, item) => sum + getCommission(item), 0)
                                                         })
 
                                                         if (Object.keys(billsByUser).length === 0) {
@@ -2887,7 +2882,7 @@ export default function RoundAccordionItem({
                                                                 if (filteredItems.length > 0) {
                                                                     filteredBillsCount++
                                                                     filteredTotal += filteredItems.reduce((s, item) => s + item.amount, 0)
-                                                                    filteredCommission += filteredItems.reduce((s, item) => s + (item.commission_amount || 0), 0)
+                                                                    filteredCommission += filteredItems.reduce((s, item) => s + getCommission(item), 0)
                                                                 }
                                                                 if (billDisplayMode === 'summary') {
                                                                     const byEntry = {}
@@ -3012,8 +3007,8 @@ export default function RoundAccordionItem({
                                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                                                         <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
                                                                                             คอม {round.currency_symbol}{(() => {
-                                                                                                if (inlineBetTypeFilter === 'all') return bill.items.reduce((sum, item) => sum + (item.commission_amount || 0), 0).toLocaleString()
-                                                                                                return bill.items.filter(item => item.bet_type === inlineBetTypeFilter).reduce((sum, item) => sum + (item.commission_amount || 0), 0).toLocaleString()
+                                                                                                if (inlineBetTypeFilter === 'all') return bill.items.reduce((sum, item) => sum + getCommission(item), 0).toLocaleString(undefined, { maximumFractionDigits: 1 })
+                                                                                                return bill.items.filter(item => item.bet_type === inlineBetTypeFilter).reduce((sum, item) => sum + getCommission(item), 0).toLocaleString(undefined, { maximumFractionDigits: 1 })
                                                                                             })()}
                                                                                         </span>
                                                                                         <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>
