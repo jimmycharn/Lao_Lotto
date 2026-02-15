@@ -59,7 +59,7 @@ export default function Login() {
 
     return (
         <div className="auth-page">
-            <div className="auth-container animate-slideUp">
+            <div className="auth-container">
                 <div className="auth-header">
                     <FiGift className="auth-logo" />
                     <h1>เข้าสู่ระบบ</h1>
