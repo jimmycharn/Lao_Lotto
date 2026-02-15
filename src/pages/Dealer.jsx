@@ -3030,11 +3030,40 @@ export default function Dealer() {
             {showResultsModal && selectedRound && (
                 <ResultsModal
                     round={selectedRound}
-                    onClose={(updatedRound) => {
+                    onClose={async (updatedRound) => {
                         setShowResultsModal(false)
-                        // Update only the specific round in state instead of refreshing all data
                         if (updatedRound) {
                             setRounds(prev => prev.map(r => r.id === updatedRound.id ? { ...r, ...updatedRound } : r))
+
+                            // If the round was still 'open' before announcing, deduct credit now
+                            // (closed rounds already had credit deducted in handleCloseRound)
+                            const wasOpen = selectedRound.status === 'open' || 
+                                (!selectedRound.status && new Date() <= new Date(selectedRound.close_time))
+                            if (wasOpen) {
+                                try {
+                                    const { data: immediateBillingResult, error: immediateBillingError } = await supabase
+                                        .rpc('create_immediate_billing_record', {
+                                            p_round_id: updatedRound.id,
+                                            p_dealer_id: user.id
+                                        })
+
+                                    if (!immediateBillingError && immediateBillingResult?.success && immediateBillingResult?.amount_deducted > 0) {
+                                        console.log('Immediate billing on announce:', immediateBillingResult)
+                                        toast.info(`ตัดเครดิต ฿${immediateBillingResult.amount_deducted.toLocaleString()} สำเร็จ`)
+                                    } else {
+                                        const { data: result, error: creditError } = await supabase
+                                            .rpc('finalize_round_credit', { p_round_id: updatedRound.id })
+
+                                        if (!creditError && result?.total_deducted > 0) {
+                                            console.log('Regular finalization on announce:', result)
+                                            toast.info(`ตัดเครดิต ฿${result.total_deducted.toLocaleString()} สำเร็จ`)
+                                        }
+                                    }
+                                } catch (billingErr) {
+                                    console.log('Credit system not configured:', billingErr)
+                                }
+                                fetchDealerCredit()
+                            }
                         }
                     }}
                 />
