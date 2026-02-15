@@ -10,6 +10,7 @@ import {
     FiCreditCard,
     FiStar
 } from 'react-icons/fi'
+import BankAccountCard from '../BankAccountCard'
 
 // Dealer Info Tab Component - Shows selected dealer's information
 export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
@@ -241,7 +242,6 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
             '2_center': '2 ตัวถ่าง',
             '2_run': '2 ตัวลอย',
             '2_bottom': '2 ตัวล่าง',
-            '3_top': '3 ตัวตรง',
             '3_straight': '3 ตัวตรง',
             '3_tod_single': '3 ตัวโต๊ด',
             '4_float': '4 ตัวลอย',
@@ -258,7 +258,6 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
             '2_center': '2 ตัวถ่าง',
             '2_run': '2 ตัวลอย',
             '2_bottom': '2 ตัวล่าง',
-            '3_top': '3 ตัวตรง',
             '3_straight': '3 ตัวตรง',
             '3_tod_single': '3 ตัวโต๊ด',
             '4_float': '4 ตัวลอย',
@@ -390,25 +389,7 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
                     <div className="profile-details card">
                         <h3>บัญชีเจ้ามือ (สำหรับโอนเงิน)</h3>
                         {primaryBank ? (
-                            <div className="profile-info-list">
-                                <div className="info-row">
-                                    <span className="info-label">ธนาคาร</span>
-                                    <span className="info-value">{primaryBank.bank_name}</span>
-                                </div>
-                                <div className="info-row">
-                                    <span className="info-label">ชื่อบัญชี</span>
-                                    <span className="info-value">{primaryBank.account_name || '-'}</span>
-                                </div>
-                                <div className="info-row">
-                                    <span className="info-label">เลขบัญชี</span>
-                                    <span className="info-value bank-account-number">{primaryBank.bank_account}</span>
-                                </div>
-                                {primaryBank.is_default && (
-                                    <div className="default-badge">
-                                        <FiCheck /> บัญชีหลัก
-                                    </div>
-                                )}
-                            </div>
+                            <BankAccountCard bank={primaryBank} />
                         ) : (
                             <div className="empty-state small">
                                 <p>ยังไม่มีข้อมูลบัญชีธนาคาร</p>
@@ -424,27 +405,8 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
                                 <>
                                     {/* Current assigned bank display */}
                                     {currentMemberBank && (
-                                        <div style={{
-                                            background: 'rgba(212, 175, 55, 0.08)',
-                                            border: '2px solid var(--color-primary)',
-                                            borderRadius: 'var(--radius-md)',
-                                            padding: '0.75rem 1rem',
-                                            marginBottom: '0.75rem'
-                                        }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                                                <FiStar style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
-                                                <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
-                                                    {currentMemberBank.bank_name}
-                                                </span>
-                                            </div>
-                                            {currentMemberBank.account_name && (
-                                                <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginLeft: '1.5rem' }}>
-                                                    {currentMemberBank.account_name}
-                                                </div>
-                                            )}
-                                            <div style={{ fontSize: '1rem', fontFamily: 'monospace', letterSpacing: '0.05em', color: 'var(--color-text)', marginLeft: '1.5rem' }}>
-                                                {currentMemberBank.bank_account}
-                                            </div>
+                                        <div style={{ marginBottom: '0.75rem' }}>
+                                            <BankAccountCard bank={currentMemberBank} />
                                         </div>
                                     )}
 

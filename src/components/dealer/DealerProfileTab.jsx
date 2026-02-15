@@ -17,6 +17,7 @@ import {
 } from 'react-icons/fi'
 import '../../pages/Dealer.css'
 import '../../pages/SettingsTabs.css'
+import CopyButton from '../CopyButton'
 
 // Dealer Profile Tab Component
 export default function DealerProfileTab({ user, profile, subscription, formatDate }) {
@@ -432,10 +433,13 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                                             </span>
                                         )}
                                     </div>
-                                    <div className="bank-account-number">{bank.bank_account}</div>
                                     {bank.account_name && (
-                                        <div className="account-name">ชื่อบัญชี: {bank.account_name}</div>
+                                        <div className="account-name">{bank.account_name}</div>
                                     )}
+                                    <div className="bank-account-number" style={{ display: 'flex', alignItems: 'center' }}>
+                                        {bank.bank_account}
+                                        <CopyButton text={bank.bank_account} />
+                                    </div>
                                 </div>
                                 <div className="bank-actions">
                                     {!bank.is_default && (

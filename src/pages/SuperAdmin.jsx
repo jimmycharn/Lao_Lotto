@@ -36,6 +36,7 @@ import {
 } from 'react-icons/fi'
 import QRCode from 'react-qr-code'
 import ChangePasswordModal from '../components/ChangePasswordModal'
+import CopyButton from '../components/CopyButton'
 import './SuperAdmin.css'
 
 export default function SuperAdmin() {
@@ -2160,7 +2161,12 @@ export default function SuperAdmin() {
                                                 </div>
                                             )}
                                         </td>
-                                        <td style={{ fontFamily: 'monospace', fontSize: '1rem' }}>{account.account_number}</td>
+                                        <td style={{ fontFamily: 'monospace', fontSize: '1rem' }}>
+                                            <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                                {account.account_number}
+                                                <CopyButton text={account.account_number} />
+                                            </span>
+                                        </td>
                                         <td>{account.account_name}</td>
                                         <td>
                                             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>

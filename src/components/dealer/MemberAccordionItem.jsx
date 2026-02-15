@@ -9,16 +9,18 @@ import {
     FiTrash2,
     FiLink,
     FiSettings,
-    FiStar
+    FiStar,
+    FiCreditCard
 } from 'react-icons/fi'
 import '../../pages/Dealer.css'
 import '../../pages/SettingsTabs.css'
 import MemberSettings from './MemberSettings'
+import BankAccountCard from '../BankAccountCard'
 
 // Member Accordion Item Component
 export default function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock, onDelete, onDisconnect, dealerBankAccounts = [], onUpdateBank, isDealer = false, onCopyCredentials }) {
     const { user } = useAuth()
-    const [activeTab, setActiveTab] = useState('info') // 'info' | 'settings'
+    const [activeTab, setActiveTab] = useState('info') // 'info' | 'bank' | 'settings'
 
     return (
         <div className={`member-accordion-item ${isExpanded ? 'expanded' : ''}`} style={{
@@ -216,6 +218,22 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                             ข้อมูลทั่วไป
                         </button>
                         <button
+                            onClick={() => setActiveTab('bank')}
+                            style={{
+                                padding: '0.75rem 1rem',
+                                background: 'transparent',
+                                border: 'none',
+                                borderBottom: activeTab === 'bank' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                                color: activeTab === 'bank' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                fontWeight: '500',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <FiCreditCard style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                            บัญชีธนาคาร
+                        </button>
+                        <button
                             onClick={() => setActiveTab('settings')}
                             style={{
                                 padding: '0.75rem 1rem',
@@ -247,20 +265,6 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                                         <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{member.phone || '-'}</div>
                                     </div>
                                     <div className="info-item">
-                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>ธนาคาร</label>
-                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{member.member_bank?.bank_name || member.bank_name || '-'}</div>
-                                    </div>
-                                    {member.member_bank?.account_name && (
-                                        <div className="info-item">
-                                            <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>ชื่อบัญชี</label>
-                                            <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{member.member_bank.account_name}</div>
-                                        </div>
-                                    )}
-                                    <div className="info-item">
-                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>เลขบัญชี</label>
-                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{member.member_bank?.bank_account || member.bank_account || '-'}</div>
-                                    </div>
-                                    <div className="info-item">
                                         <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>วันที่สมัคร</label>
                                         <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{formatDate(member.created_at)}</div>
                                     </div>
@@ -271,6 +275,22 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                                         </div>
                                     </div>
                                 </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'bank' && (
+                            <div className="member-bank-view" style={{ animation: 'fadeIn 0.3s ease' }}>
+                                {/* Member's bank account display */}
+                                {(member.member_bank || member.bank_name) ? (
+                                    <BankAccountCard
+                                        bank={member.member_bank || { bank_name: member.bank_name, bank_account: member.bank_account, account_name: member.account_name }}
+                                        title="บัญชีธนาคารสมาชิก"
+                                    />
+                                ) : (
+                                    <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--color-text-muted)', opacity: 0.7 }}>
+                                        สมาชิกยังไม่ได้ตั้งค่าบัญชีธนาคาร
+                                    </div>
+                                )}
 
                                 {/* Bank Account Assignment for this member */}
                                 {dealerBankAccounts.length > 0 && onUpdateBank && (

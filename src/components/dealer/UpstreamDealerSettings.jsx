@@ -113,7 +113,7 @@ export default function UpstreamDealerSettings({ dealer, onClose, onSaved }) {
             'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
             'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
             '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
-            '3_top': '3 ตัวตรง', '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
+            '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
             '4_float': '4 ตัวลอย', '5_float': '5 ตัวลอย'
         },
         hanoi: {
@@ -121,7 +121,7 @@ export default function UpstreamDealerSettings({ dealer, onClose, onSaved }) {
             'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
             'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
             '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
-            '3_top': '3 ตัวตรง', '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
+            '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
             '4_float': '4 ตัวลอย', '5_float': '5 ตัวลอย'
         },
         stock: { '2_top': '2 ตัวบน', '2_bottom': '2 ตัวล่าง' }

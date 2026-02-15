@@ -76,6 +76,8 @@ import UpstreamDealerAccordionItem from '../components/dealer/UpstreamDealerAcco
 import UpstreamDealersTab from '../components/dealer/UpstreamDealersTab'
 import UpstreamDealerSettings from '../components/dealer/UpstreamDealerSettings'
 import MemberSettings from '../components/dealer/MemberSettings'
+import BankAccountCard from '../components/BankAccountCard'
+import CopyButton from '../components/CopyButton'
 
 export default function Dealer() {
     const { user, profile, loading: authLoading, isDealer, isSuperAdmin, isAccountSuspended } = useAuth()
@@ -363,6 +365,9 @@ export default function Dealer() {
                 membership_id: m.membership_id,
                 membership_status: m.membership_status,
                 membership_created_at: m.membership_created_at,
+                assigned_bank_account_id: m.assigned_bank_account_id,
+                member_bank_account_id: m.member_bank_account_id,
+                member_bank: m.member_bank,
                 is_dealer: true,
                 is_from_membership: true, // Mark as from membership table
                 connection_id: m.membership_id
@@ -425,18 +430,78 @@ export default function Dealer() {
 
                 if (!downstreamError && downstreamData) {
                     console.log('Raw downstream data:', downstreamData)
+
+                    // Fetch dealer bank accounts for downstream dealers
+                    const downstreamDealerIds = downstreamData.map(d => d.dealer_id).filter(Boolean)
+                    let downstreamBankMap = {}
+                    if (downstreamDealerIds.length > 0) {
+                        const { data: downstreamBanks } = await supabase
+                            .from('dealer_bank_accounts')
+                            .select('*')
+                            .in('dealer_id', downstreamDealerIds)
+                            .order('is_default', { ascending: false })
+
+                        if (downstreamBanks) {
+                            downstreamBanks.forEach(bank => {
+                                if (!downstreamBankMap[bank.dealer_id]) {
+                                    downstreamBankMap[bank.dealer_id] = []
+                                }
+                                downstreamBankMap[bank.dealer_id].push(bank)
+                            })
+                        }
+                    }
+
+                    // Also check memberships for assigned_bank_account_id, member_bank_account_id, and real membership id
+                    let downstreamMembershipMap = {}
+                    if (downstreamDealerIds.length > 0) {
+                        const { data: downstreamMemberships } = await supabase
+                            .from('user_dealer_memberships')
+                            .select('id, user_id, member_bank_account_id, assigned_bank_account_id')
+                            .in('user_id', downstreamDealerIds)
+                            .eq('dealer_id', user.id)
+                            .eq('status', 'active')
+
+                        if (downstreamMemberships) {
+                            downstreamMemberships.forEach(m => {
+                                downstreamMembershipMap[m.user_id] = {
+                                    real_membership_id: m.id,
+                                    member_bank_account_id: m.member_bank_account_id,
+                                    assigned_bank_account_id: m.assigned_bank_account_id
+                                }
+                            })
+                        }
+                    }
+
                     // Transform to match member structure
                     const transformedDownstream = downstreamData.map(d => {
-                        console.log('Connection:', d.id, 'Status:', d.status, 'Dealer:', d.dealer_profile?.full_name)
+                        // Get membership data for this downstream dealer (may not exist for QR-connected dealers)
+                        const membershipData = downstreamMembershipMap[d.dealer_id] || {}
+
+                        // Resolve the downstream dealer's bank account that WE see (member_bank)
+                        // Priority: my_bank_account_id on connection > member_bank_account_id on membership > default
+                        const dealerBanks = downstreamBankMap[d.dealer_id] || []
+                        const userBanks = memberBankAccountsMap[d.dealer_id] || []
+                        const allBanks = [...dealerBanks, ...userBanks]
+                        const memberBankAccountId = d.my_bank_account_id || membershipData.member_bank_account_id
+                        const memberBank = memberBankAccountId
+                            ? allBanks.find(b => b.id === memberBankAccountId)
+                            : (allBanks.find(b => b.is_default) || allBanks[0])
+
+                        // assigned_bank_account_id: OUR bank that the downstream dealer sees
+                        // Priority: connection.assigned_bank_account_id > membership.assigned_bank_account_id
+                        const assignedBankId = d.assigned_bank_account_id || membershipData.assigned_bank_account_id || null
+
                         return {
                             id: d.dealer_profile?.id,
                             email: d.dealer_profile?.email,
                             full_name: d.dealer_profile?.full_name || d.upstream_name,
                             phone: d.dealer_profile?.phone,
                             created_at: d.dealer_profile?.created_at,
-                            membership_id: d.id,
+                            membership_id: membershipData.real_membership_id || d.id,
                             membership_status: d.status || (d.is_blocked ? 'blocked' : 'active'),
                             membership_created_at: d.created_at,
+                            assigned_bank_account_id: assignedBankId,
+                            member_bank: memberBank || null,
                             is_dealer: true,
                             is_linked: d.is_linked,
                             lottery_settings: d.lottery_settings,
@@ -1200,21 +1265,66 @@ export default function Dealer() {
     }
 
     // Update assigned bank account for member
+    // For regular members: update user_dealer_memberships.assigned_bank_account_id
+    // For dealer members (เจ้ามือตีเข้า): update dealer_upstream_connections.assigned_bank_account_id
+    //   because dealer-to-dealer QR connections do NOT create user_dealer_memberships records
     async function handleUpdateMemberBank(member, bankAccountId) {
         try {
-            const { error } = await supabase
-                .from('user_dealer_memberships')
-                .update({ assigned_bank_account_id: bankAccountId || null })
-                .eq('id', member.membership_id)
+            let success = false
 
-            if (error) throw error
+            if (member.is_dealer && member.connection_id) {
+                // Dealer member (เจ้ามือตีเข้า) - update on dealer_upstream_connections
+                // The connection_id is the dealer_upstream_connections.id
+                const { data, error } = await supabase
+                    .from('dealer_upstream_connections')
+                    .update({ assigned_bank_account_id: bankAccountId || null })
+                    .eq('id', member.connection_id)
+                    .select()
 
-            // Update local state immediately
+                if (error) throw error
+                success = data && data.length > 0
+
+                // If connection update failed and we have a real membership_id, try membership table
+                if (!success && member.membership_id && member.membership_id !== member.connection_id) {
+                    const { data: mData, error: mError } = await supabase
+                        .from('user_dealer_memberships')
+                        .update({ assigned_bank_account_id: bankAccountId || null })
+                        .eq('id', member.membership_id)
+                        .select()
+                    if (mError) throw mError
+                    success = mData && mData.length > 0
+                }
+            } else {
+                // Regular member - update on user_dealer_memberships
+                const { data, error } = await supabase
+                    .from('user_dealer_memberships')
+                    .update({ assigned_bank_account_id: bankAccountId || null })
+                    .eq('id', member.membership_id)
+                    .select()
+
+                if (error) throw error
+                success = data && data.length > 0
+            }
+
+            if (!success) {
+                toast.error('ไม่พบข้อมูลสมาชิกในระบบ')
+                return
+            }
+
+            // Update local state
+            const matchMember = (m) =>
+                m.id === member.id ||
+                m.membership_id === member.membership_id ||
+                m.connection_id === member.connection_id
+
             setMembers(prev => prev.map(m =>
-                m.membership_id === member.membership_id
-                    ? { ...m, assigned_bank_account_id: bankAccountId || null }
-                    : m
+                matchMember(m) ? { ...m, assigned_bank_account_id: bankAccountId || null } : m
             ))
+            setDownstreamDealers(prev => prev.map(m =>
+                matchMember(m) ? { ...m, assigned_bank_account_id: bankAccountId || null } : m
+            ))
+
+            toast.success('อัปเดตบัญชีธนาคารสำเร็จ')
         } catch (error) {
             console.error('Error updating member bank:', error)
             toast.error('เกิดข้อผิดพลาดในการอัปเดตบัญชีธนาคาร')
@@ -2973,88 +3083,10 @@ export default function Dealer() {
                                     border: '2px solid var(--color-primary)',
                                     boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
                                 }}>
-                                    <div style={{
-                                        fontSize: '0.8rem',
-                                        color: 'var(--color-primary)',
-                                        marginBottom: '0.75rem',
-                                        fontWeight: '600',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '0.5rem'
-                                    }}>
-                                        <FiCreditCard /> โอนเงินเข้าบัญชีนี้
-                                    </div>
-                                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--color-text)', marginBottom: '0.25rem' }}>
-                                        {assignedBankAccount.bank_name}
-                                    </div>
-                                    <div style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '0.5rem',
-                                        margin: '0.5rem 0'
-                                    }}>
-                                        <span style={{
-                                            fontSize: '1.5rem',
-                                            fontFamily: 'monospace',
-                                            fontWeight: 'bold',
-                                            color: 'var(--color-primary)',
-                                            letterSpacing: '2px'
-                                        }}>
-                                            {assignedBankAccount.account_number}
-                                        </span>
-                                        <button
-                                            onClick={async (e) => {
-                                                e.stopPropagation()
-                                                const text = assignedBankAccount.account_number
-                                                let copied = false
-                                                try {
-                                                    if (navigator.clipboard && window.isSecureContext) {
-                                                        await navigator.clipboard.writeText(text)
-                                                        copied = true
-                                                    }
-                                                } catch (_) {}
-                                                if (!copied) {
-                                                    // Fallback for HTTP / mobile browsers
-                                                    const el = document.createElement('input')
-                                                    el.value = text
-                                                    el.setAttribute('readonly', '')
-                                                    el.style.position = 'absolute'
-                                                    el.style.left = '-9999px'
-                                                    el.style.opacity = '0'
-                                                    document.body.appendChild(el)
-                                                    // iOS specific
-                                                    const range = document.createRange()
-                                                    el.contentEditable = 'true'
-                                                    el.readOnly = false
-                                                    el.focus()
-                                                    el.select()
-                                                    el.setSelectionRange(0, text.length)
-                                                    try {
-                                                        copied = document.execCommand('copy')
-                                                    } catch (_) {}
-                                                    document.body.removeChild(el)
-                                                }
-                                                toast.success(copied ? 'คัดลอกเลขบัญชีแล้ว' : 'กดค้างที่เลขบัญชีเพื่อคัดลอก')
-                                            }}
-                                            style={{
-                                                background: 'none',
-                                                border: '1px solid var(--color-border)',
-                                                borderRadius: '6px',
-                                                padding: '0.3rem',
-                                                cursor: 'pointer',
-                                                color: 'var(--color-text-muted)',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                transition: 'color 0.2s'
-                                            }}
-                                            title="คัดลอกเลขบัญชี"
-                                        >
-                                            <FiCopy size={16} />
-                                        </button>
-                                    </div>
-                                    <div style={{ fontSize: '0.95rem', color: 'var(--color-text-muted)', fontWeight: '500' }}>
-                                        {assignedBankAccount.account_name}
-                                    </div>
+                                    <BankAccountCard
+                                        bank={assignedBankAccount}
+                                        title="โอนเงินเข้าบัญชีนี้"
+                                    />
                                 </div>
                             ) : (
                                 <div style={{

@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { FiUser, FiEdit2, FiSave, FiCheck, FiLock, FiPlus, FiTrash2, FiStar, FiX } from 'react-icons/fi'
 import ChangePasswordModal from '../components/ChangePasswordModal'
+import CopyButton from '../components/CopyButton'
 import './Profile.css'
 
 const bankOptions = [
@@ -442,8 +443,9 @@ export default function Profile() {
                                                         {bank.account_name}
                                                     </div>
                                                 )}
-                                                <div style={{ fontSize: '1rem', fontFamily: 'monospace', letterSpacing: '0.05em', color: 'var(--color-text)' }}>
+                                                <div style={{ fontSize: '1rem', fontFamily: 'monospace', letterSpacing: '0.05em', color: 'var(--color-text)', display: 'flex', alignItems: 'center' }}>
                                                     {bank.bank_account}
+                                                    <CopyButton text={bank.bank_account} />
                                                 </div>
                                             </div>
                                             <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0 }}>
