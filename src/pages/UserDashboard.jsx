@@ -47,6 +47,7 @@ import { formatCopyText, copyToClipboard } from '../utils/copyFormat'
 import {
     LOTTERY_TYPES,
     BET_TYPES_WITH_DIGITS as BET_TYPES,
+    DEFAULT_COMMISSIONS,
     getPermutations,
     getUnique3DigitPermsFrom4,
     getUnique3DigitPermsFrom5,
@@ -611,14 +612,8 @@ export default function UserDashboard() {
         return new Date() < deleteDeadline
     }
 
-    // Default commission rates per bet type (percentage) - moved up for use in addToDraft
-    const DEFAULT_COMMISSIONS_DRAFT = {
-        'run_top': 15, 'run_bottom': 15,
-        'pak_top': 15, 'pak_bottom': 15,
-        '2_top': 15, '2_front': 15, '2_center': 15, '2_spread': 15, '2_run': 15, '2_bottom': 15,
-        '3_top': 30, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
-        '4_tod': 15, '4_set': 15, '4_float': 15, '5_float': 15, '6_top': 15
-    }
+    // Use centralized DEFAULT_COMMISSIONS from lotteryTypes.js
+    // (Previously had a local copy with incorrect '3_top': 30 instead of 15)
 
     // Get lottery type key for settings lookup
     const getLotteryKeyForDraft = (lotteryType) => {
@@ -631,7 +626,7 @@ export default function UserDashboard() {
     // Helper function to get commission rate for a bet type from lottery_settings
     // settingsOverride can be passed with fresh settings from database
     const getCommissionForBetType = (betType, settingsOverride = null) => {
-        if (!selectedRound) return { rate: DEFAULT_COMMISSIONS_DRAFT[betType] || 15, isFixed: false }
+        if (!selectedRound) return { rate: DEFAULT_COMMISSIONS[betType] || 15, isFixed: false }
 
         const currentSettings = settingsOverride || userSettings
         const lotteryKey = getLotteryKeyForDraft(selectedRound.lottery_type)
@@ -675,7 +670,7 @@ export default function UserDashboard() {
             }
         }
 
-        return { rate: DEFAULT_COMMISSIONS_DRAFT[betType] || 15, isFixed: false }
+        return { rate: DEFAULT_COMMISSIONS[betType] || 15, isFixed: false }
     }
 
     // Calculate commission amount based on rate and amount
