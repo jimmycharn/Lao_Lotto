@@ -62,6 +62,20 @@ export function AuthProvider({ children }) {
         let isMounted = true
         let profileFetched = false
 
+        // Helper to clear all stale auth data
+        const clearStaleSession = () => {
+            console.warn('Clearing stale session')
+            setUser(null)
+            setProfile(null)
+            clearProfileCache()
+            // Remove Supabase auth tokens from localStorage
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                    localStorage.removeItem(key)
+                }
+            })
+        }
+
         // Helper function to handle session
         const handleSession = async () => {
             try {
@@ -79,22 +93,69 @@ export function AuthProvider({ children }) {
                 
                 if (error) {
                     console.error('getSession error:', error)
+                    clearStaleSession()
                     setLoading(false)
                     return
                 }
                 
                 if (session?.user) {
-                    setUser(session.user)
+                    // Check if the token is expired or about to expire
+                    const expiresAt = session.expires_at // Unix timestamp in seconds
+                    const now = Math.floor(Date.now() / 1000)
+                    const isExpired = expiresAt && now >= expiresAt - 30 // 30s buffer
                     
-                    // Try to use cached profile first for instant UI
-                    const cachedProfile = getCachedProfile(session.user.id)
-                    if (cachedProfile) {
-                        setProfile(cachedProfile)
+                    if (isExpired) {
+                        console.log('Session token expired, attempting refresh...')
+                        try {
+                            const { data: refreshData, error: refreshError } = await Promise.race([
+                                supabase.auth.refreshSession(),
+                                new Promise((_, reject) => 
+                                    setTimeout(() => reject(new Error('Refresh timeout')), 5000)
+                                )
+                            ])
+                            
+                            if (!isMounted) return
+                            
+                            if (refreshError || !refreshData?.session) {
+                                console.warn('Token refresh failed:', refreshError?.message || 'No session returned')
+                                clearStaleSession()
+                                setLoading(false)
+                                return
+                            }
+                            
+                            // Use the refreshed session
+                            console.log('Token refreshed successfully')
+                            setUser(refreshData.session.user)
+                            
+                            const cachedProfile = getCachedProfile(refreshData.session.user.id)
+                            if (cachedProfile) {
+                                setProfile(cachedProfile)
+                            }
+                            
+                            profileFetched = true
+                            fetchProfile(refreshData.session.user, !!cachedProfile)
+                        } catch (refreshErr) {
+                            console.warn('Token refresh timed out:', refreshErr.message)
+                            if (isMounted) {
+                                clearStaleSession()
+                            }
+                            setLoading(false)
+                            return
+                        }
+                    } else {
+                        // Token is still valid
+                        setUser(session.user)
+                        
+                        // Try to use cached profile first for instant UI
+                        const cachedProfile = getCachedProfile(session.user.id)
+                        if (cachedProfile) {
+                            setProfile(cachedProfile)
+                        }
+                        
+                        profileFetched = true
+                        // Fetch fresh profile in background
+                        fetchProfile(session.user, !!cachedProfile)
                     }
-                    
-                    profileFetched = true
-                    // Fetch fresh profile in background
-                    fetchProfile(session.user, true)
                 }
                 
                 // Always set loading false
@@ -102,6 +163,7 @@ export function AuthProvider({ children }) {
             } catch (err) {
                 console.warn('Auth session check failed or timed out:', err.message)
                 if (isMounted) {
+                    clearStaleSession()
                     setLoading(false)
                 }
             }
@@ -120,15 +182,14 @@ export function AuthProvider({ children }) {
                 
                 if (event === 'SIGNED_IN') {
                     setUser(session?.user ?? null)
-                    // Don't set loading = true, just fetch profile in background
-                    setLoading(false) // Always stop loading on sign in
-                    if (!profileFetched) {
-                        profileFetched = true
-                        fetchProfile(session.user, true) // Background fetch
-                    }
+                    setLoading(false)
+                    // Always fetch profile on sign in (fresh login)
+                    profileFetched = true
+                    fetchProfile(session.user, false)
                 } else if (event === 'SIGNED_OUT') {
                     setUser(null)
                     setProfile(null)
+                    clearProfileCache()
                     setLoading(false)
                     profileFetched = false
                 } else if (event === 'TOKEN_REFRESHED') {
@@ -175,6 +236,25 @@ export function AuthProvider({ children }) {
 
             if (error) {
                 console.error('Error fetching profile:', error)
+
+                // If auth-related error (expired JWT, unauthorized), clear stale session
+                const isAuthError = error.message?.includes('JWT') ||
+                    error.message?.includes('token') ||
+                    error.code === 'PGRST301' ||
+                    error.code === '401' ||
+                    error.code === '403'
+                if (isAuthError) {
+                    console.warn('Auth error fetching profile, clearing stale session')
+                    setUser(null)
+                    setProfile(null)
+                    clearProfileCache()
+                    Object.keys(localStorage).forEach(key => {
+                        if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                            localStorage.removeItem(key)
+                        }
+                    })
+                    return
+                }
 
                 // If profile doesn't exist (PGRST116) and we have email, try to create it
                 if (error.code === 'PGRST116' && userEmail) {
