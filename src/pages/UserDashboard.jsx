@@ -2076,7 +2076,9 @@ export default function UserDashboard() {
 
     // Calculate totals
     const totalAmount = submissions.reduce((sum, s) => sum + (s.amount || 0), 0)
-    const totalCommission = submissions.reduce((sum, s) => sum + (s.commission_amount || 0), 0)
+    const totalCommission = selectedRound 
+        ? submissions.reduce((sum, s) => sum + calculateCommissionAmount(s.amount || 0, s.bet_type), 0)
+        : 0
 
     // Default payout rates per bet type
     const DEFAULT_PAYOUTS = {
@@ -2594,16 +2596,21 @@ export default function UserDashboard() {
                                                                             new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
                                                                         )
                                                                         return sortedItems.reduce((acc, sub) => {
+                                                                            const subCommission = calculateCommissionAmount(sub.amount || 0, sub.bet_type)
                                                                             if (sub.entry_id) {
                                                                                 const existing = acc.find(a => a.entry_id === sub.entry_id)
                                                                                 if (existing) {
                                                                                     existing.amount += sub.amount
-                                                                                    existing.commission_amount += sub.commission_amount
+                                                                                    existing._calc_commission = (existing._calc_commission || 0) + subCommission
                                                                                     return acc
                                                                                 }
-                                                                                acc.push({ ...sub })
+                                                                                const clone = { ...sub }
+                                                                                clone._calc_commission = subCommission
+                                                                                acc.push(clone)
                                                                             } else {
-                                                                                acc.push({ ...sub })
+                                                                                const clone = { ...sub }
+                                                                                clone._calc_commission = subCommission
+                                                                                acc.push(clone)
                                                                             }
                                                                             return acc
                                                                         }, [])
@@ -2628,7 +2635,7 @@ export default function UserDashboard() {
                                                                             <div className="bill-view-container">
                                                                                 {sortedBillEntries.map(([billId, billItems]) => {
                                                                                     const billTotal = billItems.reduce((sum, item) => sum + item.amount, 0)
-                                                                                    const billCommission = billItems.reduce((sum, item) => sum + item.commission_amount, 0)
+                                                                                    const billCommission = billItems.reduce((sum, item) => sum + calculateCommissionAmount(item.amount || 0, item.bet_type), 0)
                                                                                     const billTime = new Date(billItems[0].created_at).toLocaleTimeString('th-TH', {
                                                                                         hour: '2-digit',
                                                                                         minute: '2-digit'
@@ -2699,6 +2706,14 @@ export default function UserDashboard() {
                                                                                                     </div>
                                                                                                 </div>
                                                                                                 <div className="bill-header-right">
+                                                                                                    <div className="bill-header-commission" style={{ textAlign: 'right', marginRight: '1rem' }}>
+                                                                                                        <span style={{ color: 'var(--color-warning)', fontWeight: '600' }}>
+                                                                                                            {round.currency_symbol}{billCommission.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                                                                                                        </span>
+                                                                                                        <span className="bill-count" style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                                            ค่าคอม
+                                                                                                        </span>
+                                                                                                    </div>
                                                                                                     <div className="bill-header-total">
                                                                                                         <span className="bill-total-amount">
                                                                                                             {round.currency_symbol}{billTotal.toLocaleString()}
@@ -2731,7 +2746,10 @@ export default function UserDashboard() {
                                                                                                                     <span className="bill-display-text">
                                                                                                                         {sub.display_numbers}
                                                                                                                     </span>
-                                                                                                                    <span className="bill-item-amount">
+                                                                                                                    <span className="bill-item-commission" style={{ color: 'var(--color-warning)', fontSize: '0.8rem', minWidth: '55px', textAlign: 'right', marginRight: '0.75rem' }}>
+                                                                                                                        {round.currency_symbol}{(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type)).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                                                                                                                    </span>
+                                                                                                                    <span className="bill-item-amount" style={{ minWidth: '55px', textAlign: 'right' }}>
                                                                                                                         {round.currency_symbol}{sub.display_amount || sub.amount?.toLocaleString()}
                                                                                                                     </span>
                                                                                                                 </>
@@ -2745,7 +2763,10 @@ export default function UserDashboard() {
                                                                                                                             {sub.numbers}
                                                                                                                         </span>
                                                                                                                     </div>
-                                                                                                                    <span className="bill-item-amount">
+                                                                                                                    <span className="bill-item-commission" style={{ color: 'var(--color-warning)', fontSize: '0.8rem', minWidth: '55px', textAlign: 'right', marginRight: '0.75rem' }}>
+                                                                                                                        {round.currency_symbol}{calculateCommissionAmount(sub.amount || 0, sub.bet_type).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                                                                                                                    </span>
+                                                                                                                    <span className="bill-item-amount" style={{ minWidth: '55px', textAlign: 'right' }}>
                                                                                                                         {round.currency_symbol}{sub.amount?.toLocaleString()}
                                                                                                                     </span>
                                                                                                                 </>
@@ -2836,8 +2857,8 @@ export default function UserDashboard() {
                                                                                             <td>{round.currency_symbol}{displayMode === 'summary'
                                                                                                 ? (typeof sub.display_amount === 'string' ? sub.display_amount : sub.amount?.toLocaleString())
                                                                                                 : sub.amount?.toLocaleString()}</td>
-                                                                                            <td className="commission-cell">
-                                                                                                {round.currency_symbol}{sub.commission_amount?.toLocaleString()}
+                                                                                            <td className="commission-cell" style={{ color: 'var(--color-warning)' }}>
+                                                                                                {round.currency_symbol}{(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type)).toLocaleString(undefined, { maximumFractionDigits: 1 })}
                                                                                             </td>
                                                                                             <td className="time-cell">
                                                                                                 {new Date(sub.created_at).toLocaleTimeString('th-TH', {
