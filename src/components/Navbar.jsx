@@ -11,7 +11,6 @@ import {
     FiLogOut,
     FiUsers,
     FiSettings,
-    FiGift,
     FiSun,
     FiMoon
 } from 'react-icons/fi'
@@ -73,7 +72,7 @@ export default function Navbar() {
                     {/* Logo with User Name and Role Badge */}
                     <div className="navbar-brand">
                         <Link to="/" className="navbar-logo">
-                            <FiGift className="logo-icon" />
+                            <img src="/logo.png" alt="Big Lotto" className="logo-image" />
                             <span className="logo-text">
                                 <span className="logo-lao">Big</span>
                                 <span className="logo-lotto">Lotto</span>

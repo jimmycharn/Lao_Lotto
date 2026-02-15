@@ -76,6 +76,13 @@
     animation: pulse 2s infinite;
 }
 
+.logo-image {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    object-fit: cover;
+}
+
 .logo-text {
     display: flex;
     gap: 0.25rem;
