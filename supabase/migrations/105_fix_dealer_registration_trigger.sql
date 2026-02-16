@@ -1,13 +1,56 @@
 -- =============================================
 -- FIX: DEALER REGISTRATION TRIGGER
 -- =============================================
--- The auto_create_dealer_subscription trigger was failing because
--- RLS policies on dealer_subscriptions and dealer_credits don't allow
--- INSERT from the trigger context.
+-- Issues fixed:
+-- 1. handle_new_user was not reading role from user metadata
+-- 2. auto_create_dealer_subscription was failing due to RLS policies
 -- 
--- Solution: Update the function to bypass RLS using SET search_path
--- and ensure SECURITY DEFINER works correctly.
+-- Solution: 
+-- 1. Update handle_new_user to read role from raw_user_meta_data
+-- 2. Update auto_create_dealer_subscription with proper error handling
+-- 3. Add INSERT policies for dealer_subscriptions and dealer_credits
 -- =============================================
+
+-- First, fix the handle_new_user function to properly read role from metadata
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+SECURITY DEFINER
+SET search_path = public
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    user_role TEXT;
+BEGIN
+    -- Get role from metadata, default to 'user' if not provided
+    user_role := COALESCE(NEW.raw_user_meta_data->>'role', 'user');
+    
+    -- Validate role - only allow 'user' or 'dealer' from registration
+    -- 'superadmin' cannot be self-assigned
+    IF user_role NOT IN ('user', 'dealer') THEN
+        user_role := 'user';
+    END IF;
+
+    INSERT INTO public.profiles (id, email, full_name, role, balance, dealer_id)
+    VALUES (
+        NEW.id,
+        NEW.email,
+        COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)),
+        user_role,
+        0,
+        (NEW.raw_user_meta_data->>'dealer_id')::uuid
+    )
+    ON CONFLICT (id) DO UPDATE SET
+        role = EXCLUDED.role,
+        full_name = COALESCE(EXCLUDED.full_name, profiles.full_name);
+    RETURN NEW;
+END;
+$$;
+
+-- Recreate trigger for handle_new_user
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- Drop and recreate the function with proper RLS bypass
 CREATE OR REPLACE FUNCTION auto_create_dealer_subscription()
