@@ -2147,6 +2147,8 @@ export default function UserDashboard() {
         )
     }
 
+    // Wrap entire render in try-catch to capture exact error
+    try {
     return (
         <div className="user-dashboard">
             <div className="container">
@@ -3608,5 +3610,17 @@ export default function UserDashboard() {
             )}
         </div>
     )
+    } catch (renderErr) {
+        console.error('UserDashboard render error:', renderErr)
+        return (
+            <div className="user-dashboard" style={{ padding: '2rem' }}>
+                <div style={{ background: '#1a1a2e', border: '2px solid #e74c3c', borderRadius: '12px', padding: '1.5rem', color: '#fff' }}>
+                    <h2 style={{ color: '#e74c3c', marginBottom: '1rem' }}>⚠️ Render Error</h2>
+                    <p style={{ marginBottom: '0.5rem' }}><strong>Message:</strong> {renderErr.message}</p>
+                    <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '0.75rem', color: '#aaa', background: '#0d0d1a', padding: '1rem', borderRadius: '8px', maxHeight: '300px', overflow: 'auto' }}>{renderErr.stack}</pre>
+                    <button onClick={() => window.location.reload()} style={{ marginTop: '1rem', padding: '0.5rem 1.5rem', background: '#e74c3c', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>🔄 รีเฟรช</button>
+                </div>
+            </div>
+        )
+    }
 }
-
