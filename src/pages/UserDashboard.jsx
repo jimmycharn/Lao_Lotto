@@ -359,7 +359,6 @@ export default function UserDashboard() {
 
     async function fetchUserSettings() {
         if (!selectedDealer) return
-        console.log('fetchUserSettings: fetching for user_id:', user.id, 'dealer_id:', selectedDealer.id)
         try {
             const { data, error } = await supabase
                 .from('user_settings')
@@ -368,7 +367,6 @@ export default function UserDashboard() {
                 .eq('dealer_id', selectedDealer.id)
                 .maybeSingle()
 
-            console.log('fetchUserSettings result:', { data, error })
             if (error) {
                 console.error('Error fetching user settings:', error)
                 return
@@ -647,14 +645,6 @@ export default function UserDashboard() {
 
         const settings = currentSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
 
-        console.log('getCommissionForBetType:', {
-            betType,
-            settingsKey,
-            lotteryKey,
-            settings,
-            currentSettings: currentSettings?.lottery_settings?.[lotteryKey]
-        })
-
         if (settings && settings.commission !== undefined) {
             return { rate: settings.commission, isFixed: settings.isFixed || false }
         }
@@ -667,7 +657,6 @@ export default function UserDashboard() {
                 '4_set': { commission: 25, isFixed: true }
             }
             if (LAO_SET_DEFAULTS[betType]) {
-                console.log('Using Lao default for', betType, LAO_SET_DEFAULTS[betType])
                 return { rate: LAO_SET_DEFAULTS[betType].commission, isFixed: true }
             }
         }
@@ -687,8 +676,6 @@ export default function UserDashboard() {
 
     // Add to draft list
     async function addToDraft(betTypeOverride = null) {
-        console.log('addToDraft called with:', betTypeOverride)
-        console.log('submitForm:', submitForm)
 
         // Fetch fresh userSettings before processing to ensure latest commission rates
         let freshUserSettings = userSettings
@@ -705,7 +692,6 @@ export default function UserDashboard() {
                     freshUserSettings = data
                     setUserSettings(data) // Update state for future use
                 }
-                console.log('Fresh userSettings fetched:', data)
             } catch (error) {
                 console.error('Error fetching fresh userSettings:', error)
             }
@@ -725,14 +711,11 @@ export default function UserDashboard() {
                     freshRound = data
                     setSelectedRound(data) // Update state for future use
                 }
-                console.log('Fresh round fetched:', data?.set_prices)
             } catch (error) {
                 console.error('Error fetching fresh round:', error)
             }
         }
 
-        console.log('Using userSettings:', freshUserSettings)
-        console.log('lottery_settings:', freshUserSettings?.lottery_settings)
         const betType = betTypeOverride || submitForm.bet_type
 
         // Track last clicked bet type for highlighting
@@ -742,7 +725,6 @@ export default function UserDashboard() {
 
         // Clean numbers by removing spaces
         const cleanNumbers = (submitForm.numbers || '').replace(/\s/g, '')
-        console.log('cleanNumbers:', cleanNumbers, 'betType:', betType)
 
         // Check if this is a set-based bet type for Lao/Hanoi lottery
         const isLaoOrHanoi = freshRound && ['lao', 'hanoi'].includes(freshRound.lottery_type)
@@ -751,7 +733,6 @@ export default function UserDashboard() {
 
         // For set-based bets, amount field represents number of sets (default: 1 set if empty)
         if (!cleanNumbers || (!submitForm.amount && !isSetBasedBet) || !betType) {
-            console.log('Validation failed:', { cleanNumbers, amount: submitForm.amount, betType })
             toast.warning('กรุณากรอกเลขและจำนวนเงิน')
             return
         }
@@ -768,7 +749,6 @@ export default function UserDashboard() {
             const setPrice = freshRound?.set_prices?.['4_top'] || 120
             totalAmount = setCount * setPrice
             displayAmount = `${totalAmount} บาท (${setCount} ชุด)`
-            console.log('Set-based bet:', { setCount, setPrice, totalAmount })
         } else {
             // Normal amount handling
             amountParts = submitForm.amount.toString().split('*').map(p => parseFloat(p) || 0)
@@ -995,7 +975,6 @@ export default function UserDashboard() {
                 // For set-based bets: commission = setCount × commission_rate_per_set (fixed amount)
                 // Commission rate for 4_set is stored under '4_top' as fixed amount per set in user_settings
                 commissionAmount = setCount * commInfo.rate
-                console.log('Set-based commission:', { setCount, rate: commInfo.rate, commissionAmount })
             } else if (commInfo.isFixed) {
                 commissionAmount = commInfo.rate
             } else {
@@ -1057,7 +1036,6 @@ export default function UserDashboard() {
         const commInfo = getCommissionForBetType('4_set', userSettings)
         const commissionPerSet = commInfo.rate
 
-        console.log('Paste numbers - commInfo:', commInfo, 'commissionPerSet:', commissionPerSet)
 
         const lines = pasteText.split('\n')
         const newDrafts = []
@@ -1180,19 +1158,11 @@ export default function UserDashboard() {
             // Always use selectedDealer.id - this is the dealer whose credit should be updated
             // Whether user is entering their own bets or dealer is entering for themselves
             const dealerIdForCredit = selectedDealer?.id
-            console.log('=== Credit Update Debug ===')
-            console.log('isOwnDealer:', isOwnDealer)
-            console.log('user.id:', user.id)
-            console.log('selectedDealer?.id:', selectedDealer?.id)
-            console.log('dealerIdForCredit:', dealerIdForCredit)
-
             if (dealerIdForCredit) {
-                console.log('Calling updatePendingDeduction for dealer:', dealerIdForCredit)
                 try {
                     await updatePendingDeduction(dealerIdForCredit)
-                    console.log('updatePendingDeduction completed')
                 } catch (err) {
-                    console.log('Error updating pending deduction:', err)
+                    console.error('Error updating pending deduction:', err)
                 }
             }
 
@@ -1275,7 +1245,7 @@ export default function UserDashboard() {
             try {
                 await updatePendingDeduction(dealerIdForCredit)
             } catch (err) {
-                console.log('Error updating pending deduction:', err)
+                console.error('Error updating pending deduction:', err)
             }
         }
 
@@ -1339,7 +1309,7 @@ export default function UserDashboard() {
             try {
                 await updatePendingDeduction(dealerIdForCredit)
             } catch (err) {
-                console.log('Error updating pending deduction:', err)
+                console.error('Error updating pending deduction:', err)
             }
         }
 
@@ -1381,7 +1351,7 @@ export default function UserDashboard() {
             // Update pending deduction for dealer's credit
             if (selectedDealer?.id) {
                 updatePendingDeduction(selectedDealer.id).catch(err =>
-                    console.log('Error updating pending deduction:', err)
+                    console.error('Error updating pending deduction:', err)
                 )
             }
 
@@ -1409,7 +1379,7 @@ export default function UserDashboard() {
             // Update pending deduction for dealer's credit
             if (selectedDealer?.id) {
                 updatePendingDeduction(selectedDealer.id).catch(err =>
-                    console.log('Error updating pending deduction:', err)
+                    console.error('Error updating pending deduction:', err)
                 )
             }
 
@@ -1723,7 +1693,7 @@ export default function UserDashboard() {
             // Update pending deduction for dealer's credit
             if (selectedDealer?.id) {
                 updatePendingDeduction(selectedDealer.id).catch(err =>
-                    console.log('Error updating pending deduction:', err)
+                    console.error('Error updating pending deduction:', err)
                 )
             }
 
@@ -2044,7 +2014,7 @@ export default function UserDashboard() {
             // Update pending deduction for dealer's credit
             if (selectedDealer?.id) {
                 updatePendingDeduction(selectedDealer.id).catch(err =>
-                    console.log('Error updating pending deduction:', err)
+                    console.error('Error updating pending deduction:', err)
                 )
             }
 

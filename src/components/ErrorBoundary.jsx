@@ -33,6 +33,15 @@ class ErrorBoundary extends Component {
                         <p className="error-boundary-message">
                             ขออภัย เกิดข้อผิดพลาดที่ไม่คาดคิด กรุณาลองใหม่อีกครั้ง
                         </p>
+                        {this.state.error && (
+                            <details style={{ marginTop: '1rem', textAlign: 'left', fontSize: '0.75rem', color: '#999', maxHeight: '150px', overflow: 'auto' }}>
+                                <summary>รายละเอียด Error</summary>
+                                <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                                    {this.state.error.toString()}
+                                    {this.state.error.stack && '\n\n' + this.state.error.stack}
+                                </pre>
+                            </details>
+                        )}
                         <div className="error-boundary-actions">
                             <button className="error-boundary-btn primary" onClick={this.handleReload}>
                                 🔄 ลองใหม่
