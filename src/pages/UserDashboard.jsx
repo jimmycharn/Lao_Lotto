@@ -2254,6 +2254,7 @@ export default function UserDashboard() {
                                 </div>
                             ) : (
                                 rounds.map(round => {
+                                    try {
                                     const isExpanded = selectedRound?.id === round.id;
                                     return (
                                         <div key={round.id} className={`round-accordion-item ${round.lottery_type} ${isExpanded ? 'expanded' : ''}`}>
@@ -2872,6 +2873,15 @@ export default function UserDashboard() {
                                             )}
                                         </div>
                                     )
+                                    } catch (renderError) {
+                                        console.error('Round render error:', renderError)
+                                        return (
+                                            <div key={round.id} className="card" style={{ padding: '1rem', color: 'red', fontSize: '0.8rem' }}>
+                                                <strong>Error rendering round:</strong> {renderError.message}
+                                                <pre style={{ whiteSpace: 'pre-wrap', marginTop: '0.5rem' }}>{renderError.stack}</pre>
+                                            </div>
+                                        )
+                                    }
                                 })
                             )}
                         </div>
