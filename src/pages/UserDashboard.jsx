@@ -380,7 +380,12 @@ export default function UserDashboard() {
 
     useEffect(() => {
         if (selectedRound) {
+            // Clear old submissions first to prevent race condition
+            setSubmissions([])
             fetchSubmissions()
+        } else {
+            // Clear submissions when no round is selected
+            setSubmissions([])
         }
     }, [selectedRound])
 
