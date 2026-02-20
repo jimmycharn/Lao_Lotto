@@ -625,11 +625,13 @@ export default function UserDashboard() {
 
     // Helper function to get commission rate for a bet type from lottery_settings
     // settingsOverride can be passed with fresh settings from database
-    const getCommissionForBetType = (betType, settingsOverride = null) => {
-        if (!selectedRound) return { rate: DEFAULT_COMMISSIONS[betType] || 15, isFixed: false }
+    // roundOverride can be passed to use a specific round instead of selectedRound
+    const getCommissionForBetType = (betType, settingsOverride = null, roundOverride = null) => {
+        const currentRound = roundOverride || selectedRound
+        if (!currentRound) return { rate: DEFAULT_COMMISSIONS[betType] || 15, isFixed: false }
 
         const currentSettings = settingsOverride || userSettings
-        const lotteryKey = getLotteryKeyForDraft(selectedRound.lottery_type)
+        const lotteryKey = getLotteryKeyForDraft(currentRound.lottery_type)
 
         // Map bet_type to settings key for Lao/Hanoi lottery
         // In settings, Lao uses different keys than the actual bet_type used in submissions
@@ -674,8 +676,9 @@ export default function UserDashboard() {
     }
 
     // Calculate commission amount based on rate and amount
-    const calculateCommissionAmount = (amount, betType) => {
-        const commissionInfo = getCommissionForBetType(betType)
+    // roundOverride can be passed to use a specific round instead of selectedRound
+    const calculateCommissionAmount = (amount, betType, roundOverride = null) => {
+        const commissionInfo = getCommissionForBetType(betType, null, roundOverride)
         if (commissionInfo.isFixed) {
             return commissionInfo.rate
         }
@@ -2077,7 +2080,7 @@ export default function UserDashboard() {
     // Calculate totals
     const totalAmount = submissions.reduce((sum, s) => sum + (s.amount || 0), 0)
     const totalCommission = selectedRound 
-        ? submissions.reduce((sum, s) => sum + calculateCommissionAmount(s.amount || 0, s.bet_type), 0)
+        ? submissions.reduce((sum, s) => sum + calculateCommissionAmount(s.amount || 0, s.bet_type, selectedRound), 0)
         : 0
 
     // Default payout rates per bet type
@@ -2596,7 +2599,7 @@ export default function UserDashboard() {
                                                                             new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
                                                                         )
                                                                         return sortedItems.reduce((acc, sub) => {
-                                                                            const subCommission = calculateCommissionAmount(sub.amount || 0, sub.bet_type)
+                                                                            const subCommission = calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)
                                                                             if (sub.entry_id) {
                                                                                 const existing = acc.find(a => a.entry_id === sub.entry_id)
                                                                                 if (existing) {
@@ -2635,7 +2638,7 @@ export default function UserDashboard() {
                                                                             <div className="bill-view-container">
                                                                                 {sortedBillEntries.map(([billId, billItems]) => {
                                                                                     const billTotal = billItems.reduce((sum, item) => sum + item.amount, 0)
-                                                                                    const billCommission = billItems.reduce((sum, item) => sum + calculateCommissionAmount(item.amount || 0, item.bet_type), 0)
+                                                                                    const billCommission = billItems.reduce((sum, item) => sum + calculateCommissionAmount(item.amount || 0, item.bet_type, round), 0)
                                                                                     const billTime = new Date(billItems[0].created_at).toLocaleTimeString('th-TH', {
                                                                                         hour: '2-digit',
                                                                                         minute: '2-digit'
@@ -2747,7 +2750,7 @@ export default function UserDashboard() {
                                                                                                                         {sub.display_numbers}
                                                                                                                     </span>
                                                                                                                     <span className="bill-item-commission" style={{ color: 'var(--color-warning)', fontSize: '0.8rem', minWidth: '55px', textAlign: 'right', marginRight: '0.75rem' }}>
-                                                                                                                        {round.currency_symbol}{(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type)).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                                                                                                                        {round.currency_symbol}{(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)).toLocaleString(undefined, { maximumFractionDigits: 1 })}
                                                                                                                     </span>
                                                                                                                     <span className="bill-item-amount" style={{ minWidth: '55px', textAlign: 'right' }}>
                                                                                                                         {round.currency_symbol}{sub.display_amount || sub.amount?.toLocaleString()}
@@ -2764,7 +2767,7 @@ export default function UserDashboard() {
                                                                                                                         </span>
                                                                                                                     </div>
                                                                                                                     <span className="bill-item-commission" style={{ color: 'var(--color-warning)', fontSize: '0.8rem', minWidth: '55px', textAlign: 'right', marginRight: '0.75rem' }}>
-                                                                                                                        {round.currency_symbol}{calculateCommissionAmount(sub.amount || 0, sub.bet_type).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                                                                                                                        {round.currency_symbol}{calculateCommissionAmount(sub.amount || 0, sub.bet_type, round).toLocaleString(undefined, { maximumFractionDigits: 1 })}
                                                                                                                     </span>
                                                                                                                     <span className="bill-item-amount" style={{ minWidth: '55px', textAlign: 'right' }}>
                                                                                                                         {round.currency_symbol}{sub.amount?.toLocaleString()}
@@ -2858,7 +2861,7 @@ export default function UserDashboard() {
                                                                                                 ? (typeof sub.display_amount === 'string' ? sub.display_amount : sub.amount?.toLocaleString())
                                                                                                 : sub.amount?.toLocaleString()}</td>
                                                                                             <td className="commission-cell" style={{ color: 'var(--color-warning)' }}>
-                                                                                                {round.currency_symbol}{(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type)).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                                                                                                {round.currency_symbol}{(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)).toLocaleString(undefined, { maximumFractionDigits: 1 })}
                                                                                             </td>
                                                                                             <td className="time-cell">
                                                                                                 {new Date(sub.created_at).toLocaleTimeString('th-TH', {
