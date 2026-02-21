@@ -449,3 +449,206 @@ export async function updatePendingDeduction(dealerId) {
         console.error('Error updating pending deduction:', error)
     }
 }
+
+/**
+ * Calculate the credit fee for a specific round based on current submissions
+ * Used to determine additional credit to deduct when submissions are modified after round is closed
+ * @param {string} dealerId - The dealer's user ID
+ * @param {string} roundId - The round ID
+ * @returns {Promise<{fee: number, details: object}>}
+ */
+export async function calculateRoundCreditFee(dealerId, roundId) {
+    try {
+        // Get dealer's subscription
+        const { data: subscriptions } = await supabase
+            .from('dealer_subscriptions')
+            .select(`
+                *,
+                subscription_packages (
+                    id,
+                    billing_model,
+                    percentage_rate,
+                    min_amount_before_charge
+                )
+            `)
+            .eq('dealer_id', dealerId)
+            .in('status', ['active', 'trial'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+        
+        const subscription = subscriptions?.[0] || null
+        const billingModel = subscription?.billing_model || subscription?.subscription_packages?.billing_model
+
+        if (!subscription || billingModel !== 'percentage') {
+            return { fee: 0, details: { reason: 'Not percentage billing' } }
+        }
+
+        const percentageRate = subscription.subscription_packages?.percentage_rate || 0
+        const minAmount = subscription.subscription_packages?.min_amount_before_charge || 0
+
+        // Get all members of this dealer
+        const { data: memberships } = await supabase
+            .from('user_dealer_memberships')
+            .select('user_id')
+            .eq('dealer_id', dealerId)
+            .eq('status', 'active')
+
+        const memberIds = new Set((memberships || []).map(m => m.user_id))
+
+        // Get all submissions for this round
+        const { data: allSubs } = await supabase
+            .from('submissions')
+            .select('id, amount, user_id, source')
+            .eq('round_id', roundId)
+            .eq('is_deleted', false)
+
+        // Get bet_transfers FROM this round (outgoing transfers)
+        const { data: outgoingTransfers } = await supabase
+            .from('bet_transfers')
+            .select('amount, status')
+            .eq('round_id', roundId)
+        
+        const activeTransfers = (outgoingTransfers || []).filter(t => t.status !== 'returned')
+        const transferredOutAmount = activeTransfers.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0)
+
+        // Calculate volumes
+        let dealerVolume = 0
+        let memberVolume = 0
+        let downstreamVolume = 0
+
+        for (const sub of (allSubs || [])) {
+            const amount = parseFloat(sub.amount || 0)
+            if (sub.source === 'transfer') {
+                downstreamVolume += amount
+            } else if (sub.user_id === dealerId) {
+                dealerVolume += amount
+            } else if (memberIds.has(sub.user_id)) {
+                memberVolume += amount
+            }
+        }
+
+        // Subtract transferred out amount
+        let netMemberVolume = Math.max(0, memberVolume - transferredOutAmount)
+        let remainingTransfer = Math.max(0, transferredOutAmount - memberVolume)
+        let netDealerVolume = Math.max(0, dealerVolume - remainingTransfer)
+
+        // Calculate chargeable volume
+        const totalOwnVolume = netDealerVolume + netMemberVolume
+        let chargeableVolume = downstreamVolume
+        
+        if (totalOwnVolume > minAmount) {
+            chargeableVolume += (totalOwnVolume - minAmount)
+        }
+
+        // Calculate fee
+        const fee = chargeableVolume * (percentageRate / 100)
+
+        return {
+            fee,
+            details: {
+                dealerVolume,
+                memberVolume,
+                downstreamVolume,
+                transferredOutAmount,
+                netDealerVolume,
+                netMemberVolume,
+                totalOwnVolume,
+                chargeableVolume,
+                percentageRate,
+                minAmount
+            }
+        }
+    } catch (error) {
+        console.error('Error calculating round credit fee:', error)
+        return { fee: 0, details: { error: error.message } }
+    }
+}
+
+/**
+ * Deduct additional credit for a closed/announced round when submissions are modified
+ * Only deducts the difference if the new fee is higher than what was already charged
+ * @param {string} dealerId - The dealer's user ID
+ * @param {string} roundId - The round ID
+ * @param {number} previouslyChargedAmount - Amount already charged for this round (stored in round or calculated)
+ * @returns {Promise<{success: boolean, amountDeducted: number, message: string}>}
+ */
+export async function deductAdditionalCreditForRound(dealerId, roundId, previouslyChargedAmount = 0) {
+    try {
+        // Calculate current fee based on submissions
+        const { fee: currentFee, details } = await calculateRoundCreditFee(dealerId, roundId)
+
+        // Calculate additional amount to deduct
+        const additionalAmount = Math.max(0, currentFee - previouslyChargedAmount)
+
+        if (additionalAmount <= 0) {
+            return {
+                success: true,
+                amountDeducted: 0,
+                message: 'ไม่มียอดเครดิตที่ต้องตัดเพิ่ม',
+                details: { currentFee, previouslyChargedAmount, additionalAmount: 0 }
+            }
+        }
+
+        // Get current credit balance
+        const { data: creditData } = await supabase
+            .from('dealer_credits')
+            .select('balance')
+            .eq('dealer_id', dealerId)
+            .single()
+
+        const currentBalance = creditData?.balance || 0
+
+        // Ensure we don't deduct more than available (no negative balance)
+        const actualDeduction = Math.min(additionalAmount, currentBalance)
+
+        if (actualDeduction > 0) {
+            // Deduct from balance
+            const { error: updateError } = await supabase
+                .from('dealer_credits')
+                .update({
+                    balance: currentBalance - actualDeduction,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('dealer_id', dealerId)
+
+            if (updateError) throw updateError
+
+            // Record the transaction
+            await supabase
+                .from('credit_transactions')
+                .insert({
+                    dealer_id: dealerId,
+                    amount: -actualDeduction,
+                    type: 'deduction',
+                    description: `ค่าธรรมเนียมเพิ่มเติมจากการแก้ไขงวด (Round ID: ${roundId})`,
+                    round_id: roundId,
+                    created_at: new Date().toISOString()
+                })
+        }
+
+        // Update the round's charged_amount for future reference
+        await supabase
+            .from('lottery_rounds')
+            .update({
+                charged_credit_amount: currentFee
+            })
+            .eq('id', roundId)
+
+        return {
+            success: true,
+            amountDeducted: actualDeduction,
+            message: actualDeduction > 0 
+                ? `ตัดเครดิตเพิ่ม ฿${actualDeduction.toLocaleString('th-TH', {minimumFractionDigits: 2})}` 
+                : 'ไม่มียอดเครดิตที่ต้องตัดเพิ่ม',
+            details: { currentFee, previouslyChargedAmount, additionalAmount, actualDeduction, ...details }
+        }
+    } catch (error) {
+        console.error('Error deducting additional credit:', error)
+        return {
+            success: false,
+            amountDeducted: 0,
+            message: 'เกิดข้อผิดพลาดในการตัดเครดิต: ' + error.message,
+            details: { error: error.message }
+        }
+    }
+}

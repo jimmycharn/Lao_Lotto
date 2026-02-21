@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useToast } from '../../contexts/ToastContext'
 import { FiCheck, FiX, FiEdit2 } from 'react-icons/fi'
 import { LOTTERY_TYPES } from '../../constants/lotteryTypes'
+import { deductAdditionalCreditForRound } from '../../utils/creditCheck'
 
 export default function ResultsModal({ round, onClose }) {
     const { toast } = useToast()
@@ -146,12 +147,19 @@ export default function ResultsModal({ round, onClose }) {
                 console.warn('RPC function not available:', rpcError)
             }
 
-            // Credit deduction is now handled in handleCloseRound (when closing the round)
-            // No need to deduct again when announcing results
+            // Deduct additional credit if submissions were modified after round was closed
+            // This handles cases where dealer added/edited submissions for dealer-created users
+            const previouslyCharged = round.charged_credit_amount || 0
+            const creditResult = await deductAdditionalCreditForRound(round.dealer_id, round.id, previouslyCharged)
+            
+            let creditMessage = ''
+            if (creditResult.amountDeducted > 0) {
+                creditMessage = ` (${creditResult.message})`
+            }
 
             const message = isEditing
-                ? `อัปเดตผลรางวัลสำเร็จ! มีผู้ถูกรางวัล ${winCount} รายการ`
-                : `ประกาศผลสำเร็จ! มีผู้ถูกรางวัล ${winCount} รายการ`
+                ? `อัปเดตผลรางวัลสำเร็จ! มีผู้ถูกรางวัล ${winCount} รายการ${creditMessage}`
+                : `ประกาศผลสำเร็จ! มีผู้ถูกรางวัล ${winCount} รายการ${creditMessage}`
             toast.success(message)
             // ส่ง updatedRound กลับไปเพื่อ update state โดยไม่ต้อง refresh ทั้งหมด
             onClose({

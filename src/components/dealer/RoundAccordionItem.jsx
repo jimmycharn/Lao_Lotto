@@ -721,6 +721,12 @@ export default function RoundAccordionItem({
         return member && !member.password_changed
     }
 
+    // Check if dealer can edit a specific user's bill (user hasn't changed password)
+    const canEditBillForUser = (userId) => {
+        const member = allMembers.find(m => m.id === userId)
+        return member && !member.password_changed
+    }
+
     // Edit bill - open WriteSubmissionModal with existing data
     const handleEditBill = (billId, billItems, userId) => {
         // Find the member object
@@ -2269,7 +2275,7 @@ export default function RoundAccordionItem({
                                                             ))
                                                         )}
                                                     </select>
-                                                    {canWriteBetForSelectedMember() && isOpen && (
+                                                    {canWriteBetForSelectedMember() && (
                                                         <button
                                                             className="btn btn-primary btn-sm"
                                                             onClick={handleOpenWriteBet}
@@ -2727,9 +2733,14 @@ export default function RoundAccordionItem({
                                                                 const useGroupedIds = displayMode === 'summary' || displayMode === 'grouped'
                                                                 const allIds = useGroupedIds ? filteredData.flatMap(g => g.ids) : filteredData.map(s => s.id)
 
+                                                                // Check if any member in the filtered data hasn't changed password (for closed/announced rounds)
+                                                                const hasEditableMember = !isOpen && filteredData.some(sub => canEditBillForUser(sub.user_id))
+                                                                const canBulkEdit = isOpen || hasEditableMember
+
                                                                 return (
                                                                     <>
-                                                                        {isOpen && filteredData.length > 0 && (
+                                                                        {/* Allow bulk select/delete for: 1) open rounds, or 2) closed/announced rounds if any user hasn't changed password */}
+                                                                        {canBulkEdit && filteredData.length > 0 && (
                                                                             <tr style={{ background: 'var(--color-surface)' }}>
                                                                                 <td colSpan={displayMode === 'detailed' ? 5 : 4} style={{ padding: '0.5rem' }}>
                                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -2806,7 +2817,8 @@ export default function RoundAccordionItem({
                                                                                         )}
                                                                                     </td>
                                                                                     {displayMode === 'detailed' && <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>}
-                                                                                    {isOpen && displayMode === 'detailed' && (
+                                                                                    {/* Allow delete for: 1) open rounds, or 2) closed/announced rounds if user hasn't changed password */}
+                                                                                    {(isOpen || canEditBillForUser(sub.user_id)) && displayMode === 'detailed' && (
                                                                                         <td>
                                                                                             <button 
                                                                                                 className="btn btn-icon btn-sm btn-danger"
@@ -2818,7 +2830,7 @@ export default function RoundAccordionItem({
                                                                                             </button>
                                                                                         </td>
                                                                                     )}
-                                                                                    {isOpen && displayMode !== 'detailed' && <td></td>}
+                                                                                    {(isOpen || canEditBillForUser(sub.user_id)) && displayMode !== 'detailed' && <td></td>}
                                                                                 </tr>
                                                                             )
                                                                         })}
@@ -2929,7 +2941,8 @@ export default function RoundAccordionItem({
                                                                             คอม {round.currency_symbol}{(inlineBetTypeFilter === 'all' ? userGroup.totalCommission : filteredCommission).toLocaleString()}
                                                                         </span>
                                                                         <span>{round.currency_symbol}{(inlineBetTypeFilter === 'all' ? userGroup.total : filteredTotal).toLocaleString()}</span>
-                                                                        {isOpen && (
+                                                                        {/* Allow delete for: 1) open rounds, or 2) closed/announced rounds if user hasn't changed password */}
+                                                                        {(isOpen || canEditBillForUser(userGroup.user_id)) && (
                                                                             <button 
                                                                                 className="btn btn-icon btn-sm"
                                                                                 onClick={(e) => {
@@ -3017,7 +3030,8 @@ export default function RoundAccordionItem({
                                                                                                 return bill.items.filter(item => item.bet_type === inlineBetTypeFilter).reduce((sum, item) => sum + item.amount, 0).toLocaleString()
                                                                                             })()}
                                                                                         </span>
-                                                                                        {isOpen && (
+                                                                                        {/* Allow edit/delete for: 1) open rounds, or 2) closed/announced rounds if user hasn't changed password */}
+                                                                                        {(isOpen || canEditBillForUser(bill.user_id)) && (
                                                                                             <>
                                                                                                 <button 
                                                                                                     className="btn btn-icon btn-sm"
@@ -3141,7 +3155,8 @@ export default function RoundAccordionItem({
                                                                                                         <span style={{ fontWeight: '500' }}>
                                                                                                             {round.currency_symbol}{item.amount.toLocaleString()}
                                                                                                         </span>
-                                                                                                        {isOpen && billDisplayMode === 'summary' && (
+                                                                                                        {/* Allow delete for: 1) open rounds, or 2) closed/announced rounds if user hasn't changed password */}
+                                                                                                        {(isOpen || canEditBillForUser(bill.user_id)) && billDisplayMode === 'summary' && (
                                                                                                             <button 
                                                                                                                 className="btn btn-icon btn-sm"
                                                                                                                 onClick={(e) => {

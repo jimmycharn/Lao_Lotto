@@ -5,7 +5,7 @@ import { useToast } from '../contexts/ToastContext'
 import { useTheme, DASHBOARDS } from '../contexts/ThemeContext'
 import { supabase } from '../lib/supabase'
 import { processTopup } from '../services/creditService'
-import { checkDealerCreditForBet, checkUpstreamDealerCredit, getDealerCreditSummary, updatePendingDeduction } from '../utils/creditCheck'
+import { checkDealerCreditForBet, checkUpstreamDealerCredit, getDealerCreditSummary, updatePendingDeduction, deductAdditionalCreditForRound } from '../utils/creditCheck'
 import QRCode from 'react-qr-code'
 import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode'
 import { jsPDF } from 'jspdf'
@@ -1652,7 +1652,15 @@ export default function Dealer() {
                     console.log('Billing before delete not configured:', billingErr)
                 }
             } else {
-                console.log('Round already closed/announced, credit already deducted - skipping billing')
+                // For closed/announced rounds: deduct additional credit if submissions were modified
+                console.log('Round already closed/announced - checking for additional credit to deduct')
+                const previouslyCharged = roundData.charged_credit_amount || 0
+                const creditResult = await deductAdditionalCreditForRound(user.id, roundId, previouslyCharged)
+                
+                if (creditResult.amountDeducted > 0) {
+                    console.log('Additional credit deducted before delete:', creditResult)
+                    toast.info(`หักค่าธรรมเนียมเพิ่มเติม ฿${creditResult.amountDeducted.toLocaleString()} ก่อนลบงวด`)
+                }
             }
 
             // Now delete the round
