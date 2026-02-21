@@ -70,8 +70,8 @@
     font-size: 1.125rem;
 }
 
-.form-input.with-icon {
-    padding-left: 2.75rem;
+.auth-form .form-input.with-icon {
+    padding-left: 2.75rem !important;
     padding-right: 2.75rem;
 }
 
