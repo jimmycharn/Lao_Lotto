@@ -6,8 +6,8 @@
 -- =============================================
 
 -- Add charged_credit_amount column to lottery_rounds
-ALTER TABLE lottery_rounds 
+ALTER TABLE public.lottery_rounds 
 ADD COLUMN IF NOT EXISTS charged_credit_amount DECIMAL(12,2) DEFAULT 0;
 
 -- Add comment
-COMMENT ON COLUMN lottery_rounds.charged_credit_amount IS 'Amount of credit that has been charged for this round. Used to calculate additional credit when submissions are modified after round is closed.';
+COMMENT ON COLUMN public.lottery_rounds.charged_credit_amount IS 'Amount of credit that has been charged for this round. Used to calculate additional credit when submissions are modified after round is closed.';
