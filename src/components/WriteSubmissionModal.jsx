@@ -654,6 +654,16 @@ export default function WriteSubmissionModal({
         if (!isOpen) return
 
         const handleKeyDown = (e) => {
+            // F10 - Save/Submit (same as clicking บันทึก button)
+            if (e.key === 'F10') {
+                e.preventDefault()
+                e.stopPropagation()
+                if (lines.length > 0 && !submitting) {
+                    handleSubmit()
+                }
+                return
+            }
+            
             // Ctrl+S - Save draft (must be first to prevent browser save dialog)
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                 e.preventDefault()

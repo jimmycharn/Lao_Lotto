@@ -104,8 +104,15 @@ export default function WriteSubmissionModal({
             const activeEl = document.activeElement
             const isTyping = activeEl?.tagName === 'INPUT' || activeEl?.tagName === 'TEXTAREA'
             
+            // F10 - Save/Submit (same as clicking บันทึก button)
+            if (e.key === 'F10') {
+                e.preventDefault()
+                if (drafts.length > 0 && !submitting) {
+                    handleSubmit()
+                }
+            }
             // Spacebar - toggle บน/ล่าง (2-digit reversed mode)
-            if (e.key === ' ' || e.code === 'Space') {
+            else if (e.key === ' ' || e.code === 'Space') {
                 // Only toggle if not typing in a text input
                 if (!isTyping) {
                     e.preventDefault()
@@ -131,7 +138,7 @@ export default function WriteSubmissionModal({
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [isReversed, drafts.length, onClose])
+    }, [isReversed, drafts.length, onClose, submitting])
 
     async function fetchUserSettings() {
         try {
