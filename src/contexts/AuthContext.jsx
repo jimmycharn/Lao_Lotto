@@ -342,14 +342,32 @@ export function AuthProvider({ children }) {
             }
         })
 
+        // Also clear any other Supabase related storage
+        Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('supabase.auth.')) {
+                localStorage.removeItem(key)
+            }
+        })
+
         if (!supabase) return { error: null }
 
         try {
-            const { error } = await supabase.auth.signOut()
+            // Use scope: 'local' to only sign out from this browser/tab
+            // This prevents errors when session is already expired on server
+            const { error } = await supabase.auth.signOut({ scope: 'local' })
+            
+            // Ignore session_not_found or similar errors - user is already logged out
+            if (error && (error.message?.includes('session') || error.status === 401 || error.status === 403)) {
+                console.log('Session already expired, clearing local state')
+                return { error: null }
+            }
+            
             return { error }
         } catch (error) {
-            console.error("Error signing out:", error)
-            return { error }
+            // If any error occurs during signOut, still consider it successful
+            // since we've already cleared local state
+            console.log('SignOut error (ignoring):', error?.message || error)
+            return { error: null }
         }
     }
 

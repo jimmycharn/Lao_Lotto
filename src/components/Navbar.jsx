@@ -43,7 +43,12 @@ export default function Navbar() {
     }
 
     const handleSignOut = async () => {
-        await signOut()
+        try {
+            await signOut()
+        } catch (error) {
+            // Ignore any errors during signOut - user should still be redirected
+            console.log('SignOut completed with warning:', error?.message || error)
+        }
         navigate('/login')
         setIsOpen(false)
     }
