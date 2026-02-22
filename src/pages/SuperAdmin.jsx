@@ -37,6 +37,7 @@ import {
 import QRCode from 'react-qr-code'
 import ChangePasswordModal from '../components/ChangePasswordModal'
 import CopyButton from '../components/CopyButton'
+import { LOTTERY_TYPES } from '../constants/lotteryTypes'
 import './SuperAdmin.css'
 
 export default function SuperAdmin() {
@@ -87,6 +88,8 @@ export default function SuperAdmin() {
     const [editingPackage, setEditingPackage] = useState(null)
     const [showDealerModal, setShowDealerModal] = useState(false)
     const [selectedDealer, setSelectedDealer] = useState(null)
+    const [editingLotteryTypes, setEditingLotteryTypes] = useState([])
+    const [savingLotteryTypes, setSavingLotteryTypes] = useState(false)
     const [showPaymentModal, setShowPaymentModal] = useState(false)
     const [selectedPayment, setSelectedPayment] = useState(null)
     const [showAssignPackageModal, setShowAssignPackageModal] = useState(false)
@@ -836,7 +839,7 @@ export default function SuperAdmin() {
                 console.log('Could not fetch subscriptions:', e)
             }
 
-            // Map subscriptions to dealers
+            // Map subscriptions to dealers (allowed_lottery_types is already in profiles)
             const dealersWithSubs = (dealersData || []).map(dealer => {
                 const dealerSubs = subscriptionsData.filter(sub => sub.dealer_id === dealer.id)
                 return {
@@ -936,6 +939,40 @@ export default function SuperAdmin() {
     }
 
     // === DEALER MANAGEMENT ===
+    const handleSaveLotteryTypes = async () => {
+        if (!selectedDealer) return
+        
+        setSavingLotteryTypes(true)
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .update({ allowed_lottery_types: editingLotteryTypes })
+                .eq('id', selectedDealer.id)
+
+            if (error) throw error
+
+            toast.success('บันทึกประเภทหวยสำเร็จ')
+            // Update selectedDealer state
+            setSelectedDealer({ ...selectedDealer, allowed_lottery_types: editingLotteryTypes })
+            await fetchDealers()
+        } catch (error) {
+            console.error('Error saving lottery types:', error)
+            toast.error('เกิดข้อผิดพลาดในการบันทึก')
+        } finally {
+            setSavingLotteryTypes(false)
+        }
+    }
+
+    const toggleLotteryType = (type) => {
+        setEditingLotteryTypes(prev => {
+            if (prev.includes(type)) {
+                return prev.filter(t => t !== type)
+            } else {
+                return [...prev, type]
+            }
+        })
+    }
+
     const toggleDealerStatus = async (dealer, activate) => {
         try {
             console.log('toggleDealerStatus called:', dealer.id, 'current is_active:', dealer.is_active, 'new activate:', activate)
@@ -1622,6 +1659,9 @@ export default function SuperAdmin() {
                                     className={`clickable-row ${dealer.is_active === false ? 'inactive-dealer' : ''}`}
                                     onClick={() => {
                                         setSelectedDealer({...dealer, subscription})
+                                        // Initialize lottery types from dealer data or default to all types
+                                        const defaultTypes = Object.keys(LOTTERY_TYPES)
+                                        setEditingLotteryTypes(dealer.allowed_lottery_types || defaultTypes)
                                         setShowDealerModal(true)
                                     }}
                                     style={{ cursor: 'pointer' }}
@@ -3486,6 +3526,48 @@ export default function SuperAdmin() {
                                         <strong style={{ color: 'var(--color-danger)' }}>{formatDate(selectedDealer.deactivated_at)}</strong>
                                     </div>
                                 )}
+
+                                {/* Lottery Types Management */}
+                                <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(212, 175, 55, 0.1)', border: '1px solid rgba(212, 175, 55, 0.3)', borderRadius: '8px' }}>
+                                    <div style={{ fontWeight: 'bold', marginBottom: '0.75rem', color: 'var(--color-primary)' }}>
+                                        🎰 ประเภทหวยที่อนุญาต
+                                    </div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                                        {Object.entries(LOTTERY_TYPES).map(([key, label]) => (
+                                            <button
+                                                key={key}
+                                                type="button"
+                                                onClick={() => toggleLotteryType(key)}
+                                                style={{
+                                                    padding: '0.5rem 0.75rem',
+                                                    borderRadius: '6px',
+                                                    border: editingLotteryTypes.includes(key) 
+                                                        ? '2px solid var(--color-success)' 
+                                                        : '1px solid rgba(255,255,255,0.2)',
+                                                    background: editingLotteryTypes.includes(key) 
+                                                        ? 'rgba(34, 197, 94, 0.2)' 
+                                                        : 'rgba(255,255,255,0.05)',
+                                                    color: editingLotteryTypes.includes(key) 
+                                                        ? 'var(--color-success)' 
+                                                        : 'var(--color-text-muted)',
+                                                    cursor: 'pointer',
+                                                    fontSize: '0.85rem',
+                                                    transition: 'all 0.2s ease'
+                                                }}
+                                            >
+                                                {editingLotteryTypes.includes(key) ? '✓ ' : ''}{label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <button
+                                        className="btn btn-primary btn-sm"
+                                        onClick={handleSaveLotteryTypes}
+                                        disabled={savingLotteryTypes}
+                                        style={{ width: '100%' }}
+                                    >
+                                        {savingLotteryTypes ? 'กำลังบันทึก...' : <><FiSave /> บันทึกประเภทหวย</>}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <div className="modal-footer">

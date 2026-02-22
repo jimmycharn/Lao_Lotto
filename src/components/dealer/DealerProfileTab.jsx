@@ -386,24 +386,6 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                 )}
             </div>
 
-            {/* Security Settings Card */}
-            <div className="profile-details card">
-                <h3>ความปลอดภัย</h3>
-                <div className="security-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1.5rem', background: 'var(--color-bg)', borderRadius: '0.5rem' }}>
-                    <div style={{ fontSize: '2rem', color: 'var(--color-gold)', marginBottom: '0.75rem' }}>
-                        <FiLock />
-                    </div>
-                    <h4 style={{ margin: '0 0 0.25rem', fontSize: '1rem', color: 'var(--color-text)' }}>รหัสผ่าน</h4>
-                    <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>เปลี่ยนรหัสผ่านเพื่อความปลอดภัย</p>
-                    <button
-                        className="btn btn-outline"
-                        onClick={() => setShowPasswordModal(true)}
-                    >
-                        เปลี่ยนรหัสผ่าน
-                    </button>
-                </div>
-            </div>
-
             {/* Bank Accounts Card */}
             <div className="profile-details card">
                 <div className="section-header" style={{ marginBottom: '1rem' }}>
@@ -474,6 +456,24 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                         ))}
                     </div>
                 )}
+            </div>
+
+            {/* Security Settings Card */}
+            <div className="profile-details card">
+                <h3>ความปลอดภัย</h3>
+                <div className="security-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1.5rem', background: 'var(--color-bg)', borderRadius: '0.5rem' }}>
+                    <div style={{ fontSize: '2rem', color: 'var(--color-gold)', marginBottom: '0.75rem' }}>
+                        <FiLock />
+                    </div>
+                    <h4 style={{ margin: '0 0 0.25rem', fontSize: '1rem', color: 'var(--color-text)' }}>รหัสผ่าน</h4>
+                    <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>เปลี่ยนรหัสผ่านเพื่อความปลอดภัย</p>
+                    <button
+                        className="btn btn-outline"
+                        onClick={() => setShowPasswordModal(true)}
+                    >
+                        เปลี่ยนรหัสผ่าน
+                    </button>
+                </div>
             </div>
 
             {/* Add/Edit Bank Modal */}

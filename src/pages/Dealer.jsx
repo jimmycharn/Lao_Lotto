@@ -119,6 +119,7 @@ export default function Dealer() {
     const [loadingUpstream, setLoadingUpstream] = useState(false)
     const [downstreamDealers, setDownstreamDealers] = useState([]) // Dealers who send bets TO us
     const [memberTypeFilter, setMemberTypeFilter] = useState('all') // 'all' | 'member' | 'dealer'
+    const [allowedLotteryTypes, setAllowedLotteryTypes] = useState(null) // Lottery types allowed for this dealer
 
     // Add member modal states
     const [showAddMemberModal, setShowAddMemberModal] = useState(false)
@@ -412,6 +413,21 @@ export default function Dealer() {
                 .order('is_default', { ascending: false })
 
             setDealerBankAccounts(bankAccountsData || [])
+
+            // Fetch dealer settings (allowed_lottery_types from profiles)
+            try {
+                const { data: dealerSettings, error: settingsError } = await supabase
+                    .from('profiles')
+                    .select('allowed_lottery_types')
+                    .eq('id', user.id)
+                    .maybeSingle()
+
+                if (!settingsError && dealerSettings) {
+                    setAllowedLotteryTypes(dealerSettings.allowed_lottery_types)
+                }
+            } catch (e) {
+                console.log('Could not fetch dealer settings:', e)
+            }
 
             // Fetch downstream dealers (dealers who send bets TO us via dealer_upstream_connections)
             try {
@@ -2666,7 +2682,9 @@ export default function Dealer() {
                             <div className="form-group">
                                 <label className="form-label">ประเภทหวย</label>
                                 <div className="lottery-type-grid">
-                                    {Object.entries(LOTTERY_TYPES).map(([key, label]) => (
+                                    {Object.entries(LOTTERY_TYPES)
+                                        .filter(([key]) => !allowedLotteryTypes || allowedLotteryTypes.includes(key))
+                                        .map(([key, label]) => (
                                         <button
                                             key={key}
                                             type="button"
@@ -2852,7 +2870,9 @@ export default function Dealer() {
                             <div className="form-group">
                                 <label className="form-label">ประเภทหวย</label>
                                 <div className="lottery-type-grid">
-                                    {Object.entries(LOTTERY_TYPES).map(([key, label]) => (
+                                    {Object.entries(LOTTERY_TYPES)
+                                        .filter(([key]) => !allowedLotteryTypes || allowedLotteryTypes.includes(key))
+                                        .map(([key, label]) => (
                                         <button
                                             key={key}
                                             type="button"
