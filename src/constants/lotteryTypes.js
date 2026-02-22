@@ -174,6 +174,8 @@ export const BET_TYPES_WITH_DIGITS = {
     // 1 Digit
     'run_top': { label: 'วิ่งบน', digits: 1 },
     'run_bottom': { label: 'วิ่งล่าง', digits: 1 },
+    'pak_top': { label: 'ปักบน', digits: 1 },
+    'pak_bottom': { label: 'ปักล่าง', digits: 1 },
     'front_top_1': { label: 'หน้าบน', digits: 1 },
     'middle_top_1': { label: 'กลางบน', digits: 1 },
     'back_top_1': { label: 'หลังบน', digits: 1 },
@@ -183,13 +185,16 @@ export const BET_TYPES_WITH_DIGITS = {
     // 2 Digits
     '2_top': { label: '2 ตัวบน', digits: 2 },
     '2_front': { label: '2 ตัวหน้า', digits: 2 },
+    '2_center': { label: '2 ตัวถ่าง', digits: 2 },
     '2_spread': { label: '2 ตัวถ่าง', digits: 2 },
+    '2_run': { label: '2 ตัวลอย', digits: 2 },
     '2_have': { label: '2 ตัวมี', digits: 2 },
     '2_bottom': { label: '2 ตัวล่าง', digits: 2 },
     // 2 Digits Reversed (กลับ)
     '2_top_rev': { label: '2 ตัวบนกลับ', digits: 2 },
     '2_front_rev': { label: '2 ตัวหน้ากลับ', digits: 2 },
     '2_spread_rev': { label: '2 ตัวถ่างกลับ', digits: 2 },
+    '2_center_rev': { label: '2 ตัวถ่างกลับ', digits: 2 },
     '2_bottom_rev': { label: '2 ตัวล่างกลับ', digits: 2 },
 
     // 3 Digits
@@ -202,7 +207,10 @@ export const BET_TYPES_WITH_DIGITS = {
     '4_float': { label: '4 ตัวลอย', digits: 4 },
 
     // 5 Digits
-    '5_float': { label: '5 ตัวลอย', digits: 5 }
+    '5_float': { label: '5 ตัวลอย', digits: 5 },
+
+    // 6 Digits (Thai lottery first prize)
+    '6_top': { label: 'รางวัลที่ 1', digits: 6 }
 }
 
 // Bet types that should normalize numbers (order doesn't matter)

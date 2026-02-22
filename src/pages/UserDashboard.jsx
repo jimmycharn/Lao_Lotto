@@ -2107,15 +2107,6 @@ export default function UserDashboard() {
         return sub.amount * defaultRate
     }
 
-    // Default commission rates per bet type (percentage)
-    const DEFAULT_COMMISSIONS = {
-        'run_top': 15, 'run_bottom': 15,
-        'pak_top': 15, 'pak_bottom': 15,
-        '2_top': 15, '2_front': 15, '2_center': 15, '2_spread': 15, '2_run': 15, '2_bottom': 15,
-        '3_top': 15, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
-        '4_tod': 15, '4_set': 15, '4_float': 15, '5_float': 15, '6_top': 15
-    }
-
     // Calculate commission for a submission - use recorded commission_amount for consistency
     const getCalculatedCommission = (sub, round) => {
         // Always use commission_amount that was recorded when submission was made
