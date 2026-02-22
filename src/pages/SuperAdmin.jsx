@@ -1657,7 +1657,7 @@ export default function SuperAdmin() {
                                                 title="กำหนดแพ็คเกจ"
                                                 onClick={(e) => {
                                                     e.stopPropagation()
-                                                    setSelectedDealer(dealer)
+                                                    setSelectedDealer({...dealer, subscription})
                                                     setShowAssignPackageModal(true)
                                                 }}
                                             >
@@ -2998,6 +2998,54 @@ export default function SuperAdmin() {
                             <div className="dealer-assign-info">
                                 <strong>เจ้ามือ:</strong> {selectedDealer.full_name || selectedDealer.email}
                             </div>
+
+                            {/* Show current package if exists */}
+                            {selectedDealer.subscription && (
+                                <div className="current-package-info" style={{
+                                    padding: '1rem',
+                                    marginBottom: '1rem',
+                                    background: 'rgba(212, 175, 55, 0.1)',
+                                    border: '1px solid rgba(212, 175, 55, 0.3)',
+                                    borderRadius: '8px'
+                                }}>
+                                    <div style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--color-primary)' }}>
+                                        📦 แพ็คเกจปัจจุบัน
+                                    </div>
+                                    <div style={{ display: 'grid', gap: '0.5rem', fontSize: '0.9rem' }}>
+                                        <div>
+                                            <strong>ชื่อแพ็คเกจ:</strong> {selectedDealer.subscription.subscription_packages?.name || 'ไม่ระบุ'}
+                                        </div>
+                                        <div>
+                                            <strong>ประเภท:</strong> {selectedDealer.subscription.subscription_packages?.billing_model === 'percentage' ? 'หักเปอร์เซ็นต์จากยอดขาย' : 'รายเดือน/รายปี'}
+                                        </div>
+                                        {selectedDealer.subscription.subscription_packages?.billing_model === 'percentage' && (
+                                            <div>
+                                                <strong>อัตราหัก:</strong> {selectedDealer.subscription.subscription_packages?.percentage_rate}%
+                                            </div>
+                                        )}
+                                        <div>
+                                            <strong>สถานะ:</strong>{' '}
+                                            <span style={{
+                                                padding: '0.2rem 0.5rem',
+                                                borderRadius: '4px',
+                                                fontSize: '0.8rem',
+                                                background: selectedDealer.subscription.status === 'active' ? 'rgba(34, 197, 94, 0.2)' :
+                                                           selectedDealer.subscription.status === 'trial' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                                color: selectedDealer.subscription.status === 'active' ? '#22c55e' :
+                                                       selectedDealer.subscription.status === 'trial' ? '#a855f7' : '#ef4444'
+                                            }}>
+                                                {selectedDealer.subscription.status === 'active' ? 'ใช้งาน' :
+                                                 selectedDealer.subscription.status === 'trial' ? 'ทดลองใช้' : selectedDealer.subscription.status}
+                                            </span>
+                                        </div>
+                                        {selectedDealer.subscription.expires_at && (
+                                            <div>
+                                                <strong>หมดอายุ:</strong> {new Date(selectedDealer.subscription.expires_at).toLocaleDateString('th-TH')}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="form-group">
                                 <label>เลือกแพ็คเกจ</label>

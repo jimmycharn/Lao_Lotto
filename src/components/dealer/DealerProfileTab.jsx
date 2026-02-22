@@ -295,9 +295,13 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                                             subscription.status === 'trial' ? 'ทดลองใช้' :
                                                 subscription.status === 'expired' ? 'หมดอายุ' : subscription.status}
                                     </span>
-                                    {subscription.end_date && (
+                                    {subscription.expires_at ? (
                                         <span className="sub-expiry">
-                                            หมดอายุ: {formatDate(subscription.end_date)}
+                                            หมดอายุ: {formatDate(subscription.expires_at)}
+                                        </span>
+                                    ) : (
+                                        <span className="sub-expiry" style={{ color: 'var(--color-success)' }}>
+                                            ไม่มีวันหมดอายุ
                                         </span>
                                     )}
                                 </div>
