@@ -777,7 +777,7 @@ export default function SuperAdmin() {
 
             const lastMonthRevenue = lastMonthPayments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0
 
-            // Expiring subscriptions (within 7 days)
+            // Expiring subscriptions (within 7 days) - only count those with expires_at set
             const sevenDaysLater = new Date()
             sevenDaysLater.setDate(sevenDaysLater.getDate() + 7)
 
@@ -785,7 +785,8 @@ export default function SuperAdmin() {
                 .from('dealer_subscriptions')
                 .select('*', { count: 'exact', head: true })
                 .in('status', ['active', 'trial'])
-                .lte('end_date', sevenDaysLater.toISOString().split('T')[0])
+                .not('expires_at', 'is', null)
+                .lte('expires_at', sevenDaysLater.toISOString())
 
             setStats({
                 totalDealers: totalDealers || 0,
@@ -1371,11 +1372,22 @@ export default function SuperAdmin() {
             d.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             d.email?.toLowerCase().includes(searchTerm.toLowerCase())
 
+        // Check if subscription is expiring within 7 days
+        const subscription = d.dealer_subscriptions?.[0]
+        const isExpiring = (() => {
+            if (!subscription?.expires_at) return false
+            const expiresAt = new Date(subscription.expires_at)
+            const sevenDaysLater = new Date()
+            sevenDaysLater.setDate(sevenDaysLater.getDate() + 7)
+            return expiresAt <= sevenDaysLater && ['active', 'trial'].includes(subscription.status)
+        })()
+
         const matchFilter = filterStatus === 'all' ||
             (filterStatus === 'active' && d.is_active) ||
             (filterStatus === 'inactive' && !d.is_active) ||
             (filterStatus === 'trial' && d.subscription_status === 'trial') ||
-            (filterStatus === 'expired' && d.subscription_status === 'expired')
+            (filterStatus === 'expired' && d.subscription_status === 'expired') ||
+            (filterStatus === 'expiring' && isExpiring)
 
         return matchSearch && matchFilter
     })
@@ -1475,7 +1487,7 @@ export default function SuperAdmin() {
                     <div className="alert alert-info">
                         <FiClock />
                         <span>มี <strong>{stats.expiringSubscriptions}</strong> subscription จะหมดอายุใน 7 วัน</span>
-                        <button onClick={() => { setFilterStatus('expired'); setActiveTab('dealers') }} className="btn btn-sm">
+                        <button onClick={() => { setFilterStatus('expiring'); setActiveTab('dealers') }} className="btn btn-sm">
                             ดูรายการ
                         </button>
                     </div>
