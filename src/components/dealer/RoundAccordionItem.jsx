@@ -1628,6 +1628,125 @@ export default function RoundAccordionItem({
         }
     }
 
+    // Generate copy text for total submissions (ยอดรับรวม)
+    const generateTotalCopyText = (submissions) => {
+        const lotteryName = round.lottery_name || LOTTERY_TYPES[round.lottery_type] || 'หวย'
+        const totalItems = submissions.length
+        const grandTotal = submissions.reduce((sum, s) => sum + (s.amount || 0), 0)
+        const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
+        const setPrice = round?.set_prices?.['4_top'] || 120
+
+        // Format date in Thai
+        const roundDate = new Date(round.round_date)
+        const thaiMonths = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
+        const thaiYear = roundDate.getFullYear() + 543
+        const formattedDate = `${roundDate.getDate()} ${thaiMonths[roundDate.getMonth()]} ${thaiYear}`
+
+        // Group items by bet type
+        const byType = {}
+        let totalSetCount = 0
+        submissions.forEach(item => {
+            const betType = item.bet_type
+            const typeName = BET_TYPES_BY_LOTTERY[round.lottery_type]?.[betType]?.label || BET_TYPES[betType] || betType
+            const isSetType = betType === '4_set' || betType === '4_top' || betType === '3_set' || betType === '3_straight_set'
+            if (!byType[typeName]) byType[typeName] = { items: [], betType, isSetType }
+            byType[typeName].items.push(item)
+            
+            // Count sets for set-based types
+            if (isSetBasedLottery && isSetType) {
+                totalSetCount += Math.ceil((item.amount || 0) / setPrice)
+            }
+        })
+
+        let text = `📤 ยอดรับรวม - ${lotteryName}\n`
+        text += `📅 วันที่ ${formattedDate}\n`
+        text += `📅 ทั้งหมด (${totalItems} รายการ)\n`
+        text += `💰 ยอดรวม: ${round.currency_symbol}${grandTotal.toLocaleString()}\n`
+        if (isSetBasedLottery && totalSetCount > 0) {
+            text += `💰 รวมเลขชุด: ${totalSetCount} ชุด\n`
+        }
+        text += `━━━━━━━━━━━━━━━━\n`
+
+        // Separate set types and regular types
+        const regularTypes = {}
+        const setTypes = {}
+        Object.entries(byType).forEach(([typeName, typeData]) => {
+            if (isSetBasedLottery && typeData.isSetType) {
+                setTypes[typeName] = typeData
+            } else {
+                regularTypes[typeName] = typeData
+            }
+        })
+
+        // Output set types first (for Lao/Hanoi)
+        Object.entries(setTypes).forEach(([typeName, typeData]) => {
+            text += `${typeName}\n`
+            // Group by numbers and sum amounts
+            const grouped = {}
+            typeData.items.forEach(item => {
+                if (!grouped[item.numbers]) {
+                    grouped[item.numbers] = { amount: 0, count: 0 }
+                }
+                grouped[item.numbers].amount += item.amount || 0
+                grouped[item.numbers].count += 1
+            })
+            Object.entries(grouped).forEach(([numbers, data]) => {
+                const setCount = Math.ceil(data.amount / setPrice)
+                text += `${numbers}= (${setCount} ชุด)\n`
+            })
+            text += `-----------------\n`
+        })
+
+        // Output regular types
+        Object.entries(regularTypes).forEach(([typeName, typeData]) => {
+            text += `${typeName}\n`
+            // Group by numbers and sum amounts
+            const grouped = {}
+            typeData.items.forEach(item => {
+                if (!grouped[item.numbers]) {
+                    grouped[item.numbers] = 0
+                }
+                grouped[item.numbers] += item.amount || 0
+            })
+            Object.entries(grouped).forEach(([numbers, amount]) => {
+                text += `${numbers}=${amount.toLocaleString()}\n`
+            })
+            text += `-----------------\n`
+        })
+
+        text += `━━━━━━━━━━━━━━━━\n`
+        return text
+    }
+
+    // Handle copy total submissions
+    const handleCopyTotal = async () => {
+        // Use filtered submissions based on current filter
+        const submissionsToCopy = inlineUserFilter === 'all' 
+            ? inlineSubmissions 
+            : inlineSubmissions.filter(s => (s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ') === inlineUserFilter)
+        
+        if (submissionsToCopy.length === 0) {
+            toast.warning('ไม่มีรายการที่จะคัดลอก')
+            return
+        }
+
+        const text = generateTotalCopyText(submissionsToCopy)
+        try {
+            await navigator.clipboard.writeText(text)
+            toast.success(`คัดลอก ${submissionsToCopy.length} รายการแล้ว!`)
+        } catch (err) {
+            const textArea = document.createElement('textarea')
+            textArea.value = text
+            textArea.style.position = 'fixed'
+            textArea.style.left = '-9999px'
+            document.body.appendChild(textArea)
+            textArea.select()
+            document.execCommand('copy')
+            document.body.removeChild(textArea)
+            toast.success(`คัดลอก ${submissionsToCopy.length} รายการแล้ว!`)
+        }
+    }
+
     // Map bet_type to settings key for Lao/Hanoi lottery
     const getSettingsKey = (betType, lotteryKey) => {
         if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
@@ -2291,6 +2410,22 @@ export default function RoundAccordionItem({
                                                             <FiFileText /> เขียนโพย
                                                         </button>
                                                     )}
+                                                    <button
+                                                        className="btn btn-outline btn-sm"
+                                                        onClick={handleCopyTotal}
+                                                        disabled={inlineSubmissions.length === 0}
+                                                        style={{
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '0.35rem',
+                                                            whiteSpace: 'nowrap',
+                                                            padding: '0 0.75rem',
+                                                            fontSize: '0.85rem'
+                                                        }}
+                                                        title="คัดลอกยอดรับรวม"
+                                                    >
+                                                        <FiCopy /> คัดลอก
+                                                    </button>
                                                 </div>
                                                 
                                                 {/* Row 1: View mode toggle (รวม/ใบโพย) + Display mode toggle */}
