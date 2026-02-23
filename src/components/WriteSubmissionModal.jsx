@@ -395,7 +395,12 @@ export default function WriteSubmissionModal({
     onEditSubmit = null,
     lotteryType = 'thai',
     setPrice = 120,  // ราคาต่อชุดสำหรับ 4ตัวชุด
-    priceLocked = false  // ล็อคราคา
+    priceLocked = false,  // ล็อคราคา
+    // Dealer mode props
+    allMembers = [],
+    selectedMember = null,
+    onMemberChange = null,
+    isDealerMode = false
 }) {
     const [lines, setLines] = useState([])
     const [currentInput, setCurrentInput] = useState('')
@@ -2267,6 +2272,29 @@ export default function WriteSubmissionModal({
                         </button>
                     )}
                 </div>
+
+                {/* Member Selector for Dealer Mode */}
+                {isDealerMode && allMembers.length > 0 && onMemberChange && (
+                    <div className="write-modal-member-row">
+                        <label>สมาชิก:</label>
+                        <select
+                            value={selectedMember?.id || ''}
+                            onChange={(e) => {
+                                const member = allMembers.find(m => m.id === e.target.value)
+                                if (member && onMemberChange) {
+                                    onMemberChange(member)
+                                }
+                            }}
+                            className="member-select"
+                        >
+                            {allMembers.map(member => (
+                                <option key={member.id} value={member.id}>
+                                    {member.full_name || member.email || member.id}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
 
                 {/* Lines Display */}
                 <div className="write-modal-lines" ref={linesContainerRef}>

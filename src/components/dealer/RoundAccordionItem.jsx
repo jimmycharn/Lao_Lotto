@@ -3776,6 +3776,8 @@ export default function RoundAccordionItem({
                     round={round}
                     targetUser={selectedMemberForBet}
                     dealerId={user.id}
+                    allMembers={allMembers}
+                    onMemberChange={(member) => setSelectedMemberForBet(member)}
                     onClose={() => {
                         setShowWriteBetModal(false)
                         setSelectedMemberForBet(null)

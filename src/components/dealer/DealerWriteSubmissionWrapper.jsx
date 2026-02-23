@@ -13,6 +13,8 @@ export default function DealerWriteSubmissionWrapper({
     round,
     targetUser,
     dealerId,
+    allMembers = [],
+    onMemberChange,
     onClose,
     onSuccess,
     editingData = null
@@ -233,13 +235,17 @@ export default function DealerWriteSubmissionWrapper({
             onClose={onClose}
             onSubmit={handleWriteSubmit}
             roundInfo={{ 
-                name: `${round.lottery_name || round.lottery_type} - ${targetUser?.full_name || targetUser?.email}` 
+                name: `${round.lottery_name || round.lottery_type}` 
             }}
             currencySymbol={round.currency_symbol || '฿'}
             lotteryType={round.lottery_type}
             setPrice={setPrice}
             editingData={editingData}
             onEditSubmit={handleEditSubmit}
+            allMembers={allMembers}
+            selectedMember={targetUser}
+            onMemberChange={onMemberChange}
+            isDealerMode={true}
         />
     )
 }
