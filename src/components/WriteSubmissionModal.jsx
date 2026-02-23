@@ -595,11 +595,10 @@ export default function WriteSubmissionModal({
             }
         } else if (numLen === 3) {
             if (endsWithAsterisk) {
-                // Input ends with * (e.g., "834=20*") - show all possible types
+                // Input ends with * (e.g., "834=20*") - show เต็งโต๊ด and คูณชุด only (ไม่แสดง กลับ)
                 if (isTop) {
                     buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: true, appendAmount: amount1 })
                     if (permCount > 1) {
-                        buttons.push({ label: 'กลับ', value: 'กลับ', autoSubmit: true, appendAmount: amount1 })
                         buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true, appendAmount: permCount.toString() })
                     }
                 }
@@ -610,8 +609,8 @@ export default function WriteSubmissionModal({
                     buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: true })
                     if (permCount > 1) {
                         buttons.push({ label: 'กลับ', value: 'กลับ', autoSubmit: true })
-                        // Show คูณชุด if amount2 equals permutation count OR always show for flexibility
-                        if (amt2Num === permCount || permCount > 1) {
+                        // Show คูณชุด only if amount2 equals permutation count
+                        if (amt2Num === permCount) {
                             buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
                         }
                     }
@@ -1609,14 +1608,40 @@ export default function WriteSubmissionModal({
                 }
                 
                 // Build the line with locked amount and default type
-                // Special handling for คูณชุด - need to add *permutation
+                // Special handling for คูณชุด - need to add *permutation only if lockedAmount doesn't have *
                 if (defaultType === 'คูณชุด') {
                     const permCount = getPermutationCount(trimmed)
-                    trimmed = `${trimmed}=${lockedAmount}*${permCount} ${defaultType}`
+                    if (lockedHasSecondAmount) {
+                        // lockedAmount already has * (e.g., "20*20"), just use it as is
+                        trimmed = `${trimmed}=${lockedAmount} ${defaultType}`
+                    } else {
+                        // lockedAmount is single amount, add *permCount
+                        trimmed = `${trimmed}=${lockedAmount}*${permCount} ${defaultType}`
+                    }
                 } else {
                     trimmed = `${trimmed}=${lockedAmount} ${defaultType}`
                 }
-                setCurrentInput(trimmed)
+                
+                // Submit the line directly instead of just setting input
+                const parsed = parseLine(trimmed)
+                if (parsed && parsed.error) {
+                    playSound('error')
+                    setError(parsed.error)
+                    return
+                }
+                
+                playSound('success')
+                if (editingIndex !== null) {
+                    const newLines = [...lines]
+                    newLines[editingIndex] = trimmed
+                    setLines(newLines)
+                    setEditingIndex(null)
+                } else {
+                    setLines(prev => [...prev, trimmed])
+                }
+                setCurrentInput('')
+                setError('')
+                return
             }
         }
 
