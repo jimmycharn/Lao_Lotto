@@ -524,11 +524,12 @@ export default function WriteSubmissionModal({
         const numbers = input.substring(0, eqIndex)
         const afterEq = input.substring(eqIndex + 1).trim()
         
-        const hasSecondAmount = afterEq.includes('*')
+        const hasAsterisk = afterEq.includes('*')
+        const endsWithAsterisk = afterEq.endsWith('*')
         let amount1 = ''
         let amount2 = ''
         
-        if (hasSecondAmount) {
+        if (hasAsterisk) {
             const amountParts = afterEq.split('*')
             amount1 = amountParts[0].trim()
             amount2 = amountParts[1] ? amountParts[1].split(/\s+/)[0].trim() : ''
@@ -538,16 +539,18 @@ export default function WriteSubmissionModal({
         }
         
         if (!amount1 || !/^\d+$/.test(amount1)) return []
-        if (hasSecondAmount && (!amount2 || !/^\d+$/.test(amount2))) return []
+        // Allow empty amount2 when input ends with * (waiting for user to choose type)
+        const hasValidSecondAmount = hasAsterisk && amount2 && /^\d+$/.test(amount2)
         
         const numLen = numbers.length
         if (!/^\d+$/.test(numbers)) return []
 
         const buttons = []
         const isTop = topBottomToggle === 'top'
+        const permCount = numLen >= 2 ? getPermutationCount(numbers) : 1
 
         if (numLen === 1) {
-            if (hasSecondAmount) return []
+            if (hasAsterisk) return []
             if (isTop) {
                 buttons.push({ label: 'ลอยบน', value: 'ลอยบน', autoSubmit: true })
                 buttons.push({ label: 'หน้าบน', value: 'หน้าบน', autoSubmit: true })
@@ -559,7 +562,16 @@ export default function WriteSubmissionModal({
                 buttons.push({ label: 'หลังล่าง', value: 'หลังล่าง', autoSubmit: true })
             }
         } else if (numLen === 2) {
-            if (hasSecondAmount) {
+            if (endsWithAsterisk) {
+                // Input ends with * (e.g., "12=20*") - show all possible types that need second amount
+                if (isTop) {
+                    buttons.push({ label: 'บนกลับ', value: 'บนกลับ', autoSubmit: true, appendAmount: amount1 })
+                    buttons.push({ label: 'หน้ากลับ', value: 'หน้ากลับ', autoSubmit: true, appendAmount: amount1 })
+                    buttons.push({ label: 'ถ่างกลับ', value: 'ถ่างกลับ', autoSubmit: true, appendAmount: amount1 })
+                } else {
+                    buttons.push({ label: 'ล่างกลับ', value: 'ล่างกลับ', autoSubmit: true, appendAmount: amount1 })
+                }
+            } else if (hasValidSecondAmount) {
                 if (isTop) {
                     buttons.push({ label: 'บนกลับ', value: 'บนกลับ', autoSubmit: true })
                     buttons.push({ label: 'หน้ากลับ', value: 'หน้ากลับ', autoSubmit: true })
@@ -582,12 +594,26 @@ export default function WriteSubmissionModal({
                 }
             }
         } else if (numLen === 3) {
-            const permCount = getPermutationCount(numbers)
-            if (hasSecondAmount) {
+            if (endsWithAsterisk) {
+                // Input ends with * (e.g., "834=20*") - show all possible types
+                if (isTop) {
+                    buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: true, appendAmount: amount1 })
+                    if (permCount > 1) {
+                        buttons.push({ label: 'กลับ', value: 'กลับ', autoSubmit: true, appendAmount: amount1 })
+                        buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true, appendAmount: permCount.toString() })
+                    }
+                }
+            } else if (hasValidSecondAmount) {
+                // Has complete second amount - check if it could be permutation count
+                const amt2Num = parseInt(amount2, 10)
                 if (isTop) {
                     buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: true })
                     if (permCount > 1) {
                         buttons.push({ label: 'กลับ', value: 'กลับ', autoSubmit: true })
+                        // Show คูณชุด if amount2 equals permutation count OR always show for flexibility
+                        if (amt2Num === permCount || permCount > 1) {
+                            buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                        }
                     }
                 }
             } else {
@@ -610,11 +636,45 @@ export default function WriteSubmissionModal({
                 }
             }
         } else if (numLen === 4) {
-            if (hasSecondAmount) return []
-            buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+            if (endsWithAsterisk) {
+                // Input ends with * (e.g., "1234=20*") - show คูณชุด
+                if (permCount > 1) {
+                    buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true, appendAmount: permCount.toString() })
+                }
+                buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true, appendAmount: amount1 })
+            } else if (hasValidSecondAmount) {
+                // Has complete second amount - check if it could be permutation count
+                const amt2Num = parseInt(amount2, 10)
+                if (permCount > 1 && (amt2Num === permCount || permCount > 1)) {
+                    buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                }
+                buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+            } else {
+                buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+                if (permCount > 1) {
+                    buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                }
+            }
         } else if (numLen === 5) {
-            if (hasSecondAmount) return []
-            buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+            if (endsWithAsterisk) {
+                // Input ends with * (e.g., "12345=20*") - show คูณชุด
+                if (permCount > 1) {
+                    buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true, appendAmount: permCount.toString() })
+                }
+                buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true, appendAmount: amount1 })
+            } else if (hasValidSecondAmount) {
+                // Has complete second amount - check if it could be permutation count
+                const amt2Num = parseInt(amount2, 10)
+                if (permCount > 1 && (amt2Num === permCount || permCount > 1)) {
+                    buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                }
+                buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+            } else {
+                buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+                if (permCount > 1) {
+                    buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                }
+            }
         }
 
         return buttons
@@ -1193,16 +1253,29 @@ export default function WriteSubmissionModal({
                 afterEq = lockedAmount
             }
             
-            const hasSecondAmount = afterEq.includes('*')
+            const hasAsterisk = afterEq.includes('*')
+            const endsWithAsterisk = afterEq.endsWith('*')
             
             let amount1 = ''
             let amount2 = ''
             let displayLine = ''
             
-            if (hasSecondAmount) {
+            if (hasAsterisk) {
                 const amountParts = afterEq.split('*')
                 amount1 = amountParts[0].trim()
                 amount2 = amountParts[1] ? amountParts[1].split(/\s+/)[0].trim() : ''
+                
+                // If input ends with * (no amount2), determine what to append based on type
+                if (endsWithAsterisk || !amount2) {
+                    if (type === 'คูณชุด') {
+                        // คูณชุด - append permutation count
+                        const permCount = getPermutationCount(numbers)
+                        amount2 = permCount.toString()
+                    } else {
+                        // Other types (เต็งโต๊ด, กลับ, etc.) - append same amount as amount1
+                        amount2 = amount1
+                    }
+                }
                 displayLine = `${numbers}=${amount1}*${amount2} ${type}`
             } else {
                 const parts = afterEq.split(/\s+/)
@@ -1935,14 +2008,18 @@ export default function WriteSubmissionModal({
                 return []
             }
         }
-        // If has *, must have second amount too
-        if (hasSecondAmount && (!amount2 || !/^\d+$/.test(amount2))) return []
+        
+        // Check if input ends with * (waiting for second amount or type selection)
+        const endsWithAsterisk = afterEq.endsWith('*')
+        // If has * and complete second amount, validate it
+        const hasValidSecondAmount = hasSecondAmount && amount2 && /^\d+$/.test(amount2)
         
         const numLen = numbers.length
         if (!/^\d+$/.test(numbers)) return []
 
         const buttons = []
         const isTop = topBottomToggle === 'top'
+        const permCount = numLen >= 2 ? getPermutationCount(numbers) : 1
 
         if (numLen === 1) {
             // 1 digit: ลอย, หน้า, กลาง(บนเท่านั้น), หลัง
@@ -1961,8 +2038,17 @@ export default function WriteSubmissionModal({
             }
         } else if (numLen === 2) {
             // 2 digits
-            if (hasSecondAmount) {
-                // มี * ในจำนวนเงิน - แสดงเฉพาะปุ่มกลับ
+            if (endsWithAsterisk) {
+                // Input ends with * (e.g., "12=20*") - show กลับ buttons
+                if (isTop) {
+                    buttons.push({ label: 'บนกลับ', value: 'บนกลับ', autoSubmit: true })
+                    buttons.push({ label: 'หน้ากลับ', value: 'หน้ากลับ', autoSubmit: true })
+                    buttons.push({ label: 'ถ่างกลับ', value: 'ถ่างกลับ', autoSubmit: true })
+                } else {
+                    buttons.push({ label: 'ล่างกลับ', value: 'ล่างกลับ', autoSubmit: true })
+                }
+            } else if (hasValidSecondAmount) {
+                // มี * และครบ 2 ส่วน - แสดงปุ่มกลับ
                 if (isTop) {
                     buttons.push({ label: 'บนกลับ', value: 'บนกลับ', autoSubmit: true })
                     buttons.push({ label: 'หน้ากลับ', value: 'หน้ากลับ', autoSubmit: true })
@@ -1987,24 +2073,29 @@ export default function WriteSubmissionModal({
             }
         } else if (numLen === 3) {
             // 3 digits
-            const permCount = getPermutationCount(numbers)
-            
-            if (hasSecondAmount) {
-                // มี * ในจำนวนเงิน - แสดงเฉพาะ เต็งโต๊ด และ กลับ
+            if (endsWithAsterisk) {
+                // Input ends with * (e.g., "123=20*") - show เต็งโต๊ด and คูณชุด only (ไม่แสดง กลับ เพราะให้ผลเหมือน คูณชุด)
+                if (isTop) {
+                    buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: true })
+                    if (permCount > 1) {
+                        buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                    }
+                }
+            } else if (hasValidSecondAmount) {
+                // มี * และครบ 2 ส่วน - แสดง เต็งโต๊ด, กลับ และ คูณชุด (ถ้า amount2 = permCount)
+                const amt2Num = parseInt(amount2, 10)
                 if (isTop) {
                     buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: true })
                     if (permCount > 1) {
                         buttons.push({ label: 'กลับ', value: 'กลับ', autoSubmit: true })
+                        // แสดง คูณชุด เฉพาะเมื่อ amount2 เท่ากับ permutation count
+                        if (amt2Num === permCount) {
+                            buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                        }
                     }
-                } else {
-                    // หวยไทยมี 3ตัวล่าง, ลาว/ฮานอยไม่มี
-                    if (!isLaoOrHanoi) {
-                        // สำหรับหวยไทย - ไม่มีปุ่มเพราะ 3ตัวล่าง ไม่รองรับ *
-                    }
-                    // ถ้าเป็นลาว/ฮานอย ไม่แสดงปุ่มเพราะไม่มี 3ตัวล่าง
                 }
             } else {
-                // ไม่มี * ในจำนวนเงิน
+                // ไม่มี * ในจำนวนเงิน - ไม่แสดงปุ่ม กลับ (ต้องมี second amount)
                 if (isTop) {
                     if (isLaoOrHanoi) {
                         buttons.push({ label: 'ตรง', value: 'ตรง', autoSubmit: true })
@@ -2014,7 +2105,7 @@ export default function WriteSubmissionModal({
                     buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: true })
                     buttons.push({ label: 'โต๊ด', value: 'โต๊ด', autoSubmit: true })
                     if (permCount > 1) {
-                        buttons.push({ label: 'คูณชุด', value: `คูณชุด`, autoSubmit: true })
+                        buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
                     }
                 } else {
                     if (!isLaoOrHanoi) {
@@ -2025,38 +2116,61 @@ export default function WriteSubmissionModal({
                 }
             }
         } else if (numLen === 4) {
-            // 4 digits - ไม่รองรับ * ในจำนวนเงิน
-            if (hasSecondAmount) return []
-            
-            const permCount = getPermutationCount(numbers)
-            
-            if (isLaoOrHanoi) {
-                // ลาว/ฮานอย: 4ตัวชุด, ลอยแพ, คูณชุด
-                // ถ้าจำนวนเงินน้อย (<=99) อาจเป็นจำนวนชุด
-                const amountNum = parseInt(amount1)
-                if (amountNum <= 99) {
-                    buttons.push({ label: '4ตัวชุด', value: '4ตัวชุด', autoSubmit: true })
-                }
-                buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+            // 4 digits
+            if (endsWithAsterisk) {
+                // Input ends with * (e.g., "1234=20*") - show คูณชุด and ลอยแพ
                 if (permCount > 1) {
                     buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
                 }
+                buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+            } else if (hasValidSecondAmount) {
+                // มี * และครบ 2 ส่วน - แสดง คูณชุด (ถ้า amount2 = permCount) และ ลอยแพ
+                const amt2Num = parseInt(amount2, 10)
+                if (permCount > 1 && amt2Num === permCount) {
+                    buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                }
+                buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
             } else {
-                // หวยไทย: ลอยแพ, คูณชุด
-                buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
-                if (permCount > 1) {
-                    buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                // ไม่มี * ในจำนวนเงิน
+                if (isLaoOrHanoi) {
+                    // ลาว/ฮานอย: 4ตัวชุด, ลอยแพ, คูณชุด
+                    const amountNum = parseInt(amount1)
+                    if (amountNum <= 99) {
+                        buttons.push({ label: '4ตัวชุด', value: '4ตัวชุด', autoSubmit: true })
+                    }
+                    buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+                    if (permCount > 1) {
+                        buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                    }
+                } else {
+                    // หวยไทย: ลอยแพ, คูณชุด
+                    buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+                    if (permCount > 1) {
+                        buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                    }
                 }
             }
         } else if (numLen === 5) {
-            // 5 digits - ไม่รองรับ * ในจำนวนเงิน
-            if (hasSecondAmount) return []
-            
-            const permCount = getPermutationCount(numbers)
-            
-            buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
-            if (permCount > 1) {
-                buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+            // 5 digits
+            if (endsWithAsterisk) {
+                // Input ends with * (e.g., "12345=20*") - show คูณชุด and ลอยแพ
+                if (permCount > 1) {
+                    buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                }
+                buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+            } else if (hasValidSecondAmount) {
+                // มี * และครบ 2 ส่วน - แสดง คูณชุด (ถ้า amount2 = permCount) และ ลอยแพ
+                const amt2Num = parseInt(amount2, 10)
+                if (permCount > 1 && amt2Num === permCount) {
+                    buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                }
+                buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+            } else {
+                // ไม่มี * ในจำนวนเงิน
+                buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
+                if (permCount > 1) {
+                    buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
+                }
             }
         }
 

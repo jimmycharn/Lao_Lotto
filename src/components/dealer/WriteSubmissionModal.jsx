@@ -685,8 +685,18 @@ export default function WriteSubmissionModal({
         else if (digits === 2) {
             // ถ้าช่องจำนวนเงินว่าง ไม่แสดงปุ่ม
             if (!isAmountEmpty) {
-                if (hasStarInAmount && amtParts.length === 2) {
-                    // มีเครื่องหมาย * เช่น 100*100
+                const endsWithStar = amount.endsWith('*')
+                
+                if (endsWithStar) {
+                    // จำนวนเงินลงท้ายด้วย * เช่น 100* - แสดงปุ่มกลับทั้งหมด
+                    available = [
+                        { id: '2_top_rev', label: '2 ตัวบนกลับ' },
+                        { id: '2_front_rev', label: '2 ตัวหน้ากลับ' },
+                        { id: '2_spread_rev', label: '2 ตัวถ่างกลับ' },
+                        { id: '2_bottom_rev', label: '2 ตัวล่างกลับ' }
+                    ]
+                } else if (hasStarInAmount && amtParts.length === 2) {
+                    // มีเครื่องหมาย * และครบ 2 ส่วน เช่น 100*100
                     available = [
                         { id: '2_top_rev', label: '2 ตัวบนกลับ' },
                         { id: '2_front_rev', label: '2 ตัวหน้ากลับ' },
@@ -718,17 +728,31 @@ export default function WriteSubmissionModal({
         else if (digits === 3) {
             // ถ้าช่องจำนวนเงินว่าง ไม่แสดงปุ่ม
             if (!isAmountEmpty) {
-                if (hasStarInAmount && amtParts.length === 2) {
-                    // มีเครื่องหมาย * เช่น 100*100
-                    const permCount = getPermutations(submitForm.numbers).length
+                const permCount = getPermutations(submitForm.numbers).length
+                const isLaoHanoi = ['lao', 'hanoi'].includes(lotteryType)
+                const endsWithStar = amount.endsWith('*')
+                
+                if (endsWithStar) {
+                    // จำนวนเงินลงท้ายด้วย * เช่น 100* - แสดงเฉพาะ เต็ง-โต๊ด และ คูณชุด (ไม่แสดง กลับ เพราะให้ผลเหมือน คูณชุด)
+                    available = [
+                        { id: '3_straight_tod', label: 'เต็ง-โต๊ด' }
+                    ]
+                    if (permCount > 1) {
+                        available.push({ id: '3_perm_from_3', label: `คูณชุด ${permCount}` })
+                    }
+                } else if (hasStarInAmount && amtParts.length === 2) {
+                    // มีเครื่องหมาย * และครบ 2 ส่วน เช่น 100*100 หรือ 100*6
+                    const amt2 = parseInt(amtParts[1], 10)
                     available = [
                         { id: '3_straight_tod', label: 'เต็ง-โต๊ด' },
                         { id: '3_straight_perm', label: `1+กลับ (${permCount - 1})` }
                     ]
+                    // แสดง คูณชุด เฉพาะเมื่อ amount2 เท่ากับ permutation count
+                    if (permCount > 1 && amt2 === permCount) {
+                        available.push({ id: '3_perm_from_3', label: `คูณชุด ${permCount}` })
+                    }
                 } else if (amtParts.length === 1 && !hasStarInAmount) {
                     // ตัวเลขอย่างเดียวเช่น 100
-                    const permCount = getPermutations(submitForm.numbers).length
-                    const isLaoHanoi = ['lao', 'hanoi'].includes(lotteryType)
                     available = [
                         { id: '3_perm_from_3', label: `คูณชุด ${permCount}` },
                         { id: '3_straight_tod', label: 'เต็ง-โต๊ด' },
@@ -744,30 +768,58 @@ export default function WriteSubmissionModal({
         // 4. ป้อนเลข 4 ตัว - หวยไทย ลาว ฮานอย
         else if (digits === 4) {
             const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
+            const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
+            const endsWithStar = amount.endsWith('*')
             
             if (isLaoOrHanoi) {
                 // หวยลาว ฮานอย
-                // ถ้าว่างทั้ง 2 ช่องจะไม่แสดงปุ่ม
                 if (submitForm.numbers && !isAmountEmpty) {
-                    const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
-                    available = [
-                        '4_set',
-                        '4_float',
-                        { id: '3_perm_from_4', label: `3 X ${permCount}` }
-                    ]
+                    if (endsWithStar) {
+                        // จำนวนเงินลงท้ายด้วย * - แสดงปุ่มที่เป็นไปได้
+                        available = [
+                            '4_set',
+                            '4_float',
+                            { id: '3_perm_from_4', label: `3 X ${permCount}` }
+                        ]
+                    } else if (hasStarInAmount && amtParts.length === 2) {
+                        // มี * และครบ 2 ส่วน - แสดงทุกปุ่มเพื่อความยืดหยุ่น
+                        available = [
+                            '4_set',
+                            '4_float',
+                            { id: '3_perm_from_4', label: `3 X ${permCount}` }
+                        ]
+                    } else {
+                        available = [
+                            '4_set',
+                            '4_float',
+                            { id: '3_perm_from_4', label: `3 X ${permCount}` }
+                        ]
+                    }
                 } else if (submitForm.numbers && isAmountEmpty) {
                     // ช่องจำนวนเงินว่าง แสดงเฉพาะ "4 ตัวชุด"
                     available = ['4_set']
                 }
             } else {
                 // หวยไทย
-                // ถ้าช่องจำนวนเงินว่าง ไม่แสดงปุ่ม
                 if (!isAmountEmpty) {
-                    const permCount = getUnique3DigitPermsFrom4(submitForm.numbers).length
-                    available = [
-                        '4_float',
-                        { id: '3_perm_from_4', label: `3 X ${permCount}` }
-                    ]
+                    if (endsWithStar) {
+                        // จำนวนเงินลงท้ายด้วย * - แสดงปุ่มที่เป็นไปได้
+                        available = [
+                            '4_float',
+                            { id: '3_perm_from_4', label: `3 X ${permCount}` }
+                        ]
+                    } else if (hasStarInAmount && amtParts.length === 2) {
+                        // มี * และครบ 2 ส่วน - แสดงทุกปุ่มเพื่อความยืดหยุ่น
+                        available = [
+                            '4_float',
+                            { id: '3_perm_from_4', label: `3 X ${permCount}` }
+                        ]
+                    } else {
+                        available = [
+                            '4_float',
+                            { id: '3_perm_from_4', label: `3 X ${permCount}` }
+                        ]
+                    }
                 }
             }
         }
@@ -776,10 +828,26 @@ export default function WriteSubmissionModal({
             // ถ้าช่องจำนวนเงินว่าง ไม่แสดงปุ่ม
             if (!isAmountEmpty) {
                 const permCount = getUnique3DigitPermsFrom5(submitForm.numbers).length
-                available = [
-                    '5_float',
-                    { id: '3_perm_from_5', label: `3 X ${permCount}` }
-                ]
+                const endsWithStar = amount.endsWith('*')
+                
+                if (endsWithStar) {
+                    // จำนวนเงินลงท้ายด้วย * - แสดงปุ่มที่เป็นไปได้
+                    available = [
+                        '5_float',
+                        { id: '3_perm_from_5', label: `3 X ${permCount}` }
+                    ]
+                } else if (hasStarInAmount && amtParts.length === 2) {
+                    // มี * และครบ 2 ส่วน - แสดงทุกปุ่มเพื่อความยืดหยุ่น
+                    available = [
+                        '5_float',
+                        { id: '3_perm_from_5', label: `3 X ${permCount}` }
+                    ]
+                } else {
+                    available = [
+                        '5_float',
+                        { id: '3_perm_from_5', label: `3 X ${permCount}` }
+                    ]
+                }
             }
         }
 
