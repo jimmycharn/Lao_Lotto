@@ -885,12 +885,14 @@ export default function WriteSubmissionModal({
             }
             // Enter key handling
             // Ctrl+Enter (real keyboard) OR Enter with on-screen Ctrl pressed
-            // Both trigger save draft with default type when input is "number=amount"
+            // Both trigger save draft with default type when input is "number=amount" or "number=amount*"
             else if (e.key === 'Enter') {
                 e.preventDefault()
                 const input = currentInput.trim()
                 // Pattern: digits=digits (no * and no type)
                 const ctrlEnterPattern = /^\d+=\d+$/
+                // Pattern: digits=digits* (ends with * - waiting for second amount or type)
+                const ctrlEnterWithAsteriskPattern = /^\d+=\d+\*$/
                 // Pattern: exactly 4 digits (for 4ตัวชุด in Lao/Hanoi)
                 const fourDigitPattern = /^\d{4}$/
                 const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
@@ -898,8 +900,8 @@ export default function WriteSubmissionModal({
                 // Check if Ctrl is active (real keyboard OR on-screen button)
                 const isCtrlActive = e.ctrlKey || e.metaKey || isCtrlPressed
                 
-                if (isCtrlActive && ctrlEnterPattern.test(input)) {
-                    // Ctrl+Enter with "number=amount" - save draft with default type button
+                if (isCtrlActive && (ctrlEnterPattern.test(input) || ctrlEnterWithAsteriskPattern.test(input))) {
+                    // Ctrl+Enter with "number=amount" or "number=amount*" - save draft with default type button
                     const currentTypeButtons = getAvailableTypeButtons()
                     if (currentTypeButtons.length > 0) {
                         const defaultIndex = getDefaultButtonIndex(currentTypeButtons)
@@ -2471,18 +2473,19 @@ export default function WriteSubmissionModal({
                             <button 
                                 className="enter-inline"
                                 onClick={() => {
-                                    // Check if Ctrl is pressed AND input matches "number=amount" format
-                                    // (no * yet, no type specified)
+                                    // Check if Ctrl is pressed AND input matches "number=amount" or "number=amount*" format
                                     if (isCtrlPressed) {
                                         const input = currentInput.trim()
                                         // Pattern: digits=digits (no * and no type)
                                         const ctrlEnterPattern = /^\d+=\d+$/
+                                        // Pattern: digits=digits* (ends with * - waiting for second amount or type)
+                                        const ctrlEnterWithAsteriskPattern = /^\d+=\d+\*$/
                                         // Pattern: exactly 4 digits (for 4ตัวชุด in Lao/Hanoi)
                                         const fourDigitPattern = /^\d{4}$/
                                         const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
                                         
-                                        if (ctrlEnterPattern.test(input)) {
-                                            // Ctrl+Enter with "number=amount" - save draft with default type button
+                                        if (ctrlEnterPattern.test(input) || ctrlEnterWithAsteriskPattern.test(input)) {
+                                            // Ctrl+Enter with "number=amount" or "number=amount*" - save draft with default type button
                                             const currentTypeButtons = getAvailableTypeButtons()
                                             if (currentTypeButtons.length > 0) {
                                                 const defaultIndex = getDefaultButtonIndex(currentTypeButtons)
