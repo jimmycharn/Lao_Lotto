@@ -1308,6 +1308,62 @@ export default function RoundAccordionItem({
 
     const getSelectedItemsCount = (ids) => ids.filter(id => selectedItems[id]).length
 
+    // Copy selected submissions to clipboard
+    const handleCopySelectedItems = async (filteredData, selectedIds) => {
+        const itemsToCopy = filteredData.filter(sub => {
+            const itemIds = sub.ids || [sub.id]
+            return itemIds.some(id => selectedIds.includes(id))
+        })
+        
+        if (itemsToCopy.length === 0) {
+            toast.warning('กรุณาเลือกรายการที่ต้องการคัดลอก')
+            return
+        }
+
+        const lotteryName = round.lottery_name || LOTTERY_TYPES[round.lottery_type] || 'หวย'
+        const roundDate = new Date(round.round_date)
+        const formattedDate = roundDate.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
+        
+        let text = `📋 คัดลอกเลข - ${lotteryName}\n`
+        text += `📅 วันที่ ${formattedDate}\n`
+        text += `📊 ${itemsToCopy.length} รายการ\n`
+        text += `━━━━━━━━━━━━━━━━\n`
+        
+        // Group by bet type
+        const byType = {}
+        itemsToCopy.forEach(sub => {
+            const betType = sub.bet_type
+            const label = BET_TYPES_BY_LOTTERY[round.lottery_type]?.[betType]?.label || BET_TYPES[betType] || betType
+            if (!byType[label]) byType[label] = []
+            byType[label].push(sub)
+        })
+        
+        Object.entries(byType).forEach(([label, items]) => {
+            text += `\n📌 ${label}\n`
+            items.forEach(sub => {
+                text += `${sub.numbers} = ${round.currency_symbol}${sub.amount.toLocaleString()}\n`
+            })
+        })
+        
+        const grandTotal = itemsToCopy.reduce((sum, s) => sum + s.amount, 0)
+        text += `\n💰 รวม: ${round.currency_symbol}${grandTotal.toLocaleString()}\n`
+        text += `━━━━━━━━━━━━━━━━\n`
+
+        try {
+            await navigator.clipboard.writeText(text)
+            toast.success(`คัดลอก ${itemsToCopy.length} รายการแล้ว!`)
+        } catch (err) {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea')
+            textArea.value = text
+            document.body.appendChild(textArea)
+            textArea.select()
+            document.execCommand('copy')
+            document.body.removeChild(textArea)
+            toast.success(`คัดลอก ${itemsToCopy.length} รายการแล้ว!`)
+        }
+    }
+
     // Delete selected submissions
     const handleDeleteSelectedItems = async (ids) => {
         const selectedIds = ids.filter(id => selectedItems[id])
@@ -2713,6 +2769,30 @@ export default function RoundAccordionItem({
                                                             >
                                                                 เลข {allViewSortBy === 'number' && (allViewSortOrder === 'asc' ? '↑' : '↓')}
                                                             </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    if (allViewSortBy === 'amount') {
+                                                                        setAllViewSortOrder(allViewSortOrder === 'desc' ? 'asc' : 'desc')
+                                                                    } else {
+                                                                        setAllViewSortBy('amount')
+                                                                        setAllViewSortOrder('desc')
+                                                                    }
+                                                                }}
+                                                                style={{
+                                                                    padding: '0.4rem 0.6rem',
+                                                                    borderRadius: '6px',
+                                                                    border: 'none',
+                                                                    background: allViewSortBy === 'amount' ? 'var(--color-primary)' : 'transparent',
+                                                                    color: allViewSortBy === 'amount' ? '#000' : 'var(--color-text-muted)',
+                                                                    fontSize: '0.8rem',
+                                                                    fontWeight: '500',
+                                                                    cursor: 'pointer',
+                                                                    transition: 'all 0.2s ease'
+                                                                }}
+                                                                title="เรียงตามจำนวนเงิน"
+                                                            >
+                                                                เงิน {allViewSortBy === 'amount' && (allViewSortOrder === 'desc' ? '↓' : '↑')}
+                                                            </button>
                                                         </div>
                                                     )}
                                                 </div>
@@ -2778,11 +2858,83 @@ export default function RoundAccordionItem({
                                             {/* View Mode: ทั้งหมด (รวมเลข) */}
                                             {totalViewMode === 'all' && (
                                                 <div className="inline-table-wrap">
+                                                    {(() => {
+                                                        // Pre-calculate filteredData for action row
+                                                        let preFilteredData = inlineSubmissions.filter(s => {
+                                                            const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
+                                                            if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
+                                                            if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
+                                                            if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
+                                                            return true
+                                                        })
+                                                        const preUseGroupedIds = displayMode === 'summary' || displayMode === 'grouped'
+                                                        const preAllIds = preUseGroupedIds ? preFilteredData.map(s => s.id) : preFilteredData.map(s => s.id)
+                                                        const hasEditableMemberPre = !isOpen && preFilteredData.some(sub => canEditBillForUser(sub.user_id))
+                                                        const canBulkEditPre = isOpen || hasEditableMemberPre
+                                                        const colCount = displayMode === 'detailed' ? 6 : 5
+
+                                                        return (
+                                                            <>
+                                                                {/* Action Row - เลือกทั้งหมด/ลบ/คัดลอก (moved above table) */}
+                                                                {preFilteredData.length > 0 && (
+                                                                    <div style={{ 
+                                                                        display: 'flex', 
+                                                                        alignItems: 'center', 
+                                                                        gap: '0.75rem', 
+                                                                        padding: '0.5rem 0.75rem',
+                                                                        background: 'var(--color-surface)',
+                                                                        borderRadius: '0.5rem 0.5rem 0 0',
+                                                                        borderBottom: '1px solid var(--color-border)',
+                                                                        flexWrap: 'wrap'
+                                                                    }}>
+                                                                        {canBulkEditPre && (
+                                                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                                                                <input 
+                                                                                    type="checkbox" 
+                                                                                    checked={preAllIds.length > 0 && preAllIds.every(id => selectedItems[id])}
+                                                                                    onChange={() => toggleSelectAllItems(preAllIds)}
+                                                                                    style={{ width: '16px', height: '16px' }}
+                                                                                />
+                                                                                <span style={{ fontSize: '0.85rem' }}>เลือกทั้งหมด</span>
+                                                                            </label>
+                                                                        )}
+                                                                        {canBulkEditPre && getSelectedItemsCount(preAllIds) > 0 && (
+                                                                            <button 
+                                                                                className="btn btn-danger btn-sm"
+                                                                                onClick={() => handleDeleteSelectedItems(preAllIds)}
+                                                                                disabled={deletingItems}
+                                                                                style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}
+                                                                            >
+                                                                                <FiTrash2 /> ลบ ({getSelectedItemsCount(preAllIds)})
+                                                                            </button>
+                                                                        )}
+                                                                        {/* Copy button - always visible */}
+                                                                        <button 
+                                                                            className="btn btn-sm"
+                                                                            onClick={() => handleCopySelectedItems(preFilteredData, getSelectedItemsCount(preAllIds) > 0 ? preAllIds.filter(id => selectedItems[id]) : preAllIds)}
+                                                                            style={{ 
+                                                                                fontSize: '0.8rem', 
+                                                                                padding: '0.25rem 0.5rem',
+                                                                                background: 'var(--color-primary)',
+                                                                                color: 'white'
+                                                                            }}
+                                                                        >
+                                                                            <FiCopy /> คัดลอก ({getSelectedItemsCount(preAllIds) > 0 ? getSelectedItemsCount(preAllIds) : preFilteredData.length})
+                                                                        </button>
+                                                                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
+                                                                            ({preFilteredData.length} รายการ)
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                            </>
+                                                        )
+                                                    })()}
                                                     <table className="inline-table">
                                                         <thead>
                                                             <tr>
                                                                 {isOpen && <th style={{ width: '30px' }}></th>}
                                                                 <th>เลข</th>
+                                                                <th>ประเภท</th>
                                                                 <th>จำนวน</th>
                                                                 {displayMode === 'detailed' && <th>เวลา</th>}
                                                                 {isOpen && <th style={{ width: '40px' }}></th>}
@@ -2859,6 +3011,10 @@ export default function RoundAccordionItem({
                                                                         const numB = b.numbers || ''
                                                                         const comparison = numA.localeCompare(numB, undefined, { numeric: true })
                                                                         return allViewSortOrder === 'asc' ? comparison : -comparison
+                                                                    } else if (allViewSortBy === 'amount') {
+                                                                        const amtA = a.amount || 0
+                                                                        const amtB = b.amount || 0
+                                                                        return allViewSortOrder === 'desc' ? amtB - amtA : amtA - amtB
                                                                     }
                                                                     return 0
                                                                 })
@@ -2874,34 +3030,6 @@ export default function RoundAccordionItem({
 
                                                                 return (
                                                                     <>
-                                                                        {/* Allow bulk select/delete for: 1) open rounds, or 2) closed/announced rounds if any user hasn't changed password */}
-                                                                        {canBulkEdit && filteredData.length > 0 && (
-                                                                            <tr style={{ background: 'var(--color-surface)' }}>
-                                                                                <td colSpan={displayMode === 'detailed' ? 5 : 4} style={{ padding: '0.5rem' }}>
-                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                                                                                            <input 
-                                                                                                type="checkbox" 
-                                                                                                checked={allIds.length > 0 && allIds.every(id => selectedItems[id])}
-                                                                                                onChange={() => toggleSelectAllItems(allIds)}
-                                                                                                style={{ width: '16px', height: '16px' }}
-                                                                                            />
-                                                                                            <span style={{ fontSize: '0.85rem' }}>เลือกทั้งหมด</span>
-                                                                                        </label>
-                                                                                        {getSelectedItemsCount(allIds) > 0 && (
-                                                                                            <button 
-                                                                                                className="btn btn-danger btn-sm"
-                                                                                                onClick={() => handleDeleteSelectedItems(allIds)}
-                                                                                                disabled={deletingItems}
-                                                                                                style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}
-                                                                                            >
-                                                                                                <FiTrash2 /> ลบ ({getSelectedItemsCount(allIds)})
-                                                                                            </button>
-                                                                                        )}
-                                                                                    </div>
-                                                                                </td>
-                                                                            </tr>
-                                                                        )}
                                                                         {filteredData.map(sub => {
                                                                             const isSet4Digit = sub.bet_type === '4_set' || sub.bet_type === '4_top'
                                                                             const setCount = isSetBasedLottery && isSet4Digit ? Math.ceil(sub.amount / setPrice) : 0
@@ -2927,19 +3055,13 @@ export default function RoundAccordionItem({
                                                                                         </td>
                                                                                     )}
                                                                                     <td className="number-cell">
-                                                                                        {displayMode === 'summary' ? (
-                                                                                            <>
-                                                                                                <div className="number-value">{sub.numbers}</div>
-                                                                                            </>
-                                                                                        ) : (
-                                                                                            <>
-                                                                                                <div className="number-value">{sub.numbers}</div>
-                                                                                                <div className="type-sub-label">{displayLabel}</div>
-                                                                                            </>
-                                                                                        )}
+                                                                                        <div className="number-value">{sub.numbers}</div>
                                                                                         {(displayMode === 'summary' || displayMode === 'grouped') && sub.count > 1 && (
                                                                                             <div className="count-sub-label">({sub.count} รายการ)</div>
                                                                                         )}
+                                                                                    </td>
+                                                                                    <td style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                                                        {displayLabel}
                                                                                     </td>
                                                                                     <td>
                                                                                         {displayMode === 'summary' && sub.display_amount ? (
