@@ -175,6 +175,7 @@ export default function Dealer() {
         close_date: new Date().toISOString().split('T')[0],
         close_time: '20:00',
         delete_before_minutes: 1,
+        delete_after_submit_minutes: 0, // 0 = ไม่จำกัดเวลาหลังป้อน (ใช้แค่ delete_before_minutes)
         currency_symbol: '฿',
         currency_name: 'บาท',
         type_limits: getDefaultLimitsForType('lao'),
@@ -1420,6 +1421,7 @@ export default function Dealer() {
                     open_time: formatLocalDateTime(openDateTime),
                     close_time: formatLocalDateTime(closeDateTime),
                     delete_before_minutes: roundForm.delete_before_minutes,
+                    delete_after_submit_minutes: roundForm.delete_after_submit_minutes,
                     currency_symbol: roundForm.currency_symbol,
                     currency_name: roundForm.currency_name,
                     set_prices: roundForm.set_prices
@@ -1430,8 +1432,9 @@ export default function Dealer() {
             if (roundError) throw roundError
 
             // Create type limits (no payout_rate - comes from user_settings)
+            // Allow 0 value for dealers who want to transfer all numbers (0 = no limit acceptance)
             const typeLimitsData = Object.entries(roundForm.type_limits)
-                .filter(([, maxAmount]) => maxAmount > 0)  // Only add limits with value > 0
+                .filter(([, maxAmount]) => maxAmount !== undefined && maxAmount !== null && maxAmount !== '')
                 .map(([betType, maxAmount]) => ({
                     round_id: round.id,
                     bet_type: betType,
@@ -1738,6 +1741,7 @@ export default function Dealer() {
             close_date: formatDateForInput(closeTime),
             close_time: formatTimeForInput(closeTime),
             delete_before_minutes: round.delete_before_minutes || 1,
+            delete_after_submit_minutes: round.delete_after_submit_minutes || 0,
             currency_symbol: round.currency_symbol || '฿',
             currency_name: round.currency_name || 'บาท',
             type_limits: { ...getDefaultLimitsForType(round.lottery_type), ...limitsObj },
@@ -1784,6 +1788,7 @@ export default function Dealer() {
                     open_time: formatLocalDateTime(openDateTime),
                     close_time: formatLocalDateTime(closeDateTime),
                     delete_before_minutes: roundForm.delete_before_minutes,
+                    delete_after_submit_minutes: roundForm.delete_after_submit_minutes,
                     currency_symbol: roundForm.currency_symbol,
                     currency_name: roundForm.currency_name,
                     set_prices: roundForm.set_prices
@@ -1803,9 +1808,10 @@ export default function Dealer() {
             }
 
             // Filter only limits that are part of the current lottery type
+            // Allow 0 value for dealers who want to transfer all numbers (0 = no limit acceptance)
             const validBetTypes = Object.keys(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {})
             const typeLimitsData = Object.entries(roundForm.type_limits)
-                .filter(([betType, maxAmount]) => maxAmount > 0 && validBetTypes.includes(betType))
+                .filter(([betType, maxAmount]) => maxAmount !== undefined && maxAmount !== null && maxAmount !== '' && validBetTypes.includes(betType))
                 .map(([betType, maxAmount]) => ({
                     round_id: editingRound.id,
                     bet_type: betType,
@@ -2789,6 +2795,26 @@ export default function Dealer() {
                                 </div>
                             </div>
 
+                            {/* Delete After Submit */}
+                            <div className="form-row">
+                                <div className="form-group" style={{ flex: 1 }}>
+                                    <label className="form-label">ลบเลขหลังป้อน (นาที)</label>
+                                    <input
+                                        type="number"
+                                        className="form-input"
+                                        value={roundForm.delete_after_submit_minutes}
+                                        onChange={e => setRoundForm({ ...roundForm, delete_after_submit_minutes: parseInt(e.target.value) || 0 })}
+                                        onFocus={handleInputFocus}
+                                        onKeyDown={handleInputKeyDown}
+                                        min="0"
+                                        placeholder="0 = ไม่จำกัด"
+                                    />
+                                    <p className="form-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
+                                        0 = ลบได้จนกว่าจะถึงเวลาก่อนปิดรับ
+                                    </p>
+                                </div>
+                            </div>
+
                             {/* Limits by Bet Type - Based on selected lottery type */}
                             <div className="form-section">
                                 <h4>ค่าอั้นตามประเภทเลข ({LOTTERY_TYPES[roundForm.lottery_type]})</h4>
@@ -2976,6 +3002,26 @@ export default function Dealer() {
                                         <option value="฿">฿ บาท</option>
                                         <option value="₭">₭ กีบ</option>
                                     </select>
+                                </div>
+                            </div>
+
+                            {/* Delete After Submit */}
+                            <div className="form-row">
+                                <div className="form-group" style={{ flex: 1 }}>
+                                    <label className="form-label">ลบเลขหลังป้อน (นาที)</label>
+                                    <input
+                                        type="number"
+                                        className="form-input"
+                                        value={roundForm.delete_after_submit_minutes}
+                                        onChange={e => setRoundForm({ ...roundForm, delete_after_submit_minutes: parseInt(e.target.value) || 0 })}
+                                        onFocus={handleInputFocus}
+                                        onKeyDown={handleInputKeyDown}
+                                        min="0"
+                                        placeholder="0 = ไม่จำกัด"
+                                    />
+                                    <p className="form-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
+                                        0 = ลบได้จนกว่าจะถึงเวลาก่อนปิดรับ
+                                    </p>
                                 </div>
                             </div>
 
