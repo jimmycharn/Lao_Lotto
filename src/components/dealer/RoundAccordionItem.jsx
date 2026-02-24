@@ -1321,32 +1321,86 @@ export default function RoundAccordionItem({
         }
 
         const lotteryName = round.lottery_name || LOTTERY_TYPES[round.lottery_type] || 'หวย'
-        const roundDate = new Date(round.round_date)
-        const formattedDate = roundDate.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
+        const closeTime = new Date(round.close_time)
+        const formattedCloseTime = closeTime.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' + closeTime.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
         
-        let text = `📋 คัดลอกเลข - ${lotteryName}\n`
-        text += `📅 วันที่ ${formattedDate}\n`
-        text += `📊 ${itemsToCopy.length} รายการ\n`
+        // Determine sender name
+        let senderName = 'ทั้งหมด'
+        if (inlineUserFilter !== 'all') {
+            senderName = inlineUserFilter
+        }
+        
+        const grandTotal = itemsToCopy.reduce((sum, s) => sum + s.amount, 0)
+        
+        let text = `📋 ${lotteryName}\n`
+        text += `📅 งวดวันที่: ${formattedCloseTime}\n`
+        text += `👤 ผู้ส่ง: ${senderName}\n`
+        text += `📊 ทั้งหมด (${itemsToCopy.length} รายการ)\n`
+        text += `💰 ยอดรวม: ${round.currency_symbol}${grandTotal.toLocaleString()}\n`
         text += `━━━━━━━━━━━━━━━━\n`
         
-        // Group by bet type
+        // Group by bet type with specific order
+        const betTypeOrder = ['2_bottom', '2_top', '3_tod', '3_top', '3_front', '3_bottom', '4_set', '4_top', '5_top', '6_top']
         const byType = {}
         itemsToCopy.forEach(sub => {
             const betType = sub.bet_type
+            if (!byType[betType]) byType[betType] = []
+            byType[betType].push(sub)
+        })
+        
+        // Sort bet types by order
+        const sortedBetTypes = Object.keys(byType).sort((a, b) => {
+            const indexA = betTypeOrder.indexOf(a)
+            const indexB = betTypeOrder.indexOf(b)
+            if (indexA === -1 && indexB === -1) return a.localeCompare(b)
+            if (indexA === -1) return 1
+            if (indexB === -1) return -1
+            return indexA - indexB
+        })
+        
+        sortedBetTypes.forEach((betType, idx) => {
+            const items = byType[betType]
             const label = BET_TYPES_BY_LOTTERY[round.lottery_type]?.[betType]?.label || BET_TYPES[betType] || betType
-            if (!byType[label]) byType[label] = []
-            byType[label].push(sub)
-        })
-        
-        Object.entries(byType).forEach(([label, items]) => {
-            text += `\n📌 ${label}\n`
+            text += `${label}\n`
+            
             items.forEach(sub => {
-                text += `${sub.numbers} = ${round.currency_symbol}${sub.amount.toLocaleString()}\n`
+                // Format: number=amount (NO bet type label or total)
+                // numbers field may contain display_numbers like "374=10*6 คูณชุด" or just "374"
+                // display_amount may contain "100*100 เต็งโต๊ด=200"
+                // We need to extract: just the number (e.g., "374") and just the amount (e.g., "10*6")
+                
+                let numberOnly = sub.numbers
+                let amountOnly = sub.amount
+                
+                // Extract number from numbers field (may be "374=10*6 คูณชุด" or "374")
+                if (sub.numbers && sub.numbers.includes('=')) {
+                    // Format: "374=10*6 คูณชุด" -> extract "374" and "10*6"
+                    const parts = sub.numbers.split('=')
+                    numberOnly = parts[0].trim()
+                    // Extract amount part (before any Thai text)
+                    if (parts[1]) {
+                        const amountMatch = parts[1].match(/^[\d*]+/)
+                        if (amountMatch) {
+                            amountOnly = amountMatch[0]
+                        }
+                    }
+                } else if (sub.display_amount) {
+                    // Use display_amount but extract only numeric part
+                    const match = sub.display_amount.toString().match(/^[\d*]+/)
+                    if (match) {
+                        amountOnly = match[0]
+                    }
+                }
+                
+                text += `${numberOnly}=${amountOnly}\n`
             })
+            
+            // Add separator between bet types
+            if (idx < sortedBetTypes.length - 1) {
+                text += `------------------\n`
+            }
         })
         
-        const grandTotal = itemsToCopy.reduce((sum, s) => sum + s.amount, 0)
-        text += `\n💰 รวม: ${round.currency_symbol}${grandTotal.toLocaleString()}\n`
         text += `━━━━━━━━━━━━━━━━\n`
 
         try {
@@ -1756,16 +1810,28 @@ export default function RoundAccordionItem({
         // Output regular types
         Object.entries(regularTypes).forEach(([typeName, typeData]) => {
             text += `${typeName}\n`
-            // Group by numbers and sum amounts
+            // Group by numbers - use display_amount but extract only numeric part
             const grouped = {}
             typeData.items.forEach(item => {
-                if (!grouped[item.numbers]) {
-                    grouped[item.numbers] = 0
+                const key = item.numbers
+                if (!grouped[key]) {
+                    grouped[key] = { amount: 0, display_amount: null }
                 }
-                grouped[item.numbers] += item.amount || 0
+                grouped[key].amount += item.amount || 0
+                // Keep first display_amount for this number
+                if (!grouped[key].display_amount && item.display_amount) {
+                    // Extract only numeric part (e.g., "20*20" from "20*20 เต็งโต๊ด=40")
+                    const match = item.display_amount.toString().match(/^[\d*]+/)
+                    grouped[key].display_amount = match ? match[0] : null
+                }
             })
-            Object.entries(grouped).forEach(([numbers, amount]) => {
-                text += `${numbers}=${amount.toLocaleString()}\n`
+            Object.entries(grouped).forEach(([numbers, data]) => {
+                // Use extracted display_amount if available, otherwise use amount
+                if (data.display_amount) {
+                    text += `${numbers}=${data.display_amount}\n`
+                } else {
+                    text += `${numbers}=${data.amount}\n`
+                }
             })
             text += `-----------------\n`
         })
@@ -2963,9 +3029,6 @@ export default function RoundAccordionItem({
                                                                         >
                                                                             <FiCopy /> คัดลอก ({getSelectedItemsCount(preAllIds) > 0 ? getSelectedItemsCount(preAllIds) : displayCount})
                                                                         </button>
-                                                                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
-                                                                            ({displayCount} รายการ)
-                                                                        </span>
                                                                     </div>
                                                                 )}
                                                             </>
