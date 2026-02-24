@@ -2765,6 +2765,26 @@ export default function Dealer() {
                                 </div>
                             </div>
 
+                            {/* Delete After Submit */}
+                            <div className="form-row">
+                                <div className="form-group" style={{ flex: 1 }}>
+                                    <label className="form-label">ลบเลขหลังป้อน (นาที)</label>
+                                    <input
+                                        type="number"
+                                        className="form-input"
+                                        value={roundForm.delete_after_submit_minutes}
+                                        onChange={e => setRoundForm({ ...roundForm, delete_after_submit_minutes: parseInt(e.target.value) || 0 })}
+                                        onFocus={handleInputFocus}
+                                        onKeyDown={handleInputKeyDown}
+                                        min="0"
+                                        placeholder="0 = ไม่จำกัด"
+                                    />
+                                    <p className="form-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
+                                        0 = ลบได้จนกว่าจะถึงเวลาก่อนปิดรับ
+                                    </p>
+                                </div>
+                            </div>
+
                             {/* Delete Before */}
                             <div className="form-row">
                                 <div className="form-group">
@@ -2792,26 +2812,6 @@ export default function Dealer() {
                                         <option value="฿">฿ บาท</option>
                                         <option value="₭">₭ กีบ</option>
                                     </select>
-                                </div>
-                            </div>
-
-                            {/* Delete After Submit */}
-                            <div className="form-row">
-                                <div className="form-group" style={{ flex: 1 }}>
-                                    <label className="form-label">ลบเลขหลังป้อน (นาที)</label>
-                                    <input
-                                        type="number"
-                                        className="form-input"
-                                        value={roundForm.delete_after_submit_minutes}
-                                        onChange={e => setRoundForm({ ...roundForm, delete_after_submit_minutes: parseInt(e.target.value) || 0 })}
-                                        onFocus={handleInputFocus}
-                                        onKeyDown={handleInputKeyDown}
-                                        min="0"
-                                        placeholder="0 = ไม่จำกัด"
-                                    />
-                                    <p className="form-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
-                                        0 = ลบได้จนกว่าจะถึงเวลาก่อนปิดรับ
-                                    </p>
                                 </div>
                             </div>
 
@@ -2975,6 +2975,26 @@ export default function Dealer() {
                                 </div>
                             </div>
 
+                            {/* Delete After Submit */}
+                            <div className="form-row">
+                                <div className="form-group" style={{ flex: 1 }}>
+                                    <label className="form-label">ลบเลขหลังป้อน (นาที)</label>
+                                    <input
+                                        type="number"
+                                        className="form-input"
+                                        value={roundForm.delete_after_submit_minutes}
+                                        onChange={e => setRoundForm({ ...roundForm, delete_after_submit_minutes: parseInt(e.target.value) || 0 })}
+                                        onFocus={handleInputFocus}
+                                        onKeyDown={handleInputKeyDown}
+                                        min="0"
+                                        placeholder="0 = ไม่จำกัด"
+                                    />
+                                    <p className="form-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
+                                        0 = ลบได้จนกว่าจะถึงเวลาก่อนปิดรับ
+                                    </p>
+                                </div>
+                            </div>
+
                             {/* Delete Before */}
                             <div className="form-row">
                                 <div className="form-group">
@@ -3002,26 +3022,6 @@ export default function Dealer() {
                                         <option value="฿">฿ บาท</option>
                                         <option value="₭">₭ กีบ</option>
                                     </select>
-                                </div>
-                            </div>
-
-                            {/* Delete After Submit */}
-                            <div className="form-row">
-                                <div className="form-group" style={{ flex: 1 }}>
-                                    <label className="form-label">ลบเลขหลังป้อน (นาที)</label>
-                                    <input
-                                        type="number"
-                                        className="form-input"
-                                        value={roundForm.delete_after_submit_minutes}
-                                        onChange={e => setRoundForm({ ...roundForm, delete_after_submit_minutes: parseInt(e.target.value) || 0 })}
-                                        onFocus={handleInputFocus}
-                                        onKeyDown={handleInputKeyDown}
-                                        min="0"
-                                        placeholder="0 = ไม่จำกัด"
-                                    />
-                                    <p className="form-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
-                                        0 = ลบได้จนกว่าจะถึงเวลาก่อนปิดรับ
-                                    </p>
                                 </div>
                             </div>
 
