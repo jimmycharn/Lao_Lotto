@@ -3935,8 +3935,6 @@ html.theme-light .round-accordion-header:hover {
 [data-theme="light"] .round-accordion-content,
 html.theme-light .round-accordion-content {
     background: #f8f9fa !important;
-    border: 1px solid rgba(0, 0, 0, 0.08) !important;
-    border-top: none !important;
 }
 
 /* Round info text - Light Theme */

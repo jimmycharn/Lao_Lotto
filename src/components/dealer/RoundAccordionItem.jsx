@@ -2859,7 +2859,7 @@ export default function RoundAccordionItem({
                                             {totalViewMode === 'all' && (
                                                 <div className="inline-table-wrap">
                                                     {(() => {
-                                                        // Pre-calculate filteredData for action row
+                                                        // Pre-calculate filteredData for action row - must match table display logic
                                                         let preFilteredData = inlineSubmissions.filter(s => {
                                                             const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
                                                             if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
@@ -2867,16 +2867,58 @@ export default function RoundAccordionItem({
                                                             if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
                                                             return true
                                                         })
+                                                        
+                                                        // Apply same grouping logic as table display
+                                                        let processedData = preFilteredData
+                                                        if (displayMode === 'summary') {
+                                                            const byEntry = {}
+                                                            preFilteredData.forEach(s => {
+                                                                const entryId = s.entry_id || s.id
+                                                                if (!byEntry[entryId]) {
+                                                                    byEntry[entryId] = {
+                                                                        id: entryId,
+                                                                        numbers: s.display_numbers || s.numbers,
+                                                                        bet_type: s.bet_type,
+                                                                        display_bet_type: s.display_bet_type || BET_TYPES_BY_LOTTERY[round.lottery_type]?.[s.bet_type]?.label || BET_TYPES[s.bet_type] || s.bet_type,
+                                                                        amount: 0,
+                                                                        display_amount: s.display_amount,
+                                                                        count: 0,
+                                                                        ids: [],
+                                                                        created_at: s.created_at
+                                                                    }
+                                                                }
+                                                                byEntry[entryId].amount += s.amount
+                                                                byEntry[entryId].count += 1
+                                                                byEntry[entryId].ids.push(s.id)
+                                                            })
+                                                            processedData = Object.values(byEntry)
+                                                        } else if (displayMode === 'grouped') {
+                                                            const grouped = {}
+                                                            preFilteredData.forEach(s => {
+                                                                const normalizedNumbers = normalizeNumber(s.numbers, s.bet_type)
+                                                                const key = `${normalizedNumbers}|${s.bet_type}`
+                                                                if (!grouped[key]) {
+                                                                    grouped[key] = { numbers: normalizedNumbers, originalNumbers: [s.numbers], bet_type: s.bet_type, amount: 0, count: 0, id: key, ids: [], created_at: s.created_at }
+                                                                } else {
+                                                                    if (!grouped[key].originalNumbers.includes(s.numbers)) grouped[key].originalNumbers.push(s.numbers)
+                                                                }
+                                                                grouped[key].amount += s.amount
+                                                                grouped[key].count += 1
+                                                                grouped[key].ids.push(s.id)
+                                                            })
+                                                            processedData = Object.values(grouped)
+                                                        }
+                                                        
                                                         const preUseGroupedIds = displayMode === 'summary' || displayMode === 'grouped'
-                                                        const preAllIds = preUseGroupedIds ? preFilteredData.map(s => s.id) : preFilteredData.map(s => s.id)
+                                                        const preAllIds = preUseGroupedIds ? processedData.flatMap(g => g.ids) : processedData.map(s => s.id)
                                                         const hasEditableMemberPre = !isOpen && preFilteredData.some(sub => canEditBillForUser(sub.user_id))
                                                         const canBulkEditPre = isOpen || hasEditableMemberPre
-                                                        const colCount = displayMode === 'detailed' ? 6 : 5
+                                                        const displayCount = processedData.length
 
                                                         return (
                                                             <>
                                                                 {/* Action Row - เลือกทั้งหมด/ลบ/คัดลอก (moved above table) */}
-                                                                {preFilteredData.length > 0 && (
+                                                                {processedData.length > 0 && (
                                                                     <div style={{ 
                                                                         display: 'flex', 
                                                                         alignItems: 'center', 
@@ -2911,7 +2953,7 @@ export default function RoundAccordionItem({
                                                                         {/* Copy button - always visible */}
                                                                         <button 
                                                                             className="btn btn-sm"
-                                                                            onClick={() => handleCopySelectedItems(preFilteredData, getSelectedItemsCount(preAllIds) > 0 ? preAllIds.filter(id => selectedItems[id]) : preAllIds)}
+                                                                            onClick={() => handleCopySelectedItems(processedData, getSelectedItemsCount(preAllIds) > 0 ? preAllIds.filter(id => selectedItems[id]) : preAllIds)}
                                                                             style={{ 
                                                                                 fontSize: '0.8rem', 
                                                                                 padding: '0.25rem 0.5rem',
@@ -2919,10 +2961,10 @@ export default function RoundAccordionItem({
                                                                                 color: 'white'
                                                                             }}
                                                                         >
-                                                                            <FiCopy /> คัดลอก ({getSelectedItemsCount(preAllIds) > 0 ? getSelectedItemsCount(preAllIds) : preFilteredData.length})
+                                                                            <FiCopy /> คัดลอก ({getSelectedItemsCount(preAllIds) > 0 ? getSelectedItemsCount(preAllIds) : displayCount})
                                                                         </button>
                                                                         <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
-                                                                            ({preFilteredData.length} รายการ)
+                                                                            ({displayCount} รายการ)
                                                                         </span>
                                                                     </div>
                                                                 )}
@@ -3009,6 +3051,12 @@ export default function RoundAccordionItem({
                                                                     } else if (allViewSortBy === 'number') {
                                                                         const numA = a.numbers || ''
                                                                         const numB = b.numbers || ''
+                                                                        // Group by digit count first, then sort within groups
+                                                                        const digitDiff = numA.length - numB.length
+                                                                        if (digitDiff !== 0) {
+                                                                            return allViewSortOrder === 'asc' ? digitDiff : -digitDiff
+                                                                        }
+                                                                        // Same digit count, sort by number value
                                                                         const comparison = numA.localeCompare(numB, undefined, { numeric: true })
                                                                         return allViewSortOrder === 'asc' ? comparison : -comparison
                                                                     } else if (allViewSortBy === 'amount') {
