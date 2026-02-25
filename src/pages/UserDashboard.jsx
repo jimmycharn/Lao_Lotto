@@ -671,8 +671,24 @@ export default function UserDashboard() {
 
     // Calculate commission amount based on rate and amount
     // roundOverride can be passed to use a specific round instead of selectedRound
-    const calculateCommissionAmount = (amount, betType, roundOverride = null) => {
-        const commissionInfo = getCommissionForBetType(betType, null, roundOverride)
+    const calculateCommissionAmount = (amount, betType, roundOverride = null, settingsOverride = null) => {
+        const currentRound = roundOverride || selectedRound
+        const commissionInfo = getCommissionForBetType(betType, settingsOverride, roundOverride)
+        
+        // Special handling for 4_set/4_top - commission is fixed amount per set
+        if (betType === '4_set' || betType === '4_top') {
+            // Get setPrice from settings or round or default
+            const currentSettings = settingsOverride || userSettings
+            const lotteryKey = getLotteryKeyForDraft(currentRound?.lottery_type)
+            const setSettings = currentSettings?.lottery_settings?.[lotteryKey]?.['4_set']
+            const setPrice = setSettings?.setPrice || currentRound?.set_prices?.['4_top'] || 120
+            
+            // Calculate number of sets
+            const numSets = Math.floor((amount || 0) / setPrice)
+            // Commission = numSets * commission per set
+            return numSets * commissionInfo.rate
+        }
+        
         if (commissionInfo.isFixed) {
             return commissionInfo.rate
         }
