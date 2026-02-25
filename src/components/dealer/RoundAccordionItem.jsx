@@ -8,6 +8,7 @@ import {
     FiEdit2,
     FiTrash2,
     FiCheck,
+    FiCheckCircle,
     FiX,
     FiAlertTriangle,
     FiAlertCircle,
@@ -2435,8 +2436,22 @@ export default function RoundAccordionItem({
                                 <button className={`inline-tab ${inlineTab === 'total' ? 'active' : ''}`} onClick={() => setInlineTab('total')}>
                                     ยอดรวม <span className="tab-count">{inlineSubmissions.length}</span>
                                 </button>
-                                <button className={`inline-tab ${inlineTab === 'incoming' ? 'active' : ''}`} onClick={() => setInlineTab('incoming')}>
-                                    ยอดรับเข้า <span className="tab-count">{inlineSubmissions.filter(s => s.source === 'transfer').length}</span>
+                                <button className={`inline-tab ${inlineTab === 'remaining' ? 'active' : ''}`} onClick={() => setInlineTab('remaining')}>
+                                    ยอดที่เหลือ <span className="tab-count">{(() => {
+                                        // Calculate remaining items (submissions - transfers) grouped by numbers+bet_type
+                                        const submissionsByKey = {}
+                                        inlineSubmissions.forEach(s => {
+                                            const key = `${s.numbers}|${s.bet_type}`
+                                            if (!submissionsByKey[key]) submissionsByKey[key] = 0
+                                            submissionsByKey[key] += s.amount || 0
+                                        })
+                                        inlineTransfers.forEach(t => {
+                                            const key = `${t.numbers}|${t.bet_type}`
+                                            if (submissionsByKey[key]) submissionsByKey[key] -= t.amount || 0
+                                        })
+                                        // Count items with remaining amount > 0
+                                        return Object.values(submissionsByKey).filter(amt => amt > 0).length
+                                    })()}</span>
                                 </button>
                                 <button className={`inline-tab ${inlineTab === 'excess' ? 'active' : ''}`} onClick={() => setInlineTab('excess')}>
                                     ยอดเกิน <span className="tab-count">{excessItems.length}</span>
@@ -3557,174 +3572,115 @@ export default function RoundAccordionItem({
                                         </div>
                                     )}
 
-                                    {inlineTab === 'incoming' && (
+                                    {inlineTab === 'remaining' && (
                                         <div className="inline-tab-content">
                                             {(() => {
-                                                const incomingTransfers = inlineSubmissions.filter(s => s.source === 'transfer')
-                                                if (incomingTransfers.length === 0) {
+                                                // Calculate remaining amounts (submissions - transfers) grouped by numbers+bet_type
+                                                const remainingByKey = {}
+                                                inlineSubmissions.forEach(s => {
+                                                    const key = `${s.numbers}|${s.bet_type}`
+                                                    if (!remainingByKey[key]) {
+                                                        remainingByKey[key] = {
+                                                            numbers: s.numbers,
+                                                            bet_type: s.bet_type,
+                                                            display_bet_type: s.display_bet_type || BET_TYPES_BY_LOTTERY[round.lottery_type]?.[s.bet_type]?.label || BET_TYPES[s.bet_type] || s.bet_type,
+                                                            totalAmount: 0,
+                                                            transferredAmount: 0
+                                                        }
+                                                    }
+                                                    remainingByKey[key].totalAmount += s.amount || 0
+                                                })
+                                                inlineTransfers.forEach(t => {
+                                                    const key = `${t.numbers}|${t.bet_type}`
+                                                    if (remainingByKey[key]) {
+                                                        remainingByKey[key].transferredAmount += t.amount || 0
+                                                    }
+                                                })
+                                                
+                                                // Filter to only items with remaining amount > 0
+                                                let remainingItems = Object.values(remainingByKey)
+                                                    .map(item => ({
+                                                        ...item,
+                                                        remainingAmount: item.totalAmount - item.transferredAmount
+                                                    }))
+                                                    .filter(item => item.remainingAmount > 0)
+                                                
+                                                // Apply filters
+                                                if (inlineBetTypeFilter !== 'all') {
+                                                    remainingItems = remainingItems.filter(item => item.bet_type === inlineBetTypeFilter)
+                                                }
+                                                if (inlineSearch) {
+                                                    remainingItems = remainingItems.filter(item => item.numbers.includes(inlineSearch))
+                                                }
+                                                
+                                                // Sort by numbers
+                                                remainingItems.sort((a, b) => {
+                                                    const digitDiff = a.numbers.length - b.numbers.length
+                                                    if (digitDiff !== 0) return digitDiff
+                                                    return a.numbers.localeCompare(b.numbers)
+                                                })
+
+                                                if (remainingItems.length === 0) {
                                                     return (
                                                         <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
-                                                            <FiSend style={{ fontSize: '2rem', color: 'var(--color-text-muted)', marginBottom: '0.5rem', transform: 'rotate(180deg)' }} />
-                                                            <p style={{ color: 'var(--color-text-muted)' }}>ยังไม่มียอดรับเข้าจากเจ้ามืออื่น</p>
+                                                            <FiCheckCircle style={{ fontSize: '2rem', color: 'var(--color-success)', marginBottom: '0.5rem' }} />
+                                                            <p style={{ color: 'var(--color-text-muted)' }}>ตีออกหมดแล้ว ไม่มียอดที่เหลือ</p>
                                                         </div>
                                                     )
                                                 }
 
-                                                const filteredIncoming = incomingTransfers.filter(s => {
-                                                    if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
-                                                    if (inlineSearch && !s.numbers.includes(inlineSearch)) return false
-                                                    return true
-                                                })
-                                                
-                                                const incomingIds = filteredIncoming.map(s => s.id)
+                                                const totalRemaining = remainingItems.reduce((sum, item) => sum + item.remainingAmount, 0)
 
                                                 return (
                                                     <>
                                                         <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', background: 'var(--color-surface)', borderRadius: '8px' }}>
                                                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                                                <span style={{ color: 'var(--color-text-muted)', flex: 1 }}>รายการ</span>
-                                                                <span style={{ color: 'var(--color-text-muted)', flex: 1, textAlign: 'center' }}>ยอดรวม</span>
-                                                                <span style={{ color: 'var(--color-text-muted)', flex: 1, textAlign: 'right' }}>ค่าคอม</span>
+                                                                <span style={{ color: 'var(--color-text-muted)', flex: 1 }}>จำนวน</span>
+                                                                <span style={{ color: 'var(--color-text-muted)', flex: 1, textAlign: 'right' }}>ยอดที่เหลือ</span>
                                                             </div>
                                                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                                <span style={{ fontWeight: 600, flex: 1 }}>{filteredIncoming.length}</span>
-                                                                <span style={{ fontWeight: 600, color: 'var(--color-success)', flex: 1, textAlign: 'center' }}>
-                                                                    {round.currency_symbol}{filteredIncoming.reduce((sum, s) => sum + s.amount, 0).toLocaleString()}
-                                                                </span>
-                                                                <span style={{ fontWeight: 600, color: 'var(--color-danger)', flex: 1, textAlign: 'right' }}>
-                                                                    -{round.currency_symbol}{Object.values(inlineIncomingCommissions).reduce((sum, c) => sum + (c.totalCommission || 0), 0).toLocaleString()}
+                                                                <span style={{ fontWeight: 600, flex: 1 }}>{remainingItems.length} รายการ</span>
+                                                                <span style={{ fontWeight: 600, color: 'var(--color-warning)', flex: 1, textAlign: 'right' }}>
+                                                                    {round.currency_symbol}{totalRemaining.toLocaleString()}
                                                                 </span>
                                                             </div>
                                                         </div>
 
-                                                        {/* Bulk actions for returning transfers */}
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', padding: '0.75rem 1rem', background: 'var(--color-surface)', borderRadius: '8px' }}>
-                                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                                                                <input 
-                                                                    type="checkbox" 
-                                                                    checked={incomingIds.length > 0 && incomingIds.every(id => selectedIncomingItems[id])} 
-                                                                    onChange={() => toggleSelectAllIncoming(incomingIds)} 
-                                                                    style={{ width: '18px', height: '18px', accentColor: 'var(--color-danger)' }} 
-                                                                />
-                                                                <span>เลือก ({filteredIncoming.length})</span>
-                                                            </label>
-                                                            <button 
-                                                                className="btn btn-danger" 
-                                                                onClick={(e) => { e.stopPropagation(); handleReturnIncomingTransfers(incomingIds); }} 
-                                                                disabled={getSelectedIncomingCount(incomingIds) === 0 || returningIncoming}
-                                                            >
-                                                                <FiRotateCcw /> {returningIncoming ? 'กำลังคืน...' : `คืนทั้งหมด (${getSelectedIncomingCount(incomingIds)})`}
-                                                            </button>
+                                                        {/* Remaining items table */}
+                                                        <div className="inline-table-wrap">
+                                                            <table className="inline-table">
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th>เลข</th>
+                                                                        <th>ประเภท</th>
+                                                                        <th>ยอดรวม</th>
+                                                                        <th>ตีออก</th>
+                                                                        <th>เหลือ</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {remainingItems.map((item, idx) => (
+                                                                        <tr key={`${item.numbers}-${item.bet_type}-${idx}`}>
+                                                                            <td className="number-cell">
+                                                                                <div className="number-value">{item.numbers}</div>
+                                                                            </td>
+                                                                            <td style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                                                {item.display_bet_type}
+                                                                            </td>
+                                                                            <td style={{ color: 'var(--color-text-muted)' }}>
+                                                                                {round.currency_symbol}{item.totalAmount.toLocaleString()}
+                                                                            </td>
+                                                                            <td style={{ color: 'var(--color-danger)' }}>
+                                                                                -{round.currency_symbol}{item.transferredAmount.toLocaleString()}
+                                                                            </td>
+                                                                            <td style={{ fontWeight: 600, color: 'var(--color-warning)' }}>
+                                                                                {round.currency_symbol}{item.remainingAmount.toLocaleString()}
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
                                                         </div>
-
-                                                        {/* Group incoming by source dealer (bill_note contains dealer info) */}
-                                                        {(() => {
-                                                            const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
-                                                            const setPrice = round?.set_prices?.['4_top'] || 120
-                                                            
-                                                            // Group by bill_note (which contains dealer email/name)
-                                                            const groupedByDealer = {}
-                                                            filteredIncoming.forEach(sub => {
-                                                                const dealerKey = sub.bill_note || 'ไม่ระบุ'
-                                                                // Get dealer name from inlineIncomingCommissions (fetched from profiles.full_name)
-                                                                const dealerDisplayName = inlineIncomingCommissions[dealerKey]?.dealerName || 'ไม่ระบุ'
-                                                                if (!groupedByDealer[dealerKey]) {
-                                                                    groupedByDealer[dealerKey] = {
-                                                                        dealerName: dealerDisplayName,
-                                                                        dealerKey: dealerKey,
-                                                                        items: [],
-                                                                        totalAmount: 0
-                                                                    }
-                                                                }
-                                                                groupedByDealer[dealerKey].items.push(sub)
-                                                                groupedByDealer[dealerKey].totalAmount += sub.amount || 0
-                                                            })
-
-                                                            return Object.values(groupedByDealer).map(group => (
-                                                                <div key={group.dealerKey} style={{ marginBottom: '1rem', border: '1px solid var(--color-border)', borderRadius: '8px', overflow: 'hidden' }}>
-                                                                    {/* Dealer Header */}
-                                                                    <div style={{ 
-                                                                        padding: '0.75rem 1rem',
-                                                                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                                                                        borderBottom: '1px solid var(--color-border)'
-                                                                    }}>
-                                                                        {/* Row 1: Dealer Name */}
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                                                                            <FiSend style={{ color: 'var(--color-success)', transform: 'rotate(180deg)' }} />
-                                                                            <span style={{ fontWeight: 600 }}>{group.dealerName}</span>
-                                                                        </div>
-                                                                        {/* Row 2: Labels */}
-                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                                                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', flex: 1 }}>รายการ</span>
-                                                                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', flex: 1, textAlign: 'center' }}>ยอดรวม</span>
-                                                                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', flex: 1, textAlign: 'right' }}>ค่าคอม</span>
-                                                                        </div>
-                                                                        {/* Row 3: Values */}
-                                                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                                            <span style={{ fontWeight: 600, flex: 1 }}>{group.items.length}</span>
-                                                                            <span style={{ fontWeight: 600, color: 'var(--color-success)', flex: 1, textAlign: 'center' }}>{round.currency_symbol}{group.totalAmount.toLocaleString()}</span>
-                                                                            {inlineIncomingCommissions[group.dealerKey] ? (
-                                                                                <span style={{ fontWeight: 600, color: 'var(--color-danger)', flex: 1, textAlign: 'right' }}>-{round.currency_symbol}{inlineIncomingCommissions[group.dealerKey].totalCommission.toLocaleString()}</span>
-                                                                            ) : (
-                                                                                <span style={{ fontWeight: 600, color: 'var(--color-danger)', flex: 1, textAlign: 'right' }}>-</span>
-                                                                            )}
-                                                                        </div>
-                                                                    </div>
-                                                                    {/* Items Table */}
-                                                                    <div className="inline-table-wrap">
-                                                                        <table className="inline-table">
-                                                                            <thead>
-                                                                                <tr>
-                                                                                    <th style={{ width: '40px' }}></th>
-                                                                                    <th>เลข</th>
-                                                                                    <th>จำนวน</th>
-                                                                                    <th>เวลา</th>
-                                                                                </tr>
-                                                                            </thead>
-                                                                            <tbody>
-                                                                                {group.items.map(sub => {
-                                                                                    const isSelected = selectedIncomingItems[sub.id]
-                                                                                    const isSet4Digit = sub.bet_type === '4_set' || sub.bet_type === '4_top'
-                                                                                    const setCount = isSetBasedLottery && isSet4Digit ? Math.ceil(sub.amount / setPrice) : 0
-
-                                                                                    return (
-                                                                                        <tr 
-                                                                                            key={sub.id} 
-                                                                                            onClick={() => toggleIncomingItem(sub.id)}
-                                                                                            style={{ 
-                                                                                                cursor: 'pointer', 
-                                                                                                background: isSelected ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
-                                                                                                transition: 'background 0.2s ease'
-                                                                                            }}
-                                                                                        >
-                                                                                            <td style={{ textAlign: 'center' }}>
-                                                                                                <input 
-                                                                                                    type="checkbox" 
-                                                                                                    checked={isSelected || false} 
-                                                                                                    onChange={() => {}} 
-                                                                                                    style={{ width: '16px', height: '16px', accentColor: 'var(--color-danger)' }} 
-                                                                                                />
-                                                                                            </td>
-                                                                                            <td className="number-cell">
-                                                                                                <div className="number-value">{sub.numbers}</div>
-                                                                                                <div className="type-sub-label">{BET_TYPES_BY_LOTTERY[round.lottery_type]?.[sub.bet_type]?.label || BET_TYPES[sub.bet_type] || sub.bet_type}</div>
-                                                                                            </td>
-                                                                                            <td>
-                                                                                                {round.currency_symbol}{sub.amount.toLocaleString()}
-                                                                                                {isSetBasedLottery && isSet4Digit && setCount > 0 && (
-                                                                                                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>({setCount} ชุด)</div>
-                                                                                                )}
-                                                                                            </td>
-                                                                                            <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>
-                                                                                        </tr>
-                                                                                    )
-                                                                                })}
-                                                                            </tbody>
-                                                                        </table>
-                                                                    </div>
-                                                                </div>
-                                                            ))
-                                                        })()}
                                                     </>
                                                 )
                                             })()}
