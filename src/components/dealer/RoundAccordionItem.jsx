@@ -1888,6 +1888,22 @@ export default function RoundAccordionItem({
         const lotteryKey = getLotteryTypeKey(round.lottery_type)
         const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
         const settings = summaryData.userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
+        
+        // Special handling for 4_set - commission is fixed amount per set
+        if (sub.bet_type === '4_set' || sub.bet_type === '4_top') {
+            if (settings?.isSet && settings?.commission !== undefined) {
+                // Calculate number of sets: amount / setPrice
+                const setPrice = settings.setPrice || round?.set_prices?.['4_top'] || 120
+                const numSets = Math.floor((sub.amount || 0) / setPrice)
+                // Commission = numSets * commission per set
+                return numSets * settings.commission
+            }
+            // Default: 25 baht per set
+            const defaultSetPrice = round?.set_prices?.['4_top'] || 120
+            const numSets = Math.floor((sub.amount || 0) / defaultSetPrice)
+            return numSets * 25 // Default 25 baht per set
+        }
+        
         if (settings?.commission !== undefined) {
             return settings.isFixed ? settings.commission : sub.amount * (settings.commission / 100)
         }
