@@ -4637,3 +4637,16 @@ html.theme-light .icon-btn-sm:hover {
     font-size: 0.85rem;
     font-weight: 600;
 }
+
+/* Fix border overlap at corners of accordion content */
+.round-accordion-item {
+    overflow: hidden;
+}
+
+.round-accordion-content {
+    position: relative;
+    margin: 0 -2px -2px -2px;
+    padding-left: calc(1.25rem + 2px);
+    padding-right: calc(1.25rem + 2px);
+    padding-bottom: calc(1.25rem + 2px);
+}
