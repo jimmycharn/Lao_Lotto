@@ -3072,8 +3072,7 @@ export default function RoundAccordionItem({
                                                                 <th>เลข</th>
                                                                 <th>ประเภท</th>
                                                                 <th>จำนวน</th>
-                                                                {displayMode === 'detailed' && <th>เวลา</th>}
-                                                                {isOpen && <th style={{ width: '40px' }}></th>}
+                                                                {displayMode === 'detailed' && <th style={{ textAlign: 'right' }}>เวลา</th>}
                                                             </tr>
                                                         </thead>
                                                         <tbody>
@@ -3215,21 +3214,7 @@ export default function RoundAccordionItem({
                                                                                             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>({setCount} ชุด)</div>
                                                                                         )}
                                                                                     </td>
-                                                                                    {displayMode === 'detailed' && <td className="time-cell">{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>}
-                                                                                    {/* Allow delete for: 1) open rounds, or 2) closed/announced rounds if user hasn't changed password */}
-                                                                                    {(isOpen || canEditBillForUser(sub.user_id)) && displayMode === 'detailed' && (
-                                                                                        <td>
-                                                                                            <button 
-                                                                                                className="btn btn-icon btn-sm btn-danger"
-                                                                                                onClick={() => handleDeleteSingleItem(sub.id)}
-                                                                                                title="ลบ"
-                                                                                                style={{ padding: '0.2rem' }}
-                                                                                            >
-                                                                                                <FiTrash2 size={14} />
-                                                                                            </button>
-                                                                                        </td>
-                                                                                    )}
-                                                                                    {(isOpen || canEditBillForUser(sub.user_id)) && displayMode !== 'detailed' && <td></td>}
+                                                                                    {displayMode === 'detailed' && <td className="time-cell" style={{ textAlign: 'right' }}>{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>}
                                                                                 </tr>
                                                                             )
                                                                         })}
@@ -3462,6 +3447,24 @@ export default function RoundAccordionItem({
                                                                                 {/* Bill items - Collapsible */}
                                                                                 {isExpanded && (
                                                                                     <div style={{ borderTop: '1px solid var(--color-border)' }}>
+                                                                                        {/* Table Header */}
+                                                                                        <div style={{ 
+                                                                                            display: 'flex', 
+                                                                                            justifyContent: 'space-between', 
+                                                                                            alignItems: 'center',
+                                                                                            padding: '0.4rem 0.75rem',
+                                                                                            background: 'var(--color-surface-light)',
+                                                                                            borderBottom: '1px solid var(--color-border)',
+                                                                                            fontSize: '0.75rem',
+                                                                                            color: 'var(--color-text-muted)',
+                                                                                            fontWeight: '600'
+                                                                                        }}>
+                                                                                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                                                                                <span style={{ minWidth: '60px' }}>เลข</span>
+                                                                                                <span>ประเภท</span>
+                                                                                            </div>
+                                                                                            <span>จำนวน</span>
+                                                                                        </div>
                                                                                         {(() => {
                                                                                             // Sort items by created_at first to ensure correct order
                                                                                             let displayItems = [...bill.items].sort((a, b) => 
@@ -3531,24 +3534,20 @@ export default function RoundAccordionItem({
                                                                                                     borderBottom: itemIdx < displayItems.length - 1 ? '1px dashed var(--color-border)' : 'none',
                                                                                                     background: 'var(--color-surface)'
                                                                                                 }}>
-                                                                                                    <div>
+                                                                                                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                                                                                        <span style={{ fontWeight: '600', fontSize: '0.95rem', minWidth: '60px', fontFamily: "'Monaco', 'Menlo', monospace", color: 'var(--color-primary)', letterSpacing: '0.1em' }}>
+                                                                                                            {item.numbers}
+                                                                                                        </span>
                                                                                                         <div>
-                                                                                                            {billDisplayMode === 'summary' && item.numbers ? (
-                                                                                                                <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>{item.numbers}</span>
-                                                                                                            ) : (
-                                                                                                                <>
-                                                                                                                    <span style={{ fontWeight: '600', marginRight: '0.5rem', fontSize: '0.95rem' }}>{item.numbers}</span>
-                                                                                                                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                                                        {BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}
-                                                                                                                    </span>
-                                                                                                                </>
+                                                                                                            <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                                                                                {BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}
+                                                                                                            </span>
+                                                                                                            {billDisplayMode === 'summary' && item.count > 1 && (
+                                                                                                                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>
+                                                                                                                    ({item.count} รายการ)
+                                                                                                                </span>
                                                                                                             )}
                                                                                                         </div>
-                                                                                                        {billDisplayMode === 'summary' && item.count > 1 && (
-                                                                                                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
-                                                                                                                ({item.count} รายการ)
-                                                                                                            </div>
-                                                                                                        )}
                                                                                                     </div>
                                                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                                                                         <span style={{ fontWeight: '500' }}>
@@ -3670,8 +3669,7 @@ export default function RoundAccordionItem({
                                                                         <th>เลข</th>
                                                                         <th>ประเภท</th>
                                                                         <th>ยอดรวม</th>
-                                                                        <th>ตีออก</th>
-                                                                        <th>เหลือ</th>
+                                                                        <th style={{ textAlign: 'right' }}>เหลือ</th>
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody>
@@ -3686,10 +3684,7 @@ export default function RoundAccordionItem({
                                                                             <td style={{ color: 'var(--color-text-muted)' }}>
                                                                                 {round.currency_symbol}{item.totalAmount.toLocaleString()}
                                                                             </td>
-                                                                            <td style={{ color: 'var(--color-danger)' }}>
-                                                                                -{round.currency_symbol}{item.transferredAmount.toLocaleString()}
-                                                                            </td>
-                                                                            <td style={{ fontWeight: 600, color: 'var(--color-warning)' }}>
+                                                                            <td style={{ fontWeight: 600, color: 'var(--color-warning)', textAlign: 'right' }}>
                                                                                 {round.currency_symbol}{item.remainingAmount.toLocaleString()}
                                                                             </td>
                                                                         </tr>
@@ -3761,7 +3756,26 @@ export default function RoundAccordionItem({
                                                             </button>
                                                         </div>
 
-                                                        <div className="excess-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                                        {/* Table Header */}
+                                                        <div style={{ 
+                                                            display: 'flex', 
+                                                            alignItems: 'center',
+                                                            padding: '0.5rem 1rem',
+                                                            background: 'var(--color-surface-light)',
+                                                            borderBottom: '1px solid var(--color-border)',
+                                                            fontSize: '0.75rem',
+                                                            color: 'var(--color-text-muted)',
+                                                            fontWeight: '600',
+                                                            borderRadius: '8px 8px 0 0'
+                                                        }}>
+                                                            <div style={{ width: '30px' }}></div>
+                                                            <div style={{ flex: 1, display: 'flex', gap: '1rem' }}>
+                                                                <span style={{ minWidth: '60px' }}>เลข</span>
+                                                                <span>ประเภท</span>
+                                                            </div>
+                                                            <span style={{ textAlign: 'right' }}>จำนวน</span>
+                                                        </div>
+                                                        <div className="excess-list" style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
                                                             {filteredExcessItems.map((item, idx) => {
                                                                 const isSelected = selectedExcessItems[`${item.bet_type}|${item.numbers}`]
                                                                 const setPrice = round?.set_prices?.['4_top'] || 120
@@ -3772,30 +3786,25 @@ export default function RoundAccordionItem({
                                                                         className={`excess-card ${isSelected ? 'selected' : ''}`}
                                                                         onClick={() => toggleExcessItem(item)}
                                                                         style={{
-                                                                            display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.75rem 1rem',
+                                                                            display: 'flex', alignItems: 'center', padding: '0.75rem 1rem',
                                                                             background: isSelected ? 'rgba(255, 193, 7, 0.15)' : 'var(--color-surface)',
-                                                                            border: isSelected ? '2px solid var(--color-warning)' : '1px solid var(--color-border)',
-                                                                            borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s ease'
+                                                                            borderBottom: '1px solid var(--color-border)',
+                                                                            cursor: 'pointer', transition: 'all 0.2s ease'
                                                                         }}
                                                                     >
-                                                                        <input type="checkbox" checked={isSelected || false} onChange={() => { }} style={{ width: '18px', height: '18px', accentColor: 'var(--color-warning)' }} />
-                                                                        <div style={{ flex: 1 }}>
-                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                                                                                <span className="type-badge">{BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}</span>
-                                                                                <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '1.1rem' }}>{item.displayNumbers || item.numbers}</span>
-                                                                            </div>
-                                                                            <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-                                                                                <span>ยอด: {round.currency_symbol}{item.total.toLocaleString()}{item.isSetBased && ` (${item.setCount} ชุด)`}</span>
-                                                                                <span>อั้น: {item.isSetBased ? `${item.limit} ชุด` : `${round.currency_symbol}${item.limit.toLocaleString()}`}</span>
+                                                                        <input type="checkbox" checked={isSelected || false} onChange={() => { }} style={{ width: '18px', height: '18px', accentColor: 'var(--color-warning)', marginRight: '0.75rem' }} />
+                                                                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                                            <span style={{ fontWeight: 600, minWidth: '60px', fontFamily: "'Monaco', 'Menlo', monospace", color: 'var(--color-primary)', letterSpacing: '0.05em' }}>{item.displayNumbers || item.numbers}</span>
+                                                                            <div>
+                                                                                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>{BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}</span>
+                                                                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                    ยอด: {round.currency_symbol}{item.total.toLocaleString()}{item.isSetBased && ` (${item.setCount} ชุด)`} • อั้น: {item.isSetBased ? `${item.limit} ชุด` : `${round.currency_symbol}${item.limit.toLocaleString()}`}
+                                                                                </div>
                                                                             </div>
                                                                         </div>
-                                                                        <div style={{ textAlign: 'right' }}>
-                                                                            <div style={{ color: 'var(--color-warning)', fontWeight: 600, fontSize: '1.1rem' }}>
-                                                                                {round.currency_symbol}{excessAmount.toLocaleString()}
-                                                                            </div>
-                                                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                {item.isSetBased ? `เกิน ${item.excess} ชุด` : 'เกิน'}
-                                                                            </div>
+                                                                        <div style={{ textAlign: 'right', color: 'var(--color-warning)', fontWeight: 600 }}>
+                                                                            {round.currency_symbol}{excessAmount.toLocaleString()}
+                                                                            {item.isSetBased && <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>({item.excess} ชุด)</div>}
                                                                         </div>
                                                                     </div>
                                                                 )
@@ -4064,6 +4073,24 @@ export default function RoundAccordionItem({
                                                                                 </div>
                                                                             </div>
                                                                             <div style={{ padding: '0.5rem' }}>
+                                                                                {/* Table Header */}
+                                                                                <div style={{ 
+                                                                                    display: 'flex', 
+                                                                                    justifyContent: 'space-between', 
+                                                                                    alignItems: 'center',
+                                                                                    padding: '0.4rem 0.5rem',
+                                                                                    background: 'var(--color-surface-light)',
+                                                                                    borderBottom: '1px solid var(--color-border)',
+                                                                                    fontSize: '0.7rem',
+                                                                                    color: 'var(--color-text-muted)',
+                                                                                    fontWeight: '600'
+                                                                                }}>
+                                                                                    <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                                                                        <span style={{ minWidth: '50px' }}>เลข</span>
+                                                                                        <span>ประเภท</span>
+                                                                                    </div>
+                                                                                    <span>จำนวน</span>
+                                                                                </div>
                                                                                 {(() => {
                                                                                     const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
                                                                                     const setPrice = round?.set_prices?.['4_top'] || 120
@@ -4075,9 +4102,9 @@ export default function RoundAccordionItem({
 
                                                                                         return (
                                                                                             <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', borderBottom: '1px solid var(--color-border)', textDecoration: itemReturned ? 'line-through' : 'none', opacity: itemReturned ? 0.6 : 1, background: itemReturned ? 'rgba(239, 68, 68, 0.05)' : 'transparent' }}>
-                                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                                                    <span className="type-badge" style={{ fontSize: '0.7rem' }}>{BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}</span>
-                                                                                                    <span style={{ fontWeight: 500, color: itemReturned ? 'var(--color-danger)' : 'var(--color-primary)' }}>{item.numbers}</span>
+                                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                                                                    <span style={{ fontWeight: 600, minWidth: '50px', fontFamily: "'Monaco', 'Menlo', monospace", color: itemReturned ? 'var(--color-danger)' : 'var(--color-primary)', letterSpacing: '0.05em' }}>{item.numbers}</span>
+                                                                                                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}</span>
                                                                                                     {itemReturned && <span style={{ fontSize: '0.6rem', padding: '0.1rem 0.3rem', background: 'var(--color-danger)', color: 'white', borderRadius: '3px' }}>คืน</span>}
                                                                                                 </div>
                                                                                                 <div style={{ textAlign: 'right' }}>
