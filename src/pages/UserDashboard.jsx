@@ -605,14 +605,55 @@ export default function UserDashboard() {
         return new Date() < new Date(selectedRound.close_time)
     }
 
-    // Check if can delete (before delete deadline)
+    // Check if can delete (must satisfy BOTH conditions)
+    // 1. Within delete_after_submit_minutes after submission (if > 0)
+    // 2. Before delete_before_close_minutes before round closes (if > 0)
     function canDelete(submission) {
         if (!selectedRound) return false
         if (selectedRound.status !== 'open') return false
 
-        const closeTime = new Date(selectedRound.close_time)
-        const deleteDeadline = new Date(closeTime.getTime() - (selectedRound.delete_before_minutes * 60 * 1000))
-        return new Date() < deleteDeadline
+        const now = new Date()
+        
+        // Debug logging
+        console.log('=== canDelete Debug ===')
+        console.log('Now:', now.toISOString())
+        console.log('Submission created_at:', submission?.created_at)
+        console.log('Round delete_after_submit_minutes:', selectedRound.delete_after_submit_minutes)
+        console.log('Round delete_before_close_minutes:', selectedRound.delete_before_close_minutes)
+        console.log('Round close_time:', selectedRound.close_time)
+        
+        // Condition 1: Check delete_after_submit_minutes (time limit after submission)
+        // If delete_after_submit_minutes > 0, can only delete within X minutes after submission
+        const deleteAfterSubmitMinutes = selectedRound.delete_after_submit_minutes || 0
+        if (deleteAfterSubmitMinutes > 0 && submission?.created_at) {
+            const submissionTime = new Date(submission.created_at)
+            const deleteAfterDeadline = new Date(submissionTime.getTime() + (deleteAfterSubmitMinutes * 60 * 1000))
+            console.log('Condition 1: submissionTime:', submissionTime.toISOString())
+            console.log('Condition 1: deleteAfterDeadline:', deleteAfterDeadline.toISOString())
+            console.log('Condition 1: now > deleteAfterDeadline?', now > deleteAfterDeadline)
+            if (now > deleteAfterDeadline) {
+                console.log('==> BLOCKED by Condition 1 (exceeded time after submission)')
+                return false // Exceeded time limit after submission
+            }
+        }
+        
+        // Condition 2: Check delete_before_close_minutes (must delete before round closes)
+        // If delete_before_close_minutes > 0, must delete at least X minutes before close time
+        const deleteBeforeMinutes = selectedRound.delete_before_close_minutes || 0
+        if (deleteBeforeMinutes > 0) {
+            const closeTime = new Date(selectedRound.close_time)
+            const deleteBeforeDeadline = new Date(closeTime.getTime() - (deleteBeforeMinutes * 60 * 1000))
+            console.log('Condition 2: closeTime:', closeTime.toISOString())
+            console.log('Condition 2: deleteBeforeDeadline:', deleteBeforeDeadline.toISOString())
+            console.log('Condition 2: now > deleteBeforeDeadline?', now > deleteBeforeDeadline)
+            if (now > deleteBeforeDeadline) {
+                console.log('==> BLOCKED by Condition 2 (too close to round closing)')
+                return false // Too close to round closing time
+            }
+        }
+        
+        console.log('==> ALLOWED to delete/edit')
+        return true
     }
 
     // Use centralized DEFAULT_COMMISSIONS from lotteryTypes.js
@@ -2765,7 +2806,7 @@ export default function UserDashboard() {
                                                                                             )}
 
                                                                                             {/* Bill Actions - For editing/deleting */}
-                                                                                            {isExpandedBill && canSubmit() && billId !== 'no-bill' && (
+                                                                                            {isExpandedBill && canDelete(billItems[0]) && billId !== 'no-bill' && (
                                                                                                 <div className="bill-card-actions">
                                                                                                     <button
                                                                                                         className="bill-action-btn edit"

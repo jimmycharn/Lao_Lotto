@@ -3547,185 +3547,6 @@
     text-align: center;
 }
 
-   
-
-/* Bill Action Buttons - Inline with time row */
-.bill-sub-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 0.5rem;
-    padding-top: 0.5rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.bill-info-left {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    flex: 1;
-}
-
-.bill-action-buttons {
-    display: flex;
-    gap: 0.5rem;
-    margin-left: auto;
-}
-
-.bill-action-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border-radius: var(--radius-md);
-    font-size: 1rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    border: none;
-}
-
-
-.edit-modal .form-actions .btn {
-    flex: 1;
-    padding: 0.75rem;
-    font-size: 1rem;
-}
-
-.btn-secondary {
-    background: var(--color-surface-light);
-    border: 1px solid var(--color-border);
-    color: var(--color-text);
-}
-
-.btn-secondary:hover {
-    background: rgba(255, 255, 255, 0.1);
-}
-
-/* Amount preview for set-based bets */
-.amount-preview {
-    margin-top: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    background: rgba(0, 210, 106, 0.1);
-    border: 1px solid rgba(0, 210, 106, 0.3);
-    border-radius: var(--radius-md);
-    color: var(--color-success);
-    font-size: 0.9rem;
-    font-weight: 600;
-    text-align: center;
-}
-
-/* Edit bet type selector for special types */
-.edit-bet-type-selector {
-    margin-bottom: 1.25rem;
-}
-
-.edit-bet-type-selector .form-label {
-    display: block;
-    border-color: var(--color-primary);
-    background: rgba(212, 175, 55, 0.15);
-    color: var(--color-primary);
-    font-weight: 600;
-}
-
-/* Full Edit Modal */
-.edit-modal-full {
-    max-width: 450px;
-    width: 95%;
-}
-
-.edit-modal-full .bet-type-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-}
-
-.edit-modal-full .bet-type-btn {
-    flex: 1 1 auto;
-    min-width: calc(50% - 0.25rem);
-    padding: 0.75rem 1rem;
-    background: linear-gradient(135deg, var(--color-primary), #b8962d);
-    border: none;
-    border-radius: var(--radius-md);
-    color: #000;
-    font-weight: 600;
-    font-size: 0.95rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.edit-modal-full .bet-type-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(212, 175, 55, 0.4);
-}
-
-.edit-modal-full .bet-type-btn:active {
-    transform: translateY(0);
-}
-
-.edit-modal-full .bet-type-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
-}
-
-.amount-hint {
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    font-weight: normal;
-}
-
-.empty-bet-types {
-    text-align: center;
-    color: var(--color-text-muted);
-    padding: 1rem;
-    font-size: 0.9rem;
-    border: 1px dashed var(--color-border);
-    border-radius: var(--radius-md);
-}
-
-/* Edit Form Row - Number and Amount on same line */
-.edit-form-row {
-    display: flex;
-    gap: 0.75rem;
-    margin-bottom: 1rem;
-}
-
-.edit-form-row .form-group {
-    margin-bottom: 0;
-}
-
-.edit-number-group {
-    flex: 0.8;
-    min-width: 0;
-}
-
-.edit-amount-group {
-    flex: 1.2;
-    min-width: 0;
-}
-
-.edit-form-row .form-label {
-    font-size: 0.8rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.edit-form-row .form-input {
-    width: 100%;
-    padding: 0.65rem 0.75rem;
-}
-
-.edit-form-row .number-input {
-    font-size: 1.25rem;
-    letter-spacing: 0.15em;
-    text-align: center;
-}
-
-   
-
 /* Bill Action Buttons - Inline with time row */
 .bill-sub-row {
     display: flex;
@@ -4523,4 +4344,100 @@ html.theme-light .time-remaining {
     background: #4ade80 !important;
     color: #000 !important;
     font-weight: 700;
+}
+
+/* =============================================
+   FIX: Border overlap in accordion
+   Use wrapper border approach to prevent double borders at corners
+   ============================================= */
+
+/* Remove individual borders from header and content when expanded */
+.round-accordion-item.expanded {
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+/* Thai - wrapper approach */
+.round-accordion-item.thai.expanded {
+    border: 2px solid #ed1c24;
+    border-top-width: 5px;
+}
+
+.round-accordion-item.thai.expanded .round-accordion-header {
+    border: none;
+    border-radius: 0;
+    border-bottom: 1px solid rgba(237, 28, 36, 0.3);
+}
+
+.round-accordion-item.thai.expanded .round-accordion-content {
+    border: none;
+    border-radius: 0;
+}
+
+/* Lao - wrapper approach */
+.round-accordion-item.lao.expanded {
+    border: 2px solid #002868;
+    border-top-width: 5px;
+}
+
+.round-accordion-item.lao.expanded .round-accordion-header {
+    border: none;
+    border-radius: 0;
+    border-bottom: 1px solid rgba(0, 40, 104, 0.3);
+}
+
+.round-accordion-item.lao.expanded .round-accordion-content {
+    border: none;
+    border-radius: 0;
+}
+
+/* Hanoi - wrapper approach */
+.round-accordion-item.hanoi.expanded {
+    border: 2px solid #ffcd00;
+    border-top-width: 5px;
+}
+
+.round-accordion-item.hanoi.expanded .round-accordion-header {
+    border: none;
+    border-radius: 0;
+    border-bottom: 1px solid rgba(255, 205, 0, 0.3);
+}
+
+.round-accordion-item.hanoi.expanded .round-accordion-content {
+    border: none;
+    border-radius: 0;
+}
+
+/* Yeekee - wrapper approach */
+.round-accordion-item.yeekee.expanded {
+    border: 2px solid #9c27b0;
+    border-top-width: 5px;
+}
+
+.round-accordion-item.yeekee.expanded .round-accordion-header {
+    border: none;
+    border-radius: 0;
+    border-bottom: 1px solid rgba(156, 39, 176, 0.3);
+}
+
+.round-accordion-item.yeekee.expanded .round-accordion-content {
+    border: none;
+    border-radius: 0;
+}
+
+/* Stock - wrapper approach */
+.round-accordion-item.stock.expanded {
+    border: 2px solid #00c853;
+    border-top-width: 5px;
+}
+
+.round-accordion-item.stock.expanded .round-accordion-header {
+    border: none;
+    border-radius: 0;
+    border-bottom: 1px solid rgba(0, 200, 83, 0.3);
+}
+
+.round-accordion-item.stock.expanded .round-accordion-content {
+    border: none;
+    border-radius: 0;
 }
