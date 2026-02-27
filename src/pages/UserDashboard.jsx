@@ -5,6 +5,8 @@ import { useTheme, DASHBOARDS } from '../contexts/ThemeContext'
 import { supabase } from '../lib/supabase'
 import { checkDealerCreditForBet, updatePendingDeduction } from '../utils/creditCheck'
 import { Html5Qrcode } from 'html5-qrcode'
+import { jsPDF } from 'jspdf'
+import { addThaiFont } from '../utils/thaiFontLoader'
 import {
     FiClock,
     FiCalendar,
@@ -1390,6 +1392,151 @@ export default function UserDashboard() {
         )
     }
 
+    // Export submissions to PDF
+    async function exportSubmissionsPDF() {
+        if (!selectedRound || submissions.length === 0) {
+            toast.warning('ไม่มีรายการที่จะบันทึก')
+            return
+        }
+
+        try {
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+            const hasThai = await addThaiFont(doc)
+            if (!hasThai) {
+                doc.setFont('helvetica')
+            }
+
+            const pageWidth = doc.internal.pageSize.getWidth()
+            const lineHeight = 6
+            let y = 15
+
+            // Calculate totals
+            const totalAmount = submissions.reduce((sum, s) => sum + (s.amount || 0), 0)
+            const totalCommission = submissions.reduce((sum, s) => sum + (s.commission_amount || 0), 0)
+            const netAmount = totalAmount - totalCommission
+            const currencySymbol = selectedRound?.currency_symbol || '฿'
+
+            // Title
+            doc.setFontSize(14)
+            doc.text(`${selectedRound.lottery_name || 'หวย'}`, pageWidth / 2, y, { align: 'center' })
+            y += lineHeight
+            
+            // Round date (close date)
+            const closeDate = selectedRound.close_time 
+                ? new Date(selectedRound.close_time).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })
+                : ''
+            if (closeDate) {
+                doc.setFontSize(12)
+                doc.text(`งวดวันที่: ${closeDate}`, pageWidth / 2, y, { align: 'center' })
+            }
+            y += lineHeight * 1.5
+
+            // Summary section
+            doc.setFontSize(11)
+            doc.text(`ส่งเลข: ${submissions.length} รายการ`, 15, y)
+            y += lineHeight
+            doc.text(`ยอดส่ง: ${totalAmount.toLocaleString()} ${currencySymbol === '฿' ? 'บาท' : currencySymbol}`, 15, y)
+            y += lineHeight
+            doc.text(`ค่าคอม: ${totalCommission.toLocaleString()} ${currencySymbol === '฿' ? 'บาท' : currencySymbol}`, 15, y)
+            y += lineHeight
+            doc.text(`ส่งสุทธิ: ${netAmount.toLocaleString()} ${currencySymbol === '฿' ? 'บาท' : currencySymbol}`, 15, y)
+            y += lineHeight * 1.5
+
+            // Separator line
+            doc.setLineWidth(0.3)
+            doc.line(15, y, pageWidth - 15, y)
+            y += lineHeight
+
+            // Group submissions by bill_id
+            const billGroups = submissions.reduce((acc, sub) => {
+                const billId = sub.bill_id || 'no-bill'
+                if (!acc[billId]) acc[billId] = []
+                acc[billId].push(sub)
+                return acc
+            }, {})
+
+            // Sort bills by time (newest first)
+            const sortedBills = Object.entries(billGroups).sort((a, b) => {
+                const timeA = new Date(a[1][0].created_at).getTime()
+                const timeB = new Date(b[1][0].created_at).getTime()
+                return timeB - timeA
+            })
+
+            // Output each bill
+            doc.setFontSize(10)
+            for (const [billId, items] of sortedBills) {
+                // Check if need new page
+                if (y > 270) {
+                    doc.addPage()
+                    y = 15
+                }
+
+                // Bill header (note or bill_id)
+                const billNote = items[0]?.bill_note || billId
+                doc.setFontSize(11)
+                doc.text(billNote, 15, y)
+                y += lineHeight * 0.8
+
+                // Group items by entry_id to show original input format
+                const entryGroups = items.reduce((acc, item) => {
+                    const entryId = item.entry_id || item.id
+                    if (!acc[entryId]) acc[entryId] = []
+                    acc[entryId].push(item)
+                    return acc
+                }, {})
+
+                doc.setFontSize(10)
+                for (const [entryId, entryItems] of Object.entries(entryGroups)) {
+                    if (y > 280) {
+                        doc.addPage()
+                        y = 15
+                    }
+
+                    const firstItem = entryItems[0]
+                    
+                    // display_numbers contains the full original line (e.g., "25=20*20 ถ่างกลับ")
+                    // If it contains "=" it's the full line, use it directly
+                    // Otherwise construct from parts
+                    let lineText = ''
+                    const displayNumbers = firstItem.display_numbers || ''
+                    
+                    if (displayNumbers && displayNumbers.includes('=')) {
+                        // Full line format - use directly
+                        lineText = displayNumbers
+                    } else {
+                        // Construct from parts
+                        const numbers = displayNumbers || firstItem.numbers
+                        const displayAmt = firstItem.display_amount || firstItem.amount?.toString() || ''
+                        const betTypeLabel = firstItem.display_bet_type || BET_TYPES[firstItem.bet_type]?.label || ''
+                        lineText = `${numbers}=${displayAmt} ${betTypeLabel}`.trim()
+                    }
+
+                    doc.text(lineText, 20, y)
+                    y += lineHeight * 0.7
+                }
+
+                // Bill total - only show if bill has more than 1 entry
+                const entryCount = Object.keys(entryGroups).length
+                if (entryCount > 1) {
+                    const billTotal = items.reduce((sum, item) => sum + (item.amount || 0), 0)
+                    doc.text(`รวม ${billTotal.toLocaleString()} ${currencySymbol === '฿' ? 'บาท' : currencySymbol}`, 20, y)
+                    y += lineHeight * 0.5
+                }
+                y += lineHeight * 0.8
+            }
+
+            // Save PDF
+            const dateStr = new Date().toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-')
+            const filename = `${selectedRound.lottery_name || 'lottery'}_${dateStr}.pdf`
+            doc.save(filename)
+
+            toast.success('บันทึก PDF สำเร็จ!')
+        } catch (error) {
+            console.error('Error exporting PDF:', error)
+            toast.error('เกิดข้อผิดพลาดในการบันทึก PDF')
+        }
+    }
+
     // Delete submission
     async function handleDelete(submission) {
         if (!confirm('ต้องการลบรายการนี้?')) return
@@ -2419,8 +2566,29 @@ export default function UserDashboard() {
                                                     </div>
 
                                                     <div className="submissions-list card">
-                                                        <div className="list-header">
+                                                        <div className="list-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                             <h3>รายการที่ส่ง</h3>
+                                                            <button
+                                                                onClick={exportSubmissionsPDF}
+                                                                disabled={submissions.length === 0}
+                                                                style={{
+                                                                    padding: '0.4rem 0.8rem',
+                                                                    fontSize: '0.85rem',
+                                                                    background: 'transparent',
+                                                                    border: '1.5px solid var(--color-primary)',
+                                                                    color: 'var(--color-primary)',
+                                                                    borderRadius: '6px',
+                                                                    cursor: submissions.length === 0 ? 'not-allowed' : 'pointer',
+                                                                    opacity: submissions.length === 0 ? 0.5 : 1,
+                                                                    fontWeight: '500',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '0.3rem'
+                                                                }}
+                                                            >
+                                                                <FiFileText size={14} />
+                                                                บันทึก pdf
+                                                            </button>
                                                         </div>
                                                         <div className="list-header-actions">
                                                             <span className="toggle-label">จัดกลุ่ม</span>
@@ -2764,11 +2932,24 @@ export default function UserDashboard() {
                                                                                             {/* Bill Items - Collapsible */}
                                                                                             {isExpandedBill && (
                                                                                                 <div className="bill-items-list" style={{ borderTop: '1.5px solid rgba(128, 128, 128, 0.35)' }}>
+                                                                                                    {/* Table Header */}
+                                                                                                    <div className="bill-item-header" style={{ 
+                                                                                                        display: 'flex', 
+                                                                                                        justifyContent: 'space-between', 
+                                                                                                        padding: '0.5rem 0.75rem',
+                                                                                                        borderBottom: '1px solid rgba(128, 128, 128, 0.2)',
+                                                                                                        fontWeight: '600',
+                                                                                                        fontSize: '0.85rem',
+                                                                                                        color: 'var(--color-text-secondary)'
+                                                                                                    }}>
+                                                                                                        <span style={{ flex: 1 }}>เลข</span>
+                                                                                                        <span style={{ minWidth: '55px', textAlign: 'right', marginRight: '0.75rem' }}>ค่าคอม</span>
+                                                                                                        <span style={{ minWidth: '55px', textAlign: 'right' }}>จำนวน</span>
+                                                                                                    </div>
                                                                                                     {sortedBillItems.map(sub => (
                                                                                                         <div
                                                                                                             key={sub.id || sub.entry_id}
-                                                                                                            className={`bill-item-row ${canDelete(sub) ? 'editable' : ''}`}
-                                                                                                            onClick={() => handleEditSubmission(sub)}
+                                                                                                            className="bill-item-row"
                                                                                                         >
                                                                                                             {displayMode === 'summary' && sub.display_numbers ? (
                                                                                                                 <>
@@ -2807,7 +2988,12 @@ export default function UserDashboard() {
 
                                                                                             {/* Bill Actions - For editing/deleting */}
                                                                                             {isExpandedBill && canDelete(billItems[0]) && billId !== 'no-bill' && (
-                                                                                                <div className="bill-card-actions">
+                                                                                                <div className="bill-card-actions" style={{ 
+                                                                                                    display: 'flex', 
+                                                                                                    gap: '0.5rem', 
+                                                                                                    padding: '0.5rem 0.75rem',
+                                                                                                    borderTop: '1px solid rgba(128, 128, 128, 0.2)'
+                                                                                                }}>
                                                                                                     <button
                                                                                                         className="bill-action-btn edit"
                                                                                                         onClick={(e) => {
@@ -2815,6 +3001,20 @@ export default function UserDashboard() {
                                                                                                             handleEditBill(billId, billItems)
                                                                                                         }}
                                                                                                         title="แก้ไขโพย"
+                                                                                                        style={{
+                                                                                                            padding: '0.4rem 0.8rem',
+                                                                                                            border: '1.5px solid var(--color-warning)',
+                                                                                                            borderRadius: '6px',
+                                                                                                            background: 'transparent',
+                                                                                                            color: 'var(--color-warning)',
+                                                                                                            fontWeight: '500',
+                                                                                                            fontSize: '0.85rem',
+                                                                                                            cursor: 'pointer',
+                                                                                                            display: 'flex',
+                                                                                                            alignItems: 'center',
+                                                                                                            justifyContent: 'center',
+                                                                                                            gap: '0.3rem'
+                                                                                                        }}
                                                                                                     >
                                                                                                         <FiEdit2 /> แก้ไข
                                                                                                     </button>
@@ -2825,6 +3025,20 @@ export default function UserDashboard() {
                                                                                                             handleDeleteBill(billId)
                                                                                                         }}
                                                                                                         title="ลบโพยทั้งหมด"
+                                                                                                        style={{
+                                                                                                            padding: '0.4rem 0.8rem',
+                                                                                                            border: '1.5px solid var(--color-danger)',
+                                                                                                            borderRadius: '6px',
+                                                                                                            background: 'transparent',
+                                                                                                            color: 'var(--color-danger)',
+                                                                                                            fontWeight: '500',
+                                                                                                            fontSize: '0.85rem',
+                                                                                                            cursor: 'pointer',
+                                                                                                            display: 'flex',
+                                                                                                            alignItems: 'center',
+                                                                                                            justifyContent: 'center',
+                                                                                                            gap: '0.3rem'
+                                                                                                        }}
                                                                                                     >
                                                                                                         <FiTrash2 /> ลบ
                                                                                                     </button>

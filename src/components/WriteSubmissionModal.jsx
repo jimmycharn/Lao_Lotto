@@ -145,15 +145,15 @@ const parseLine = (line) => {
         } else if (typeStr.includes('ลอยบน') || typeStr.includes('วิ่งบน')) {
             betType = 'run_top'
         } else if (typeStr.includes('หน้าบน')) {
-            betType = 'front_top'
+            betType = 'front_top_1'
         } else if (typeStr.includes('หน้าล่าง')) {
-            betType = 'front_bottom'
+            betType = 'front_bottom_1'
         } else if (typeStr.includes('กลางบน')) {
-            betType = 'middle_top'
+            betType = 'middle_top_1'
         } else if (typeStr.includes('หลังบน')) {
-            betType = 'back_top'
+            betType = 'back_top_1'
         } else if (typeStr.includes('หลังล่าง')) {
-            betType = 'back_bottom'
+            betType = 'back_bottom_1'
         } else if (typeStr.includes('ล่าง')) {
             betType = 'run_bottom'
         } else {
@@ -365,11 +365,11 @@ const getBetTypeLabel = (betType) => {
     const labels = {
         'run_top': 'วิ่งบน',
         'run_bottom': 'วิ่งล่าง',
-        'front_top': 'หน้าบน',
-        'front_bottom': 'หน้าล่าง',
-        'middle_top': 'กลางบน',
-        'back_top': 'หลังบน',
-        'back_bottom': 'หลังล่าง',
+        'front_top_1': 'หน้าบน',
+        'front_bottom_1': 'หน้าล่าง',
+        'middle_top_1': 'กลางบน',
+        'back_top_1': 'หลังบน',
+        'back_bottom_1': 'หลังล่าง',
         '2_top': '2 ตัวบน',
         '2_bottom': '2 ตัวล่าง',
         '2_teng': '2 ตัวมี',
