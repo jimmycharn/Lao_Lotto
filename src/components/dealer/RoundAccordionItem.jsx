@@ -2896,9 +2896,9 @@ export default function RoundAccordionItem({
                                             </div>
 
                                             {/* แสดงผลแบบตาราง 2 แถว: หัวข้อ + ค่า */}
-                                            <div className="inline-summary-table" style={{ 
+                                            <div style={{ 
                                                 display: 'grid', 
-                                                gridTemplateColumns: 'repeat(3, 1fr)', 
+                                                gridTemplateColumns: 'repeat(4, 1fr)', 
                                                 gap: '0.25rem 0.5rem',
                                                 background: 'rgba(255,255,255,0.03)',
                                                 borderRadius: 'var(--radius-md)',
@@ -2906,9 +2906,10 @@ export default function RoundAccordionItem({
                                                 marginBottom: '0.5rem'
                                             }}>
                                                 {/* แถวหัวข้อ */}
-                                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>จำนวน</span>
+                                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>รายการ</span>
                                                 <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ยอดรวม</span>
                                                 <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ค่าคอม</span>
+                                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', textAlign: 'right' }}>เหลือ</span>
                                                 {/* แถวค่า */}
                                                 <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>{(() => {
                                                     let filtered = inlineSubmissions.filter(s => {
@@ -2935,7 +2936,7 @@ export default function RoundAccordionItem({
                                                         return Object.keys(grouped).length
                                                     }
                                                     return filtered.length
-                                                })()} รายการ</span>
+                                                })()}</span>
                                                 <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>{round.currency_symbol}{inlineSubmissions.filter(s => {
                                                     const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
                                                     if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
@@ -2950,6 +2951,18 @@ export default function RoundAccordionItem({
                                                     if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
                                                     return true
                                                 }).reduce((sum, s) => sum + getCommission(s), 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+                                                <span style={{ fontWeight: '600', fontSize: '0.9rem', color: 'var(--color-success)', textAlign: 'right' }}>{(() => {
+                                                    const filtered = inlineSubmissions.filter(s => {
+                                                        const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
+                                                        if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
+                                                        if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
+                                                        if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
+                                                        return true
+                                                    })
+                                                    const totalAmount = filtered.reduce((sum, s) => sum + s.amount, 0)
+                                                    const totalCommission = filtered.reduce((sum, s) => sum + getCommission(s), 0)
+                                                    return `${round.currency_symbol}${(totalAmount - totalCommission).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                                                })()}</span>
                                             </div>
 
                                             {/* View Mode: ทั้งหมด (รวมเลข) */}
@@ -3068,6 +3081,7 @@ export default function RoundAccordionItem({
                                                             <tr>
                                                                 <th style={{ width: '30px' }}></th>
                                                                 <th>เลข</th>
+                                                                {displayMode !== 'summary' && <th>ประเภท</th>}
                                                                 <th style={{ textAlign: 'right' }}>จำนวน</th>
                                                                 {displayMode === 'detailed' && <th style={{ textAlign: 'right' }}>เวลา</th>}
                                                             </tr>
@@ -3196,6 +3210,11 @@ export default function RoundAccordionItem({
                                                                                             <div className="count-sub-label">({sub.count} รายการ)</div>
                                                                                         )}
                                                                                     </td>
+                                                                                    {displayMode !== 'summary' && (
+                                                                                        <td style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                                                            {displayLabel}
+                                                                                        </td>
+                                                                                    )}
                                                                                     <td style={{ textAlign: 'right' }}>
                                                                                         {displayMode === 'summary' && sub.display_amount ? (
                                                                                             <>{round.currency_symbol}{sub.display_amount}</>
@@ -3453,7 +3472,7 @@ export default function RoundAccordionItem({
                                                                                         }}>
                                                                                             <div style={{ display: 'flex', gap: '1rem' }}>
                                                                                                 <span style={{ minWidth: '60px' }}>เลข</span>
-                                                                                                <span>ประเภท</span>
+                                                                                                {billDisplayMode !== 'summary' && <span>ประเภท</span>}
                                                                                             </div>
                                                                                             <span>จำนวน</span>
                                                                                         </div>
@@ -3530,16 +3549,16 @@ export default function RoundAccordionItem({
                                                                                                         <span style={{ fontWeight: '600', fontSize: '0.95rem', minWidth: '60px', fontFamily: "'Monaco', 'Menlo', monospace", color: 'var(--color-primary)', letterSpacing: '0.1em' }}>
                                                                                                             {item.numbers}
                                                                                                         </span>
-                                                                                                        <div>
+                                                                                                        {billDisplayMode !== 'summary' && (
                                                                                                             <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
                                                                                                                 {BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}
                                                                                                             </span>
-                                                                                                            {billDisplayMode === 'summary' && item.count > 1 && (
-                                                                                                                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>
-                                                                                                                    ({item.count} รายการ)
-                                                                                                                </span>
-                                                                                                            )}
-                                                                                                        </div>
+                                                                                                        )}
+                                                                                                        {billDisplayMode === 'summary' && item.count > 1 && (
+                                                                                                            <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                                                                                                                ({item.count} รายการ)
+                                                                                                            </span>
+                                                                                                        )}
                                                                                                     </div>
                                                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                                                                         <span style={{ fontWeight: '500' }}>
