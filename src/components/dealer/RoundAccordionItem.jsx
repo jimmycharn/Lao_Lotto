@@ -3026,18 +3026,16 @@ export default function RoundAccordionItem({
                                                                         borderBottom: '1px solid var(--color-border)',
                                                                         flexWrap: 'wrap'
                                                                     }}>
-                                                                        {canBulkEditPre && (
-                                                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                                                                                <input 
-                                                                                    type="checkbox" 
-                                                                                    checked={preAllIds.length > 0 && preAllIds.every(id => selectedItems[id])}
-                                                                                    onChange={() => toggleSelectAllItems(preAllIds)}
-                                                                                    style={{ width: '16px', height: '16px' }}
-                                                                                />
-                                                                                <span style={{ fontSize: '0.85rem' }}>เลือกทั้งหมด</span>
-                                                                            </label>
-                                                                        )}
-                                                                        {canBulkEditPre && getSelectedItemsCount(preAllIds) > 0 && (
+                                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                                                            <input 
+                                                                                type="checkbox" 
+                                                                                checked={preAllIds.length > 0 && preAllIds.every(id => selectedItems[id])}
+                                                                                onChange={() => toggleSelectAllItems(preAllIds)}
+                                                                                style={{ width: '16px', height: '16px' }}
+                                                                            />
+                                                                            <span style={{ fontSize: '0.85rem' }}>เลือกทั้งหมด</span>
+                                                                        </label>
+                                                                        {getSelectedItemsCount(preAllIds) > 0 && (
                                                                             <button 
                                                                                 className="btn btn-danger btn-sm"
                                                                                 onClick={() => handleDeleteSelectedItems(preAllIds)}
@@ -3068,10 +3066,9 @@ export default function RoundAccordionItem({
                                                     <table className="inline-table">
                                                         <thead>
                                                             <tr>
-                                                                {isOpen && <th style={{ width: '30px' }}></th>}
+                                                                <th style={{ width: '30px' }}></th>
                                                                 <th>เลข</th>
-                                                                <th>ประเภท</th>
-                                                                <th>จำนวน</th>
+                                                                <th style={{ textAlign: 'right' }}>จำนวน</th>
                                                                 {displayMode === 'detailed' && <th style={{ textAlign: 'right' }}>เวลา</th>}
                                                             </tr>
                                                         </thead>
@@ -3185,26 +3182,21 @@ export default function RoundAccordionItem({
 
                                                                             return (
                                                                                 <tr key={sub.id} style={{ background: isSelected ? 'rgba(239, 68, 68, 0.1)' : 'transparent' }}>
-                                                                                    {isOpen && (
-                                                                                        <td>
-                                                                                            <input 
-                                                                                                type="checkbox" 
-                                                                                                checked={itemIds.every(id => selectedItems[id])}
-                                                                                                onChange={() => itemIds.forEach(id => toggleSelectItem(id))}
-                                                                                                style={{ width: '16px', height: '16px' }}
-                                                                                            />
-                                                                                        </td>
-                                                                                    )}
+                                                                                    <td>
+                                                                                        <input 
+                                                                                            type="checkbox" 
+                                                                                            checked={itemIds.every(id => selectedItems[id])}
+                                                                                            onChange={() => itemIds.forEach(id => toggleSelectItem(id))}
+                                                                                            style={{ width: '16px', height: '16px' }}
+                                                                                        />
+                                                                                    </td>
                                                                                     <td className="number-cell">
                                                                                         <div className="number-value">{sub.numbers}</div>
                                                                                         {(displayMode === 'summary' || displayMode === 'grouped') && sub.count > 1 && (
                                                                                             <div className="count-sub-label">({sub.count} รายการ)</div>
                                                                                         )}
                                                                                     </td>
-                                                                                    <td style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                                                                                        {displayLabel}
-                                                                                    </td>
-                                                                                    <td>
+                                                                                    <td style={{ textAlign: 'right' }}>
                                                                                         {displayMode === 'summary' && sub.display_amount ? (
                                                                                             <>{round.currency_symbol}{sub.display_amount}</>
                                                                                         ) : (
