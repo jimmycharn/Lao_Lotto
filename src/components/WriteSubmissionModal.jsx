@@ -463,6 +463,74 @@ export default function WriteSubmissionModal({
         }
     }, [soundEnabled])
 
+    // Draft auto-save key based on round
+    const draftKey = roundInfo?.id ? `lao_lotto_draft_${roundInfo.id}` : null
+
+    // Load draft from localStorage when modal opens
+    useEffect(() => {
+        if (isOpen && draftKey && !isEditMode && lines.length === 0) {
+            try {
+                const savedDraft = localStorage.getItem(draftKey)
+                if (savedDraft) {
+                    const draft = JSON.parse(savedDraft)
+                    if (draft.lines && draft.lines.length > 0) {
+                        setLines(draft.lines)
+                        setBillNote(draft.billNote || '')
+                        setCurrentInput(draft.currentInput || '')
+                    }
+                }
+            } catch {
+                // Ignore localStorage errors
+            }
+        }
+    }, [isOpen, draftKey, isEditMode])
+
+    // Save draft to localStorage when lines change
+    useEffect(() => {
+        if (draftKey && !isEditMode && isOpen) {
+            try {
+                if (lines.length > 0 || currentInput.trim() || billNote.trim()) {
+                    localStorage.setItem(draftKey, JSON.stringify({
+                        lines,
+                        billNote,
+                        currentInput,
+                        savedAt: Date.now()
+                    }))
+                } else {
+                    // Clear draft if empty
+                    localStorage.removeItem(draftKey)
+                }
+            } catch {
+                // Ignore localStorage errors
+            }
+        }
+    }, [lines, billNote, currentInput, draftKey, isEditMode, isOpen])
+
+    // Clear draft after successful submit
+    const clearDraft = useCallback(() => {
+        if (draftKey) {
+            try {
+                localStorage.removeItem(draftKey)
+            } catch {
+                // Ignore
+            }
+        }
+    }, [draftKey])
+
+    // Warn before page refresh/close if there's unsaved draft
+    useEffect(() => {
+        const handleBeforeUnload = (e) => {
+            if (isOpen && (lines.length > 0 || currentInput.trim())) {
+                e.preventDefault()
+                e.returnValue = 'คุณมีข้อมูลที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้หรือไม่?'
+                return e.returnValue
+            }
+        }
+
+        window.addEventListener('beforeunload', handleBeforeUnload)
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+    }, [isOpen, lines, currentInput])
+
     // Toggle sound on/off
     const toggleSound = useCallback(() => {
         setSoundEnabled(prev => !prev)
@@ -1040,12 +1108,7 @@ export default function WriteSubmissionModal({
             setSuccess(false)
             setFocusedTypeIndex(-1)
             
-            // Focus note input when modal opens
-            setTimeout(() => {
-                if (noteInputRef.current) {
-                    noteInputRef.current.focus()
-                }
-            }, 100)
+            // Don't auto-focus note input - let user start typing numbers immediately
         }
     }, [isOpen, editingData])
 
@@ -1793,6 +1856,17 @@ export default function WriteSubmissionModal({
             return
         }
 
+        // Check if round is still open (time validation)
+        if (roundInfo?.close_time) {
+            const closeTime = new Date(roundInfo.close_time)
+            const now = new Date()
+            if (now >= closeTime) {
+                setError('หมดเวลาส่งเลขแล้ว งวดนี้ปิดรับแล้ว')
+                playSound('error')
+                return
+            }
+        }
+
         setSubmitting(true)
         setError('')
 
@@ -1835,10 +1909,9 @@ export default function WriteSubmissionModal({
                 setError('')
                 setIsLocked(false)
                 setLockedAmount('')
-                // Focus note input after clearing
-                if (noteInputRef.current) {
-                    noteInputRef.current.focus()
-                }
+                // Clear draft after successful submit
+                clearDraft()
+                // Don't focus note input - let user start typing numbers immediately
             }
         } catch (err) {
             setError(err.message || 'เกิดข้อผิดพลาด')

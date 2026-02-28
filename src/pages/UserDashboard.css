@@ -3872,6 +3872,7 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    flex: 1;
 }
 
 .bill-bet-type {

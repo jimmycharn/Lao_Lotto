@@ -1297,24 +1297,31 @@ export default function UserDashboard() {
         })
 
         // Insert to database
-        const { error } = await supabase
+        const { error, data: insertedData } = await supabase
             .from('submissions')
             .insert(submissionsToInsert)
+            .select()
 
         if (error) throw error
 
-        // Update pending deduction for dealer credit
-        const dealerIdForCredit = isOwnDealer ? user.id : selectedDealer?.id
-        if (dealerIdForCredit) {
-            try {
-                await updatePendingDeduction(dealerIdForCredit)
-            } catch (err) {
-                console.error('Error updating pending deduction:', err)
-            }
+        // Optimistic update - add new submissions to state immediately
+        if (insertedData && insertedData.length > 0) {
+            setSubmissions(prev => [...insertedData, ...prev])
         }
 
-        fetchSubmissions()
+        // Show success immediately
         toast.success(`บันทึกโพยสำเร็จ! (${entries.length} รายการ)`)
+
+        // Update pending deduction for dealer credit in background
+        const dealerIdForCredit = isOwnDealer ? user.id : selectedDealer?.id
+        if (dealerIdForCredit) {
+            updatePendingDeduction(dealerIdForCredit).catch(err => {
+                console.error('Error updating pending deduction:', err)
+            })
+        }
+
+        // Refresh submissions in background to sync with server
+        setTimeout(() => fetchSubmissions(), 500)
     }
 
     // Handle edit bill submission from WriteSubmissionModal
@@ -2936,6 +2943,7 @@ export default function UserDashboard() {
                                                                                                     <div className="bill-item-header" style={{ 
                                                                                                         display: 'flex', 
                                                                                                         justifyContent: 'space-between', 
+                                                                                                        alignItems: 'center',
                                                                                                         padding: '0.5rem 0.75rem',
                                                                                                         borderBottom: '1px solid rgba(128, 128, 128, 0.2)',
                                                                                                         fontWeight: '600',
@@ -2943,8 +2951,8 @@ export default function UserDashboard() {
                                                                                                         color: 'var(--color-text-secondary)'
                                                                                                     }}>
                                                                                                         <span style={{ flex: 1 }}>เลข</span>
-                                                                                                        <span style={{ minWidth: '55px', textAlign: 'right', marginRight: '0.75rem' }}>ค่าคอม</span>
-                                                                                                        <span style={{ minWidth: '55px', textAlign: 'right' }}>จำนวน</span>
+                                                                                                        <span style={{ width: '65px', textAlign: 'right', marginRight: '0.75rem' }}>ค่าคอม</span>
+                                                                                                        <span style={{ width: '65px', textAlign: 'right' }}>จำนวน</span>
                                                                                                     </div>
                                                                                                     {sortedBillItems.map(sub => (
                                                                                                         <div
@@ -2956,10 +2964,10 @@ export default function UserDashboard() {
                                                                                                                     <span className="bill-display-text">
                                                                                                                         {sub.display_numbers}
                                                                                                                     </span>
-                                                                                                                    <span className="bill-item-commission" style={{ color: 'var(--color-warning)', fontSize: '0.8rem', minWidth: '55px', textAlign: 'right', marginRight: '0.75rem' }}>
+                                                                                                                    <span className="bill-item-commission" style={{ color: 'var(--color-warning)', fontSize: '0.8rem', width: '65px', textAlign: 'right', marginRight: '0.75rem' }}>
                                                                                                                         {round.currency_symbol}{(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)).toLocaleString(undefined, { maximumFractionDigits: 1 })}
                                                                                                                     </span>
-                                                                                                                    <span className="bill-item-amount" style={{ minWidth: '55px', textAlign: 'right' }}>
+                                                                                                                    <span className="bill-item-amount" style={{ width: '65px', textAlign: 'right' }}>
                                                                                                                         {round.currency_symbol}{sub.display_amount || sub.amount?.toLocaleString()}
                                                                                                                     </span>
                                                                                                                 </>
@@ -2973,10 +2981,10 @@ export default function UserDashboard() {
                                                                                                                             {sub.numbers}
                                                                                                                         </span>
                                                                                                                     </div>
-                                                                                                                    <span className="bill-item-commission" style={{ color: 'var(--color-warning)', fontSize: '0.8rem', minWidth: '55px', textAlign: 'right', marginRight: '0.75rem' }}>
+                                                                                                                    <span className="bill-item-commission" style={{ color: 'var(--color-warning)', fontSize: '0.8rem', width: '65px', textAlign: 'right', marginRight: '0.75rem' }}>
                                                                                                                         {round.currency_symbol}{calculateCommissionAmount(sub.amount || 0, sub.bet_type, round).toLocaleString(undefined, { maximumFractionDigits: 1 })}
                                                                                                                     </span>
-                                                                                                                    <span className="bill-item-amount" style={{ minWidth: '55px', textAlign: 'right' }}>
+                                                                                                                    <span className="bill-item-amount" style={{ width: '65px', textAlign: 'right' }}>
                                                                                                                         {round.currency_symbol}{sub.amount?.toLocaleString()}
                                                                                                                     </span>
                                                                                                                 </>
@@ -3002,7 +3010,8 @@ export default function UserDashboard() {
                                                                                                         }}
                                                                                                         title="แก้ไขโพย"
                                                                                                         style={{
-                                                                                                            padding: '0.4rem 0.8rem',
+                                                                                                            padding: '0.5rem 1.2rem',
+                                                                                                            minWidth: '80px',
                                                                                                             border: '1.5px solid var(--color-warning)',
                                                                                                             borderRadius: '6px',
                                                                                                             background: 'transparent',
@@ -3013,7 +3022,7 @@ export default function UserDashboard() {
                                                                                                             display: 'flex',
                                                                                                             alignItems: 'center',
                                                                                                             justifyContent: 'center',
-                                                                                                            gap: '0.3rem'
+                                                                                                            gap: '0.4rem'
                                                                                                         }}
                                                                                                     >
                                                                                                         <FiEdit2 /> แก้ไข
@@ -3026,7 +3035,8 @@ export default function UserDashboard() {
                                                                                                         }}
                                                                                                         title="ลบโพยทั้งหมด"
                                                                                                         style={{
-                                                                                                            padding: '0.4rem 0.8rem',
+                                                                                                            padding: '0.5rem 1.2rem',
+                                                                                                            minWidth: '80px',
                                                                                                             border: '1.5px solid var(--color-danger)',
                                                                                                             borderRadius: '6px',
                                                                                                             background: 'transparent',
@@ -3037,7 +3047,7 @@ export default function UserDashboard() {
                                                                                                             display: 'flex',
                                                                                                             alignItems: 'center',
                                                                                                             justifyContent: 'center',
-                                                                                                            gap: '0.3rem'
+                                                                                                            gap: '0.4rem'
                                                                                                         }}
                                                                                                     >
                                                                                                         <FiTrash2 /> ลบ
@@ -3841,7 +3851,7 @@ export default function UserDashboard() {
                     setEditingBillData(null)
                 }}
                 onSubmit={handleWriteSubmit}
-                roundInfo={selectedRound ? { name: selectedRound.name } : null}
+                roundInfo={selectedRound ? { id: selectedRound.id, name: selectedRound.name, close_time: selectedRound.close_time } : null}
                 currencySymbol={selectedRound?.currency_symbol || '฿'}
                 editingData={editingBillData}
                 onEditSubmit={handleEditBillSubmit}
