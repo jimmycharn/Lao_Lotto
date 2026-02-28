@@ -336,29 +336,45 @@ export function AuthProvider({ children }) {
         clearProfileCache()
 
         // Manually clear Supabase tokens from localStorage to prevent auto-login on refresh
-        Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
-                localStorage.removeItem(key)
-            }
-        })
+        try {
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                    localStorage.removeItem(key)
+                }
+            })
 
-        // Also clear any other Supabase related storage
-        Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('supabase.auth.')) {
-                localStorage.removeItem(key)
-            }
-        })
+            // Also clear any other Supabase related storage
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('supabase.auth.')) {
+                    localStorage.removeItem(key)
+                }
+            })
+        } catch (storageError) {
+            console.log('Error clearing localStorage:', storageError)
+        }
 
         if (!supabase) return { error: null }
 
         try {
             // Use scope: 'local' to only sign out from this browser/tab
             // This prevents errors when session is already expired on server
-            const { error } = await supabase.auth.signOut({ scope: 'local' })
+            // Add timeout to prevent hanging on stale connections
+            const signOutPromise = supabase.auth.signOut({ scope: 'local' })
+            const timeoutPromise = new Promise((resolve) => 
+                setTimeout(() => resolve({ error: { message: 'SignOut timeout' } }), 3000)
+            )
             
-            // Ignore session_not_found or similar errors - user is already logged out
-            if (error && (error.message?.includes('session') || error.status === 401 || error.status === 403)) {
-                console.log('Session already expired, clearing local state')
+            const { error } = await Promise.race([signOutPromise, timeoutPromise])
+            
+            // Ignore session_not_found, timeout, or similar errors - user is already logged out
+            if (error && (
+                error.message?.includes('session') || 
+                error.message?.includes('timeout') ||
+                error.message?.includes('network') ||
+                error.status === 401 || 
+                error.status === 403
+            )) {
+                console.log('Session already expired or timeout, clearing local state')
                 return { error: null }
             }
             

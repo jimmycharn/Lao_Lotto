@@ -43,14 +43,17 @@ export default function Navbar() {
     }
 
     const handleSignOut = async () => {
+        // Navigate first to prevent UI errors during stale session logout
+        setIsOpen(false)
+        navigate('/login')
+        
+        // Then sign out in background - errors are handled gracefully
         try {
             await signOut()
         } catch (error) {
-            // Ignore any errors during signOut - user should still be redirected
+            // Ignore any errors during signOut - user is already redirected
             console.log('SignOut completed with warning:', error?.message || error)
         }
-        navigate('/login')
-        setIsOpen(false)
     }
 
     // Check if user has a dealer
