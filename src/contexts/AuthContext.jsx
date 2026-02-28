@@ -52,6 +52,54 @@ export function AuthProvider({ children }) {
     const [profile, setProfile] = useState(null)
     const [loading, setLoading] = useState(true)
     const fetchingRef = useRef(false)
+    const loadingTimerRef = useRef(null)
+
+    // Safety: ensure loading NEVER stays true longer than 10 seconds
+    useEffect(() => {
+        if (loading) {
+            loadingTimerRef.current = setTimeout(() => {
+                console.warn('Safety timeout: forcing loading=false after 10s')
+                setLoading(false)
+                fetchingRef.current = false
+            }, 10000)
+        } else {
+            if (loadingTimerRef.current) {
+                clearTimeout(loadingTimerRef.current)
+                loadingTimerRef.current = null
+            }
+        }
+        return () => {
+            if (loadingTimerRef.current) {
+                clearTimeout(loadingTimerRef.current)
+            }
+        }
+    }, [loading])
+
+    // Helper to clear all Supabase auth tokens from localStorage
+    const clearAuthTokens = () => {
+        try {
+            Object.keys(localStorage).forEach(key => {
+                if (
+                    (key.startsWith('sb-') && key.endsWith('-auth-token')) ||
+                    key.startsWith('supabase.auth.')
+                ) {
+                    localStorage.removeItem(key)
+                }
+            })
+        } catch (e) {
+            // Ignore
+        }
+    }
+
+    // Helper to fully reset auth state
+    const clearAllAuthState = () => {
+        console.warn('Clearing all auth state')
+        setUser(null)
+        setProfile(null)
+        clearProfileCache()
+        clearAuthTokens()
+        fetchingRef.current = false
+    }
 
     useEffect(() => {
         if (!supabase) {
@@ -60,30 +108,14 @@ export function AuthProvider({ children }) {
         }
 
         let isMounted = true
-        let profileFetched = false
 
-        // Helper to clear all stale auth data
-        const clearStaleSession = () => {
-            console.warn('Clearing stale session')
-            setUser(null)
-            setProfile(null)
-            clearProfileCache()
-            // Remove Supabase auth tokens from localStorage
-            Object.keys(localStorage).forEach(key => {
-                if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
-                    localStorage.removeItem(key)
-                }
-            })
-        }
-
-        // Helper function to handle session
+        // Helper function to handle session on mount
         const handleSession = async () => {
             try {
-                // Race between getSession and a 3 second timeout
                 const result = await Promise.race([
                     supabase.auth.getSession(),
                     new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('Session timeout')), 3000)
+                        setTimeout(() => reject(new Error('Session timeout')), 5000)
                     )
                 ])
                 
@@ -91,79 +123,67 @@ export function AuthProvider({ children }) {
                 
                 const { data: { session }, error } = result
                 
-                if (error) {
-                    console.error('getSession error:', error)
-                    clearStaleSession()
+                if (error || !session?.user) {
+                    if (error) console.error('getSession error:', error)
+                    clearAllAuthState()
                     setLoading(false)
                     return
                 }
+
+                // Check if the token is expired or about to expire
+                const expiresAt = session.expires_at
+                const now = Math.floor(Date.now() / 1000)
+                const isExpired = expiresAt && now >= expiresAt - 30
                 
-                if (session?.user) {
-                    // Check if the token is expired or about to expire
-                    const expiresAt = session.expires_at // Unix timestamp in seconds
-                    const now = Math.floor(Date.now() / 1000)
-                    const isExpired = expiresAt && now >= expiresAt - 30 // 30s buffer
-                    
-                    if (isExpired) {
-                        console.log('Session token expired, attempting refresh...')
-                        try {
-                            const { data: refreshData, error: refreshError } = await Promise.race([
-                                supabase.auth.refreshSession(),
-                                new Promise((_, reject) => 
-                                    setTimeout(() => reject(new Error('Refresh timeout')), 5000)
-                                )
-                            ])
-                            
-                            if (!isMounted) return
-                            
-                            if (refreshError || !refreshData?.session) {
-                                console.warn('Token refresh failed:', refreshError?.message || 'No session returned')
-                                clearStaleSession()
-                                setLoading(false)
-                                return
-                            }
-                            
-                            // Use the refreshed session
-                            console.log('Token refreshed successfully')
-                            setUser(refreshData.session.user)
-                            
-                            const cachedProfile = getCachedProfile(refreshData.session.user.id)
-                            if (cachedProfile) {
-                                setProfile(cachedProfile)
-                            }
-                            
-                            profileFetched = true
-                            fetchProfile(refreshData.session.user, !!cachedProfile)
-                        } catch (refreshErr) {
-                            console.warn('Token refresh timed out:', refreshErr.message)
-                            if (isMounted) {
-                                clearStaleSession()
-                            }
+                if (isExpired) {
+                    console.log('Session token expired, attempting refresh...')
+                    try {
+                        const { data: refreshData, error: refreshError } = await Promise.race([
+                            supabase.auth.refreshSession(),
+                            new Promise((_, reject) => 
+                                setTimeout(() => reject(new Error('Refresh timeout')), 5000)
+                            )
+                        ])
+                        
+                        if (!isMounted) return
+                        
+                        if (refreshError || !refreshData?.session) {
+                            console.warn('Token refresh failed, clearing session')
+                            clearAllAuthState()
                             setLoading(false)
                             return
                         }
-                    } else {
-                        // Token is still valid
-                        setUser(session.user)
                         
-                        // Try to use cached profile first for instant UI
-                        const cachedProfile = getCachedProfile(session.user.id)
+                        console.log('Token refreshed successfully')
+                        setUser(refreshData.session.user)
+                        
+                        const cachedProfile = getCachedProfile(refreshData.session.user.id)
                         if (cachedProfile) {
                             setProfile(cachedProfile)
+                            setLoading(false)
                         }
-                        
-                        profileFetched = true
-                        // Fetch fresh profile in background
-                        fetchProfile(session.user, !!cachedProfile)
+                        fetchProfile(refreshData.session.user, !!cachedProfile)
+                    } catch (refreshErr) {
+                        console.warn('Token refresh timed out')
+                        if (isMounted) clearAllAuthState()
+                        setLoading(false)
+                        return
                     }
+                } else {
+                    // Token is still valid
+                    setUser(session.user)
+                    
+                    const cachedProfile = getCachedProfile(session.user.id)
+                    if (cachedProfile) {
+                        setProfile(cachedProfile)
+                        setLoading(false)
+                    }
+                    fetchProfile(session.user, !!cachedProfile)
                 }
-                
-                // Always set loading false
-                setLoading(false)
             } catch (err) {
-                console.warn('Auth session check failed or timed out:', err.message)
+                console.warn('Auth session check failed:', err.message)
                 if (isMounted) {
-                    clearStaleSession()
+                    clearAllAuthState()
                     setLoading(false)
                 }
             }
@@ -177,21 +197,20 @@ export function AuthProvider({ children }) {
                 if (!isMounted) return
                 console.log('Auth event:', event)
                 
-                // Skip initial session - already handled above
                 if (event === 'INITIAL_SESSION') return
                 
                 if (event === 'SIGNED_IN') {
+                    // Reset fetchingRef to ensure profile fetch is NOT blocked
+                    fetchingRef.current = false
                     setUser(session?.user ?? null)
-                    setLoading(false)
-                    // Always fetch profile on sign in (fresh login)
-                    profileFetched = true
-                    fetchProfile(session.user, false)
+                    if (session?.user) {
+                        fetchProfile(session.user, false)
+                    } else {
+                        setLoading(false)
+                    }
                 } else if (event === 'SIGNED_OUT') {
-                    setUser(null)
-                    setProfile(null)
-                    clearProfileCache()
+                    clearAllAuthState()
                     setLoading(false)
-                    profileFetched = false
                 } else if (event === 'TOKEN_REFRESHED') {
                     setUser(session?.user ?? null)
                 }
@@ -210,49 +229,44 @@ export function AuthProvider({ children }) {
             return
         }
         
-        // Prevent duplicate fetches - but still set loading false if needed
+        // Prevent duplicate fetches
         if (fetchingRef.current) {
             console.log('Profile fetch already in progress, skipping')
-            // Still need to set loading false if we're waiting
-            if (!hasCachedProfile) {
-                setTimeout(() => setLoading(false), 100)
-            }
             return
         }
         fetchingRef.current = true
 
-        // Handle both user object and userId string
         const userId = userOrId?.id || userOrId
         const userEmail = userOrId?.email
 
-        console.log('Fetching profile for:', userId, hasCachedProfile ? '(background refresh)' : '')
+        console.log('Fetching profile for:', userId, hasCachedProfile ? '(background)' : '')
+
+        // Safety timeout for this specific fetch - 8 seconds max
+        const fetchTimeout = setTimeout(() => {
+            console.warn('fetchProfile safety timeout - forcing loading=false')
+            fetchingRef.current = false
+            setLoading(false)
+        }, 8000)
 
         try {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .single()
+            const { data, error } = await Promise.race([
+                supabase.from('profiles').select('*').eq('id', userId).single(),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Profile fetch timeout')), 6000)
+                )
+            ])
 
             if (error) {
                 console.error('Error fetching profile:', error)
 
-                // If auth-related error (expired JWT, unauthorized), clear stale session
                 const isAuthError = error.message?.includes('JWT') ||
                     error.message?.includes('token') ||
                     error.code === 'PGRST301' ||
                     error.code === '401' ||
                     error.code === '403'
                 if (isAuthError) {
-                    console.warn('Auth error fetching profile, clearing stale session')
-                    setUser(null)
-                    setProfile(null)
-                    clearProfileCache()
-                    Object.keys(localStorage).forEach(key => {
-                        if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
-                            localStorage.removeItem(key)
-                        }
-                    })
+                    console.warn('Auth error fetching profile, clearing session')
+                    clearAllAuthState()
                     return
                 }
 
@@ -273,30 +287,27 @@ export function AuthProvider({ children }) {
                         .insert([newProfile])
 
                     if (insertError) {
-                        console.error("Failed to auto-create profile:", insertError)
+                        console.error('Failed to auto-create profile:', insertError)
                     } else {
                         console.log('Profile auto-created successfully')
                         setProfile(newProfile)
+                        setCachedProfile(userId, newProfile)
                     }
                 }
-                // setLoading(false) is handled in finally block
                 return
             }
             
             if (data) {
                 console.log('Profile loaded:', data.role)
                 setProfile(data)
-                // Cache the profile for faster refresh
                 setCachedProfile(userId, data)
             }
         } catch (error) {
             console.error('Error in fetchProfile:', error)
         } finally {
+            clearTimeout(fetchTimeout)
             fetchingRef.current = false
-            // Only set loading false if we didn't already have cached data
-            if (!hasCachedProfile) {
-                setLoading(false)
-            }
+            setLoading(false)
         }
     }
 
@@ -320,71 +331,42 @@ export function AuthProvider({ children }) {
     const signIn = async (email, password) => {
         if (!supabase) return { data: null, error: { message: 'Supabase not configured' } }
 
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email,
-            password
-        })
-        return { data, error }
+        // Reset stale state before fresh login attempt
+        fetchingRef.current = false
+        setProfile(null)
+        clearProfileCache()
+
+        try {
+            const { data, error } = await Promise.race([
+                supabase.auth.signInWithPassword({ email, password }),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Login timeout')), 10000)
+                )
+            ])
+            return { data, error }
+        } catch (err) {
+            return { data: null, error: { message: err.message === 'Login timeout' ? 'การเข้าสู่ระบบใช้เวลานานเกินไป กรุณาลองใหม่' : err.message } }
+        }
     }
 
     const signOut = async () => {
-        // Force clear local state immediately to ensure UI updates
-        setUser(null)
-        setProfile(null)
-        
-        // Clear profile cache
-        clearProfileCache()
-
-        // Manually clear Supabase tokens from localStorage to prevent auto-login on refresh
-        try {
-            Object.keys(localStorage).forEach(key => {
-                if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
-                    localStorage.removeItem(key)
-                }
-            })
-
-            // Also clear any other Supabase related storage
-            Object.keys(localStorage).forEach(key => {
-                if (key.startsWith('supabase.auth.')) {
-                    localStorage.removeItem(key)
-                }
-            })
-        } catch (storageError) {
-            console.log('Error clearing localStorage:', storageError)
-        }
+        // Clear ALL local state immediately
+        clearAllAuthState()
+        setLoading(false)
 
         if (!supabase) return { error: null }
 
         try {
-            // Use scope: 'local' to only sign out from this browser/tab
-            // This prevents errors when session is already expired on server
-            // Add timeout to prevent hanging on stale connections
             const signOutPromise = supabase.auth.signOut({ scope: 'local' })
             const timeoutPromise = new Promise((resolve) => 
                 setTimeout(() => resolve({ error: { message: 'SignOut timeout' } }), 3000)
             )
-            
-            const { error } = await Promise.race([signOutPromise, timeoutPromise])
-            
-            // Ignore session_not_found, timeout, or similar errors - user is already logged out
-            if (error && (
-                error.message?.includes('session') || 
-                error.message?.includes('timeout') ||
-                error.message?.includes('network') ||
-                error.status === 401 || 
-                error.status === 403
-            )) {
-                console.log('Session already expired or timeout, clearing local state')
-                return { error: null }
-            }
-            
-            return { error }
+            await Promise.race([signOutPromise, timeoutPromise])
         } catch (error) {
-            // If any error occurs during signOut, still consider it successful
-            // since we've already cleared local state
             console.log('SignOut error (ignoring):', error?.message || error)
-            return { error: null }
         }
+        // Always succeed - local state is already cleared
+        return { error: null }
     }
 
     const value = {

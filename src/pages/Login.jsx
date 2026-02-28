@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { FiMail, FiLock, FiUser, FiEye, FiEyeOff, FiGift } from 'react-icons/fi'
@@ -13,12 +13,33 @@ export default function Login() {
     const { signIn, user, profile, loading: authLoading, isDealer, isSuperAdmin } = useAuth()
     const navigate = useNavigate()
 
+    const loadingTimerRef = useRef(null)
+
     // Reset local loading state if authLoading finishes
     useEffect(() => {
         if (!authLoading) {
             setLoading(false)
         }
     }, [authLoading])
+
+    // Safety: spinner can never be stuck for more than 12 seconds
+    useEffect(() => {
+        if (loading) {
+            loadingTimerRef.current = setTimeout(() => {
+                console.warn('Login safety timeout: forcing loading=false')
+                setLoading(false)
+                setError('การเข้าสู่ระบบใช้เวลานาน กรุณาลองใหม่อีกครั้ง')
+            }, 12000)
+        } else {
+            if (loadingTimerRef.current) {
+                clearTimeout(loadingTimerRef.current)
+                loadingTimerRef.current = null
+            }
+        }
+        return () => {
+            if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current)
+        }
+    }, [loading])
 
     // If user is already logged in and profile is loaded, redirect based on role
     if (user && profile && !authLoading) {
