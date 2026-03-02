@@ -968,6 +968,27 @@ export default function RoundAccordionItem({
             if (typeLimit === undefined && isSet4Digit) {
                 typeLimit = inlineTypeLimits['4_set'] ?? inlineTypeLimits['4_top']
             }
+            // Fallback: map alias bet_types to their limit-bearing equivalents
+            if (typeLimit === undefined) {
+                const BET_TYPE_LIMIT_ALIASES = {
+                    '2_spread': '2_center',
+                    '2_have': '2_run',
+                    '2_back': '2_bottom',
+                    'front_top_1': 'pak_top',
+                    'middle_top_1': 'pak_top',
+                    'back_top_1': 'pak_top',
+                    'front_bottom_1': 'pak_bottom',
+                    'back_bottom_1': 'pak_bottom',
+                    '3_front': '3_top',
+                    '3_back': '3_top',
+                    '3_bottom': '3_top',
+                    '3_straight': '3_top',
+                    '4_top': '4_set',
+                    '4_tod': '4_set'
+                }
+                const aliasType = BET_TYPE_LIMIT_ALIASES[item.bet_type]
+                if (aliasType) typeLimit = inlineTypeLimits[aliasType]
+            }
 
             const numberLimit = inlineNumberLimits.find(nl => {
                 const nlNormalized = normalizeNumber(nl.numbers, nl.bet_type)
@@ -1002,7 +1023,13 @@ export default function RoundAccordionItem({
                 }
             }
         })
-        return excessItems.sort((a, b) => b.excess - a.excess)
+        return excessItems.sort((a, b) => {
+            // Sort by number of digits (ascending), then by number value (ascending)
+            const aLen = (a.numbers || '').length
+            const bLen = (b.numbers || '').length
+            if (aLen !== bLen) return aLen - bLen
+            return (a.numbers || '').localeCompare(b.numbers || '', undefined, { numeric: true })
+        })
     }
 
     const excessItems = calculateExcessItems()
@@ -2433,19 +2460,30 @@ export default function RoundAccordionItem({
 
                             <div className="inline-tabs">
                                 <button className={`inline-tab ${inlineTab === 'total' ? 'active' : ''}`} onClick={() => setInlineTab('total')}>
-                                    ยอดรวม <span className="tab-count">{inlineSubmissions.length}</span>
+                                    ยอดรวม <span className="tab-count">{(() => {
+                                        // Group by normalizedNumbers+bet_type to count unique numbers
+                                        const grouped = {}
+                                        inlineSubmissions.forEach(s => {
+                                            const normalized = normalizeNumber(s.numbers, s.bet_type)
+                                            const key = `${normalized}|${s.bet_type}`
+                                            grouped[key] = true
+                                        })
+                                        return Object.keys(grouped).length
+                                    })()}</span>
                                 </button>
                                 <button className={`inline-tab ${inlineTab === 'remaining' ? 'active' : ''}`} onClick={() => setInlineTab('remaining')}>
                                     ยอดที่เหลือ <span className="tab-count">{(() => {
-                                        // Calculate remaining items (submissions - transfers) grouped by numbers+bet_type
+                                        // Calculate remaining items (submissions - transfers) grouped by normalizedNumbers+bet_type
                                         const submissionsByKey = {}
                                         inlineSubmissions.forEach(s => {
-                                            const key = `${s.numbers}|${s.bet_type}`
+                                            const normalized = normalizeNumber(s.numbers, s.bet_type)
+                                            const key = `${normalized}|${s.bet_type}`
                                             if (!submissionsByKey[key]) submissionsByKey[key] = 0
                                             submissionsByKey[key] += s.amount || 0
                                         })
                                         inlineTransfers.forEach(t => {
-                                            const key = `${t.numbers}|${t.bet_type}`
+                                            const normalized = normalizeNumber(t.numbers, t.bet_type)
+                                            const key = `${normalized}|${t.bet_type}`
                                             if (submissionsByKey[key]) submissionsByKey[key] -= t.amount || 0
                                         })
                                         // Count items with remaining amount > 0
