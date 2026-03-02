@@ -1385,12 +1385,6 @@ export default function RoundAccordionItem({
                             amountOnly = amountMatch[0]
                         }
                     }
-                } else if (sub.display_amount) {
-                    // Use display_amount but extract only numeric part
-                    const match = sub.display_amount.toString().match(/^[\d*]+/)
-                    if (match) {
-                        amountOnly = match[0]
-                    }
                 }
                 
                 text += `${numberOnly}=${amountOnly}\n`
@@ -1811,28 +1805,17 @@ export default function RoundAccordionItem({
         // Output regular types
         Object.entries(regularTypes).forEach(([typeName, typeData]) => {
             text += `${typeName}\n`
-            // Group by numbers - use display_amount but extract only numeric part
+            // Group by numbers and sum actual amounts
             const grouped = {}
             typeData.items.forEach(item => {
                 const key = item.numbers
                 if (!grouped[key]) {
-                    grouped[key] = { amount: 0, display_amount: null }
+                    grouped[key] = { amount: 0 }
                 }
                 grouped[key].amount += item.amount || 0
-                // Keep first display_amount for this number
-                if (!grouped[key].display_amount && item.display_amount) {
-                    // Extract only numeric part (e.g., "20*20" from "20*20 เต็งโต๊ด=40")
-                    const match = item.display_amount.toString().match(/^[\d*]+/)
-                    grouped[key].display_amount = match ? match[0] : null
-                }
             })
             Object.entries(grouped).forEach(([numbers, data]) => {
-                // Use extracted display_amount if available, otherwise use amount
-                if (data.display_amount) {
-                    text += `${numbers}=${data.display_amount}\n`
-                } else {
-                    text += `${numbers}=${data.amount}\n`
-                }
+                text += `${numbers}=${data.amount}\n`
             })
             text += `-----------------\n`
         })
