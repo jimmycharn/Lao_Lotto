@@ -115,6 +115,8 @@ export default function Dealer() {
     const [roundsTab, setRoundsTab] = useState('open') // 'open' | 'closed' | 'history'
     const [roundHistory, setRoundHistory] = useState([])
     const [historyLoading, setHistoryLoading] = useState(false)
+    const [expandedHistoryId, setExpandedHistoryId] = useState(null)
+    const [historyUserDetails, setHistoryUserDetails] = useState({})
     const [upstreamDealers, setUpstreamDealers] = useState([])
     const [loadingUpstream, setLoadingUpstream] = useState(false)
     const [downstreamDealers, setDownstreamDealers] = useState([]) // Dealers who send bets TO us
@@ -572,6 +574,60 @@ export default function Dealer() {
             console.error('Error fetching round history:', error)
         } finally {
             setHistoryLoading(false)
+        }
+    }
+
+    // Fetch user details for a history round (accordion expand)
+    async function fetchHistoryUserDetails(historyItem) {
+        const roundId = historyItem.round_id
+        if (!roundId || historyUserDetails[roundId]) return // Already loaded
+        
+        try {
+            const { data: userHistories, error } = await supabase
+                .from('user_round_history')
+                .select('*')
+                .eq('round_id', roundId)
+                .eq('dealer_id', user.id)
+
+            if (error) {
+                console.error('Error fetching user history details:', error)
+                return
+            }
+
+            // Fetch user profiles for display names
+            const userIds = userHistories?.map(uh => uh.user_id) || []
+            let profilesMap = {}
+            if (userIds.length > 0) {
+                const { data: profiles } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, email')
+                    .in('id', userIds)
+
+                profiles?.forEach(p => {
+                    profilesMap[p.id] = p
+                })
+            }
+
+            // Merge user names into history data
+            const enriched = (userHistories || []).map(uh => ({
+                ...uh,
+                full_name: profilesMap[uh.user_id]?.full_name || profilesMap[uh.user_id]?.email || 'ไม่ทราบชื่อ'
+            }))
+
+            setHistoryUserDetails(prev => ({ ...prev, [roundId]: enriched }))
+        } catch (err) {
+            console.error('Error:', err)
+        }
+    }
+
+    // Toggle history accordion
+    function toggleHistoryAccordion(historyItem) {
+        const id = historyItem.id
+        if (expandedHistoryId === id) {
+            setExpandedHistoryId(null)
+        } else {
+            setExpandedHistoryId(id)
+            fetchHistoryUserDetails(historyItem)
         }
     }
 
@@ -1584,6 +1640,7 @@ export default function Dealer() {
                         dealer_id: user.id,
                         round_id: roundId,
                         lottery_type: roundData.lottery_type,
+                        lottery_name: roundData.lottery_name || LOTTERY_TYPES[roundData.lottery_type],
                         round_date: roundData.draw_date || roundData.open_time?.split('T')[0],
                         open_time: roundData.open_time,
                         close_time: roundData.close_time,
@@ -1624,7 +1681,10 @@ export default function Dealer() {
                     dealer_id: user.id,
                     round_id: roundId,
                     lottery_type: roundData.lottery_type,
+                    lottery_name: roundData.lottery_name || LOTTERY_TYPES[roundData.lottery_type],
                     round_date: roundData.draw_date || roundData.open_time?.split('T')[0],
+                    open_time: roundData.open_time,
+                    close_time: roundData.close_time,
                     total_entries: data.entries,
                     total_amount: data.amount,
                     total_commission: data.commission,
@@ -2213,16 +2273,31 @@ export default function Dealer() {
                                         </div>
                                     ) : (
                                         <div className="history-list">
-                                            {roundHistory.map(history => (
-                                                <div key={history.id} className={`round-accordion-item ${history.lottery_type}`}>
-                                                    <div className="round-accordion-header card" style={{ cursor: 'default' }}>
+                                            {roundHistory.map(history => {
+                                                const isExpanded = expandedHistoryId === history.id
+                                                const userDetails = historyUserDetails[history.round_id] || []
+                                                return (
+                                                <div key={history.id} className={`round-accordion-item ${history.lottery_type} ${isExpanded ? 'expanded' : ''}`}>
+                                                    <div 
+                                                        className="round-accordion-header card" 
+                                                        style={{ cursor: 'pointer' }}
+                                                        onClick={() => toggleHistoryAccordion(history)}
+                                                    >
                                                         <div className="open-round-layout">
-                                                            {/* Row 1: Logo, Name */}
-                                                            <div className="open-round-header-row">
-                                                                <span className={`lottery-badge ${history.lottery_type}`}>
-                                                                    {LOTTERY_TYPES[history.lottery_type] || history.lottery_type}
-                                                                </span>
-                                                                <span className="round-name">{history.lottery_name || LOTTERY_TYPES[history.lottery_type]}</span>
+                                                            {/* Row 1: Logo, Name, Chevron */}
+                                                            <div className="open-round-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                    <span className={`lottery-badge ${history.lottery_type}`}>
+                                                                        {LOTTERY_TYPES[history.lottery_type] || history.lottery_type}
+                                                                    </span>
+                                                                    <span className="round-name">{history.lottery_name || LOTTERY_TYPES[history.lottery_type]}</span>
+                                                                </div>
+                                                                <FiChevronDown style={{ 
+                                                                    transition: 'transform 0.2s', 
+                                                                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                                                                    fontSize: '1.2rem',
+                                                                    color: 'var(--color-text-muted)'
+                                                                }} />
                                                             </div>
                                                             
                                                             {/* Row 2: Date/Time */}
@@ -2257,8 +2332,68 @@ export default function Dealer() {
                                                             </div>
                                                         </div>
                                                     </div>
+                                                    
+                                                    {/* Accordion Body - User Details */}
+                                                    {isExpanded && (
+                                                        <div className="round-accordion-body" style={{
+                                                            padding: '0.75rem 1rem',
+                                                            background: 'var(--color-bg-secondary, #fafafa)',
+                                                            borderTop: '1px solid var(--color-border, #eee)'
+                                                        }}>
+                                                            <h4 style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.5rem', fontWeight: 600 }}>
+                                                                <FiUsers style={{ marginRight: '0.3rem', verticalAlign: 'middle' }} />
+                                                                สรุปยอดสมาชิก ({userDetails.length} คน)
+                                                            </h4>
+                                                            {userDetails.length === 0 ? (
+                                                                <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                                                                    <div className="spinner" style={{ width: '20px', height: '20px', margin: '0 auto 0.5rem' }}></div>
+                                                                    กำลังโหลด...
+                                                                </div>
+                                                            ) : (
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                                                    {userDetails.map((ud, idx) => (
+                                                                        <div key={ud.id || idx} className="card" style={{ 
+                                                                            padding: '0.75rem', 
+                                                                            background: 'var(--color-bg, #fff)',
+                                                                            border: '1px solid var(--color-border, #eee)'
+                                                                        }}>
+                                                                            <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                                                <FiUser style={{ color: 'var(--color-primary)' }} />
+                                                                                {ud.full_name}
+                                                                            </div>
+                                                                            <div className="open-round-stats">
+                                                                                <div className="stats-block incoming">
+                                                                                    <div className="stats-block-items">
+                                                                                        <div className="stat-item">
+                                                                                            <span className="stat-label">ยอดส่ง</span>
+                                                                                            <span className="stat-value">฿{(ud.total_amount || 0).toLocaleString()}</span>
+                                                                                        </div>
+                                                                                        <div className="stat-item">
+                                                                                            <span className="stat-label">ค่าคอม</span>
+                                                                                            <span className="stat-value success">+฿{(ud.total_commission || 0).toLocaleString()}</span>
+                                                                                        </div>
+                                                                                        <div className="stat-item">
+                                                                                            <span className="stat-label">ถูกรางวัล</span>
+                                                                                            <span className="stat-value success">+฿{(ud.total_winnings || 0).toLocaleString()}</span>
+                                                                                        </div>
+                                                                                        <div className="stat-item">
+                                                                                            <span className="stat-label">กำไร/ขาดทุน</span>
+                                                                                            <span className={`stat-value ${(ud.profit_loss || 0) >= 0 ? 'success' : 'danger'}`}>
+                                                                                                {(ud.profit_loss || 0) >= 0 ? '+' : ''}฿{(ud.profit_loss || 0).toLocaleString()}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            ))}
+                                                )
+                                            })}
                                         </div>
                                     )
                                 ) : (
