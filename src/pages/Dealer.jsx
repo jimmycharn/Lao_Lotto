@@ -2335,29 +2335,21 @@ export default function Dealer() {
                                                     
                                                     {/* Accordion Body - User Details */}
                                                     {isExpanded && (
-                                                        <div className="round-accordion-body" style={{
-                                                            padding: '0.75rem 1rem',
-                                                            background: 'var(--color-bg-secondary, #fafafa)',
-                                                            borderTop: '1px solid var(--color-border, #eee)'
-                                                        }}>
-                                                            <h4 style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.5rem', fontWeight: 600 }}>
+                                                        <div className="history-accordion-body">
+                                                            <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 600 }}>
                                                                 <FiUsers style={{ marginRight: '0.3rem', verticalAlign: 'middle' }} />
                                                                 สรุปยอดสมาชิก ({userDetails.length} คน)
                                                             </h4>
                                                             {userDetails.length === 0 ? (
-                                                                <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                                                                <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                                                                     <div className="spinner" style={{ width: '20px', height: '20px', margin: '0 auto 0.5rem' }}></div>
                                                                     กำลังโหลด...
                                                                 </div>
                                                             ) : (
                                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                                                     {userDetails.map((ud, idx) => (
-                                                                        <div key={ud.id || idx} className="card" style={{ 
-                                                                            padding: '0.75rem', 
-                                                                            background: 'var(--color-bg, #fff)',
-                                                                            border: '1px solid var(--color-border, #eee)'
-                                                                        }}>
-                                                                            <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                                        <div key={ud.id || idx} className="history-user-card">
+                                                                            <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-primary)' }}>
                                                                                 <FiUser style={{ color: 'var(--color-primary)' }} />
                                                                                 {ud.full_name}
                                                                             </div>

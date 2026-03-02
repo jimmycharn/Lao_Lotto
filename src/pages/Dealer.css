@@ -4650,3 +4650,33 @@ html.theme-light .icon-btn-sm:hover {
     padding-right: calc(1.25rem + 2px);
     padding-bottom: calc(1.25rem + 2px);
 }
+
+/* History Accordion Body */
+.history-accordion-body {
+    padding: 0.75rem 1rem;
+    background: var(--bg-card-hover);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* History User Card */
+.history-user-card {
+    padding: 0.75rem;
+    border-radius: 8px;
+    background: var(--bg-card);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Light theme overrides */
+:root.theme-light .history-accordion-body,
+[data-theme="light"] .history-accordion-body {
+    background: #f0f2f5;
+    border-top: 1px solid #e0e0e0;
+}
+
+:root.theme-light .history-user-card,
+[data-theme="light"] .history-user-card {
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
