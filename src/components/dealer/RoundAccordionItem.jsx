@@ -51,6 +51,8 @@ export default function RoundAccordionItem({
     user,
     allMembers = [], // All members of the dealer
     onCreditUpdate, // Callback to refresh dealer credit after bet submission
+    pendingCreditRefresh, // Counter to trigger re-fetch of pending credits
+    roundPendingData, // Direct pending credit data from parent (avoids stale DB fetch)
     isExpanded: isExpandedProp, // Controlled expanded state from parent
     onToggle // Callback to toggle expanded state
 }) {
@@ -140,7 +142,6 @@ export default function RoundAccordionItem({
 
     // Fetch summary data on mount for all rounds (announced, open, or closed)
     useEffect(() => {
-        console.log('Mount useEffect:', { isAnnounced, isOpen, isClosed, roundId: round.id, status: round.status, is_result_announced: round.is_result_announced })
         // Always fetch summary data to show stats in header
         fetchSummaryData()
     }, [round.id])
@@ -2169,6 +2170,29 @@ export default function RoundAccordionItem({
                                             </div>
                                         </div>
                                     )}
+                                </div>
+                            )}
+                            
+                            {/* Per-round pending credit display — uses prop directly from parent */}
+                            {roundPendingData && roundPendingData.pending_fee > 0 && (
+                                <div className="round-pending-credit" style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '0.35rem 0.6rem',
+                                    borderRadius: '6px',
+                                    background: 'rgba(245, 158, 11, 0.1)',
+                                    border: '1px solid rgba(245, 158, 11, 0.3)',
+                                    fontSize: '0.75rem',
+                                    marginTop: '0.25rem'
+                                }}>
+                                    <span style={{ color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                        <FiAlertCircle style={{ color: '#f59e0b', fontSize: '0.85rem' }} />
+                                        เครดิตรอตัดงวดนี้
+                                    </span>
+                                    <span style={{ color: '#f59e0b', fontWeight: 700 }}>
+                                        ฿{roundPendingData.pending_fee.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                    </span>
                                 </div>
                             )}
                         </div>

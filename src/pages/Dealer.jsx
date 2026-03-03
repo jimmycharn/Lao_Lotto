@@ -138,6 +138,8 @@ export default function Dealer() {
     const [dealerCredit, setDealerCredit] = useState(null)
     const [creditLoading, setCreditLoading] = useState(false)
     const [creditSummary, setCreditSummary] = useState(null)
+    const [pendingCreditRefresh, setPendingCreditRefresh] = useState(0)
+    const [roundPendingMap, setRoundPendingMap] = useState({}) // { roundId: { pending_fee, ... } }
 
     // Topup Modal states
     const [showTopupModal, setShowTopupModal] = useState(false)
@@ -388,6 +390,7 @@ export default function Dealer() {
                             name,
                             description,
                             billing_model,
+                            percentage_rate,
                             monthly_price,
                             yearly_price,
                             max_users,
@@ -644,44 +647,47 @@ export default function Dealer() {
                 .maybeSingle()
 
             if (creditData) {
-                const pendingDeduction = creditData.pending_deduction || 0
-                const availableCredit = creditData.balance - pendingDeduction
+                // Show balance immediately but don't show stale pending_deduction
+                // It will be updated accurately after Step 2 recalculates
                 setDealerCredit({
                     balance: creditData.balance,
-                    pendingDeduction: pendingDeduction,
-                    availableCredit: availableCredit,
+                    pendingDeduction: 0,
+                    availableCredit: creditData.balance,
                     is_blocked: creditData.is_blocked,
                     blocked_reason: creditData.blocked_reason,
                     warning_threshold: creditData.warning_threshold,
-                    has_sufficient_credit: availableCredit > 0 && !creditData.is_blocked,
-                    is_low_credit: availableCredit <= creditData.warning_threshold
+                    has_sufficient_credit: creditData.balance > 0 && !creditData.is_blocked,
+                    is_low_credit: creditData.balance <= creditData.warning_threshold
                 })
             }
             setCreditLoading(false)
 
-            // Step 2: Recalculate pending_deduction in background (slow)
-            await updatePendingDeduction(user.id)
-
-            // Step 3: Re-fetch with updated pending_deduction
-            const { data: updatedData } = await supabase
-                .from('dealer_credits')
-                .select('*')
-                .eq('dealer_id', user.id)
-                .maybeSingle()
-
-            if (updatedData) {
-                const pendingDeduction = updatedData.pending_deduction || 0
-                const availableCredit = updatedData.balance - pendingDeduction
-                setDealerCredit({
-                    balance: updatedData.balance,
-                    pendingDeduction: pendingDeduction,
-                    availableCredit: availableCredit,
-                    is_blocked: updatedData.is_blocked,
-                    blocked_reason: updatedData.blocked_reason,
-                    warning_threshold: updatedData.warning_threshold,
-                    has_sufficient_credit: availableCredit > 0 && !updatedData.is_blocked,
-                    is_low_credit: availableCredit <= updatedData.warning_threshold
+            // Step 2: Recalculate pending_deduction (returns accurate totalPending + per-round breakdown)
+            const { totalPending, roundBreakdown } = await updatePendingDeduction(user.id)
+            
+            // Build round pending map from breakdown (keyed by round_id)
+            const newMap = {}
+            if (roundBreakdown) {
+                roundBreakdown.forEach(rb => {
+                    newMap[rb.round_id] = { pending_fee: rb.pending_fee, percentage_rate: rb.percentage_rate }
                 })
+            }
+            setRoundPendingMap(newMap)
+            
+            // Signal RoundAccordionItems to re-fetch their pending credits
+            setPendingCreditRefresh(prev => prev + 1)
+
+            // Step 3: Use the returned totalPending directly (no race condition)
+            if (creditData) {
+                const balance = creditData.balance
+                const availableCredit = balance - totalPending
+                setDealerCredit(prev => ({
+                    ...prev,
+                    pendingDeduction: totalPending,
+                    availableCredit: availableCredit,
+                    has_sufficient_credit: availableCredit > 0 && !prev?.is_blocked,
+                    is_low_credit: availableCredit <= (prev?.warning_threshold || 1000)
+                }))
             }
 
             // Also fetch credit summary with subscription info
@@ -2181,6 +2187,53 @@ export default function Dealer() {
                     </div>
                 )}
 
+                {/* Subscription Expiry Warning */}
+                {subscription?.expires_at && (() => {
+                    const now = new Date()
+                    const expiry = new Date(subscription.expires_at)
+                    const daysLeft = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24))
+                    const isExpired = daysLeft <= 0
+                    const isExpiringSoon = daysLeft > 0 && daysLeft <= 7
+                    const isFixedPrice = (subscription.subscription_packages?.billing_model || subscription.billing_model) !== 'percentage'
+
+                    if (!isExpired && !isExpiringSoon) return null
+                    if (!isFixedPrice) return null
+
+                    // Check if dealer has enough credit for renewal
+                    const renewalPrice = subscription.billing_cycle === 'yearly'
+                        ? parseFloat(subscription.subscription_packages?.yearly_price || 0)
+                        : parseFloat(subscription.subscription_packages?.monthly_price || 0)
+                    const availableCredit = (dealerCredit?.availableCredit || 0)
+                    const canRenew = availableCredit >= renewalPrice && renewalPrice > 0
+
+                    return (
+                        <div style={{
+                            marginBottom: '1rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            padding: '1rem',
+                            background: isExpired ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                            border: `1px solid ${isExpired ? 'var(--color-danger)' : '#f59e0b'}`,
+                            borderRadius: '8px'
+                        }}>
+                            <FiAlertTriangle style={{ fontSize: '1.5rem', color: isExpired ? 'var(--color-danger)' : '#f59e0b', flexShrink: 0 }} />
+                            <div style={{ flex: 1 }}>
+                                <strong style={{ color: isExpired ? 'var(--color-danger)' : '#f59e0b' }}>
+                                    {isExpired ? 'แพ็คเกจหมดอายุแล้ว!' : `แพ็คเกจจะหมดอายุใน ${daysLeft} วัน`}
+                                </strong>
+                                <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                                    {renewalPrice > 0 ? (
+                                        canRenew
+                                            ? `ระบบจะต่ออายุอัตโนมัติ (฿${renewalPrice.toLocaleString()}/${subscription.billing_cycle === 'yearly' ? 'ปี' : 'เดือน'})`
+                                            : `เครดิตไม่เพียงพอสำหรับต่ออายุ (ต้องการ ฿${renewalPrice.toLocaleString()} คงเหลือ ฿${availableCredit.toLocaleString()}) กรุณาเติมเครดิต`
+                                    ) : 'กรุณาติดต่อผู้ดูแลระบบ'}
+                                </p>
+                            </div>
+                        </div>
+                    )
+                })()}
+
                 {/* Tabs */}
                 <div className="dealer-tabs">
                     <button
@@ -2420,6 +2473,8 @@ export default function Dealer() {
                                                     user={user}
                                                     allMembers={members}
                                                     onCreditUpdate={fetchDealerCredit}
+                                                    pendingCreditRefresh={pendingCreditRefresh}
+                                                    roundPendingData={roundPendingMap[round.id]}
                                                     isExpanded={expandedRoundId === round.id}
                                                     onToggle={() => setExpandedRoundId(expandedRoundId === round.id ? null : round.id)}
                                                 />

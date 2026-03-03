@@ -89,6 +89,11 @@ export default function DealerWriteSubmissionWrapper({
             throw new Error('ไม่มีข้อมูลที่จะบันทึก')
         }
 
+        // Safety check: verify user hasn't changed password (prevent dealer input for independent users)
+        if (targetUser?.password_changed) {
+            throw new Error('ไม่สามารถเขียนโพยแทนสมาชิกที่เปลี่ยนรหัสผ่านแล้วได้')
+        }
+
         // Calculate total amount
         const totalAmount = entries.reduce((sum, e) => sum + (e.amount || 0), 0)
 
@@ -152,6 +157,11 @@ export default function DealerWriteSubmissionWrapper({
     async function handleEditSubmit({ entries, billNote, originalBillId, originalItems }) {
         if (!entries || entries.length === 0) {
             throw new Error('ไม่มีข้อมูลที่จะบันทึก')
+        }
+
+        // Safety check: verify user hasn't changed password
+        if (targetUser?.password_changed) {
+            throw new Error('ไม่สามารถแก้ไขโพยของสมาชิกที่เปลี่ยนรหัสผ่านแล้วได้')
         }
 
         // Soft delete old entries

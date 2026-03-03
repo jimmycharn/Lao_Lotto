@@ -1247,6 +1247,45 @@ export default function SuperAdmin() {
             console.log('Package billing_model:', selectedPackage.billing_model)
             console.log('Package percentage_rate:', selectedPackage.percentage_rate)
 
+            // Determine if this is a fixed-price package (monthly/yearly/per_machine)
+            const isFixedPrice = selectedPackage.billing_model === 'monthly' || 
+                                 selectedPackage.billing_model === 'yearly' ||
+                                 selectedPackage.billing_model === 'per_machine'
+            const isPercentage = selectedPackage.billing_model === 'percentage'
+
+            // Calculate price to deduct for fixed-price packages
+            let priceToDeduct = 0
+            if (isFixedPrice && !assignPackageForm.is_trial) {
+                if (assignPackageForm.billing_cycle === 'yearly') {
+                    priceToDeduct = parseFloat(selectedPackage.yearly_price || 0)
+                } else {
+                    priceToDeduct = parseFloat(selectedPackage.monthly_price || 0)
+                }
+            }
+
+            // For fixed-price packages: check dealer credit sufficiency before assigning
+            if (priceToDeduct > 0) {
+                const { data: dealerCredit } = await supabase
+                    .from('dealer_credits')
+                    .select('balance, pending_deduction, is_blocked')
+                    .eq('dealer_id', selectedDealer.id)
+                    .maybeSingle()
+
+                const currentBalance = dealerCredit?.balance || 0
+                const pendingDeduction = dealerCredit?.pending_deduction || 0
+                const availableCredit = currentBalance - pendingDeduction
+
+                if (dealerCredit?.is_blocked) {
+                    toast.error('เจ้ามือถูกระงับการใช้งานเครดิต ไม่สามารถสมัครแพ็คเกจได้')
+                    return
+                }
+
+                if (availableCredit < priceToDeduct) {
+                    toast.error(`เครดิตไม่เพียงพอ! ต้องการ ฿${priceToDeduct.toLocaleString()} แต่เครดิตคงเหลือ ฿${availableCredit.toLocaleString()}`)
+                    return
+                }
+            }
+
             // Calculate dates
             const startDate = new Date()
             let endDate = new Date()
@@ -1257,6 +1296,17 @@ export default function SuperAdmin() {
                 endDate.setFullYear(endDate.getFullYear() + 1)
             } else {
                 endDate.setMonth(endDate.getMonth() + 1)
+            }
+
+            // Auto-set expires_at for fixed-price packages based on billing cycle
+            let expiresAt = null
+            if (assignPackageForm.has_expiry && assignPackageForm.expires_at) {
+                expiresAt = new Date(assignPackageForm.expires_at + 'T23:59:59').toISOString()
+            } else if (isFixedPrice && !assignPackageForm.is_trial) {
+                // Auto-set expiry based on billing cycle
+                expiresAt = endDate.toISOString()
+            } else if (assignPackageForm.is_trial) {
+                expiresAt = endDate.toISOString()
             }
 
             const subscriptionData = {
@@ -1270,9 +1320,7 @@ export default function SuperAdmin() {
                 is_trial: assignPackageForm.is_trial,
                 trial_days: assignPackageForm.is_trial ? assignPackageForm.trial_days : null,
                 package_snapshot: selectedPackage,
-                expires_at: assignPackageForm.has_expiry && assignPackageForm.expires_at 
-                    ? new Date(assignPackageForm.expires_at + 'T23:59:59').toISOString() 
-                    : null
+                expires_at: expiresAt
             }
 
             // Check if dealer already has a subscription
@@ -1307,6 +1355,49 @@ export default function SuperAdmin() {
 
             if (subError) throw subError
 
+            // For fixed-price packages: deduct credit immediately
+            if (priceToDeduct > 0) {
+                // Get current balance
+                const { data: creditData } = await supabase
+                    .from('dealer_credits')
+                    .select('balance')
+                    .eq('dealer_id', selectedDealer.id)
+                    .single()
+
+                const currentBalance = creditData?.balance || 0
+                const newBalance = currentBalance - priceToDeduct
+
+                // Deduct from dealer credits
+                await supabase
+                    .from('dealer_credits')
+                    .update({
+                        balance: newBalance,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('dealer_id', selectedDealer.id)
+
+                // Record credit transaction
+                await supabase
+                    .from('credit_transactions')
+                    .insert({
+                        dealer_id: selectedDealer.id,
+                        transaction_type: 'deduction',
+                        amount: -priceToDeduct,
+                        balance_after: newBalance,
+                        reference_type: 'subscription',
+                        description: `ค่าแพ็คเกจ "${selectedPackage.name}" (${assignPackageForm.billing_cycle === 'yearly' ? 'รายปี' : 'รายเดือน'})`,
+                        metadata: {
+                            package_id: selectedPackage.id,
+                            package_name: selectedPackage.name,
+                            billing_cycle: assignPackageForm.billing_cycle,
+                            price: priceToDeduct,
+                            expires_at: expiresAt
+                        }
+                    })
+
+                toast.info(`ตัดเครดิต ฿${priceToDeduct.toLocaleString()} สำหรับแพ็คเกจ "${selectedPackage.name}"`)
+            }
+
             // Update dealer profile
             await supabase
                 .from('profiles')
@@ -1322,9 +1413,9 @@ export default function SuperAdmin() {
                 .insert({
                     dealer_id: selectedDealer.id,
                     action: 'package_assigned',
-                    description: `กำหนดแพ็คเกจ "${selectedPackage.name}" ${assignPackageForm.is_trial ? '(ทดลองใช้)' : ''}`,
+                    description: `กำหนดแพ็คเกจ "${selectedPackage.name}" ${assignPackageForm.is_trial ? '(ทดลองใช้)' : ''}${priceToDeduct > 0 ? ` - ตัดเครดิต ฿${priceToDeduct.toLocaleString()}` : ''}`,
                     performed_by: user.id,
-                    metadata: { package_id: selectedPackage.id, package_name: selectedPackage.name }
+                    metadata: { package_id: selectedPackage.id, package_name: selectedPackage.name, amount_deducted: priceToDeduct }
                 })
 
             setShowAssignPackageModal(false)

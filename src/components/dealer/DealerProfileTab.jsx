@@ -295,16 +295,40 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                                             subscription.status === 'trial' ? 'ทดลองใช้' :
                                                 subscription.status === 'expired' ? 'หมดอายุ' : subscription.status}
                                     </span>
-                                    {subscription.expires_at ? (
-                                        <span className="sub-expiry">
-                                            หมดอายุ: {formatDate(subscription.expires_at)}
-                                        </span>
-                                    ) : (
-                                        <span className="sub-expiry" style={{ color: 'var(--color-success)' }}>
-                                            ไม่มีวันหมดอายุ
-                                        </span>
-                                    )}
+                                    <span className="sub-type" style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                        {subscription.subscription_packages.billing_model === 'percentage' 
+                                            ? `หักยอดขาย ${subscription.subscription_packages.percentage_rate}%`
+                                            : subscription.billing_cycle === 'yearly' ? 'รายปี' : 'รายเดือน'}
+                                    </span>
                                 </div>
+                                {subscription.expires_at ? (() => {
+                                    const now = new Date()
+                                    const expiry = new Date(subscription.expires_at)
+                                    const daysLeft = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24))
+                                    const isExpired = daysLeft <= 0
+                                    const isExpiringSoon = daysLeft > 0 && daysLeft <= 7
+                                    return (
+                                        <div className="sub-expiry-detail" style={{
+                                            marginTop: '0.25rem',
+                                            fontSize: '0.8rem',
+                                            padding: '0.25rem 0.5rem',
+                                            borderRadius: '4px',
+                                            background: isExpired ? 'rgba(239, 68, 68, 0.1)' : isExpiringSoon ? 'rgba(245, 158, 11, 0.1)' : 'transparent',
+                                            color: isExpired ? '#ef4444' : isExpiringSoon ? '#f59e0b' : 'var(--color-text-muted)'
+                                        }}>
+                                            {isExpired 
+                                                ? `หมดอายุแล้ว (${formatDate(subscription.expires_at)})`
+                                                : isExpiringSoon
+                                                    ? `หมดอายุใน ${daysLeft} วัน (${formatDate(subscription.expires_at)})`
+                                                    : `หมดอายุ: ${formatDate(subscription.expires_at)} (เหลือ ${daysLeft} วัน)`
+                                            }
+                                        </div>
+                                    )
+                                })() : (
+                                    <div style={{ marginTop: '0.25rem', fontSize: '0.8rem', color: 'var(--color-success)' }}>
+                                        ไม่มีวันหมดอายุ
+                                    </div>
+                                )}
                             </>
                         ) : (
                             <>
