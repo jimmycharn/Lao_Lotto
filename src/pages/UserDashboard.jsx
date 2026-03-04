@@ -61,6 +61,7 @@ export default function UserDashboard() {
     const { user, profile, loading: authLoading } = useAuth()
     const { toast } = useToast()
     const { setActiveDashboard } = useTheme()
+    const hasFetchedRef = useRef(false)
 
     // Set active dashboard for theme on mount
     useEffect(() => {
@@ -239,12 +240,15 @@ export default function UserDashboard() {
     // Fetch active dealer memberships
     useEffect(() => {
         if (user) {
+            // Prevent duplicate fetches on token refresh / app switch
+            if (hasFetchedRef.current) return
+            hasFetchedRef.current = true
             fetchDealerMemberships()
         } else if (!authLoading) {
             // Auth finished but no user - stop loading
             setDealersLoading(false)
         }
-    }, [user, authLoading])
+    }, [user?.id, authLoading])
 
     async function fetchDealerMemberships() {
         setDealersLoading(true)

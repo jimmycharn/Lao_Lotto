@@ -212,7 +212,9 @@ export function AuthProvider({ children }) {
                     clearAllAuthState()
                     setLoading(false)
                 } else if (event === 'TOKEN_REFRESHED') {
-                    setUser(session?.user ?? null)
+                    // Don't setUser here — user identity hasn't changed, only the token.
+                    // Calling setUser creates a new reference, triggering useEffect re-runs
+                    // across all pages, which causes draft data loss on mobile app switching.
                 }
             }
         )

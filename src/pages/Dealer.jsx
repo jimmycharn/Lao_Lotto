@@ -84,6 +84,7 @@ export default function Dealer() {
     const { toast } = useToast()
     const { setActiveDashboard, getTheme } = useTheme()
     const [searchParams] = useSearchParams()
+    const hasFetchedRef = useRef(false)
 
     // Set active dashboard for theme on mount
     useEffect(() => {
@@ -227,6 +228,9 @@ export default function Dealer() {
         if (!profile?.id) return
 
         if (user?.id && (isDealer || isSuperAdmin)) {
+            // Prevent duplicate fetches on token refresh / app switch
+            if (hasFetchedRef.current) return
+            hasFetchedRef.current = true
             fetchDealerCredit() // Load credit first (parallel with fetchData)
             fetchData()
         } else {
