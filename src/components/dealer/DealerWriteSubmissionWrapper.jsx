@@ -185,7 +185,9 @@ export default function DealerWriteSubmissionWrapper({
         }
 
         const billId = originalBillId || generateUUID()
-        const baseTimestamp = new Date()
+        // Use original created_at so editing doesn't extend the delete/edit deadline
+        const originalCreatedAt = originalItems?.[0]?.created_at
+        const baseTimestamp = originalCreatedAt ? new Date(originalCreatedAt) : new Date()
 
         // Transform entries to submissions format
         const inserts = entries.map((entry, index) => {

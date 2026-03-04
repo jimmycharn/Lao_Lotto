@@ -1776,7 +1776,8 @@ export default function UserDashboard() {
                 // Create new submissions based on the updated values
                 const entryId = editingSubmission.entry_id
                 const billId = editingSubmission.bill_id
-                const timestamp = new Date().toISOString()
+                // Use original created_at so editing doesn't extend the delete/edit deadline
+                const timestamp = editingSubmission.created_at || new Date().toISOString()
                 const amountParts = editForm.amount.split('*').map(p => parseFloat(p) || 0)
                 const newSubmissions = []
 
@@ -1954,6 +1955,8 @@ export default function UserDashboard() {
         setEditSaving(true)
         try {
             const timestamp = new Date().toISOString()
+            // Use original created_at so editing doesn't extend the delete/edit deadline
+            const originalTimestamp = editingSubmission.created_at || timestamp
             // Generate UUID with fallback for non-secure contexts (HTTP)
             const entryId = (typeof crypto !== 'undefined' && crypto.randomUUID)
                 ? crypto.randomUUID()
@@ -2001,7 +2004,7 @@ export default function UserDashboard() {
                         display_numbers: newNumbers,
                         display_amount: amount,
                         display_bet_type: 'เต็ง-โต๊ด',
-                        created_at: timestamp
+                        created_at: originalTimestamp
                     })
                 }
                 if (todAmt > 0) {
@@ -2020,7 +2023,7 @@ export default function UserDashboard() {
                         display_numbers: newNumbers,
                         display_amount: amount,
                         display_bet_type: 'เต็ง-โต๊ด',
-                        created_at: timestamp
+                        created_at: originalTimestamp
                     })
                 }
             } else if (betType === '3_straight_perm') {
@@ -2044,7 +2047,7 @@ export default function UserDashboard() {
                         display_numbers: newNumbers,
                         display_amount: amount,
                         display_bet_type: displayLabel,
-                        created_at: timestamp
+                        created_at: originalTimestamp
                     })
                 }
                 if (permAmt > 0 && perms.length > 0) {
@@ -2063,7 +2066,7 @@ export default function UserDashboard() {
                             display_numbers: newNumbers,
                             display_amount: amount,
                             display_bet_type: displayLabel,
-                            created_at: timestamp
+                            created_at: originalTimestamp
                         })
                     })
                 }
@@ -2089,7 +2092,7 @@ export default function UserDashboard() {
                         display_numbers: newNumbers,
                         display_amount: amount,
                         display_bet_type: displayLabel,
-                        created_at: timestamp
+                        created_at: originalTimestamp
                     })
                 }
                 if (amt2 > 0 && reversed !== newNumbers) {
@@ -2106,7 +2109,7 @@ export default function UserDashboard() {
                         display_numbers: newNumbers,
                         display_amount: amount,
                         display_bet_type: displayLabel,
-                        created_at: timestamp
+                        created_at: originalTimestamp
                     })
                 }
             } else if (betType === '4_set' && isLaoOrHanoi) {
@@ -2129,7 +2132,7 @@ export default function UserDashboard() {
                     display_numbers: newNumbers,
                     display_amount: `${totalAmount} บาท (${setCount} ชุด)`,
                     display_bet_type: BET_TYPES['4_set']?.label || '4 ตัวชุด',
-                    created_at: timestamp
+                    created_at: originalTimestamp
                 })
             } else if (betType === '3_perm_from_3') {
                 // คูณชุด: all permutations of 3-digit number
@@ -2151,7 +2154,7 @@ export default function UserDashboard() {
                         display_numbers: newNumbers,
                         display_amount: amount,
                         display_bet_type: `คูณชุด ${perms.length}`,
-                        created_at: timestamp
+                        created_at: originalTimestamp
                     })
                 })
             } else if (betType === '3_perm_from_4' || betType === '3_perm_from_5') {
@@ -2176,7 +2179,7 @@ export default function UserDashboard() {
                         display_numbers: newNumbers,
                         display_amount: amount,
                         display_bet_type: `3 X ${perms.length}`,
-                        created_at: timestamp
+                        created_at: originalTimestamp
                     })
                 })
             } else if (betType === '4_float' || betType === '5_float') {
@@ -2198,7 +2201,7 @@ export default function UserDashboard() {
                     display_numbers: newNumbers,  // แสดงผลตามที่ซื้อ
                     display_amount: singleAmt.toString(),
                     display_bet_type: BET_TYPES[betType]?.label || betType,
-                    created_at: timestamp
+                    created_at: originalTimestamp
                 })
             } else {
                 // Simple single submission (2_top, 3_top, run_top, etc.)
@@ -2218,7 +2221,7 @@ export default function UserDashboard() {
                     display_numbers: newNumbers,
                     display_amount: singleAmt.toString(),
                     display_bet_type: BET_TYPES[betType]?.label || betType,
-                    created_at: timestamp
+                    created_at: originalTimestamp
                 })
             }
 
