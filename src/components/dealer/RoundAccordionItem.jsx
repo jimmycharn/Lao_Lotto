@@ -1979,12 +1979,15 @@ export default function RoundAccordionItem({
                 {/* New Layout for Closed/Announced Rounds */}
                 {(isClosed || isAnnounced) && !isOpen ? (
                     <div className="closed-round-layout">
-                        {/* Top Row: Logo, Name, Status, Actions, Chevron */}
+                        {/* Top Row: Logo, Name, Status + Delete at top-right */}
                         <div className="closed-round-top">
                             <div className="closed-round-header-row">
-                                <span className={`lottery-badge ${round.lottery_type}`}>{LOTTERY_TYPES[round.lottery_type]}</span>
-                                <h3 className="lottery-title">{round.lottery_name || LOTTERY_TYPES[round.lottery_type]}</h3>
-                                {getStatusBadge(round)}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flex: 1, minWidth: 0 }}>
+                                    <span className={`lottery-badge ${round.lottery_type}`}>{LOTTERY_TYPES[round.lottery_type]}</span>
+                                    <h3 className="lottery-title">{round.lottery_name || LOTTERY_TYPES[round.lottery_type]}</h3>
+                                    {getStatusBadge(round)}
+                                </div>
+                                <button className="icon-btn-sm danger" onClick={(e) => { e.stopPropagation(); onDeleteRound(); }} title="ลบ" style={{ marginLeft: 'auto', flexShrink: 0 }}><FiTrash2 /></button>
                             </div>
                             <div className="closed-round-meta">
                                 <FiCalendar /> {formatDate(round.open_time)} {formatTime(round.open_time)} - {formatDate(round.close_time)} {formatTime(round.close_time)}
@@ -1993,7 +1996,6 @@ export default function RoundAccordionItem({
                                 <div className="action-buttons-left">
                                     <button className="icon-btn-sm" onClick={(e) => { e.stopPropagation(); onEditRound(); }} title="แก้ไข"><FiEdit2 /></button>
                                     <button className="icon-btn-sm warning" onClick={(e) => { e.stopPropagation(); onShowNumberLimits(); }} title="เลขอั้น"><FiAlertTriangle /></button>
-                                    <button className="icon-btn-sm danger" onClick={(e) => { e.stopPropagation(); onDeleteRound(); }} title="ลบ"><FiTrash2 /></button>
                                     <button className="icon-btn-sm" onClick={(e) => { e.stopPropagation(); fetchSummaryData(); }} title="รีเฟรช"><FiRefreshCw /></button>
                                 </div>
                                 <svg className={`chevron ${isExpanded ? 'rotated' : ''}`} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -2088,11 +2090,14 @@ export default function RoundAccordionItem({
                     /* Original Layout for Open Rounds */
                     <>
                         <div className="open-round-layout">
-                            {/* Row 1: Logo, Name, Status */}
+                            {/* Row 1: Logo, Name, Status + Delete button at top-right */}
                             <div className="open-round-header-row">
-                                <span className={`lottery-badge ${round.lottery_type}`}>{LOTTERY_TYPES[round.lottery_type]}</span>
-                                <span className="round-name">{round.lottery_name || LOTTERY_TYPES[round.lottery_type]}</span>
-                                {getStatusBadge(round)}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flex: 1, minWidth: 0 }}>
+                                    <span className={`lottery-badge ${round.lottery_type}`}>{LOTTERY_TYPES[round.lottery_type]}</span>
+                                    <span className="round-name">{round.lottery_name || LOTTERY_TYPES[round.lottery_type]}</span>
+                                    {getStatusBadge(round)}
+                                </div>
+                                <button className="icon-btn danger" onClick={(e) => { e.stopPropagation(); onDeleteRound(); }} title="ลบ" style={{ marginLeft: 'auto', flexShrink: 0 }}><FiTrash2 /></button>
                             </div>
                             
                             {/* Row 2: Date/Time */}
@@ -2106,7 +2111,6 @@ export default function RoundAccordionItem({
                                     <button className="icon-btn" onClick={(e) => { e.stopPropagation(); onEditRound(); }} title="แก้ไขงวด"><FiEdit2 /></button>
                                     {round.status === 'open' && <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onCloseRound(); }} title="ปิดงวด"><FiLock /></button>}
                                     <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onShowNumberLimits(); }} title="ตั้งค่าเลขอั้น"><FiAlertTriangle /></button>
-                                    <button className="icon-btn danger" onClick={(e) => { e.stopPropagation(); onDeleteRound(); }} title="ลบ"><FiTrash2 /></button>
                                     <button className="icon-btn" onClick={(e) => { e.stopPropagation(); fetchSummaryData(); }} title="รีเฟรช"><FiRefreshCw /></button>
                                 </div>
                                 <svg className={`chevron ${isExpanded ? 'rotated' : ''}`} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

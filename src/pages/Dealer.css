@@ -1415,11 +1415,17 @@
 
 .user-summary-card.winner {
     border-left-color: var(--color-success);
+    border-top: 1px solid var(--color-success);
+    border-bottom: 1px solid var(--color-success);
+    border-right: 1px solid var(--color-success);
     background: linear-gradient(90deg, rgba(0, 210, 106, 0.1) 0%, var(--color-surface-light) 100%);
 }
 
 .user-summary-card.loser {
     border-left-color: var(--color-danger);
+    border-top: 1px solid var(--color-danger);
+    border-bottom: 1px solid var(--color-danger);
+    border-right: 1px solid var(--color-danger);
 }
 
 .user-summary-card.total-card {
@@ -4188,7 +4194,6 @@ html.theme-light .expand-icon {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    flex-wrap: wrap;
 }
 
 .closed-round-header-row .lottery-title {
@@ -4567,7 +4572,6 @@ html.theme-light .icon-btn-sm:hover {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    flex-wrap: wrap;
 }
 
 .open-round-header-row .round-name {
