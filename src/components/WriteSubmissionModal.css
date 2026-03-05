@@ -195,10 +195,14 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     align-items: center;
     flex-shrink: 0;
+    overflow: hidden;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .write-modal-note-row .note-input {
     flex: 1;
+    min-width: 0;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
@@ -1214,9 +1218,22 @@
     }
     
     .save-btn-inline {
-        padding: 0.5rem 1rem;
-        font-size: 0.85rem;
-        min-height: 38px;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.8rem;
+        min-height: 36px;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .write-modal-note-row {
+        gap: 0.35rem;
+        padding: 0.4rem;
+    }
+
+    .paste-btn-inline {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
     }
     
     .number-pad-4col {
