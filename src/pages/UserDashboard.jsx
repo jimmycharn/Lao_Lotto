@@ -613,7 +613,7 @@ export default function UserDashboard() {
 
     // Check if can delete (must satisfy BOTH conditions)
     // 1. Within delete_after_submit_minutes after submission (if > 0)
-    // 2. Before delete_before_close_minutes before round closes (if > 0)
+    // 2. Before delete_before_minutes before round closes (if > 0)
     function canDelete(submission) {
         if (!selectedRound) return false
         if (selectedRound.status !== 'open') return false
@@ -625,7 +625,7 @@ export default function UserDashboard() {
         console.log('Now:', now.toISOString())
         console.log('Submission created_at:', submission?.created_at)
         console.log('Round delete_after_submit_minutes:', selectedRound.delete_after_submit_minutes)
-        console.log('Round delete_before_close_minutes:', selectedRound.delete_before_close_minutes)
+        console.log('Round delete_before_minutes:', selectedRound.delete_before_minutes)
         console.log('Round close_time:', selectedRound.close_time)
         
         // Condition 1: Check delete_after_submit_minutes (time limit after submission)
@@ -643,9 +643,9 @@ export default function UserDashboard() {
             }
         }
         
-        // Condition 2: Check delete_before_close_minutes (must delete before round closes)
-        // If delete_before_close_minutes > 0, must delete at least X minutes before close time
-        const deleteBeforeMinutes = selectedRound.delete_before_close_minutes || 0
+        // Condition 2: Check delete_before_minutes (must delete before round closes)
+        // If delete_before_minutes > 0, must delete at least X minutes before close time
+        const deleteBeforeMinutes = selectedRound.delete_before_minutes || 0
         if (deleteBeforeMinutes > 0) {
             const closeTime = new Date(selectedRound.close_time)
             const deleteBeforeDeadline = new Date(closeTime.getTime() - (deleteBeforeMinutes * 60 * 1000))
@@ -1552,6 +1552,10 @@ export default function UserDashboard() {
 
     // Delete submission
     async function handleDelete(submission) {
+        if (!canDelete(submission)) {
+            toast.warning('ไม่สามารถลบได้ เนื่องจากเลยเวลาที่กำหนด')
+            return
+        }
         if (!confirm('ต้องการลบรายการนี้?')) return
 
         try {
@@ -1586,7 +1590,11 @@ export default function UserDashboard() {
     }
 
     // Delete entire bill (all submissions with the same bill_id)
-    async function handleDeleteBill(billId) {
+    async function handleDeleteBill(billId, billItems) {
+        if (!canDelete(billItems?.[0])) {
+            toast.warning('ไม่สามารถลบได้ เนื่องจากเลยเวลาที่กำหนด')
+            return
+        }
         if (!confirm(`ต้องการลบโพยใบที่ ${billId} ทั้งหมด?`)) return
 
         try {
@@ -1636,6 +1644,10 @@ export default function UserDashboard() {
 
     // Edit bill - open WriteSubmissionModal with existing data
     function handleEditBill(billId, billItems) {
+        if (!canDelete(billItems?.[0])) {
+            toast.warning('ไม่สามารถแก้ไขได้ เนื่องจากเลยเวลาที่กำหนด')
+            return
+        }
         // Sort items by created_at to maintain original order
         const sortedItems = [...billItems].sort((a, b) =>
             new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
@@ -3069,7 +3081,7 @@ export default function UserDashboard() {
                                                                                                         className="bill-action-btn delete"
                                                                                                         onClick={(e) => {
                                                                                                             e.stopPropagation()
-                                                                                                            handleDeleteBill(billId)
+                                                                                                            handleDeleteBill(billId, billItems)
                                                                                                         }}
                                                                                                         title="ลบโพยทั้งหมด"
                                                                                                         style={{
