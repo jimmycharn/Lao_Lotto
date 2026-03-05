@@ -41,6 +41,7 @@ export default function WriteSubmissionModal({
     const [drafts, setDrafts] = useState([])
     const [submitting, setSubmitting] = useState(false)
     const [billNote, setBillNote] = useState('')
+    const [isPaid, setIsPaid] = useState(false)
     const [userSettings, setUserSettings] = useState(null)
     const [isReversed, setIsReversed] = useState(false) // Toggle for 2-digit reversed bets
     const [showPasteModal, setShowPasteModal] = useState(false)
@@ -621,6 +622,7 @@ export default function WriteSubmissionModal({
                 bill_id: billId,
                 bill_note: billNote || null,
                 is_deleted: false,
+                is_paid: isPaid || false,
                 // Track who submitted: dealer submitted on behalf of user
                 submitted_by: dealerId,
                 submitted_by_type: 'dealer'
@@ -644,6 +646,7 @@ export default function WriteSubmissionModal({
             }
             setDrafts([])
             setBillNote('')
+            setIsPaid(false)
             if (onSuccess) onSuccess()
             onClose()
         } catch (error) {
@@ -905,8 +908,8 @@ export default function WriteSubmissionModal({
                         งวด: {round.lottery_name || LOTTERY_TYPES[round.lottery_type]} ({round.round_date})
                     </p>
 
-                    {/* Bill Note Input */}
-                    <div className="bill-note-section" style={{ marginBottom: '1rem' }}>
+                    {/* Bill Note Input + Paid checkbox */}
+                    <div className="bill-note-section" style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                         <input
                             type="text"
                             className="form-input"
@@ -919,7 +922,34 @@ export default function WriteSubmissionModal({
                                     e.target.blur()
                                 }
                             }}
+                            style={{ flex: 1 }}
                         />
+                        <label
+                            title="ชำระเงินแล้ว"
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                width: '36px',
+                                height: '36px',
+                                borderRadius: 'var(--radius-md)',
+                                border: `2px solid ${isPaid ? 'var(--color-success)' : 'var(--color-border)'}`,
+                                background: isPaid ? 'rgba(0, 210, 106, 0.15)' : 'transparent',
+                                transition: 'all 0.2s ease',
+                                flexShrink: 0
+                            }}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={isPaid}
+                                onChange={e => setIsPaid(e.target.checked)}
+                                style={{ display: 'none' }}
+                            />
+                            <span style={{ fontSize: '1.1rem', color: isPaid ? 'var(--color-success)' : 'var(--color-text-muted)', fontWeight: '600' }}>
+                                ฿
+                            </span>
+                        </label>
                     </div>
 
                     {/* Input Section */}

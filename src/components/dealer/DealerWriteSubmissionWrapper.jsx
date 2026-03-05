@@ -84,7 +84,7 @@ export default function DealerWriteSubmissionWrapper({
     }
 
     // Handle submission from WriteSubmissionModal
-    async function handleWriteSubmit({ entries, billNote }) {
+    async function handleWriteSubmit({ entries, billNote, isPaid }) {
         if (!entries || entries.length === 0) {
             throw new Error('ไม่มีข้อมูลที่จะบันทึก')
         }
@@ -131,6 +131,7 @@ export default function DealerWriteSubmissionWrapper({
                 commission_rate: commissionRate,
                 commission_amount: commissionAmount,
                 is_deleted: false,
+                is_paid: isPaid || false,
                 submitted_by: dealerId,
                 submitted_by_type: 'dealer',
                 created_at: entryTimestamp
@@ -154,7 +155,7 @@ export default function DealerWriteSubmissionWrapper({
     }
 
     // Handle edit submission from WriteSubmissionModal
-    async function handleEditSubmit({ entries, billNote, originalBillId, originalItems }) {
+    async function handleEditSubmit({ entries, billNote, isPaid, originalBillId, originalItems }) {
         if (!entries || entries.length === 0) {
             throw new Error('ไม่มีข้อมูลที่จะบันทึก')
         }
@@ -213,6 +214,7 @@ export default function DealerWriteSubmissionWrapper({
                 commission_rate: commissionRate,
                 commission_amount: commissionAmount,
                 is_deleted: false,
+                is_paid: isPaid || false,
                 submitted_by: dealerId,
                 submitted_by_type: 'dealer',
                 created_at: entryTimestamp

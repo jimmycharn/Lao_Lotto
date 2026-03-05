@@ -406,6 +406,7 @@ export default function WriteSubmissionModal({
     const [currentInput, setCurrentInput] = useState('')
     const [editingIndex, setEditingIndex] = useState(null)
     const [billNote, setBillNote] = useState('')
+    const [isPaid, setIsPaid] = useState(false)
     const [error, setError] = useState('')
     const [success, setSuccess] = useState(false)
     const [submitting, setSubmitting] = useState(false)
@@ -1097,10 +1098,12 @@ export default function WriteSubmissionModal({
                 // Load existing data for editing
                 setLines(editingData.originalLines || [])
                 setBillNote(editingData.billNote || '')
+                setIsPaid(editingData.isPaid || false)
             } else {
                 // New submission
                 setLines([])
                 setBillNote('')
+                setIsPaid(false)
             }
             setCurrentInput('')
             setEditingIndex(null)
@@ -1888,6 +1891,7 @@ export default function WriteSubmissionModal({
                 await onEditSubmit({
                     entries: allEntries,
                     billNote,
+                    isPaid,
                     rawLines: lines,
                     originalBillId: editingData.billId,
                     originalItems: editingData.originalItems
@@ -1899,6 +1903,7 @@ export default function WriteSubmissionModal({
                 await onSubmit({
                     entries: allEntries,
                     billNote,
+                    isPaid,
                     rawLines: lines
                 })
                 // New mode - clear and stay open for next bill
@@ -1906,6 +1911,7 @@ export default function WriteSubmissionModal({
                 setCurrentInput('')
                 setEditingIndex(null)
                 setBillNote('')
+                setIsPaid(false)
                 setError('')
                 setIsLocked(false)
                 setLockedAmount('')
@@ -2311,7 +2317,7 @@ export default function WriteSubmissionModal({
                     </button>
                 </div>
 
-                {/* Bill Note + Save Button Row */}
+                {/* Bill Note Row */}
                 <div className="write-modal-note-row">
                     <button 
                         className="paste-btn-inline"
@@ -2323,7 +2329,7 @@ export default function WriteSubmissionModal({
                     <input
                         ref={noteInputRef}
                         type="text"
-                        placeholder="บันทึกช่วยจำ (ไม่บังคับ)"
+                        placeholder="บันทึกช่วยจำ"
                         value={billNote}
                         onChange={e => setBillNote(e.target.value)}
                         onKeyDown={e => {
@@ -2335,7 +2341,34 @@ export default function WriteSubmissionModal({
                         }}
                         className="note-input"
                     />
-                    {!success && (
+                    <label
+                        title="ชำระเงินแล้ว"
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            width: '36px',
+                            height: '36px',
+                            borderRadius: 'var(--radius-md)',
+                            border: `2px solid ${isPaid ? 'var(--color-success)' : 'var(--color-border)'}`,
+                            background: isPaid ? 'rgba(0, 210, 106, 0.15)' : 'transparent',
+                            transition: 'all 0.2s ease',
+                            flexShrink: 0
+                        }}
+                    >
+                        <input
+                            type="checkbox"
+                            checked={isPaid}
+                            onChange={e => setIsPaid(e.target.checked)}
+                            style={{ display: 'none' }}
+                        />
+                        <span style={{ fontSize: '1.1rem', color: isPaid ? 'var(--color-success)' : 'var(--color-text-muted)', fontWeight: '600' }}>
+                            ฿
+                        </span>
+                    </label>
+                    {/* Save button for non-dealer mode (user dashboard) */}
+                    {!isDealerMode && !success && (
                         <button 
                             className="save-btn-inline"
                             onClick={handleSubmit}
@@ -2346,7 +2379,7 @@ export default function WriteSubmissionModal({
                     )}
                 </div>
 
-                {/* Member Selector for Dealer Mode */}
+                {/* Member Selector + Save Button for Dealer Mode */}
                 {isDealerMode && allMembers.length > 0 && onMemberChange && (
                     <div className="write-modal-member-row">
                         <label>สมาชิก:</label>
@@ -2366,6 +2399,27 @@ export default function WriteSubmissionModal({
                                 </option>
                             ))}
                         </select>
+                        {!success && (
+                            <button 
+                                className="save-btn-inline"
+                                onClick={handleSubmit}
+                                disabled={lines.length === 0 || submitting}
+                            >
+                                {submitting ? '...' : 'บันทึก'}
+                            </button>
+                        )}
+                    </div>
+                )}
+                {/* Save button for dealer mode without members */}
+                {isDealerMode && !(allMembers.length > 0 && onMemberChange) && !success && (
+                    <div className="write-modal-member-row" style={{ justifyContent: 'flex-end' }}>
+                        <button 
+                            className="save-btn-inline"
+                            onClick={handleSubmit}
+                            disabled={lines.length === 0 || submitting}
+                        >
+                            {submitting ? '...' : 'บันทึก'}
+                        </button>
                     </div>
                 )}
 

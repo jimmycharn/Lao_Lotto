@@ -1251,7 +1251,7 @@ export default function UserDashboard() {
     }
 
     // Handle write submission from WriteSubmissionModal
-    async function handleWriteSubmit({ entries, billNote: note, rawLines }) {
+    async function handleWriteSubmit({ entries, billNote: note, isPaid, rawLines }) {
         if (!selectedRound || entries.length === 0) {
             throw new Error('ไม่มีข้อมูลที่จะบันทึก')
         }
@@ -1296,6 +1296,7 @@ export default function UserDashboard() {
                 display_bet_type: null, // ไม่ใช้ display_bet_type แยก เพราะ display_numbers มีข้อมูลครบแล้ว
                 commission_rate: commInfo.rate,
                 commission_amount: commissionAmount,
+                is_paid: isPaid || false,
                 created_at: entryTimestamp
             }
         })
@@ -1329,7 +1330,7 @@ export default function UserDashboard() {
     }
 
     // Handle edit bill submission from WriteSubmissionModal
-    async function handleEditBillSubmit({ entries, billNote: note, rawLines, originalBillId, originalItems }) {
+    async function handleEditBillSubmit({ entries, billNote: note, isPaid, rawLines, originalBillId, originalItems }) {
         if (!selectedRound || entries.length === 0) {
             throw new Error('ไม่มีข้อมูลที่จะบันทึก')
         }
@@ -1368,6 +1369,7 @@ export default function UserDashboard() {
                 display_bet_type: null, // ไม่ใช้ display_bet_type แยก เพราะ display_numbers มีข้อมูลครบแล้ว
                 commission_rate: commInfo.rate,
                 commission_amount: commissionAmount,
+                is_paid: isPaid || false,
                 created_at: entryTimestamp
             }
         })
@@ -1611,6 +1613,27 @@ export default function UserDashboard() {
         }
     }
 
+    // Toggle paid status for entire bill
+    async function handleToggleBillPaid(billId, billItems) {
+        try {
+            const currentPaid = billItems[0]?.is_paid || false
+            const newPaid = !currentPaid
+            const { error } = await supabase
+                .from('submissions')
+                .update({ is_paid: newPaid })
+                .eq('bill_id', billId)
+                .eq('round_id', selectedRound.id)
+
+            if (error) throw error
+
+            toast.success(newPaid ? 'ทำเครื่องหมายชำระเงินแล้ว' : 'ยกเลิกเครื่องหมายชำระเงิน')
+            fetchSubmissions()
+        } catch (error) {
+            console.error('Error toggling paid status:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+
     // Edit bill - open WriteSubmissionModal with existing data
     function handleEditBill(billId, billItems) {
         // Sort items by created_at to maintain original order
@@ -1654,6 +1677,7 @@ export default function UserDashboard() {
         setEditingBillData({
             billId,
             billNote: sortedItems[0]?.bill_note || '',
+            isPaid: sortedItems[0]?.is_paid || false,
             originalLines,
             originalItems: sortedItems
         })
@@ -1804,6 +1828,7 @@ export default function UserDashboard() {
                             display_numbers: newNumbers,
                             display_amount: editForm.amount,
                             display_bet_type: displayLabel,
+                            is_paid: editingSubmission.is_paid || false,
                             created_at: timestamp
                         })
                     }
@@ -1823,6 +1848,7 @@ export default function UserDashboard() {
                             display_numbers: newNumbers,
                             display_amount: editForm.amount,
                             display_bet_type: displayLabel,
+                            is_paid: editingSubmission.is_paid || false,
                             created_at: timestamp
                         })
                     }
@@ -1848,6 +1874,7 @@ export default function UserDashboard() {
                             display_numbers: newNumbers,
                             display_amount: editForm.amount,
                             display_bet_type: displayLabel,
+                            is_paid: editingSubmission.is_paid || false,
                             created_at: timestamp
                         })
                     }
@@ -1867,6 +1894,7 @@ export default function UserDashboard() {
                                 display_numbers: newNumbers,
                                 display_amount: editForm.amount,
                                 display_bet_type: displayLabel,
+                                is_paid: editingSubmission.is_paid || false,
                                 created_at: timestamp
                             })
                         })
@@ -2224,6 +2252,10 @@ export default function UserDashboard() {
                     created_at: originalTimestamp
                 })
             }
+
+            // Preserve is_paid from original submission on all new submissions
+            const originalIsPaid = editingSubmission.is_paid || false
+            newSubmissions.forEach(sub => { sub.is_paid = originalIsPaid })
 
             // Insert all new submissions
             if (newSubmissions.length > 0) {
@@ -2905,41 +2937,40 @@ export default function UserDashboard() {
                                                                                             <div
                                                                                                 className="bill-card-header"
                                                                                                 onClick={() => toggleBill(billId)}
+                                                                                                style={{ padding: '0.6rem 0.75rem', cursor: 'pointer' }}
                                                                                             >
-                                                                                                <div className="bill-header-left">
-                                                                                                    <div className="bill-header-info">
-                                                                                                        <span className="bill-name">
-                                                                                                            {billItems[0]?.bill_note || (billId === 'no-bill' ? '-' : billId)}
-                                                                                                        </span>
-                                                                                                        <span className="bill-meta">
-                                                                                                            {billDate} {billTime}
-                                                                                                        </span>
-                                                                                                    </div>
+                                                                                                {/* Line 1: [note] date time (N items) ฿✓ */}
+                                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
+                                                                                                    {billItems[0]?.bill_note && (
+                                                                                                        <span style={{ fontWeight: '600', color: 'var(--color-text)' }}>{billItems[0].bill_note}</span>
+                                                                                                    )}
+                                                                                                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
+                                                                                                        {billDate} {billTime}
+                                                                                                    </span>
+                                                                                                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
+                                                                                                        ({actualLineCount})
+                                                                                                    </span>
+                                                                                                    {billItems[0]?.is_paid && <span title="ชำระเงินแล้ว" style={{ color: 'var(--color-success)', fontSize: '0.85rem', fontWeight: '700' }}>฿✓</span>}
                                                                                                 </div>
-                                                                                                <div className="bill-header-right">
-                                                                                                    <div className="bill-header-commission" style={{ textAlign: 'right', marginRight: '1rem' }}>
-                                                                                                        <span style={{ color: 'var(--color-warning)', fontWeight: '600' }}>
-                                                                                                            {round.currency_symbol}{billCommission.toLocaleString(undefined, { maximumFractionDigits: 1 })}
-                                                                                                        </span>
-                                                                                                        <span className="bill-count" style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                                            ค่าคอม
-                                                                                                        </span>
-                                                                                                    </div>
-                                                                                                    <div className="bill-header-total">
-                                                                                                        <span className="bill-total-amount">
+                                                                                                {/* Line 2: amount, commission, copy */}
+                                                                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                                                                        <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>
                                                                                                             {round.currency_symbol}{billTotal.toLocaleString()}
                                                                                                         </span>
-                                                                                                        <span className="bill-count">
-                                                                                                            {actualLineCount} รายการ
+                                                                                                        <span style={{ fontSize: '0.8rem', color: 'var(--color-warning)' }}>
+                                                                                                            คอม {round.currency_symbol}{billCommission.toLocaleString(undefined, { maximumFractionDigits: 1 })}
                                                                                                         </span>
                                                                                                     </div>
-                                                                                                    <button
-                                                                                                        className="bill-copy-btn"
-                                                                                                        onClick={handleCopyBill}
-                                                                                                        title="คัดลอก"
-                                                                                                    >
-                                                                                                        <FiCopy />
-                                                                                                    </button>
+                                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                                                                                        <button
+                                                                                                            className="bill-copy-btn"
+                                                                                                            onClick={handleCopyBill}
+                                                                                                            title="คัดลอก"
+                                                                                                        >
+                                                                                                            <FiCopy />
+                                                                                                        </button>
+                                                                                                    </div>
                                                                                                 </div>
                                                                                             </div>
 
