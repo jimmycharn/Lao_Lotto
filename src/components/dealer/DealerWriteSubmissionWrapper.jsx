@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useToast } from '../../contexts/ToastContext'
 import { updatePendingDeduction, checkDealerCreditForBet } from '../../utils/creditCheck'
 import { generateUUID } from '../../constants/lotteryTypes'
+import { fetchNumberLimits, fetchCurrentTotals, checkBatchSubmissions, generateLimitWarnings } from '../../utils/numberLimits'
 import WriteSubmissionModal from '../WriteSubmissionModal'
 
 /**
@@ -103,6 +104,39 @@ export default function DealerWriteSubmissionWrapper({
             throw new Error(creditCheck.message)
         }
 
+        // Check number limits
+        const [numberLimits, currentTotals] = await Promise.all([
+            fetchNumberLimits(round.id),
+            fetchCurrentTotals(round.id)
+        ])
+
+        const limitLines = entries.map(e => ({
+            betType: e.betType || e.bet_type,
+            numbers: e.numbers,
+            amount: e.amount
+        }))
+        const limitResults = checkBatchSubmissions(numberLimits, currentTotals, limitLines)
+
+        // Block all blocked entries (เลขปิด — reject entire submission if any blocked number found)
+        const blockedEntries = limitResults.filter(r => r.status === 'blocked')
+        if (blockedEntries.length > 0) {
+            const blockedDetails = [...new Set(blockedEntries.map(r => {
+                const limitAmt = r.maxAllowed || 0
+                const currentAmt = r.currentTotal || 0
+                if (currentAmt >= limitAmt) {
+                    return `${r.numbers} (ปิดรับแล้ว)`
+                }
+                return `${r.numbers} (รับได้อีก ${Math.max(limitAmt - currentAmt, 0).toLocaleString()} จาก ${limitAmt.toLocaleString()})`
+            }))]
+            throw new Error(`🔴 เลขปิด: ${blockedDetails.join(', ')} — ไม่สามารถรับได้`)
+        }
+
+        // Show warnings for limited/overflow entries
+        const warnings = generateLimitWarnings(limitResults)
+        if (warnings && warnings.length > 0) {
+            warnings.forEach(w => toast.warning(w))
+        }
+
         const billId = generateUUID()
         const baseTimestamp = new Date()
 
@@ -116,6 +150,12 @@ export default function DealerWriteSubmissionWrapper({
             
             // Add milliseconds offset to preserve order (each entry gets +1ms)
             const entryTimestamp = new Date(baseTimestamp.getTime() + index).toISOString()
+
+            // Get limit check result for this entry
+            const lr = limitResults[index]
+            const isOverflow = lr && (lr.status === 'overflow' || (lr.status === 'blocked' && lr.remaining > 0))
+            const overflowAmount = lr ? lr.overflow : 0
+            const actualPayoutPercent = lr ? lr.payoutPercent : 100
 
             return {
                 entry_id: entry.entryId || entry.entry_id || generateUUID(),
@@ -134,7 +174,10 @@ export default function DealerWriteSubmissionWrapper({
                 is_paid: isPaid || false,
                 submitted_by: dealerId,
                 submitted_by_type: 'dealer',
-                created_at: entryTimestamp
+                created_at: entryTimestamp,
+                is_overflow: isOverflow,
+                overflow_amount: overflowAmount,
+                actual_payout_percent: actualPayoutPercent
             }
         })
 
@@ -185,6 +228,39 @@ export default function DealerWriteSubmissionWrapper({
             throw new Error(creditCheck.message)
         }
 
+        // Check number limits (after soft delete so totals are recalculated)
+        const [numberLimits, currentTotals] = await Promise.all([
+            fetchNumberLimits(round.id),
+            fetchCurrentTotals(round.id)
+        ])
+
+        const limitLines = entries.map(e => ({
+            betType: e.betType || e.bet_type,
+            numbers: e.numbers,
+            amount: e.amount
+        }))
+        const limitResults = checkBatchSubmissions(numberLimits, currentTotals, limitLines)
+
+        // Block all blocked entries (เลขปิด — reject entire submission if any blocked number found)
+        const blockedEntries = limitResults.filter(r => r.status === 'blocked')
+        if (blockedEntries.length > 0) {
+            const blockedDetails = [...new Set(blockedEntries.map(r => {
+                const limitAmt = r.maxAllowed || 0
+                const currentAmt = r.currentTotal || 0
+                if (currentAmt >= limitAmt) {
+                    return `${r.numbers} (ปิดรับแล้ว)`
+                }
+                return `${r.numbers} (รับได้อีก ${Math.max(limitAmt - currentAmt, 0).toLocaleString()} จาก ${limitAmt.toLocaleString()})`
+            }))]
+            throw new Error(`🔴 เลขปิด: ${blockedDetails.join(', ')} — ไม่สามารถรับได้`)
+        }
+
+        // Show warnings for limited/overflow entries
+        const warnings = generateLimitWarnings(limitResults)
+        if (warnings && warnings.length > 0) {
+            warnings.forEach(w => toast.warning(w))
+        }
+
         const billId = originalBillId || generateUUID()
         // Use original created_at so editing doesn't extend the delete/edit deadline
         const originalCreatedAt = originalItems?.[0]?.created_at
@@ -199,6 +275,12 @@ export default function DealerWriteSubmissionWrapper({
             
             // Add milliseconds offset to preserve order (each entry gets +1ms)
             const entryTimestamp = new Date(baseTimestamp.getTime() + index).toISOString()
+
+            // Get limit check result for this entry
+            const lr = limitResults[index]
+            const isOverflow = lr && (lr.status === 'overflow' || (lr.status === 'blocked' && lr.remaining > 0))
+            const overflowAmount = lr ? lr.overflow : 0
+            const actualPayoutPercent = lr ? lr.payoutPercent : 100
 
             return {
                 entry_id: entry.entryId || entry.entry_id || generateUUID(),
@@ -217,7 +299,10 @@ export default function DealerWriteSubmissionWrapper({
                 is_paid: isPaid || false,
                 submitted_by: dealerId,
                 submitted_by_type: 'dealer',
-                created_at: entryTimestamp
+                created_at: entryTimestamp,
+                is_overflow: isOverflow,
+                overflow_amount: overflowAmount,
+                actual_payout_percent: actualPayoutPercent
             }
         })
 

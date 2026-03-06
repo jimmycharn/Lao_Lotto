@@ -33,6 +33,7 @@ import {
     getDefaultLimitsForType,
     getLotteryTypeKey
 } from '../../constants/lotteryTypes'
+import { findMatchingLimit, getEffectivePayoutPercent } from '../../utils/numberLimits'
 import DealerWriteSubmissionWrapper from './DealerWriteSubmissionWrapper'
 
 export default function RoundAccordionItem({ 
@@ -992,14 +993,28 @@ export default function RoundAccordionItem({
                 if (aliasType) typeLimit = inlineTypeLimits[aliasType]
             }
 
-            const numberLimit = inlineNumberLimits.find(nl => {
+            // Enhanced number limit matching: support is_active, include_reversed, reversed_numbers
+            const activeNumberLimits = inlineNumberLimits.filter(nl => nl.is_active !== false)
+            // Try direct match first, then reversed match via findMatchingLimit
+            let numberLimit = activeNumberLimits.find(nl => {
                 const nlNormalized = normalizeNumber(nl.numbers, nl.bet_type)
                 const nlIsSet4 = nl.bet_type === '4_set' || nl.bet_type === '4_top'
-                // Match if same bet type, or both are 4-digit sets
                 return (nl.bet_type === item.bet_type || (isSet4Digit && nlIsSet4)) && nlNormalized === item.numbers
             })
+            // If no direct match, check reversed numbers
+            if (!numberLimit) {
+                numberLimit = activeNumberLimits.find(nl => {
+                    const nlIsSet4 = nl.bet_type === '4_set' || nl.bet_type === '4_top'
+                    if (!(nl.bet_type === item.bet_type || (isSet4Digit && nlIsSet4))) return false
+                    if (!nl.include_reversed || !Array.isArray(nl.reversed_numbers)) return false
+                    return nl.reversed_numbers.includes(item.numbers)
+                })
+            }
+
             const effectiveLimit = numberLimit?.max_amount ?? typeLimit
             const isSetBased = isSetBasedLottery && isSet4Digit
+            const limitType = numberLimit?.limit_type || 'limited'
+            const payoutPercent = numberLimit ? getEffectivePayoutPercent(numberLimit) : 100
 
             const transferredForThis = inlineTransfers.filter(t => {
                 const tIsSet4 = t.bet_type === '4_set' || t.bet_type === '4_top'
@@ -1015,12 +1030,12 @@ export default function RoundAccordionItem({
                 if (isSetBased) {
                     const effectiveExcess = item.setCount - effectiveLimit - transferredSets
                     if (effectiveExcess > 0) {
-                        excessItems.push({ ...item, limit: effectiveLimit, excess: effectiveExcess, transferredSets, isSetBased: true })
+                        excessItems.push({ ...item, limit: effectiveLimit, excess: effectiveExcess, transferredSets, isSetBased: true, limitType, payoutPercent, isNumberLimit: !!numberLimit })
                     }
                 } else {
                     const effectiveExcess = item.total - effectiveLimit - transferredForThis
                     if (effectiveExcess > 0) {
-                        excessItems.push({ ...item, limit: effectiveLimit, excess: effectiveExcess, transferredAmount: transferredForThis })
+                        excessItems.push({ ...item, limit: effectiveLimit, excess: effectiveExcess, transferredAmount: transferredForThis, limitType, payoutPercent, isNumberLimit: !!numberLimit })
                     }
                 }
             }
@@ -3885,7 +3900,7 @@ export default function RoundAccordionItem({
                                                                             <div>
                                                                                 <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>{BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}</span>
                                                                                 <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                    ยอด: {round.currency_symbol}{item.total.toLocaleString()}{item.isSetBased && ` (${item.setCount} ชุด)`} • อั้น: {item.isSetBased ? `${item.limit} ชุด` : `${round.currency_symbol}${item.limit.toLocaleString()}`}
+                                                                                    ยอด: {round.currency_symbol}{item.total.toLocaleString()}{item.isSetBased && ` (${item.setCount} ชุด)`} • {item.limitType === 'blocked' ? '🔴 ปิด' : 'อั้น'}: {item.isSetBased ? `${item.limit} ชุด` : `${round.currency_symbol}${item.limit.toLocaleString()}`}{item.isNumberLimit && item.payoutPercent < 100 ? ` • จ่าย ${item.payoutPercent}%` : ''}
                                                                                 </div>
                                                                             </div>
                                                                         </div>

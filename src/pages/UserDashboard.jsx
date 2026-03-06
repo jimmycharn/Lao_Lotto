@@ -4,6 +4,7 @@ import { useToast } from '../contexts/ToastContext'
 import { useTheme, DASHBOARDS } from '../contexts/ThemeContext'
 import { supabase } from '../lib/supabase'
 import { checkDealerCreditForBet, updatePendingDeduction } from '../utils/creditCheck'
+import { fetchNumberLimits, fetchCurrentTotals, checkBatchSubmissions, generateLimitWarnings } from '../utils/numberLimits'
 import { Html5Qrcode } from 'html5-qrcode'
 import { jsPDF } from 'jspdf'
 import { addThaiFont } from '../utils/thaiFontLoader'
@@ -1269,6 +1270,45 @@ export default function UserDashboard() {
             }
         }
 
+        // Check number limits
+        console.log('[NumberLimits] selectedRound.id:', selectedRound.id)
+        const [numberLimits, currentTotals] = await Promise.all([
+            fetchNumberLimits(selectedRound.id),
+            fetchCurrentTotals(selectedRound.id)
+        ])
+
+        console.log('[NumberLimits] Active limits:', numberLimits.length, numberLimits.map(nl => ({ bet_type: nl.bet_type, numbers: nl.numbers, max_amount: nl.max_amount, limit_type: nl.limit_type, is_active: nl.is_active })))
+        console.log('[NumberLimits] Current totals:', Object.fromEntries(currentTotals))
+
+        const limitLines = entries.map(e => ({
+            betType: e.betType,
+            numbers: e.numbers,
+            amount: e.amount
+        }))
+        console.log('[NumberLimits] Lines to check:', limitLines)
+        const limitResults = checkBatchSubmissions(numberLimits, currentTotals, limitLines)
+        console.log('[NumberLimits] Check results:', limitResults.map(r => ({ status: r.status, numbers: r.numbers, betType: r.betType, amount: r.amount, currentTotal: r.currentTotal, maxAllowed: r.maxAllowed, remaining: r.remaining, overflow: r.overflow })))
+
+        // Block all blocked entries (เลขปิด — reject entire submission if any blocked number found)
+        const blockedEntries = limitResults.filter(r => r.status === 'blocked')
+        if (blockedEntries.length > 0) {
+            const blockedDetails = [...new Set(blockedEntries.map(r => {
+                const limitAmt = r.maxAllowed || 0
+                const currentAmt = r.currentTotal || 0
+                if (currentAmt >= limitAmt) {
+                    return `${r.numbers} (ปิดรับแล้ว)`
+                }
+                return `${r.numbers} (รับได้อีก ${Math.max(limitAmt - currentAmt, 0).toLocaleString()} จาก ${limitAmt.toLocaleString()})`
+            }))]
+            throw new Error(`🔴 เลขปิด: ${blockedDetails.join(', ')} — ไม่สามารถรับได้`)
+        }
+
+        // Show warnings for limited/overflow entries
+        const warnings = generateLimitWarnings(limitResults)
+        if (warnings && warnings.length > 0) {
+            warnings.forEach(w => toast.warning(w))
+        }
+
         const billId = 'B-' + Math.random().toString(36).substring(2, 8).toUpperCase()
         const baseTimestamp = new Date()
         const lotteryKey = selectedRound.lottery_type === 'lao' || selectedRound.lottery_type === 'hanoi' ? 'lao' : selectedRound.lottery_type
@@ -1281,6 +1321,12 @@ export default function UserDashboard() {
 
             // Add milliseconds offset to preserve order (each entry gets +1ms)
             const entryTimestamp = new Date(baseTimestamp.getTime() + index).toISOString()
+
+            // Get limit check result for this entry
+            const lr = limitResults[index]
+            const isOverflow = lr && (lr.status === 'overflow' || (lr.status === 'blocked' && lr.remaining > 0))
+            const overflowAmount = lr ? lr.overflow : 0
+            const actualPayoutPercent = lr ? lr.payoutPercent : 100
 
             return {
                 round_id: selectedRound.id,
@@ -1297,7 +1343,10 @@ export default function UserDashboard() {
                 commission_rate: commInfo.rate,
                 commission_amount: commissionAmount,
                 is_paid: isPaid || false,
-                created_at: entryTimestamp
+                created_at: entryTimestamp,
+                is_overflow: isOverflow,
+                overflow_amount: overflowAmount,
+                actual_payout_percent: actualPayoutPercent
             }
         })
 
@@ -1346,6 +1395,39 @@ export default function UserDashboard() {
             if (deleteError) throw deleteError
         }
 
+        // Check number limits (after soft delete so totals are recalculated)
+        const [numberLimits, currentTotals] = await Promise.all([
+            fetchNumberLimits(selectedRound.id),
+            fetchCurrentTotals(selectedRound.id)
+        ])
+
+        const limitLines = entries.map(e => ({
+            betType: e.betType,
+            numbers: e.numbers,
+            amount: e.amount
+        }))
+        const limitResults = checkBatchSubmissions(numberLimits, currentTotals, limitLines)
+
+        // Block all blocked entries (เลขปิด — reject entire submission if any blocked number found)
+        const blockedEntries = limitResults.filter(r => r.status === 'blocked')
+        if (blockedEntries.length > 0) {
+            const blockedDetails = [...new Set(blockedEntries.map(r => {
+                const limitAmt = r.maxAllowed || 0
+                const currentAmt = r.currentTotal || 0
+                if (currentAmt >= limitAmt) {
+                    return `${r.numbers} (ปิดรับแล้ว)`
+                }
+                return `${r.numbers} (รับได้อีก ${Math.max(limitAmt - currentAmt, 0).toLocaleString()} จาก ${limitAmt.toLocaleString()})`
+            }))]
+            throw new Error(`🔴 เลขปิด: ${blockedDetails.join(', ')} — ไม่สามารถรับได้`)
+        }
+
+        // Show warnings for limited/overflow entries
+        const warnings = generateLimitWarnings(limitResults)
+        if (warnings && warnings.length > 0) {
+            warnings.forEach(w => toast.warning(w))
+        }
+
         // Insert new submissions with same bill_id
         const baseTimestamp = new Date()
         const submissionsToInsert = entries.map((entry, index) => {
@@ -1354,6 +1436,12 @@ export default function UserDashboard() {
 
             // Add milliseconds offset to preserve order (each entry gets +1ms)
             const entryTimestamp = new Date(baseTimestamp.getTime() + index).toISOString()
+
+            // Get limit check result for this entry
+            const lr = limitResults[index]
+            const isOverflow = lr && (lr.status === 'overflow' || (lr.status === 'blocked' && lr.remaining > 0))
+            const overflowAmount = lr ? lr.overflow : 0
+            const actualPayoutPercent = lr ? lr.payoutPercent : 100
 
             return {
                 round_id: selectedRound.id,
@@ -1370,7 +1458,10 @@ export default function UserDashboard() {
                 commission_rate: commInfo.rate,
                 commission_amount: commissionAmount,
                 is_paid: isPaid || false,
-                created_at: entryTimestamp
+                created_at: entryTimestamp,
+                is_overflow: isOverflow,
+                overflow_amount: overflowAmount,
+                actual_payout_percent: actualPayoutPercent
             }
         })
 

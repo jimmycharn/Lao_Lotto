@@ -1,18 +1,46 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useToast } from '../../contexts/ToastContext'
-import { FiAlertTriangle, FiX, FiPlus, FiTrash2 } from 'react-icons/fi'
-import { BET_TYPES, BET_TYPES_BY_LOTTERY } from '../../constants/lotteryTypes'
+import { FiAlertTriangle, FiX, FiPlus, FiTrash2, FiSearch, FiEdit2, FiCheck, FiSlash, FiClock, FiRefreshCw } from 'react-icons/fi'
+import { BET_TYPES, BET_TYPES_BY_LOTTERY, getPermutations } from '../../constants/lotteryTypes'
+
+// Generate all permutations (reversed numbers) for a given number string
+function generateReversedNumbers(numbers) {
+    if (!numbers || numbers.length <= 1) return []
+    const perms = getPermutations(numbers)
+    // Filter out the original number
+    return perms.filter(p => p !== numbers)
+}
 
 export default function NumberLimitsModal({ round, onClose }) {
     const { toast } = useToast()
     const [limits, setLimits] = useState([])
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
+    const [searchQuery, setSearchQuery] = useState('')
+    const [editingId, setEditingId] = useState(null)
+    const [editForm, setEditForm] = useState({})
+
+    // Available bet types for this lottery type
+    const availableBetTypes = useMemo(() => {
+        const types = BET_TYPES_BY_LOTTERY[round.lottery_type] || {}
+        // Filter out set types (4_set, 3_set) as they are managed differently
+        return Object.entries(types).filter(([key]) => !key.includes('_set'))
+    }, [round.lottery_type])
+
+    // New limit form state
     const [newLimit, setNewLimit] = useState({
-        bet_type: Object.keys(BET_TYPES_BY_LOTTERY[round.lottery_type] || {})[0] || '2_top',
         numbers: '',
-        max_amount: ''
+        max_amount: '',
+        limit_type: 'limited', // 'limited' = เลขอั้น, 'blocked' = เลขปิด
+        payout_percent: 100,
+        include_reversed: false,
+        selected_bet_types: availableBetTypes.map(([key]) => key), // Default: select all
+        select_all: true,
+        // Time condition
+        has_time_condition: false,
+        after_time: '',
+        time_payout_percent: 50
     })
 
     useEffect(() => {
@@ -36,26 +64,78 @@ export default function NumberLimitsModal({ round, onClose }) {
         }
     }
 
+    // Toggle select all bet types
+    function handleToggleSelectAll(checked) {
+        setNewLimit(prev => ({
+            ...prev,
+            select_all: checked,
+            selected_bet_types: checked ? availableBetTypes.map(([key]) => key) : []
+        }))
+    }
+
+    // Toggle individual bet type
+    function handleToggleBetType(betType) {
+        setNewLimit(prev => {
+            const types = prev.selected_bet_types.includes(betType)
+                ? prev.selected_bet_types.filter(t => t !== betType)
+                : [...prev.selected_bet_types, betType]
+            return {
+                ...prev,
+                selected_bet_types: types,
+                select_all: types.length === availableBetTypes.length
+            }
+        })
+    }
+
     async function handleAddLimit() {
-        if (!newLimit.numbers || !newLimit.max_amount) {
-            toast.warning('กรุณากรอกข้อมูลให้ครบ')
+        if (!newLimit.numbers) {
+            toast.warning('กรุณากรอกเลข')
+            return
+        }
+        if (!newLimit.max_amount && newLimit.limit_type !== 'blocked') {
+            toast.warning('กรุณากรอกวงเงินสูงสุด')
+            return
+        }
+        if (newLimit.selected_bet_types.length === 0) {
+            toast.warning('กรุณาเลือกประเภทอย่างน้อย 1 ประเภท')
             return
         }
 
         setSaving(true)
         try {
+            const reversedNumbers = newLimit.include_reversed
+                ? generateReversedNumbers(newLimit.numbers)
+                : []
+
+            const timeCondition = newLimit.has_time_condition && newLimit.after_time
+                ? {
+                    after_time: newLimit.after_time,
+                    payout_percent: parseFloat(newLimit.time_payout_percent) || 50
+                }
+                : null
+
+            // Create one record per selected bet type
+            const records = newLimit.selected_bet_types.map(betType => ({
+                round_id: round.id,
+                bet_type: betType,
+                numbers: newLimit.numbers,
+                max_amount: parseFloat(newLimit.max_amount) || 0,
+                limit_type: newLimit.limit_type,
+                payout_percent: parseFloat(newLimit.payout_percent) || 100,
+                include_reversed: newLimit.include_reversed,
+                reversed_numbers: reversedNumbers,
+                time_condition: timeCondition,
+                is_active: true
+            }))
+
             const { error } = await supabase
                 .from('number_limits')
-                .insert({
-                    round_id: round.id,
-                    bet_type: newLimit.bet_type,
-                    numbers: newLimit.numbers,
-                    max_amount: parseFloat(newLimit.max_amount)
-                })
+                .upsert(records, { onConflict: 'round_id,bet_type,numbers' })
 
             if (error) throw error
 
-            setNewLimit({ ...newLimit, numbers: '', max_amount: '' })
+            toast.success(`เพิ่มเลข${newLimit.limit_type === 'blocked' ? 'ปิด' : 'อั้น'} ${newLimit.numbers} สำเร็จ (${newLimit.selected_bet_types.length} ประเภท)`)
+            setNewLimit(prev => ({ ...prev, numbers: '', max_amount: '' }))
             fetchLimits()
         } catch (error) {
             console.error('Error adding limit:', error)
@@ -66,7 +146,7 @@ export default function NumberLimitsModal({ round, onClose }) {
     }
 
     async function handleDeleteLimit(id) {
-        if (!confirm('ต้องการลบเลขอั้นนี้?')) return
+        if (!confirm('ต้องการลบรายการนี้?')) return
 
         try {
             const { error } = await supabase
@@ -74,119 +154,531 @@ export default function NumberLimitsModal({ round, onClose }) {
                 .delete()
                 .eq('id', id)
 
-            if (!error) fetchLimits()
+            if (!error) {
+                setLimits(prev => prev.filter(l => l.id !== id))
+                toast.success('ลบเรียบร้อย')
+            }
         } catch (error) {
             console.error('Error deleting limit:', error)
         }
     }
 
+    async function handleDeleteByNumber(numbers) {
+        const matching = limits.filter(l => l.numbers === numbers)
+        if (matching.length === 0) return
+        if (!confirm(`ต้องการลบเลข ${numbers} ทั้งหมด (${matching.length} รายการ)?`)) return
+
+        try {
+            const { error } = await supabase
+                .from('number_limits')
+                .delete()
+                .eq('round_id', round.id)
+                .eq('numbers', numbers)
+
+            if (!error) {
+                fetchLimits()
+                toast.success(`ลบเลข ${numbers} ทั้งหมดเรียบร้อย`)
+            }
+        } catch (error) {
+            console.error('Error deleting limits:', error)
+        }
+    }
+
+    async function handleToggleActive(limit) {
+        try {
+            const { error } = await supabase
+                .from('number_limits')
+                .update({ is_active: !limit.is_active })
+                .eq('id', limit.id)
+
+            if (!error) {
+                setLimits(prev => prev.map(l => l.id === limit.id ? { ...l, is_active: !l.is_active } : l))
+            }
+        } catch (error) {
+            console.error('Error toggling active:', error)
+        }
+    }
+
+    function startEdit(limit) {
+        setEditingId(limit.id)
+        setEditForm({
+            max_amount: limit.max_amount,
+            payout_percent: limit.payout_percent || 100,
+            limit_type: limit.limit_type || 'limited',
+            has_time_condition: !!limit.time_condition,
+            after_time: limit.time_condition?.after_time || '',
+            time_payout_percent: limit.time_condition?.payout_percent || 50
+        })
+    }
+
+    async function handleSaveEdit(id) {
+        try {
+            const timeCondition = editForm.has_time_condition && editForm.after_time
+                ? {
+                    after_time: editForm.after_time,
+                    payout_percent: parseFloat(editForm.time_payout_percent) || 50
+                }
+                : null
+
+            const { error } = await supabase
+                .from('number_limits')
+                .update({
+                    max_amount: parseFloat(editForm.max_amount) || 0,
+                    payout_percent: parseFloat(editForm.payout_percent) || 100,
+                    limit_type: editForm.limit_type,
+                    time_condition: timeCondition
+                })
+                .eq('id', id)
+
+            if (error) throw error
+
+            setEditingId(null)
+            fetchLimits()
+            toast.success('บันทึกการแก้ไขเรียบร้อย')
+        } catch (error) {
+            console.error('Error updating limit:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+
+    // Filtered limits based on search
+    const filteredLimits = useMemo(() => {
+        if (!searchQuery) return limits
+        const q = searchQuery.toLowerCase()
+        return limits.filter(l =>
+            l.numbers.includes(q) ||
+            (BET_TYPES[l.bet_type] || '').toLowerCase().includes(q)
+        )
+    }, [limits, searchQuery])
+
+    // Group limits by number for display
+    const groupedLimits = useMemo(() => {
+        const groups = {}
+        filteredLimits.forEach(l => {
+            if (!groups[l.numbers]) {
+                groups[l.numbers] = {
+                    numbers: l.numbers,
+                    limit_type: l.limit_type,
+                    items: [],
+                    is_active: l.is_active
+                }
+            }
+            groups[l.numbers].items.push(l)
+        })
+        return Object.values(groups).sort((a, b) => a.numbers.localeCompare(b.numbers))
+    }, [filteredLimits])
+
+    const sectionStyle = {
+        background: 'var(--card-bg, rgba(255,255,255,0.05))',
+        borderRadius: '12px',
+        padding: '1rem',
+        marginBottom: '1rem',
+        border: '1px solid var(--border-color, rgba(255,255,255,0.1))'
+    }
+
+    const labelStyle = {
+        fontSize: '0.8rem',
+        fontWeight: '600',
+        marginBottom: '0.3rem',
+        display: 'block',
+        opacity: 0.8
+    }
+
+    const inputStyle = {
+        width: '100%',
+        padding: '0.5rem 0.6rem',
+        borderRadius: '6px',
+        border: '1px solid var(--border-color, rgba(255,255,255,0.2))',
+        background: 'var(--input-bg, rgba(255,255,255,0.08))',
+        color: 'var(--text-color, #fff)',
+        fontSize: '0.85rem'
+    }
+
+    const chipStyle = (active) => ({
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '0.3rem',
+        padding: '0.25rem 0.6rem',
+        borderRadius: '20px',
+        fontSize: '0.75rem',
+        fontWeight: '500',
+        cursor: 'pointer',
+        border: active ? '1.5px solid var(--color-primary)' : '1px solid var(--border-color, rgba(255,255,255,0.2))',
+        background: active ? 'rgba(102, 126, 234, 0.2)' : 'transparent',
+        color: active ? 'var(--color-primary)' : 'var(--text-color, #fff)',
+        opacity: active ? 1 : 0.6,
+        transition: 'all 0.15s'
+    })
+
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
-                <div className="modal-header">
-                    <h3><FiAlertTriangle /> ตั้งค่าเลขอั้น - {round.lottery_name}</h3>
-                    <button className="modal-close" onClick={onClose}>
-                        <FiX />
-                    </button>
+            <div className="modal modal-lg" onClick={e => e.stopPropagation()} style={{ maxWidth: '640px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+                {/* Header */}
+                <div className="modal-header" style={{ flexShrink: 0 }}>
+                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <FiAlertTriangle /> ตั้งค่าเลขอั้น/ปิด — {round.lottery_name}
+                    </h3>
+                    <button className="modal-close" onClick={onClose}><FiX /></button>
                 </div>
 
-                <div className="modal-body">
-                    <div className="add-limit-form card">
-                        <h4>เพิ่มเลขอั้นใหม่</h4>
-                        <div className="form-row">
-                            <div className="form-group">
-                                <label className="form-label">ประเภท</label>
-                                <select
-                                    className="form-input"
-                                    value={newLimit.bet_type}
-                                    onChange={e => setNewLimit({ ...newLimit, bet_type: e.target.value })}
-                                >
-                                    {Object.entries(BET_TYPES_BY_LOTTERY[round.lottery_type] || {}).map(([key, config]) => (
-                                        <option key={key} value={key}>{config.label}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">เลข</label>
+                {/* Body */}
+                <div className="modal-body" style={{ flex: 1, overflowY: 'auto', padding: '0.75rem' }}>
+
+                    {/* === Add New Limit Section === */}
+                    <div style={sectionStyle}>
+                        <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.95rem' }}>
+                            <FiPlus style={{ marginRight: '0.3rem' }} /> เพิ่มเลขอั้น/ปิด
+                        </h4>
+
+                        {/* Row 1: Number + Type + Max Amount */}
+                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.6rem', flexWrap: 'wrap' }}>
+                            <div style={{ flex: '1 1 100px', minWidth: '80px' }}>
+                                <label style={labelStyle}>เลข</label>
                                 <input
                                     type="text"
-                                    className="form-input"
-                                    placeholder="เช่น 47"
+                                    inputMode="numeric"
+                                    style={inputStyle}
+                                    placeholder="เช่น 123"
                                     value={newLimit.numbers}
                                     onChange={e => setNewLimit({ ...newLimit, numbers: e.target.value.replace(/\D/g, '') })}
                                 />
                             </div>
-                            <div className="form-group">
-                                <label className="form-label">รับสูงสุด ({round.currency_name})</label>
+                            <div style={{ flex: '1 1 100px', minWidth: '90px' }}>
+                                <label style={labelStyle}>ประเภทจำกัด</label>
+                                <select
+                                    style={inputStyle}
+                                    value={newLimit.limit_type}
+                                    onChange={e => setNewLimit({ ...newLimit, limit_type: e.target.value })}
+                                >
+                                    <option value="limited">🔶 อั้น (รับเกินได้)</option>
+                                    <option value="blocked">🔴 ปิด (ปิดรับ)</option>
+                                </select>
+                            </div>
+                            <div style={{ flex: '1 1 80px', minWidth: '80px' }}>
+                                <label style={labelStyle}>วงเงินสูงสุด ({round.currency_symbol})</label>
                                 <input
                                     type="number"
-                                    className="form-input"
+                                    inputMode="numeric"
+                                    style={inputStyle}
                                     placeholder="0"
                                     value={newLimit.max_amount}
                                     onChange={e => setNewLimit({ ...newLimit, max_amount: e.target.value })}
                                 />
                             </div>
-                            <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
-                                <button
-                                    className="btn btn-primary full-width"
-                                    onClick={(e) => {
-                                        e.target.blur()
-                                        handleAddLimit()
-                                    }}
-                                    disabled={saving}
-                                >
-                                    <FiPlus /> เพิ่ม
-                                </button>
+                        </div>
+
+                        {/* Row 2: Payout % + Include Reversed */}
+                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                            {newLimit.limit_type === 'limited' && (
+                                <div style={{ flex: '0 0 120px' }}>
+                                    <label style={labelStyle}>อัตราจ่าย %</label>
+                                    <input
+                                        type="number"
+                                        inputMode="numeric"
+                                        style={inputStyle}
+                                        placeholder="100"
+                                        min="0"
+                                        max="100"
+                                        value={newLimit.payout_percent}
+                                        onChange={e => setNewLimit({ ...newLimit, payout_percent: e.target.value })}
+                                    />
+                                </div>
+                            )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', paddingTop: '1.2rem' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={newLimit.include_reversed}
+                                        onChange={e => setNewLimit({ ...newLimit, include_reversed: e.target.checked })}
+                                        style={{ width: '16px', height: '16px' }}
+                                    />
+                                    <FiRefreshCw size={14} /> รวมเลขกลับทุกชุด
+                                </label>
                             </div>
                         </div>
+
+                        {/* Show reversed preview */}
+                        {newLimit.include_reversed && newLimit.numbers && newLimit.numbers.length >= 2 && (
+                            <div style={{ fontSize: '0.75rem', opacity: 0.7, marginBottom: '0.5rem', padding: '0.3rem 0.5rem', background: 'rgba(255,255,255,0.05)', borderRadius: '6px' }}>
+                                เลขกลับ: {generateReversedNumbers(newLimit.numbers).join(', ') || 'ไม่มี'}
+                            </div>
+                        )}
+
+                        {/* Row 3: Time Condition */}
+                        <div style={{ marginBottom: '0.6rem' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', marginBottom: '0.4rem' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={newLimit.has_time_condition}
+                                    onChange={e => setNewLimit({ ...newLimit, has_time_condition: e.target.checked })}
+                                    style={{ width: '16px', height: '16px' }}
+                                />
+                                <FiClock size={14} /> กำหนดอัตราจ่ายตามเวลา
+                            </label>
+                            {newLimit.has_time_condition && (
+                                <div style={{ display: 'flex', gap: '0.5rem', paddingLeft: '1.4rem', flexWrap: 'wrap' }}>
+                                    <div style={{ flex: '0 0 120px' }}>
+                                        <label style={labelStyle}>หลังเวลา</label>
+                                        <input
+                                            type="time"
+                                            style={inputStyle}
+                                            value={newLimit.after_time}
+                                            onChange={e => setNewLimit({ ...newLimit, after_time: e.target.value })}
+                                        />
+                                    </div>
+                                    <div style={{ flex: '0 0 100px' }}>
+                                        <label style={labelStyle}>จ่าย %</label>
+                                        <input
+                                            type="number"
+                                            inputMode="numeric"
+                                            style={inputStyle}
+                                            placeholder="50"
+                                            min="0"
+                                            max="100"
+                                            value={newLimit.time_payout_percent}
+                                            onChange={e => setNewLimit({ ...newLimit, time_payout_percent: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Row 4: Bet Type Selection */}
+                        <div style={{ marginBottom: '0.6rem' }}>
+                            <label style={{ ...labelStyle, marginBottom: '0.4rem' }}>ประเภทการแทง</label>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                                {/* Select All Chip */}
+                                <span
+                                    style={{
+                                        ...chipStyle(newLimit.select_all),
+                                        fontWeight: '600',
+                                        borderColor: newLimit.select_all ? 'var(--color-success)' : undefined,
+                                        background: newLimit.select_all ? 'rgba(76, 175, 80, 0.2)' : undefined,
+                                        color: newLimit.select_all ? 'var(--color-success)' : undefined
+                                    }}
+                                    onClick={() => handleToggleSelectAll(!newLimit.select_all)}
+                                >
+                                    <FiCheck size={12} /> ทั้งหมด
+                                </span>
+                                {availableBetTypes.map(([key, config]) => (
+                                    <span
+                                        key={key}
+                                        style={chipStyle(newLimit.selected_bet_types.includes(key))}
+                                        onClick={() => handleToggleBetType(key)}
+                                    >
+                                        {config.label}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Add Button */}
+                        <button
+                            className="btn btn-primary full-width"
+                            onClick={e => { e.target.blur(); handleAddLimit() }}
+                            disabled={saving || !newLimit.numbers}
+                            style={{ marginTop: '0.3rem' }}
+                        >
+                            {saving ? 'กำลังบันทึก...' : (
+                                <>
+                                    <FiPlus /> เพิ่มเลข{newLimit.limit_type === 'blocked' ? 'ปิด' : 'อั้น'} {newLimit.numbers || ''}
+                                    {newLimit.selected_bet_types.length > 0 && ` (${newLimit.selected_bet_types.length} ประเภท)`}
+                                </>
+                            )}
+                        </button>
                     </div>
 
-                    <div className="limits-list-section">
-                        <h4>รายการเลขอั้นปัจจุบัน</h4>
+                    {/* === Current Limits List === */}
+                    <div style={sectionStyle}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <h4 style={{ margin: 0, fontSize: '0.95rem' }}>
+                                รายการเลขอั้น/ปิด ({limits.length})
+                            </h4>
+                            <div style={{ position: 'relative', flex: '1 1 180px', maxWidth: '250px' }}>
+                                <FiSearch style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} size={14} />
+                                <input
+                                    type="text"
+                                    style={{ ...inputStyle, paddingLeft: '1.8rem' }}
+                                    placeholder="ค้นหาเลข..."
+                                    value={searchQuery}
+                                    onChange={e => setSearchQuery(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
                         {loading ? (
-                            <div className="loading-state">
+                            <div style={{ textAlign: 'center', padding: '2rem' }}>
                                 <div className="spinner"></div>
                             </div>
-                        ) : limits.length === 0 ? (
-                            <p className="text-muted">ยังไม่มีการตั้งค่าเลขอั้นเฉพาะเลข</p>
+                        ) : groupedLimits.length === 0 ? (
+                            <p style={{ textAlign: 'center', opacity: 0.5, padding: '1.5rem' }}>
+                                {searchQuery ? 'ไม่พบเลขที่ค้นหา' : 'ยังไม่มีการตั้งค่าเลขอั้น/ปิด'}
+                            </p>
                         ) : (
-                            <div className="table-wrap">
-                                <table className="data-table">
-                                    <thead>
-                                        <tr>
-                                            <th>ประเภท</th>
-                                            <th>เลข</th>
-                                            <th>รับสูงสุด</th>
-                                            <th>จัดการ</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {limits.map(limit => (
-                                            <tr key={limit.id}>
-                                                <td>{BET_TYPES[limit.bet_type]}</td>
-                                                <td className="number-cell">{limit.numbers}</td>
-                                                <td>{round.currency_symbol}{limit.max_amount?.toLocaleString()}</td>
-                                                <td>
-                                                    <button
-                                                        className="icon-btn danger"
-                                                        onClick={() => handleDeleteLimit(limit.id)}
-                                                    >
-                                                        <FiTrash2 />
-                                                    </button>
-                                                </td>
-                                            </tr>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                {groupedLimits.map(group => (
+                                    <div key={group.numbers} style={{
+                                        border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+                                        borderRadius: '8px',
+                                        overflow: 'hidden'
+                                    }}>
+                                        {/* Group Header */}
+                                        <div style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            padding: '0.5rem 0.75rem',
+                                            background: group.limit_type === 'blocked'
+                                                ? 'rgba(244, 67, 54, 0.1)'
+                                                : 'rgba(255, 152, 0, 0.1)',
+                                            borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.05))'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <span style={{ fontSize: '1.1rem', fontWeight: '700', fontFamily: 'monospace' }}>
+                                                    {group.numbers}
+                                                </span>
+                                                <span style={{
+                                                    fontSize: '0.7rem',
+                                                    padding: '0.1rem 0.4rem',
+                                                    borderRadius: '4px',
+                                                    fontWeight: '600',
+                                                    background: group.limit_type === 'blocked' ? 'rgba(244, 67, 54, 0.2)' : 'rgba(255, 152, 0, 0.2)',
+                                                    color: group.limit_type === 'blocked' ? '#f44336' : '#ff9800'
+                                                }}>
+                                                    {group.limit_type === 'blocked' ? '🔴 ปิด' : '🔶 อั้น'}
+                                                </span>
+                                                <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>
+                                                    {group.items.length} ประเภท
+                                                </span>
+                                                {group.items[0]?.include_reversed && (
+                                                    <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>
+                                                        <FiRefreshCw size={10} /> กลับ
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <button
+                                                className="icon-btn danger"
+                                                onClick={() => handleDeleteByNumber(group.numbers)}
+                                                title="ลบทั้งหมด"
+                                                style={{ padding: '0.2rem 0.3rem' }}
+                                            >
+                                                <FiTrash2 size={14} />
+                                            </button>
+                                        </div>
+
+                                        {/* Items */}
+                                        {group.items.map(limit => (
+                                            <div key={limit.id} style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                padding: '0.35rem 0.75rem',
+                                                borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.03))',
+                                                opacity: limit.is_active ? 1 : 0.4,
+                                                fontSize: '0.82rem'
+                                            }}>
+                                                {editingId === limit.id ? (
+                                                    /* Edit Mode */
+                                                    <div style={{ display: 'flex', gap: '0.3rem', flex: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                                                        <span style={{ fontWeight: '500', minWidth: '70px' }}>{BET_TYPES[limit.bet_type]}</span>
+                                                        <select
+                                                            style={{ ...inputStyle, width: '90px', padding: '0.3rem' }}
+                                                            value={editForm.limit_type}
+                                                            onChange={e => setEditForm({ ...editForm, limit_type: e.target.value })}
+                                                        >
+                                                            <option value="limited">อั้น</option>
+                                                            <option value="blocked">ปิด</option>
+                                                        </select>
+                                                        <input
+                                                            type="number"
+                                                            style={{ ...inputStyle, width: '70px', padding: '0.3rem' }}
+                                                            value={editForm.max_amount}
+                                                            onChange={e => setEditForm({ ...editForm, max_amount: e.target.value })}
+                                                            placeholder="วงเงิน"
+                                                        />
+                                                        {editForm.limit_type === 'limited' && (
+                                                            <input
+                                                                type="number"
+                                                                style={{ ...inputStyle, width: '55px', padding: '0.3rem' }}
+                                                                value={editForm.payout_percent}
+                                                                onChange={e => setEditForm({ ...editForm, payout_percent: e.target.value })}
+                                                                placeholder="%"
+                                                            />
+                                                        )}
+                                                        <button
+                                                            className="icon-btn"
+                                                            onClick={() => handleSaveEdit(limit.id)}
+                                                            style={{ color: 'var(--color-success)', padding: '0.2rem' }}
+                                                        >
+                                                            <FiCheck size={14} />
+                                                        </button>
+                                                        <button
+                                                            className="icon-btn"
+                                                            onClick={() => setEditingId(null)}
+                                                            style={{ opacity: 0.5, padding: '0.2rem' }}
+                                                        >
+                                                            <FiX size={14} />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    /* View Mode */
+                                                    <>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
+                                                            <span style={{ fontWeight: '500', minWidth: '70px' }}>{BET_TYPES[limit.bet_type]}</span>
+                                                            <span style={{ opacity: 0.7 }}>
+                                                                {round.currency_symbol}{limit.max_amount?.toLocaleString()}
+                                                            </span>
+                                                            {limit.limit_type === 'limited' && limit.payout_percent !== 100 && (
+                                                                <span style={{ fontSize: '0.72rem', color: 'var(--color-warning)', fontWeight: '500' }}>
+                                                                    จ่าย {limit.payout_percent}%
+                                                                </span>
+                                                            )}
+                                                            {limit.time_condition?.after_time && (
+                                                                <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>
+                                                                    <FiClock size={10} /> {limit.time_condition.after_time}→{limit.time_condition.payout_percent}%
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '0.2rem' }}>
+                                                            <button
+                                                                className="icon-btn"
+                                                                onClick={() => handleToggleActive(limit)}
+                                                                title={limit.is_active ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}
+                                                                style={{ padding: '0.2rem', opacity: 0.6 }}
+                                                            >
+                                                                {limit.is_active ? <FiCheck size={13} style={{ color: 'var(--color-success)' }} /> : <FiSlash size={13} />}
+                                                            </button>
+                                                            <button
+                                                                className="icon-btn"
+                                                                onClick={() => startEdit(limit)}
+                                                                title="แก้ไข"
+                                                                style={{ padding: '0.2rem', opacity: 0.6 }}
+                                                            >
+                                                                <FiEdit2 size={13} />
+                                                            </button>
+                                                            <button
+                                                                className="icon-btn danger"
+                                                                onClick={() => handleDeleteLimit(limit.id)}
+                                                                title="ลบ"
+                                                                style={{ padding: '0.2rem' }}
+                                                            >
+                                                                <FiTrash2 size={13} />
+                                                            </button>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
                                         ))}
-                                    </tbody>
-                                </table>
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </div>
                 </div>
 
-                <div className="modal-footer">
-                    <button className="btn btn-secondary" onClick={onClose}>
-                        ปิด
-                    </button>
+                {/* Footer */}
+                <div className="modal-footer" style={{ flexShrink: 0 }}>
+                    <button className="btn btn-secondary" onClick={onClose}>ปิด</button>
                 </div>
             </div>
         </div>
