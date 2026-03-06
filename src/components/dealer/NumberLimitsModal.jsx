@@ -528,24 +528,12 @@ export default function NumberLimitsModal({ round, onClose }) {
                                             alignItems: 'center',
                                             justifyContent: 'space-between',
                                             padding: '0.5rem 0.75rem',
-                                            background: group.limit_type === 'blocked'
-                                                ? 'rgba(244, 67, 54, 0.1)'
-                                                : 'rgba(255, 152, 0, 0.1)',
+                                            background: 'rgba(255, 255, 255, 0.05)',
                                             borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.05))'
                                         }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                 <span style={{ fontSize: '1.1rem', fontWeight: '700', fontFamily: 'monospace' }}>
                                                     {group.numbers}
-                                                </span>
-                                                <span style={{
-                                                    fontSize: '0.7rem',
-                                                    padding: '0.1rem 0.4rem',
-                                                    borderRadius: '4px',
-                                                    fontWeight: '600',
-                                                    background: group.limit_type === 'blocked' ? 'rgba(244, 67, 54, 0.2)' : 'rgba(255, 152, 0, 0.2)',
-                                                    color: group.limit_type === 'blocked' ? '#f44336' : '#ff9800'
-                                                }}>
-                                                    {group.limit_type === 'blocked' ? '🔴 ปิด' : '🔶 อั้น'}
                                                 </span>
                                                 <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>
                                                     {group.items.length} ประเภท
@@ -624,6 +612,17 @@ export default function NumberLimitsModal({ round, onClose }) {
                                                     /* View Mode */
                                                     <>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
+                                                            <span style={{
+                                                                fontSize: '0.65rem',
+                                                                padding: '0.05rem 0.3rem',
+                                                                borderRadius: '3px',
+                                                                fontWeight: '600',
+                                                                background: limit.limit_type === 'blocked' ? 'rgba(244, 67, 54, 0.2)' : 'rgba(255, 152, 0, 0.2)',
+                                                                color: limit.limit_type === 'blocked' ? '#f44336' : '#ff9800',
+                                                                lineHeight: '1.3'
+                                                            }}>
+                                                                {limit.limit_type === 'blocked' ? 'ปิด' : 'อั้น'}
+                                                            </span>
                                                             <span style={{ fontWeight: '500', minWidth: '70px' }}>{BET_TYPES[limit.bet_type]}</span>
                                                             <span style={{ opacity: 0.7 }}>
                                                                 {round.currency_symbol}{limit.max_amount?.toLocaleString()}

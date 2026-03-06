@@ -2579,25 +2579,38 @@ export default function SuperAdmin() {
                                             </div>
                                         </td>
                                         <td>
-                                            <span style={{ 
-                                                fontWeight: 'bold', 
-                                                fontSize: '1.1rem',
-                                                color: credit.balance <= 0 ? 'var(--color-danger)' : 
-                                                       credit.balance <= credit.warning_threshold ? 'var(--color-warning)' : 
-                                                       'var(--color-success)'
-                                            }}>
-                                                ฿{(credit.balance || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-                                            </span>
+                                            {(() => {
+                                                const bal = credit.balance || 0
+                                                const pending = credit.pending_deduction || 0
+                                                const available = bal - pending
+                                                return (
+                                                    <div>
+                                                        <span style={{ 
+                                                            fontWeight: 'bold', 
+                                                            fontSize: '1.1rem',
+                                                            color: available <= 0 ? 'var(--color-danger)' : 
+                                                                   available <= credit.warning_threshold ? 'var(--color-warning)' : 
+                                                                   'var(--color-success)'
+                                                        }}>
+                                                            ฿{available.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                                        </span>
+                                                        {pending > 0 && (
+                                                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                                                                ยอดจริง ฿{bal.toLocaleString('th-TH', { minimumFractionDigits: 2 })} | รอตัด ฿{pending.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )
+                                            })()}
                                         </td>
                                         <td>{credit.package?.name || 'Standard'}</td>
                                         <td>
-                                            {credit.is_blocked ? (
-                                                <span className="badge badge-danger">บล็อค</span>
-                                            ) : credit.balance <= credit.warning_threshold ? (
-                                                <span className="badge badge-warning">เครดิตต่ำ</span>
-                                            ) : (
-                                                <span className="badge badge-success">ปกติ</span>
-                                            )}
+                                            {(() => {
+                                                const available = (credit.balance || 0) - (credit.pending_deduction || 0)
+                                                if (credit.is_blocked) return <span className="badge badge-danger">บล็อค</span>
+                                                if (available <= credit.warning_threshold) return <span className="badge badge-warning">เครดิตต่ำ</span>
+                                                return <span className="badge badge-success">ปกติ</span>
+                                            })()}
                                         </td>
                                         <td style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
                                             {new Date(credit.updated_at).toLocaleString('th-TH')}
@@ -3603,9 +3616,24 @@ export default function SuperAdmin() {
                                 </div>
                                 <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
                                     <span style={{ color: 'var(--color-text-muted)' }}>เครดิตคงเหลือ</span>
-                                    <strong style={{ color: 'var(--color-success)' }}>
-                                        ฿{(dealerCredits.find(c => c.dealer_id === selectedDealer.id)?.balance || 0).toLocaleString()}
-                                    </strong>
+                                    {(() => {
+                                        const cr = dealerCredits.find(c => c.dealer_id === selectedDealer.id)
+                                        const bal = cr?.balance || 0
+                                        const pending = cr?.pending_deduction || 0
+                                        const available = bal - pending
+                                        return (
+                                            <div style={{ textAlign: 'right' }}>
+                                                <strong style={{ color: available <= 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
+                                                    ฿{available.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                                </strong>
+                                                {pending > 0 && (
+                                                    <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                                                        ยอดจริง ฿{bal.toLocaleString('th-TH', { minimumFractionDigits: 2 })} | รอตัด ฿{pending.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )
+                                    })()}
                                 </div>
                                 <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
                                     <span style={{ color: 'var(--color-text-muted)' }}>วันที่สมัคร</span>

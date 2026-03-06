@@ -445,20 +445,20 @@ export async function updatePendingDeduction(dealerId) {
             }
 
             // === Calculate chargeable volume ===
-            // Group 1: dealer's own bets + dealer-input for own users → subject to min_amount threshold
-            const thresholdVolume = netDealerOwnVolume + netDealerInputForOwnUsers
-            let chargeableFromThreshold = 0
-            if (thresholdVolume > minAmount) {
-                chargeableFromThreshold = thresholdVolume - minAmount
+            // Total volume = all groups combined (after transfer deduction)
+            const totalVolume = netDealerOwnVolume + netDealerInputForOwnUsers + selfInputVolume + downstreamVolume
+
+            // Apply minAmount to total volume: only charge amount exceeding minAmount
+            let totalChargeableVolume = 0
+            if (totalVolume > minAmount) {
+                totalChargeableVolume = totalVolume - minAmount
             }
 
-            // Group 2: user self-input → always charged (no min_amount benefit)
+            // Keep breakdown for reference
+            const chargeableFromThreshold = Math.max(netDealerOwnVolume + netDealerInputForOwnUsers - minAmount, 0)
             const chargeableFromSelfInput = selfInputVolume
-
-            // Group 3: downstream volume → always charged
             const chargeableFromDownstream = downstreamVolume
-
-            const totalChargeableVolume = chargeableFromThreshold + chargeableFromSelfInput + chargeableFromDownstream
+            const thresholdVolume = netDealerOwnVolume + netDealerInputForOwnUsers
 
             // Calculate pending fee for this round
             let roundPending = totalChargeableVolume * (percentageRate / 100)
@@ -717,14 +717,15 @@ export async function calculateRoundCreditFee(dealerId, roundId) {
             remainingTransfer -= d
         }
 
-        // Calculate chargeable volume
-        const thresholdVolume = netDealerOwnVolume + netDealerInputForOwnUsers
-        let chargeableFromThreshold = 0
-        if (thresholdVolume > minAmount) {
-            chargeableFromThreshold = thresholdVolume - minAmount
+        // Calculate chargeable volume — apply minAmount to total volume
+        const totalVolume = netDealerOwnVolume + netDealerInputForOwnUsers + selfInputVolume + downstreamVolume
+        let totalChargeableVolume = 0
+        if (totalVolume > minAmount) {
+            totalChargeableVolume = totalVolume - minAmount
         }
 
-        const totalChargeableVolume = chargeableFromThreshold + selfInputVolume + downstreamVolume
+        const thresholdVolume = netDealerOwnVolume + netDealerInputForOwnUsers
+        const chargeableFromThreshold = Math.max(thresholdVolume - minAmount, 0)
 
         // Calculate fee with min/max limits
         let fee = totalChargeableVolume * (percentageRate / 100)
