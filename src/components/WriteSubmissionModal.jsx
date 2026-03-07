@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { FiX, FiTrash2, FiEdit2, FiPlus, FiCheck, FiRefreshCw, FiVolume2, FiVolumeX } from 'react-icons/fi'
 import { getPermutations } from '../constants/lotteryTypes'
+import { fetchNumberLimits, fetchCurrentTotals, findMatchingLimit, getEffectivePayoutPercent } from '../utils/numberLimits'
 import './WriteSubmissionModal.css'
 
 // Shared AudioContext for low-latency sound playback
@@ -410,6 +411,7 @@ export default function WriteSubmissionModal({
     const [error, setError] = useState('')
     const [success, setSuccess] = useState(false)
     const [submitting, setSubmitting] = useState(false)
+    const [limitInfo, setLimitInfo] = useState('') // Info message for limited payout
     const [topBottomToggle, setTopBottomToggle] = useState('top') // 'top' = บน, 'bottom' = ล่าง
     const [isLocked, setIsLocked] = useState(false) // ล็อคราคา/รูปแบบ
     const [lockedAmount, setLockedAmount] = useState('') // จำนวนเงินที่ล็อคไว้
@@ -463,6 +465,83 @@ export default function WriteSubmissionModal({
             // Ignore localStorage errors
         }
     }, [soundEnabled])
+
+    // Check a parsed line against number limits (fetches fresh data every time)
+    // Returns: { allowed: boolean, blocked: string[], limitedInfo: string[] }
+    const checkLineAgainstLimits = useCallback(async (lineStr) => {
+        if (!roundInfo?.id) return { allowed: true, blocked: [], limitedInfo: [] }
+
+        const parsed = parseLine(lineStr)
+        if (!parsed || parsed.error) return { allowed: true, blocked: [], limitedInfo: [] }
+
+        const entries = generateEntries(parsed, null, lineStr, { setPrice, lotteryType })
+        if (entries.length === 0) return { allowed: true, blocked: [], limitedInfo: [] }
+
+        try {
+            const [limits, totals] = await Promise.all([
+                fetchNumberLimits(roundInfo.id),
+                fetchCurrentTotals(roundInfo.id)
+            ])
+
+            if (!limits || limits.length === 0) return { allowed: true, blocked: [], limitedInfo: [] }
+
+            const blocked = []
+            const limitedInfo = []
+
+            for (const entry of entries) {
+                const limit = findMatchingLimit(limits, entry.betType, entry.numbers)
+                if (!limit) continue
+
+                const limitType = limit.limit_type || 'blocked'
+                const payoutPercent = getEffectivePayoutPercent(limit)
+
+                if (limitType === 'blocked') {
+                    const betLabel = getBetTypeLabel(entry.betType) || entry.betType
+                    blocked.push(`${entry.numbers} (${betLabel})`)
+                } else if (payoutPercent < 100) {
+                    const betLabel = getBetTypeLabel(entry.betType) || entry.betType
+                    limitedInfo.push(`${entry.numbers} ${betLabel} จ่าย ${payoutPercent}%`)
+                }
+            }
+
+            return { allowed: blocked.length === 0, blocked, limitedInfo }
+        } catch (err) {
+            console.error('[WriteModal] Error checking number limits:', err)
+            return { allowed: true, blocked: [], limitedInfo: [] }
+        }
+    }, [roundInfo?.id, setPrice, lotteryType])
+
+    // Add line with limit check (async - fetches fresh limits) - returns true if line was added
+    const addLineWithLimitCheck = useCallback(async (lineStr, isEditing = false, editIndex = null) => {
+        const { allowed, blocked, limitedInfo } = await checkLineAgainstLimits(lineStr)
+
+        if (!allowed) {
+            playSound('error')
+            setError(`🔴 เลขปิดรับ: ${blocked.join(', ')}`)
+            setLimitInfo('')
+            return false
+        }
+
+        // Line is allowed - add it
+        if (isEditing && editIndex !== null) {
+            setLines(prev => {
+                const newLines = [...prev]
+                newLines[editIndex] = lineStr
+                return newLines
+            })
+        } else {
+            setLines(prev => [...prev, lineStr])
+        }
+
+        // Show payout info if there are limited entries
+        if (limitedInfo.length > 0) {
+            setLimitInfo(`⚠️ เลขอั้น: ${limitedInfo.join(', ')}`)
+        } else {
+            setLimitInfo('')
+        }
+
+        return true
+    }, [checkLineAgainstLimits])
 
     // Draft auto-save key based on round
     const draftKey = roundInfo?.id ? `lao_lotto_draft_${roundInfo.id}` : null
@@ -1167,6 +1246,7 @@ export default function WriteSubmissionModal({
         playSound('click')
         setCurrentInput(prev => prev + num)
         setError('')
+        setLimitInfo('')
     }
 
     // Handle backspace
@@ -1189,6 +1269,7 @@ export default function WriteSubmissionModal({
             return prev.slice(0, -1)
         })
         setError('')
+        setLimitInfo('')
     }
 
     // Handle clear - clears input AND exits editing mode
@@ -1196,6 +1277,7 @@ export default function WriteSubmissionModal({
         playSound('click')
         setCurrentInput('')
         setError('')
+        setLimitInfo('')
         setEditingIndex(null) // Exit editing mode
     }
 
@@ -1251,6 +1333,7 @@ export default function WriteSubmissionModal({
         playSound('click')
         setCurrentInput('')
         setError('')
+        setLimitInfo('')
         // Keep editingIndex unchanged - stay in editing mode
     }
 
@@ -1270,7 +1353,7 @@ export default function WriteSubmissionModal({
 
     // Handle type button click - format: 123=50 ล่าง or 123=50*30 บนกลับ
     // inputOverride: optional parameter to override currentInput (used when state hasn't updated yet)
-    const handleTypeClick = (type, autoSubmit = false, inputOverride = null) => {
+    const handleTypeClick = async (type, autoSubmit = false, inputOverride = null) => {
         let input = inputOverride !== null ? inputOverride.trim() : currentInput.trim()
         let eqIndex = input.indexOf('=')
         const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
@@ -1288,16 +1371,12 @@ export default function WriteSubmissionModal({
                     return
                 }
                 
-                playSound('success')
-                
-                if (editingIndex !== null) {
-                    const newLines = [...lines]
-                    newLines[editingIndex] = displayLine.trim()
-                    setLines(newLines)
-                    setEditingIndex(null)
-                } else {
-                    setLines(prev => [...prev, displayLine.trim()])
+                // Check number limits before adding
+                if (!(await addLineWithLimitCheck(displayLine.trim(), editingIndex !== null, editingIndex))) {
+                    return
                 }
+                playSound('success')
+                if (editingIndex !== null) setEditingIndex(null)
                 setCurrentInput('')
                 setError('')
             } else {
@@ -1378,17 +1457,12 @@ export default function WriteSubmissionModal({
                     return
                 }
                 
-                // Success - play success sound
-                playSound('success')
-                
-                if (editingIndex !== null) {
-                    const newLines = [...lines]
-                    newLines[editingIndex] = displayLine.trim()
-                    setLines(newLines)
-                    setEditingIndex(null)
-                } else {
-                    setLines(prev => [...prev, displayLine.trim()])
+                // Check number limits before adding
+                if (!(await addLineWithLimitCheck(displayLine.trim(), editingIndex !== null, editingIndex))) {
+                    return
                 }
+                playSound('success')
+                if (editingIndex !== null) setEditingIndex(null)
                 setCurrentInput('')
                 setError('')
             } else {
@@ -1511,7 +1585,7 @@ export default function WriteSubmissionModal({
     }
 
     // Handle enter - add line
-    const handleEnter = () => {
+    const handleEnter = async () => {
         let trimmed = currentInput.trim()
         
         // Special case: กด Enter เมื่อ input ว่าง และมี draft อยู่แล้ว
@@ -1703,15 +1777,12 @@ export default function WriteSubmissionModal({
                     return
                 }
                 
-                playSound('success')
-                if (editingIndex !== null) {
-                    const newLines = [...lines]
-                    newLines[editingIndex] = trimmed
-                    setLines(newLines)
-                    setEditingIndex(null)
-                } else {
-                    setLines(prev => [...prev, trimmed])
+                // Check number limits before adding
+                if (!(await addLineWithLimitCheck(trimmed, editingIndex !== null, editingIndex))) {
+                    return
                 }
+                playSound('success')
+                if (editingIndex !== null) setEditingIndex(null)
                 setCurrentInput('')
                 setError('')
                 return
@@ -1766,17 +1837,12 @@ export default function WriteSubmissionModal({
             return
         }
 
-        // Success - play success sound
-        playSound('success')
-
-        if (editingIndex !== null) {
-            const newLines = [...lines]
-            newLines[editingIndex] = trimmed
-            setLines(newLines)
-            setEditingIndex(null)
-        } else {
-            setLines(prev => [...prev, trimmed])
+        // Check number limits before adding
+        if (!(await addLineWithLimitCheck(trimmed, editingIndex !== null, editingIndex))) {
+            return
         }
+        playSound('success')
+        if (editingIndex !== null) setEditingIndex(null)
 
         setCurrentInput('')
         setError('')
@@ -1804,11 +1870,18 @@ export default function WriteSubmissionModal({
     }
 
     // Handle insert line
-    const handleInsertLine = (index) => {
+    const handleInsertLine = async (index) => {
         if (!currentInput.trim()) return
         const parsed = parseLine(currentInput.trim())
         if (parsed && parsed.error) {
             setError(parsed.error)
+            return
+        }
+        // Check number limits before inserting
+        const { allowed, blocked, limitedInfo } = await checkLineAgainstLimits(currentInput.trim())
+        if (!allowed) {
+            playSound('error')
+            setError(`🔴 เลขปิดรับ: ${blocked.join(', ')}`)
             return
         }
         const newLines = [...lines]
@@ -1816,10 +1889,15 @@ export default function WriteSubmissionModal({
         setLines(newLines)
         setCurrentInput('')
         setError('')
+        if (limitedInfo.length > 0) {
+            setLimitInfo(`⚠️ เลขอั้น: ${limitedInfo.join(', ')}`)
+        } else {
+            setLimitInfo('')
+        }
     }
 
     // Handle paste numbers - parse 4-digit numbers from clipboard text
-    const handlePasteNumbers = () => {
+    const handlePasteNumbers = async () => {
         if (!pasteText.trim()) {
             setError('กรุณาวางข้อมูลก่อน')
             return
@@ -1843,10 +1921,31 @@ export default function WriteSubmissionModal({
         })
 
         if (newLines.length > 0) {
-            setLines(prev => [...prev, ...newLines])
+            // Check number limits for pasted lines
+            const allowedLines = []
+            const blockedNums = []
+            const limitedInfoAll = []
+            for (const nl of newLines) {
+                const { allowed, blocked, limitedInfo } = await checkLineAgainstLimits(nl)
+                if (allowed) {
+                    allowedLines.push(nl)
+                    limitedInfoAll.push(...limitedInfo)
+                } else {
+                    blockedNums.push(...blocked)
+                }
+            }
+            if (allowedLines.length > 0) {
+                setLines(prev => [...prev, ...allowedLines])
+                playSound('success')
+            }
+            if (blockedNums.length > 0) {
+                setError(`🔴 เลขปิดรับ: ${[...new Set(blockedNums)].join(', ')}`)
+            }
+            if (limitedInfoAll.length > 0) {
+                setLimitInfo(`⚠️ เลขอั้น: ${[...new Set(limitedInfoAll)].join(', ')}`)
+            }
             setShowPasteModal(false)
             setPasteText('')
-            playSound('success')
         } else {
             setError('ไม่พบเลข 4 ตัวในข้อความ')
         }
@@ -2522,6 +2621,13 @@ export default function WriteSubmissionModal({
                     </div>
                 )}
 
+                {/* Number Limit Info */}
+                {limitInfo && !error && (
+                    <div className="write-modal-error" style={{ background: 'rgba(255, 152, 0, 0.15)', borderColor: 'rgba(255, 152, 0, 0.3)', color: '#ff9800' }}>
+                        {limitInfo}
+                    </div>
+                )}
+
                 {/* Success Message */}
                 {success && (
                     <div className="write-modal-success">
@@ -2709,7 +2815,7 @@ export default function WriteSubmissionModal({
                                     rows={6}
                                     placeholder="วางข้อความที่นี่ (Ctrl+V)..."
                                     autoFocus
-                                    onPaste={e => {
+                                    onPaste={async (e) => {
                                         e.preventDefault()
                                         const text = e.clipboardData.getData('text')
                                         if (!text.trim()) return
@@ -2727,9 +2833,30 @@ export default function WriteSubmissionModal({
                                         })
                                         
                                         if (newLines.length > 0) {
-                                            setLines(prev => [...prev, ...newLines])
+                                            // Check number limits for pasted lines
+                                            const allowedLines = []
+                                            const blockedNums = []
+                                            const limitedInfoAll = []
+                                            for (const nl of newLines) {
+                                                const { allowed, blocked, limitedInfo } = await checkLineAgainstLimits(nl)
+                                                if (allowed) {
+                                                    allowedLines.push(nl)
+                                                    limitedInfoAll.push(...limitedInfo)
+                                                } else {
+                                                    blockedNums.push(...blocked)
+                                                }
+                                            }
+                                            if (allowedLines.length > 0) {
+                                                setLines(prev => [...prev, ...allowedLines])
+                                                playSound('success')
+                                            }
+                                            if (blockedNums.length > 0) {
+                                                setError(`🔴 เลขปิดรับ: ${[...new Set(blockedNums)].join(', ')}`)
+                                            }
+                                            if (limitedInfoAll.length > 0) {
+                                                setLimitInfo(`⚠️ เลขอั้น: ${[...new Set(limitedInfoAll)].join(', ')}`)
+                                            }
                                             setShowPasteModal(false)
-                                            playSound('success')
                                         } else {
                                             setError('ไม่พบเลข 4 ตัวในข้อความ')
                                             setShowPasteModal(false)

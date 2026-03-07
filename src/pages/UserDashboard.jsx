@@ -4,7 +4,7 @@ import { useToast } from '../contexts/ToastContext'
 import { useTheme, DASHBOARDS } from '../contexts/ThemeContext'
 import { supabase } from '../lib/supabase'
 import { checkDealerCreditForBet, updatePendingDeduction } from '../utils/creditCheck'
-import { fetchNumberLimits, fetchCurrentTotals, checkBatchSubmissions, generateLimitWarnings } from '../utils/numberLimits'
+import { fetchNumberLimits, fetchCurrentTotals, checkBatchSubmissions } from '../utils/numberLimits'
 import { Html5Qrcode } from 'html5-qrcode'
 import { jsPDF } from 'jspdf'
 import { addThaiFont } from '../utils/thaiFontLoader'
@@ -1303,12 +1303,6 @@ export default function UserDashboard() {
             throw new Error(`🔴 เลขปิด: ${blockedDetails.join(', ')} — ไม่สามารถรับได้`)
         }
 
-        // Show warnings for limited/overflow entries
-        const warnings = generateLimitWarnings(limitResults)
-        if (warnings && warnings.length > 0) {
-            warnings.forEach(w => toast.warning(w))
-        }
-
         const billId = 'B-' + Math.random().toString(36).substring(2, 8).toUpperCase()
         const baseTimestamp = new Date()
         const lotteryKey = selectedRound.lottery_type === 'lao' || selectedRound.lottery_type === 'hanoi' ? 'lao' : selectedRound.lottery_type
@@ -1420,12 +1414,6 @@ export default function UserDashboard() {
                 return `${r.numbers} (รับได้อีก ${Math.max(limitAmt - currentAmt, 0).toLocaleString()} จาก ${limitAmt.toLocaleString()})`
             }))]
             throw new Error(`🔴 เลขปิด: ${blockedDetails.join(', ')} — ไม่สามารถรับได้`)
-        }
-
-        // Show warnings for limited/overflow entries
-        const warnings = generateLimitWarnings(limitResults)
-        if (warnings && warnings.length > 0) {
-            warnings.forEach(w => toast.warning(w))
         }
 
         // Insert new submissions with same bill_id
@@ -2883,6 +2871,49 @@ export default function UserDashboard() {
                                                                     </button>
                                                                 </div>
                                                             )}
+                                                            {/* ย่อ/เต็ม toggle */}
+                                                            <div style={{
+                                                                display: 'flex',
+                                                                gap: '2px',
+                                                                background: 'var(--color-surface)',
+                                                                borderRadius: '8px',
+                                                                padding: '3px'
+                                                            }}>
+                                                                <button
+                                                                    onClick={() => setDisplayMode('summary')}
+                                                                    style={{
+                                                                        padding: '0.35rem 0.5rem',
+                                                                        borderRadius: '6px',
+                                                                        border: 'none',
+                                                                        background: displayMode === 'summary' ? 'var(--color-primary)' : 'transparent',
+                                                                        color: displayMode === 'summary' ? '#000' : 'var(--color-text-muted)',
+                                                                        fontSize: '0.75rem',
+                                                                        fontWeight: '500',
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s ease'
+                                                                    }}
+                                                                    title="แสดงแบบย่อ"
+                                                                >
+                                                                    ย่อ
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setDisplayMode('detailed')}
+                                                                    style={{
+                                                                        padding: '0.35rem 0.5rem',
+                                                                        borderRadius: '6px',
+                                                                        border: 'none',
+                                                                        background: displayMode === 'detailed' ? 'var(--color-primary)' : 'transparent',
+                                                                        color: displayMode === 'detailed' ? '#000' : 'var(--color-text-muted)',
+                                                                        fontSize: '0.75rem',
+                                                                        fontWeight: '500',
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s ease'
+                                                                    }}
+                                                                    title="แสดงแบบเต็ม"
+                                                                >
+                                                                    เต็ม
+                                                                </button>
+                                                            </div>
                                                             {submissions.length > 0 && (
                                                                 <button
                                                                     className="bill-copy-btn"
@@ -3056,77 +3087,78 @@ export default function UserDashboard() {
                                                                                                     {billItems[0]?.is_paid && <span title="ชำระเงินแล้ว" style={{ color: 'var(--color-success)', fontSize: '0.85rem', fontWeight: '700' }}>฿✓</span>}
                                                                                                 </div>
                                                                                                 {/* Line 2: amount, commission, copy */}
-                                                                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                                                                                        <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>
-                                                                                                            {round.currency_symbol}{billTotal.toLocaleString()}
-                                                                                                        </span>
-                                                                                                        <span style={{ fontSize: '0.8rem', color: 'var(--color-warning)' }}>
-                                                                                                            คอม {round.currency_symbol}{billCommission.toLocaleString(undefined, { maximumFractionDigits: 1 })}
-                                                                                                        </span>
-                                                                                                    </div>
-                                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                                                                                                        <button
-                                                                                                            className="bill-copy-btn"
-                                                                                                            onClick={handleCopyBill}
-                                                                                                            title="คัดลอก"
-                                                                                                        >
-                                                                                                            <FiCopy />
-                                                                                                        </button>
-                                                                                                    </div>
+                                                                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                                                                                                    <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>
+                                                                                                        {round.currency_symbol}{billTotal.toLocaleString()}
+                                                                                                    </span>
+                                                                                                    <span style={{ fontSize: '0.8rem', color: 'var(--color-warning)' }}>
+                                                                                                        คอม {round.currency_symbol}{billCommission.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                                                                                                    </span>
+                                                                                                    <button
+                                                                                                        className="bill-copy-btn"
+                                                                                                        onClick={handleCopyBill}
+                                                                                                        title="คัดลอก"
+                                                                                                    >
+                                                                                                        <FiCopy />
+                                                                                                    </button>
                                                                                                 </div>
                                                                                             </div>
 
                                                                                             {/* Bill Items - Collapsible */}
                                                                                             {isExpandedBill && (
-                                                                                                <div className="bill-items-list" style={{ borderTop: '1.5px solid rgba(128, 128, 128, 0.35)' }}>
+                                                                                                <div className="bill-items-list">
                                                                                                     {/* Table Header */}
                                                                                                     <div className="bill-item-header" style={{ 
                                                                                                         display: 'flex', 
-                                                                                                        justifyContent: 'space-between', 
                                                                                                         alignItems: 'center',
                                                                                                         padding: '0.5rem 0.75rem',
                                                                                                         borderBottom: '1px solid rgba(128, 128, 128, 0.2)',
                                                                                                         fontWeight: '600',
                                                                                                         fontSize: '0.85rem',
-                                                                                                        color: 'var(--color-text-secondary)'
+                                                                                                        color: 'var(--color-text-secondary)',
+                                                                                                        gap: '0.5rem'
                                                                                                     }}>
                                                                                                         <span style={{ flex: 1 }}>เลข</span>
-                                                                                                        <span style={{ width: '65px', textAlign: 'right', marginRight: '0.75rem' }}>ค่าคอม</span>
-                                                                                                        <span style={{ width: '65px', textAlign: 'right' }}>จำนวน</span>
+                                                                                                        <span style={{ width: '60px', textAlign: 'right', flexShrink: 0 }}>ค่าคอม</span>
+                                                                                                        <span style={{ width: '60px', textAlign: 'right', flexShrink: 0 }}>จำนวน</span>
+                                                                                                        {displayMode === 'detailed' && <span style={{ width: '45px', textAlign: 'right', flexShrink: 0 }}>จ่าย</span>}
                                                                                                     </div>
                                                                                                     {sortedBillItems.map(sub => (
                                                                                                         <div
                                                                                                             key={sub.id || sub.entry_id}
                                                                                                             className="bill-item-row"
+                                                                                                            style={{ gap: '0.5rem', padding: '0.65rem 0.75rem' }}
                                                                                                         >
                                                                                                             {displayMode === 'summary' && sub.display_numbers ? (
                                                                                                                 <>
-                                                                                                                    <span className="bill-display-text">
+                                                                                                                    <span className="bill-display-text" style={{ flex: 1 }}>
                                                                                                                         {sub.display_numbers}
                                                                                                                     </span>
-                                                                                                                    <span className="bill-item-commission" style={{ color: 'var(--color-warning)', fontSize: '0.8rem', width: '65px', textAlign: 'right', marginRight: '0.75rem' }}>
+                                                                                                                    <span className="bill-item-commission" style={{ color: 'var(--color-warning)', fontSize: '0.8rem', width: '60px', textAlign: 'right', flexShrink: 0 }}>
                                                                                                                         {round.currency_symbol}{(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)).toLocaleString(undefined, { maximumFractionDigits: 1 })}
                                                                                                                     </span>
-                                                                                                                    <span className="bill-item-amount" style={{ width: '65px', textAlign: 'right' }}>
+                                                                                                                    <span className="bill-item-amount" style={{ width: '60px', textAlign: 'right', flexShrink: 0 }}>
                                                                                                                         {round.currency_symbol}{sub.display_amount || sub.amount?.toLocaleString()}
                                                                                                                     </span>
                                                                                                                 </>
                                                                                                             ) : (
                                                                                                                 <>
-                                                                                                                    <div className="bill-item-left">
+                                                                                                                    <div className="bill-item-left" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.1rem' }}>
+                                                                                                                        <span className="bill-number" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
+                                                                                                                            {sub.numbers}
+                                                                                                                        </span>
                                                                                                                         <span className="bill-bet-type">
                                                                                                                             {BET_TYPES[sub.bet_type]?.label}
                                                                                                                         </span>
-                                                                                                                        <span className="bill-number">
-                                                                                                                            {sub.numbers}
-                                                                                                                        </span>
                                                                                                                     </div>
-                                                                                                                    <span className="bill-item-commission" style={{ color: 'var(--color-warning)', fontSize: '0.8rem', width: '65px', textAlign: 'right', marginRight: '0.75rem' }}>
+                                                                                                                    <span className="bill-item-commission" style={{ color: 'var(--color-warning)', fontSize: '0.8rem', width: '60px', textAlign: 'right', flexShrink: 0 }}>
                                                                                                                         {round.currency_symbol}{calculateCommissionAmount(sub.amount || 0, sub.bet_type, round).toLocaleString(undefined, { maximumFractionDigits: 1 })}
                                                                                                                     </span>
-                                                                                                                    <span className="bill-item-amount" style={{ width: '65px', textAlign: 'right' }}>
+                                                                                                                    <span className="bill-item-amount" style={{ width: '60px', textAlign: 'right', flexShrink: 0 }}>
                                                                                                                         {round.currency_symbol}{sub.amount?.toLocaleString()}
+                                                                                                                    </span>
+                                                                                                                    <span style={{ width: '45px', textAlign: 'right', flexShrink: 0, fontSize: '0.75rem', color: 'var(--color-danger)' }}>
+                                                                                                                        {sub.actual_payout_percent != null && sub.actual_payout_percent < 100 ? `${sub.actual_payout_percent}%` : ''}
                                                                                                                     </span>
                                                                                                                 </>
                                                                                                             )}
@@ -3221,10 +3253,9 @@ export default function UserDashboard() {
                                                                                 <thead>
                                                                                     <tr>
                                                                                         <th>เลข</th>
-                                                                                        <th>จำนวน</th>
                                                                                         <th>ค่าคอม</th>
-                                                                                        <th>เวลา</th>
-                                                                                        <th></th>
+                                                                                        <th>จำนวน</th>
+                                                                                        {displayMode === 'detailed' && <th>จ่าย</th>}
                                                                                     </tr>
                                                                                 </thead>
                                                                                 <tbody>
@@ -3235,50 +3266,39 @@ export default function UserDashboard() {
                                                                                             onClick={() => handleEditSubmission(sub)}
                                                                                         >
                                                                                             <td className="number-cell">
-                                                                                                <div className="number-display">
-                                                                                                    <span className="main-number">
-                                                                                                        {displayMode === 'summary' ? (sub.display_numbers || sub.numbers) : sub.numbers}
-                                                                                                    </span>
-                                                                                                    <span className="sub-type">
-                                                                                                        {displayMode === 'summary'
-                                                                                                            ? (sub.display_bet_type && sub.display_bet_type !== sub.display_numbers
+                                                                                                {displayMode === 'summary' ? (
+                                                                                                    <div className="number-display">
+                                                                                                        <span className="main-number">
+                                                                                                            {sub.display_numbers || sub.numbers}
+                                                                                                        </span>
+                                                                                                        <span className="sub-type">
+                                                                                                            {sub.display_bet_type && sub.display_bet_type !== sub.display_numbers
                                                                                                                 ? sub.display_bet_type
-                                                                                                                : BET_TYPES[sub.bet_type]?.label)
-                                                                                                            : BET_TYPES[sub.bet_type]?.label}
-                                                                                                    </span>
-                                                                                                </div>
+                                                                                                                : BET_TYPES[sub.bet_type]?.label}
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                ) : (
+                                                                                                    <div className="number-display">
+                                                                                                        <span className="main-number" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
+                                                                                                            {sub.numbers}
+                                                                                                        </span>
+                                                                                                        <span className="sub-type">
+                                                                                                            {BET_TYPES[sub.bet_type]?.label}
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </td>
+                                                                                            <td className="commission-cell" style={{ color: 'var(--color-warning)' }}>
+                                                                                                {round.currency_symbol}{(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)).toLocaleString(undefined, { maximumFractionDigits: 1 })}
                                                                                             </td>
                                                                                             <td>{round.currency_symbol}{displayMode === 'summary'
                                                                                                 ? (typeof sub.display_amount === 'string' ? sub.display_amount : sub.amount?.toLocaleString())
                                                                                                 : sub.amount?.toLocaleString()}</td>
-                                                                                            <td className="commission-cell" style={{ color: 'var(--color-warning)' }}>
-                                                                                                {round.currency_symbol}{(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)).toLocaleString(undefined, { maximumFractionDigits: 1 })}
-                                                                                            </td>
-                                                                                            <td className="time-cell">
-                                                                                                {new Date(sub.created_at).toLocaleTimeString('th-TH', {
-                                                                                                    hour: '2-digit',
-                                                                                                    minute: '2-digit'
-                                                                                                })}
-                                                                                            </td>
-                                                                                            <td>
-                                                                                                {canDelete(sub) && (
-                                                                                                    <button
-                                                                                                        className="icon-btn danger"
-                                                                                                        onClick={(e) => {
-                                                                                                            e.stopPropagation()
-                                                                                                            handleDelete(sub)
-                                                                                                        }}
-                                                                                                        title="ลบ"
-                                                                                                    >
-                                                                                                        <FiTrash2 />
-                                                                                                    </button>
-                                                                                                )}
-                                                                                                {sub.is_winner && (
-                                                                                                    <span className="winner-badge">
-                                                                                                        <FiCheck /> ถูก!
-                                                                                                    </span>
-                                                                                                )}
-                                                                                            </td>
+                                                                                            {displayMode === 'detailed' && (
+                                                                                                <td style={{ fontSize: '0.8rem', color: 'var(--color-danger)' }}>
+                                                                                                    {sub.actual_payout_percent != null && sub.actual_payout_percent < 100 ? `${sub.actual_payout_percent}%` : ''}
+                                                                                                </td>
+                                                                                            )}
                                                                                         </tr>
                                                                                     ))}
                                                                                 </tbody>

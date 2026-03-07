@@ -3171,6 +3171,7 @@ export default function RoundAccordionItem({
                                                                 {displayMode !== 'summary' && <th>ประเภท</th>}
                                                                 <th style={{ textAlign: 'right' }}>จำนวน</th>
                                                                 {displayMode === 'detailed' && <th style={{ textAlign: 'right' }}>เวลา</th>}
+                                                                {(displayMode === 'detailed' || displayMode === 'grouped') && <th style={{ textAlign: 'right' }}>จ่าย</th>}
                                                             </tr>
                                                         </thead>
                                                         <tbody>
@@ -3221,13 +3222,18 @@ export default function RoundAccordionItem({
                                                                         const normalizedNumbers = normalizeNumber(s.numbers, s.bet_type)
                                                                         const key = `${normalizedNumbers}|${s.bet_type}`
                                                                         if (!grouped[key]) {
-                                                                            grouped[key] = { numbers: normalizedNumbers, originalNumbers: [s.numbers], bet_type: s.bet_type, amount: 0, count: 0, id: key, ids: [], created_at: s.created_at }
+                                                                            grouped[key] = { numbers: normalizedNumbers, originalNumbers: [s.numbers], bet_type: s.bet_type, amount: 0, count: 0, id: key, ids: [], created_at: s.created_at, min_payout_percent: null }
                                                                         } else {
                                                                             if (!grouped[key].originalNumbers.includes(s.numbers)) grouped[key].originalNumbers.push(s.numbers)
                                                                         }
                                                                         grouped[key].amount += s.amount
                                                                         grouped[key].count += 1
                                                                         grouped[key].ids.push(s.id)
+                                                                        if (s.actual_payout_percent != null && s.actual_payout_percent < 100) {
+                                                                            if (grouped[key].min_payout_percent == null || s.actual_payout_percent < grouped[key].min_payout_percent) {
+                                                                                grouped[key].min_payout_percent = s.actual_payout_percent
+                                                                            }
+                                                                        }
                                                                     })
                                                                     filteredData = Object.values(grouped)
                                                                 }
@@ -3313,6 +3319,16 @@ export default function RoundAccordionItem({
                                                                                         )}
                                                                                     </td>
                                                                                     {displayMode === 'detailed' && <td className="time-cell" style={{ textAlign: 'right' }}>{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>}
+                                                                                    {displayMode === 'detailed' && (
+                                                                                        <td style={{ textAlign: 'right', fontSize: '0.8rem', color: 'var(--color-danger)' }}>
+                                                                                            {sub.actual_payout_percent != null && sub.actual_payout_percent < 100 ? `${sub.actual_payout_percent}%` : ''}
+                                                                                        </td>
+                                                                                    )}
+                                                                                    {displayMode === 'grouped' && (
+                                                                                        <td style={{ textAlign: 'right', fontSize: '0.8rem', color: 'var(--color-danger)' }}>
+                                                                                            {sub.min_payout_percent != null && sub.min_payout_percent < 100 ? `${sub.min_payout_percent}%` : ''}
+                                                                                        </td>
+                                                                                    )}
                                                                                 </tr>
                                                                             )
                                                                         })}

@@ -3754,13 +3754,14 @@
     justify-content: space-between;
     align-items: center;
     padding: 1rem 1.25rem;
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(255, 255, 255, 0.06);
+    border-bottom: 2px solid rgba(212, 175, 55, 0.25);
     cursor: pointer;
     transition: background 0.2s ease;
 }
 
 .bill-card-header:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(255, 255, 255, 0.09);
 }
 
 .bill-header-left {
@@ -3838,13 +3839,12 @@
 
 /* Bill Items List */
 .bill-items-list {
-    padding: 0.5rem 1.25rem 1rem;
-    margin-top: 1rem;
+    padding: 0.5rem 0.75rem 1rem;
+    margin-top: 0;
 }
 
 .bill-item-row {
     display: flex;
-    justify-content: space-between;
     align-items: center;
     padding: 0.65rem 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.03);
@@ -3858,9 +3858,6 @@
 
 .bill-item-row:hover {
     background: rgba(255, 255, 255, 0.02);
-    margin: 0 -0.5rem;
-    padding-left: 0.5rem;
-    padding-right: 0.5rem;
     border-radius: var(--radius-sm);
 }
 
