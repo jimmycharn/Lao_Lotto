@@ -100,7 +100,8 @@ function buildCopyEntries(submissions) {
             results.push({
                 displayType: 'teng_tod',
                 displayLine: cleanLine,
-                sortKey: firstEntry.numbers
+                sortKey: firstEntry.numbers,
+                payoutPercent: firstEntry.actual_payout_percent
             })
             return
         }
@@ -110,7 +111,8 @@ function buildCopyEntries(submissions) {
             results.push({
                 displayType: 'koon_chud',
                 displayLine: cleanLine,
-                sortKey: firstEntry.numbers
+                sortKey: firstEntry.numbers,
+                payoutPercent: firstEntry.actual_payout_percent
             })
             return
         }
@@ -119,7 +121,8 @@ function buildCopyEntries(submissions) {
         results.push({
             displayType: firstEntry.bet_type,
             displayLine: cleanLine,
-            sortKey: firstEntry.numbers
+            sortKey: firstEntry.numbers,
+            payoutPercent: firstEntry.actual_payout_percent
         })
     })
 
@@ -141,14 +144,12 @@ export function formatCopyText({ submissions, round, userName, billName }) {
     const lotteryType = round.lottery_type
     const currencySymbol = round.currency_symbol || '฿'
 
-    // Build structured entries (deduplicated by entry_id)
-    const copyEntries = buildCopyEntries(submissions)
-
-    // Group by displayType
+    // Group individual submissions by bet_type (full/expanded — one line per submission)
     const groupedByType = {}
-    copyEntries.forEach(entry => {
-        if (!groupedByType[entry.displayType]) groupedByType[entry.displayType] = []
-        groupedByType[entry.displayType].push(entry)
+    submissions.forEach(sub => {
+        const bt = sub.bet_type
+        if (!groupedByType[bt]) groupedByType[bt] = []
+        groupedByType[bt].push(sub)
     })
 
     // Sort bet types by defined order
@@ -161,40 +162,51 @@ export function formatCopyText({ submissions, round, userName, billName }) {
     // Calculate total from all submissions
     const totalAmount = submissions.reduce((sum, s) => sum + s.amount, 0)
 
-    // Count unique entries (by entry_id)
-    const uniqueCount = copyEntries.length
-
-    // Format close time
+    // Format close time (date only, no time)
     const closeTime = round.close_time ? new Date(round.close_time) : null
     const closeDateStr = closeTime
         ? closeTime.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
-        + ' ' + closeTime.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
         : '-'
 
     // Build header
     let text = `📋 ${round.lottery_name || LOTTERY_TYPES[lotteryType] || lotteryType}\n`
     if (billName) {
-        text += `🎫 ${billName}\n`
+        text += `🎫 ใบโพย: ${billName}\n`
     }
     text += `📅 งวดวันที่: ${closeDateStr}\n`
     text += `👤 ผู้ส่ง: ${userName || '-'}\n`
-    text += `📊 ทั้งหมด (${uniqueCount} รายการ)\n`
+    text += `📊 ทั้งหมด (${submissions.length} รายการ)\n`
     text += `💰 ยอดรวม: ${currencySymbol}${totalAmount.toLocaleString()}\n`
     text += `━━━━━━━━━━━━━━━━\n`
 
-    // Build body grouped by bet type
-    sortedBetTypes.forEach(betType => {
+    // Build body grouped by bet type — each submission is its own line
+    sortedBetTypes.forEach((betType, idx) => {
         const label = getBetTypeLabel(betType, lotteryType)
         text += `${label}\n`
 
         // Sort items by number
         const items = groupedByType[betType].sort((a, b) => {
-            return a.sortKey.localeCompare(b.sortKey, undefined, { numeric: true })
+            return (a.numbers || '').localeCompare(b.numbers || '', undefined, { numeric: true })
         })
 
-        items.forEach(entry => {
-            text += `${entry.displayLine}\n`
+        items.forEach(sub => {
+            let line = `${sub.numbers}=${sub.amount}`
+            // Add payout annotation if not 100%
+            const pct = sub.actual_payout_percent
+            if (pct != null && pct !== 100) {
+                if (pct === 50) {
+                    line += ' จ่ายครึ่ง'
+                } else {
+                    line += ` จ่าย ${pct}%`
+                }
+            }
+            text += `${line}\n`
         })
+
+        // Add separator between groups
+        if (idx < sortedBetTypes.length - 1) {
+            text += `---------------------\n`
+        }
     })
 
     text += `━━━━━━━━━━━━━━━━`

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useToast } from '../../contexts/ToastContext'
 import { FiAlertTriangle, FiX, FiPlus, FiTrash2, FiSearch, FiEdit2, FiCheck, FiSlash, FiClock, FiRefreshCw } from 'react-icons/fi'
@@ -20,6 +20,7 @@ export default function NumberLimitsModal({ round, onClose }) {
     const [searchQuery, setSearchQuery] = useState('')
     const [editingId, setEditingId] = useState(null)
     const [editForm, setEditForm] = useState({})
+    const numberInputRef = useRef(null)
 
     // Available bet types for this lottery type
     const availableBetTypes = useMemo(() => {
@@ -57,7 +58,7 @@ export default function NumberLimitsModal({ round, onClose }) {
         numbers: '',
         max_amount: 0,
         limit_type: 'limited', // 'limited' = เลขอั้น, 'blocked' = เลขปิด
-        payout_percent: 100,
+        payout_percent: 50,
         include_reversed: true,
         selected_bet_types: [], // Default: none selected
         select_all: false
@@ -173,6 +174,7 @@ export default function NumberLimitsModal({ round, onClose }) {
             toast.success(`เพิ่มเลข${newLimit.limit_type === 'blocked' ? 'ปิด' : 'อั้น'} ${newLimit.numbers} สำเร็จ (${newLimit.selected_bet_types.length} ประเภท)`)
             setNewLimit(prev => ({ ...prev, numbers: '', max_amount: 0 }))
             fetchLimits()
+            setTimeout(() => numberInputRef.current?.focus(), 100)
         } catch (error) {
             console.error('Error adding limit:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
@@ -374,6 +376,7 @@ export default function NumberLimitsModal({ round, onClose }) {
                                     type="text"
                                     inputMode="numeric"
                                     style={inputStyle}
+                                    ref={numberInputRef}
                                     placeholder="เช่น 123"
                                     value={newLimit.numbers}
                                     onChange={e => setNewLimit({ ...newLimit, numbers: e.target.value.replace(/\D/g, '') })}
@@ -492,7 +495,7 @@ export default function NumberLimitsModal({ round, onClose }) {
                         <button
                             className="btn btn-primary full-width"
                             onClick={e => { e.target.blur(); handleAddLimit() }}
-                            disabled={saving || !newLimit.numbers || newLimit.selected_bet_types.length === 0 || (newLimit.limit_type !== 'blocked' && !newLimit.max_amount)}
+                            disabled={saving || !newLimit.numbers || newLimit.selected_bet_types.length === 0 || (newLimit.limit_type !== 'blocked' && (newLimit.max_amount === '' || newLimit.max_amount === null || newLimit.max_amount === undefined))}
                             style={{ marginTop: '0.3rem' }}
                         >
                             {saving ? 'กำลังบันทึก...' : (

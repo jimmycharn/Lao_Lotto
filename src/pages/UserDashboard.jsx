@@ -3052,11 +3052,11 @@ export default function UserDashboard() {
                                                                                     })()
                                                                                     const isDealerSubmitted = billItems[0]?.submitted_by_type === 'dealer'
 
-                                                                                    // Copy bill function
+                                                                                    // Copy bill function (use raw billItems for full/expanded format)
                                                                                     const handleCopyBill = async (e) => {
                                                                                         e.stopPropagation()
                                                                                         const text = formatCopyText({
-                                                                                            submissions: processedBillItems,
+                                                                                            submissions: billItems,
                                                                                             round,
                                                                                             userName: profile?.full_name || profile?.email || '-',
                                                                                             billName: billItems[0]?.bill_note || billId
