@@ -3170,8 +3170,7 @@ export default function RoundAccordionItem({
                                                                 <th>เลข</th>
                                                                 {displayMode !== 'summary' && <th>ประเภท</th>}
                                                                 <th style={{ textAlign: 'right' }}>จำนวน</th>
-                                                                {displayMode === 'detailed' && <th style={{ textAlign: 'right' }}>เวลา</th>}
-                                                                {(displayMode === 'detailed' || displayMode === 'grouped') && <th style={{ textAlign: 'right' }}>จ่าย</th>}
+                                                                {displayMode === 'detailed' && <th style={{ textAlign: 'right' }}>จ่าย</th>}
                                                             </tr>
                                                         </thead>
                                                         <tbody>
@@ -3300,7 +3299,7 @@ export default function RoundAccordionItem({
                                                                                     <td className="number-cell">
                                                                                         <div className="number-value">{sub.numbers}</div>
                                                                                         {(displayMode === 'summary' || displayMode === 'grouped') && sub.count > 1 && (
-                                                                                            <div className="count-sub-label">({sub.count} รายการ)</div>
+                                                                                            <div className="count-sub-label">({sub.count})</div>
                                                                                         )}
                                                                                     </td>
                                                                                     {displayMode !== 'summary' && (
@@ -3318,15 +3317,9 @@ export default function RoundAccordionItem({
                                                                                             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>({setCount} ชุด)</div>
                                                                                         )}
                                                                                     </td>
-                                                                                    {displayMode === 'detailed' && <td className="time-cell" style={{ textAlign: 'right' }}>{new Date(sub.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>}
                                                                                     {displayMode === 'detailed' && (
                                                                                         <td style={{ textAlign: 'right', fontSize: '0.8rem', color: 'var(--color-danger)' }}>
                                                                                             {sub.actual_payout_percent != null && sub.actual_payout_percent < 100 ? `${sub.actual_payout_percent}%` : ''}
-                                                                                        </td>
-                                                                                    )}
-                                                                                    {displayMode === 'grouped' && (
-                                                                                        <td style={{ textAlign: 'right', fontSize: '0.8rem', color: 'var(--color-danger)' }}>
-                                                                                            {sub.min_payout_percent != null && sub.min_payout_percent < 100 ? `${sub.min_payout_percent}%` : ''}
                                                                                         </td>
                                                                                     )}
                                                                                 </tr>
@@ -3581,7 +3574,10 @@ export default function RoundAccordionItem({
                                                                                                 <span style={{ minWidth: '60px' }}>เลข</span>
                                                                                                 {billDisplayMode !== 'summary' && <span>ประเภท</span>}
                                                                                             </div>
-                                                                                            <span>จำนวน</span>
+                                                                                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                                                                                <span>จำนวน</span>
+                                                                                                {billDisplayMode === 'detailed' && <span style={{ width: '45px', textAlign: 'right' }}>จ่าย</span>}
+                                                                                            </div>
                                                                                         </div>
                                                                                         {(() => {
                                                                                             // Sort items by created_at first to ensure correct order
@@ -3663,7 +3659,7 @@ export default function RoundAccordionItem({
                                                                                                         )}
                                                                                                         {billDisplayMode === 'summary' && item.count > 1 && (
                                                                                                             <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
-                                                                                                                ({item.count} รายการ)
+                                                                                                                ({item.count})
                                                                                                             </span>
                                                                                                         )}
                                                                                                     </div>
@@ -3671,6 +3667,11 @@ export default function RoundAccordionItem({
                                                                                                         <span style={{ fontWeight: '500' }}>
                                                                                                             {round.currency_symbol}{item.amount.toLocaleString()}
                                                                                                         </span>
+                                                                                                        {billDisplayMode === 'detailed' && (
+                                                                                                            <span style={{ width: '45px', textAlign: 'right', fontSize: '0.75rem', color: 'var(--color-danger)', flexShrink: 0 }}>
+                                                                                                                {item.actual_payout_percent != null && item.actual_payout_percent < 100 ? `${item.actual_payout_percent}%` : ''}
+                                                                                                            </span>
+                                                                                                        )}
                                                                                                         {/* Allow delete for: 1) open rounds, or 2) closed/announced rounds if user hasn't changed password */}
                                                                                                         {(isOpen || canEditBillForUser(bill.user_id)) && billDisplayMode === 'summary' && (
                                                                                                             <button 
