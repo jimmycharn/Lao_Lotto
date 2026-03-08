@@ -1457,6 +1457,121 @@ export default function RoundAccordionItem({
         }
     }
 
+    // Copy remaining items (ยอดที่เหลือ) to clipboard
+    const handleCopyRemainingItems = async (remainingItems, totalRemaining) => {
+        if (remainingItems.length === 0) return
+
+        const lotteryName = round.lottery_name || LOTTERY_TYPES[round.lottery_type] || 'หวย'
+        const closeTime = new Date(round.close_time)
+        const formattedDate = closeTime.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })
+
+        let text = `📤 ยอดที่เหลือ - ${lotteryName}\n`
+        text += `📅 วันที่ ${formattedDate}\n`
+        text += `📅 ทั้งหมด (${remainingItems.length} รายการ)\n`
+        text += `💰 ยอดรวม: ${round.currency_symbol}${totalRemaining.toLocaleString()}\n`
+        text += `━━━━━━━━━━━━━━━━\n`
+
+        const betTypeOrder = ['2_bottom', '2_top', '3_tod', '3_top', '3_front', '3_bottom', '4_set', '4_top', '5_top', '6_top']
+        const byType = {}
+        remainingItems.forEach(item => {
+            if (!byType[item.bet_type]) byType[item.bet_type] = []
+            byType[item.bet_type].push(item)
+        })
+        const sortedBetTypes = Object.keys(byType).sort((a, b) => {
+            const indexA = betTypeOrder.indexOf(a)
+            const indexB = betTypeOrder.indexOf(b)
+            if (indexA === -1 && indexB === -1) return a.localeCompare(b)
+            if (indexA === -1) return 1
+            if (indexB === -1) return -1
+            return indexA - indexB
+        })
+
+        sortedBetTypes.forEach((betType, idx) => {
+            const items = byType[betType]
+            const label = BET_TYPES_BY_LOTTERY[round.lottery_type]?.[betType]?.label || BET_TYPES[betType] || betType
+            text += `${label}\n`
+            items.forEach(item => {
+                text += `${item.numbers}=${item.remainingAmount}\n`
+            })
+            if (idx < sortedBetTypes.length - 1) {
+                text += `-----------------\n`
+            }
+        })
+        text += `━━━━━━━━━━━━━━━━\n`
+
+        try {
+            await navigator.clipboard.writeText(text)
+            toast.success(`คัดลอก ${remainingItems.length} รายการแล้ว!`)
+        } catch (err) {
+            const textArea = document.createElement('textarea')
+            textArea.value = text
+            document.body.appendChild(textArea)
+            textArea.select()
+            document.execCommand('copy')
+            document.body.removeChild(textArea)
+            toast.success(`คัดลอก ${remainingItems.length} รายการแล้ว!`)
+        }
+    }
+
+    // Copy excess items (ยอดเกิน) to clipboard
+    const handleCopyExcessItems = async (filteredExcessItems) => {
+        if (filteredExcessItems.length === 0) return
+
+        const lotteryName = round.lottery_name || LOTTERY_TYPES[round.lottery_type] || 'หวย'
+        const closeTime = new Date(round.close_time)
+        const formattedDate = closeTime.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })
+        const setPrice = round?.set_prices?.['4_top'] || 120
+        const grandTotal = filteredExcessItems.reduce((sum, i) => sum + (i.isSetBased ? i.excess * setPrice : i.excess), 0)
+
+        let text = `📤 ยอดที่เกิน - ${lotteryName}\n`
+        text += `📅 วันที่ ${formattedDate}\n`
+        text += `📅 ทั้งหมด (${filteredExcessItems.length} รายการ)\n`
+        text += `💰 ยอดรวม: ${round.currency_symbol}${grandTotal.toLocaleString()}\n`
+        text += `━━━━━━━━━━━━━━━━\n`
+
+        const betTypeOrder = ['2_bottom', '2_top', '3_tod', '3_top', '3_front', '3_bottom', '4_set', '4_top', '5_top', '6_top']
+        const byType = {}
+        filteredExcessItems.forEach(item => {
+            if (!byType[item.bet_type]) byType[item.bet_type] = []
+            byType[item.bet_type].push(item)
+        })
+        const sortedBetTypes = Object.keys(byType).sort((a, b) => {
+            const indexA = betTypeOrder.indexOf(a)
+            const indexB = betTypeOrder.indexOf(b)
+            if (indexA === -1 && indexB === -1) return a.localeCompare(b)
+            if (indexA === -1) return 1
+            if (indexB === -1) return -1
+            return indexA - indexB
+        })
+
+        sortedBetTypes.forEach((betType, idx) => {
+            const items = byType[betType]
+            const label = BET_TYPES_BY_LOTTERY[round.lottery_type]?.[betType]?.label || BET_TYPES[betType] || betType
+            text += `${label}\n`
+            items.forEach(item => {
+                const excessAmount = item.isSetBased ? item.excess * setPrice : item.excess
+                text += `${item.numbers}=${excessAmount}\n`
+            })
+            if (idx < sortedBetTypes.length - 1) {
+                text += `-----------------\n`
+            }
+        })
+        text += `━━━━━━━━━━━━━━━━\n`
+
+        try {
+            await navigator.clipboard.writeText(text)
+            toast.success(`คัดลอก ${filteredExcessItems.length} รายการแล้ว!`)
+        } catch (err) {
+            const textArea = document.createElement('textarea')
+            textArea.value = text
+            document.body.appendChild(textArea)
+            textArea.select()
+            document.execCommand('copy')
+            document.body.removeChild(textArea)
+            toast.success(`คัดลอก ${filteredExcessItems.length} รายการแล้ว!`)
+        }
+    }
+
     // Delete selected submissions
     const handleDeleteSelectedItems = async (ids) => {
         const selectedIds = ids.filter(id => selectedItems[id])
@@ -3772,8 +3887,18 @@ export default function RoundAccordionItem({
                                                                 <span style={{ color: 'var(--color-text-muted)', flex: 1 }}>จำนวน</span>
                                                                 <span style={{ color: 'var(--color-text-muted)', flex: 1, textAlign: 'right' }}>ยอดที่เหลือ</span>
                                                             </div>
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                                <span style={{ fontWeight: 600, flex: 1 }}>{remainingItems.length} รายการ</span>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
+                                                                    <span style={{ fontWeight: 600 }}>{remainingItems.length} รายการ</span>
+                                                                    <button
+                                                                        className="btn btn-sm"
+                                                                        onClick={() => handleCopyRemainingItems(remainingItems, totalRemaining)}
+                                                                        title="คัดลอกยอดที่เหลือ"
+                                                                        style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                                                                    >
+                                                                        <FiCopy size={12} /> คัดลอก ({remainingItems.length})
+                                                                    </button>
+                                                                </div>
                                                                 <span style={{ fontWeight: 600, color: 'var(--color-warning)', flex: 1, textAlign: 'right' }}>
                                                                     {round.currency_symbol}{totalRemaining.toLocaleString()}
                                                                 </span>
@@ -3843,6 +3968,14 @@ export default function RoundAccordionItem({
                                                                         : `${round.currency_symbol}${filteredExcessItems.reduce((sum, i) => sum + i.excess, 0).toLocaleString()}`}
                                                                 </span>
                                                             </div>
+                                                            <button
+                                                                className="btn btn-sm"
+                                                                onClick={() => handleCopyExcessItems(filteredExcessItems)}
+                                                                title="คัดลอกยอดเกิน"
+                                                                style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.5rem' }}
+                                                            >
+                                                                <FiCopy size={12} /> คัดลอก ({filteredExcessItems.length})
+                                                            </button>
                                                         </div>
 
                                                         <div className="bulk-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-surface)', borderRadius: '8px' }}>
