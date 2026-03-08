@@ -28,19 +28,39 @@ export default function NumberLimitsModal({ round, onClose }) {
         return Object.entries(types).filter(([key]) => !key.includes('_set'))
     }, [round.lottery_type])
 
+    // Group bet types by digit count for organized display
+    const betTypeGroups = useMemo(() => {
+        const groups = [
+            { label: 'เลข 1 ตัว', keys: ['run_top', 'run_bottom', 'pak_top', 'pak_bottom'] },
+            { label: 'เลข 2 ตัว', keys: ['2_top', '2_front', '2_center', '2_run', '2_bottom'] },
+            { label: 'เลข 3 ตัว', keys: ['3_top', '3_tod', '3_bottom'] },
+            { label: 'เลข 4 ตัว', keys: ['4_set', '4_float'] },
+            { label: 'เลข 5 ตัว', keys: ['5_float'] }
+        ]
+        const availableKeys = availableBetTypes.map(([key]) => key)
+        return groups
+            .map(g => ({
+                ...g,
+                types: g.keys
+                    .filter(k => availableKeys.includes(k))
+                    .map(k => {
+                        const config = availableBetTypes.find(([key]) => key === k)
+                        return config ? { key: config[0], label: config[1].label } : null
+                    })
+                    .filter(Boolean)
+            }))
+            .filter(g => g.types.length > 0)
+    }, [availableBetTypes])
+
     // New limit form state
     const [newLimit, setNewLimit] = useState({
         numbers: '',
         max_amount: '',
         limit_type: 'limited', // 'limited' = เลขอั้น, 'blocked' = เลขปิด
         payout_percent: 100,
-        include_reversed: false,
-        selected_bet_types: availableBetTypes.map(([key]) => key), // Default: select all
-        select_all: true,
-        // Time condition
-        has_time_condition: false,
-        after_time: '',
-        time_payout_percent: 50
+        include_reversed: true,
+        selected_bet_types: [], // Default: none selected
+        select_all: false
     })
 
     useEffect(() => {
@@ -107,13 +127,6 @@ export default function NumberLimitsModal({ round, onClose }) {
                 ? generateReversedNumbers(newLimit.numbers)
                 : []
 
-            const timeCondition = newLimit.has_time_condition && newLimit.after_time
-                ? {
-                    after_time: newLimit.after_time,
-                    payout_percent: parseFloat(newLimit.time_payout_percent) || 50
-                }
-                : null
-
             // Create one record per selected bet type
             const records = newLimit.selected_bet_types.map(betType => ({
                 round_id: round.id,
@@ -124,7 +137,7 @@ export default function NumberLimitsModal({ round, onClose }) {
                 payout_percent: parseFloat(newLimit.payout_percent) || 100,
                 include_reversed: newLimit.include_reversed,
                 reversed_numbers: reversedNumbers,
-                time_condition: timeCondition,
+                time_condition: null,
                 is_active: true
             }))
 
@@ -270,9 +283,9 @@ export default function NumberLimitsModal({ round, onClose }) {
 
     const sectionStyle = {
         background: 'var(--card-bg, rgba(255,255,255,0.05))',
-        borderRadius: '12px',
-        padding: '1rem',
-        marginBottom: '1rem',
+        borderRadius: '10px',
+        padding: '0.6rem',
+        marginBottom: '0.75rem',
         border: '1px solid var(--border-color, rgba(255,255,255,0.1))'
     }
 
@@ -322,7 +335,7 @@ export default function NumberLimitsModal({ round, onClose }) {
                 </div>
 
                 {/* Body */}
-                <div className="modal-body" style={{ flex: 1, overflowY: 'auto', padding: '0.75rem' }}>
+                <div className="modal-body" style={{ flex: 1, overflowY: 'auto', padding: '0.5rem' }}>
 
                     {/* === Add New Limit Section === */}
                     <div style={sectionStyle}>
@@ -330,8 +343,8 @@ export default function NumberLimitsModal({ round, onClose }) {
                             <FiPlus style={{ marginRight: '0.3rem' }} /> เพิ่มเลขอั้น/ปิด
                         </h4>
 
-                        {/* Row 1: Number + Type + Max Amount */}
-                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.6rem', flexWrap: 'wrap' }}>
+                        {/* Row 1: Number + Limit Type (same row) */}
+                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.6rem' }}>
                             <div style={{ flex: '1 1 100px', minWidth: '80px' }}>
                                 <label style={labelStyle}>เลข</label>
                                 <input
@@ -343,7 +356,7 @@ export default function NumberLimitsModal({ round, onClose }) {
                                     onChange={e => setNewLimit({ ...newLimit, numbers: e.target.value.replace(/\D/g, '') })}
                                 />
                             </div>
-                            <div style={{ flex: '1 1 100px', minWidth: '90px' }}>
+                            <div style={{ flex: '1 1 140px', minWidth: '120px' }}>
                                 <label style={labelStyle}>ประเภทจำกัด</label>
                                 <select
                                     style={inputStyle}
@@ -354,8 +367,12 @@ export default function NumberLimitsModal({ round, onClose }) {
                                     <option value="blocked">🔴 ปิด (ปิดรับ)</option>
                                 </select>
                             </div>
-                            <div style={{ flex: '1 1 80px', minWidth: '80px' }}>
-                                <label style={labelStyle}>วงเงินสูงสุด ({round.currency_symbol})</label>
+                        </div>
+
+                        {/* Row 2: Max Amount + Payout % (same row) */}
+                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.6rem' }}>
+                            <div style={{ flex: '1 1 120px', minWidth: '100px' }}>
+                                <label style={labelStyle}>วงเงินรับสูงสุด ({round.currency_symbol})</label>
                                 <input
                                     type="number"
                                     inputMode="numeric"
@@ -365,12 +382,8 @@ export default function NumberLimitsModal({ round, onClose }) {
                                     onChange={e => setNewLimit({ ...newLimit, max_amount: e.target.value })}
                                 />
                             </div>
-                        </div>
-
-                        {/* Row 2: Payout % + Include Reversed */}
-                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
                             {newLimit.limit_type === 'limited' && (
-                                <div style={{ flex: '0 0 120px' }}>
+                                <div style={{ flex: '0 0 110px', minWidth: '90px' }}>
                                     <label style={labelStyle}>อัตราจ่าย %</label>
                                     <input
                                         type="number"
@@ -384,17 +397,19 @@ export default function NumberLimitsModal({ round, onClose }) {
                                     />
                                 </div>
                             )}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', paddingTop: '1.2rem' }}>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={newLimit.include_reversed}
-                                        onChange={e => setNewLimit({ ...newLimit, include_reversed: e.target.checked })}
-                                        style={{ width: '16px', height: '16px' }}
-                                    />
-                                    <FiRefreshCw size={14} /> รวมเลขกลับทุกชุด
-                                </label>
-                            </div>
+                        </div>
+
+                        {/* Row 3: Include Reversed Checkbox */}
+                        <div style={{ marginBottom: '0.6rem' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={newLimit.include_reversed}
+                                    onChange={e => setNewLimit({ ...newLimit, include_reversed: e.target.checked })}
+                                    style={{ width: '16px', height: '16px' }}
+                                />
+                                <FiRefreshCw size={14} /> รวมเลขกลับทุกชุด
+                            </label>
                         </div>
 
                         {/* Show reversed preview */}
@@ -404,50 +419,11 @@ export default function NumberLimitsModal({ round, onClose }) {
                             </div>
                         )}
 
-                        {/* Row 3: Time Condition */}
-                        <div style={{ marginBottom: '0.6rem' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', marginBottom: '0.4rem' }}>
-                                <input
-                                    type="checkbox"
-                                    checked={newLimit.has_time_condition}
-                                    onChange={e => setNewLimit({ ...newLimit, has_time_condition: e.target.checked })}
-                                    style={{ width: '16px', height: '16px' }}
-                                />
-                                <FiClock size={14} /> กำหนดอัตราจ่ายตามเวลา
-                            </label>
-                            {newLimit.has_time_condition && (
-                                <div style={{ display: 'flex', gap: '0.5rem', paddingLeft: '1.4rem', flexWrap: 'wrap' }}>
-                                    <div style={{ flex: '0 0 120px' }}>
-                                        <label style={labelStyle}>หลังเวลา</label>
-                                        <input
-                                            type="time"
-                                            style={inputStyle}
-                                            value={newLimit.after_time}
-                                            onChange={e => setNewLimit({ ...newLimit, after_time: e.target.value })}
-                                        />
-                                    </div>
-                                    <div style={{ flex: '0 0 100px' }}>
-                                        <label style={labelStyle}>จ่าย %</label>
-                                        <input
-                                            type="number"
-                                            inputMode="numeric"
-                                            style={inputStyle}
-                                            placeholder="50"
-                                            min="0"
-                                            max="100"
-                                            value={newLimit.time_payout_percent}
-                                            onChange={e => setNewLimit({ ...newLimit, time_payout_percent: e.target.value })}
-                                        />
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Row 4: Bet Type Selection */}
+                        {/* Bet Type Selection - Grouped by digit count */}
                         <div style={{ marginBottom: '0.6rem' }}>
                             <label style={{ ...labelStyle, marginBottom: '0.4rem' }}>ประเภทการแทง</label>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-                                {/* Select All Chip */}
+                            {/* Select All Chip */}
+                            <div style={{ marginBottom: '0.4rem' }}>
                                 <span
                                     style={{
                                         ...chipStyle(newLimit.select_all),
@@ -460,16 +436,24 @@ export default function NumberLimitsModal({ round, onClose }) {
                                 >
                                     <FiCheck size={12} /> ทั้งหมด
                                 </span>
-                                {availableBetTypes.map(([key, config]) => (
-                                    <span
-                                        key={key}
-                                        style={chipStyle(newLimit.selected_bet_types.includes(key))}
-                                        onClick={() => handleToggleBetType(key)}
-                                    >
-                                        {config.label}
-                                    </span>
-                                ))}
                             </div>
+                            {/* Grouped bet types */}
+                            {betTypeGroups.map(group => (
+                                <div key={group.label} style={{ marginBottom: '0.35rem' }}>
+                                    <div style={{ fontSize: '0.7rem', opacity: 0.5, marginBottom: '0.2rem', fontWeight: '600' }}>{group.label}</div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                                        {group.types.map(t => (
+                                            <span
+                                                key={t.key}
+                                                style={chipStyle(newLimit.selected_bet_types.includes(t.key))}
+                                                onClick={() => handleToggleBetType(t.key)}
+                                            >
+                                                {t.label}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
                         </div>
 
                         {/* Add Button */}
@@ -527,7 +511,7 @@ export default function NumberLimitsModal({ round, onClose }) {
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'space-between',
-                                            padding: '0.5rem 0.75rem',
+                                            padding: '0.4rem 0.5rem',
                                             background: 'rgba(255, 255, 255, 0.05)',
                                             borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.05))'
                                         }}>
@@ -560,7 +544,7 @@ export default function NumberLimitsModal({ round, onClose }) {
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 justifyContent: 'space-between',
-                                                padding: '0.35rem 0.75rem',
+                                                padding: '0.3rem 0.5rem',
                                                 borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.03))',
                                                 opacity: limit.is_active ? 1 : 0.4,
                                                 fontSize: '0.82rem'
@@ -611,7 +595,7 @@ export default function NumberLimitsModal({ round, onClose }) {
                                                 ) : (
                                                     /* View Mode */
                                                     <>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
                                                             <span style={{
                                                                 fontSize: '0.65rem',
                                                                 padding: '0.05rem 0.3rem',
@@ -623,8 +607,8 @@ export default function NumberLimitsModal({ round, onClose }) {
                                                             }}>
                                                                 {limit.limit_type === 'blocked' ? 'ปิด' : 'อั้น'}
                                                             </span>
-                                                            <span style={{ fontWeight: '500', minWidth: '70px' }}>{BET_TYPES[limit.bet_type]}</span>
-                                                            <span style={{ opacity: 0.7 }}>
+                                                            <span style={{ fontWeight: '500', minWidth: '55px', fontSize: '0.8rem' }}>{BET_TYPES[limit.bet_type]}</span>
+                                                            <span style={{ opacity: 0.7, fontSize: '0.8rem' }}>
                                                                 {round.currency_symbol}{limit.max_amount?.toLocaleString()}
                                                             </span>
                                                             {limit.limit_type === 'limited' && limit.payout_percent !== 100 && (
@@ -638,7 +622,7 @@ export default function NumberLimitsModal({ round, onClose }) {
                                                                 </span>
                                                             )}
                                                         </div>
-                                                        <div style={{ display: 'flex', gap: '0.2rem' }}>
+                                                        <div style={{ display: 'flex', gap: '0.15rem', flexShrink: 0 }}>
                                                             <button
                                                                 className="icon-btn"
                                                                 onClick={() => handleToggleActive(limit)}
