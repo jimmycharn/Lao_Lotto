@@ -31,11 +31,11 @@ export default function NumberLimitsModal({ round, onClose }) {
     // Group bet types by digit count for organized display
     const betTypeGroups = useMemo(() => {
         const groups = [
-            { label: 'เลข 1 ตัว', keys: ['run_top', 'run_bottom', 'pak_top', 'pak_bottom'] },
-            { label: 'เลข 2 ตัว', keys: ['2_top', '2_front', '2_center', '2_run', '2_bottom'] },
-            { label: 'เลข 3 ตัว', keys: ['3_top', '3_tod', '3_bottom'] },
-            { label: 'เลข 4 ตัว', keys: ['4_set', '4_float'] },
-            { label: 'เลข 5 ตัว', keys: ['5_float'] }
+            { label: 'เลข 1 ตัว', digitCount: 1, keys: ['run_top', 'run_bottom', 'pak_top', 'pak_bottom'] },
+            { label: 'เลข 2 ตัว', digitCount: 2, keys: ['2_top', '2_front', '2_center', '2_run', '2_bottom'] },
+            { label: 'เลข 3 ตัว', digitCount: 3, keys: ['3_top', '3_tod', '3_bottom'] },
+            { label: 'เลข 4 ตัว', digitCount: 4, keys: ['4_set', '4_float'] },
+            { label: 'เลข 5 ตัว', digitCount: 5, keys: ['5_float'] }
         ]
         const availableKeys = availableBetTypes.map(([key]) => key)
         return groups
@@ -62,6 +62,28 @@ export default function NumberLimitsModal({ round, onClose }) {
         selected_bet_types: [], // Default: none selected
         select_all: false
     })
+
+    // Determine which bet type keys are enabled based on the number input length
+    const enabledBetKeys = useMemo(() => {
+        const len = (newLimit.numbers || '').length
+        if (len === 0) return new Set()
+        const matched = betTypeGroups.filter(g => g.digitCount === len)
+        return new Set(matched.flatMap(g => g.types.map(t => t.key)))
+    }, [newLimit.numbers, betTypeGroups])
+
+    // Auto-clear selected bet types that no longer match when number changes
+    useEffect(() => {
+        if (enabledBetKeys.size === 0) {
+            setNewLimit(prev => ({ ...prev, selected_bet_types: [], select_all: false }))
+        } else {
+            setNewLimit(prev => {
+                const filtered = prev.selected_bet_types.filter(k => enabledBetKeys.has(k))
+                const allEnabled = [...enabledBetKeys]
+                const isAll = allEnabled.length > 0 && allEnabled.every(k => filtered.includes(k))
+                return { ...prev, selected_bet_types: filtered, select_all: isAll }
+            })
+        }
+    }, [enabledBetKeys])
 
     useEffect(() => {
         fetchLimits()
@@ -425,42 +447,55 @@ export default function NumberLimitsModal({ round, onClose }) {
                             {/* Select All Chip */}
                             <div style={{ marginBottom: '0.4rem' }}>
                                 <span
+                                    onClick={() => {
+                                        if (enabledBetKeys.size === 0) return
+                                        handleToggleSelectAll(!newLimit.select_all)
+                                    }}
                                     style={{
                                         ...chipStyle(newLimit.select_all),
                                         fontWeight: '600',
                                         borderColor: newLimit.select_all ? 'var(--color-success)' : undefined,
                                         background: newLimit.select_all ? 'rgba(76, 175, 80, 0.2)' : undefined,
-                                        color: newLimit.select_all ? 'var(--color-success)' : undefined
+                                        color: newLimit.select_all ? 'var(--color-success)' : undefined,
+                                        ...(enabledBetKeys.size === 0 ? { opacity: 0.25, cursor: 'not-allowed' } : {})
                                     }}
-                                    onClick={() => handleToggleSelectAll(!newLimit.select_all)}
                                 >
                                     <FiCheck size={12} /> ทั้งหมด
                                 </span>
                             </div>
                             {/* Grouped bet types */}
-                            {betTypeGroups.map(group => (
-                                <div key={group.label} style={{ marginBottom: '0.35rem' }}>
-                                    <div style={{ fontSize: '0.7rem', opacity: 0.5, marginBottom: '0.2rem', fontWeight: '600' }}>{group.label}</div>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-                                        {group.types.map(t => (
-                                            <span
-                                                key={t.key}
-                                                style={chipStyle(newLimit.selected_bet_types.includes(t.key))}
-                                                onClick={() => handleToggleBetType(t.key)}
-                                            >
-                                                {t.label}
-                                            </span>
-                                        ))}
+                            {betTypeGroups.map((group) => {
+                                const groupEnabled = group.types.some(t => enabledBetKeys.has(t.key));
+                                return (
+                                    <div key={group.label} style={{ marginBottom: '0.35rem', opacity: groupEnabled ? 1 : 0.35 }}>
+                                        <div style={{ fontSize: '0.7rem', opacity: 0.5, marginBottom: '0.2rem', fontWeight: '600' }}>{group.label}</div>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                                            {group.types.map((t) => {
+                                                const isEnabled = enabledBetKeys.has(t.key);
+                                                return (
+                                                    <span
+                                                        key={t.key}
+                                                        style={{
+                                                            ...chipStyle(newLimit.selected_bet_types.includes(t.key)),
+                                                            ...(isEnabled ? {} : { cursor: 'not-allowed', opacity: 0.4 })
+                                                        }}
+                                                        onClick={() => isEnabled && handleToggleBetType(t.key)}
+                                                    >
+                                                        {t.label}
+                                                    </span>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
 
                         {/* Add Button */}
                         <button
                             className="btn btn-primary full-width"
                             onClick={e => { e.target.blur(); handleAddLimit() }}
-                            disabled={saving || !newLimit.numbers}
+                            disabled={saving || !newLimit.numbers || newLimit.selected_bet_types.length === 0 || (newLimit.limit_type !== 'blocked' && !newLimit.max_amount)}
                             style={{ marginTop: '0.3rem' }}
                         >
                             {saving ? 'กำลังบันทึก...' : (
