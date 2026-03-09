@@ -10,7 +10,9 @@ import {
     FiLink,
     FiSettings,
     FiStar,
-    FiCreditCard
+    FiCreditCard,
+    FiRefreshCw,
+    FiClock
 } from 'react-icons/fi'
 import '../../pages/Dealer.css'
 import '../../pages/SettingsTabs.css'
@@ -18,7 +20,14 @@ import MemberSettings from './MemberSettings'
 import BankAccountCard from '../BankAccountCard'
 
 // Member Accordion Item Component
-export default function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock, onDelete, onDisconnect, dealerBankAccounts = [], onUpdateBank, isDealer = false, onCopyCredentials }) {
+export default function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock, onDelete, onDisconnect, dealerBankAccounts = [], onUpdateBank, isDealer = false, onCopyCredentials, isPerUserYearly = false, onRenew }) {
+    // Membership expiry helpers
+    const membershipExpired = isPerUserYearly && !isDealer && member.membership_expires_at
+        ? new Date(member.membership_expires_at) < new Date()
+        : (isPerUserYearly && !isDealer && !member.membership_expires_at) // No expiry set = expired for per_user_yearly
+    const membershipExpiringSoon = isPerUserYearly && !isDealer && member.membership_expires_at && !membershipExpired
+        ? (new Date(member.membership_expires_at) - new Date()) / (1000 * 60 * 60 * 24) <= 30
+        : false
     const { user } = useAuth()
     const [activeTab, setActiveTab] = useState('info') // 'info' | 'bank' | 'settings'
 
@@ -80,6 +89,54 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                             <span className="member-email" style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
                                 {member.email}
                             </span>
+                            {isPerUserYearly && !isDealer && (
+                                <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
+                                    {membershipExpired ? (
+                                        <span style={{
+                                            background: 'var(--color-error)',
+                                            color: '#fff',
+                                            padding: '0.1rem 0.5rem',
+                                            borderRadius: '4px',
+                                            fontSize: '0.7rem',
+                                            fontWeight: '600'
+                                        }}>
+                                            หมดอายุแล้ว
+                                        </span>
+                                    ) : membershipExpiringSoon ? (
+                                        <span style={{
+                                            background: 'var(--color-warning)',
+                                            color: '#fff',
+                                            padding: '0.1rem 0.5rem',
+                                            borderRadius: '4px',
+                                            fontSize: '0.7rem',
+                                            fontWeight: '600'
+                                        }}>
+                                            <FiClock size={10} style={{ marginRight: '3px', verticalAlign: 'text-bottom' }} />
+                                            ใกล้หมดอายุ
+                                        </span>
+                                    ) : member.membership_expires_at ? (
+                                        <span style={{
+                                            background: 'var(--color-success)',
+                                            color: '#fff',
+                                            padding: '0.1rem 0.5rem',
+                                            borderRadius: '4px',
+                                            fontSize: '0.7rem',
+                                            fontWeight: '600'
+                                        }}>
+                                            ใช้งานได้
+                                        </span>
+                                    ) : null}
+                                    {member.membership_expires_at && (
+                                        <span style={{
+                                            color: 'var(--color-text-muted)',
+                                            fontSize: '0.7rem',
+                                            lineHeight: '1.5'
+                                        }}>
+                                            ถึง {new Date(member.membership_expires_at).toLocaleDateString('th-TH')}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                     <div className="accordion-icon" style={{
@@ -100,6 +157,28 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                     borderTop: '1px solid var(--color-border)',
                     marginLeft: '56px'
                 }}>
+                    {/* Renew button - only for per_user_yearly non-dealer members */}
+                    {isPerUserYearly && !isDealer && onRenew && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onRenew(member); }}
+                            style={{ 
+                                padding: '0.5rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: membershipExpired ? 'var(--color-primary)' : 'transparent',
+                                border: membershipExpired ? '1px solid var(--color-primary)' : '1px solid var(--color-success)',
+                                borderRadius: '50%',
+                                color: membershipExpired ? '#fff' : 'var(--color-success)',
+                                cursor: 'pointer',
+                                width: '32px',
+                                height: '32px'
+                            }}
+                            title="ต่ออายุสมาชิก"
+                        >
+                            <FiRefreshCw size={14} />
+                        </button>
+                    )}
                     {/* Copy button - only for non-dealer and password not changed */}
                     {!isDealer && onCopyCredentials && !member.password_changed && (
                         <button
@@ -270,10 +349,26 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                                     </div>
                                     <div className="info-item">
                                         <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>สถานะ</label>
-                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-success)' }}>
-                                            <span className="status-badge open" style={{ fontSize: '0.9rem' }}>ปกติ</span>
+                                        <div style={{ fontSize: '1.1rem', color: membershipExpired ? 'var(--color-error)' : 'var(--color-success)' }}>
+                                            <span className={`status-badge ${membershipExpired ? 'closed' : 'open'}`} style={{ fontSize: '0.9rem' }}>
+                                                {membershipExpired ? 'หมดอายุ' : 'ปกติ'}
+                                            </span>
                                         </div>
                                     </div>
+                                    {isPerUserYearly && !isDealer && member.membership_expires_at && (
+                                        <div className="info-item">
+                                            <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>วันหมดอายุ</label>
+                                            <div style={{ fontSize: '1.1rem', color: membershipExpired ? 'var(--color-error)' : 'var(--color-text)' }}>
+                                                {new Date(member.membership_expires_at).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {isPerUserYearly && !isDealer && member.membership_years && (
+                                        <div className="info-item">
+                                            <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>จำนวนปีที่ซื้อ</label>
+                                            <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{member.membership_years} ปี</div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}

@@ -42,7 +42,8 @@ import {
     FiInfo,
     FiLink,
     FiCreditCard,
-    FiImage
+    FiImage,
+    FiRefreshCw
 } from 'react-icons/fi'
 import './Dealer.css'
 import './SettingsTabs.css'
@@ -126,9 +127,21 @@ export default function Dealer() {
 
     // Add member modal states
     const [showAddMemberModal, setShowAddMemberModal] = useState(false)
-    const [addMemberForm, setAddMemberForm] = useState({ email: '', full_name: '', phone: '' })
+    const [addMemberForm, setAddMemberForm] = useState({ email: '', full_name: '', phone: '', membership_years: 1 })
     const [addingMember, setAddingMember] = useState(false)
     const [newMemberCredentials, setNewMemberCredentials] = useState(null) // { email, password, url }
+
+    // Renew membership modal states
+    const [showRenewModal, setShowRenewModal] = useState(false)
+    const [renewMember, setRenewMember] = useState(null)
+    const [renewYears, setRenewYears] = useState(1)
+    const [renewing, setRenewing] = useState(false)
+
+    // Approve member with years (for per_user_yearly)
+    const [showApproveYearsModal, setShowApproveYearsModal] = useState(false)
+    const [approveMemberTarget, setApproveMemberTarget] = useState(null)
+    const [approveYears, setApproveYears] = useState(1)
+    const [approving, setApproving] = useState(false)
 
     // QR Code modal state
     const [showQRModal, setShowQRModal] = useState(false)
@@ -349,6 +362,8 @@ export default function Dealer() {
                     membership_created_at: m.created_at,
                     approved_at: m.approved_at,
                     blocked_at: m.blocked_at,
+                    membership_expires_at: m.membership_expires_at || null,
+                    membership_years: m.membership_years || null,
                     assigned_bank_account_id: m.assigned_bank_account_id,
                     member_bank_account_id: m.member_bank_account_id,
                     member_bank: memberBank || null,
@@ -395,6 +410,8 @@ export default function Dealer() {
                             description,
                             billing_model,
                             percentage_rate,
+                            profit_percentage_rate,
+                            price_per_user_per_year,
                             monthly_price,
                             yearly_price,
                             max_users,
@@ -657,6 +674,7 @@ export default function Dealer() {
                     balance: creditData.balance,
                     pendingDeduction: 0,
                     availableCredit: creditData.balance,
+                    outstanding_debt: creditData.outstanding_debt || 0,
                     is_blocked: creditData.is_blocked,
                     blocked_reason: creditData.blocked_reason,
                     warning_threshold: creditData.warning_threshold,
@@ -850,7 +868,7 @@ export default function Dealer() {
                     }
 
                     // Use creditService to process topup
-                    const { success, error, newBalance } = await processTopup({
+                    const { success, error, newBalance, debtRecovered } = await processTopup({
                         dealerId: user.id,
                         bankAccountId: assignedBankAccount.id,
                         amount: verifiedAmount,
@@ -866,7 +884,8 @@ export default function Dealer() {
 
                     console.log('Credit updated successfully to:', newBalance)
 
-                    toast.success(`เติมเครดิต ฿${verifiedAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} สำเร็จ!`)
+                    const debtMsg = debtRecovered > 0 ? ` (หักยอดค้าง ฿${debtRecovered.toLocaleString('th-TH', { minimumFractionDigits: 2 })})` : ''
+                    toast.success(`เติมเครดิต ฿${verifiedAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} สำเร็จ!${debtMsg}`)
                     fetchDealerCredit()
                 } else {
                     // SlipOK verification failed - create pending request
@@ -912,8 +931,80 @@ export default function Dealer() {
         }
     }
 
+    // Helper: check if current dealer uses per_user_yearly billing
+    function isPerUserYearly() {
+        return subscription?.subscription_packages?.billing_model === 'per_user_yearly'
+    }
+
+    // Helper: get price per user per year from subscription
+    function getPricePerUserPerYear() {
+        return parseFloat(subscription?.subscription_packages?.price_per_user_per_year || 0)
+    }
+
+    // Helper: deduct credit for per_user_yearly membership
+    async function deductMembershipCredit(years, memberName) {
+        const pricePerYear = getPricePerUserPerYear()
+        const totalCost = pricePerYear * years
+        if (totalCost <= 0) return { success: true }
+
+        // Check dealer credit
+        const { data: creditData } = await supabase
+            .from('dealer_credits')
+            .select('balance, pending_deduction, is_blocked')
+            .eq('dealer_id', user.id)
+            .maybeSingle()
+
+        if (creditData?.is_blocked) {
+            return { success: false, error: 'เครดิตถูกระงับ ไม่สามารถดำเนินการได้' }
+        }
+
+        const currentBalance = creditData?.balance || 0
+        const pendingDeduction = creditData?.pending_deduction || 0
+        const availableCredit = currentBalance - pendingDeduction
+
+        if (availableCredit < totalCost) {
+            return { success: false, error: `เครดิตไม่เพียงพอ! ต้องการ ฿${totalCost.toLocaleString()} แต่เครดิตคงเหลือ ฿${availableCredit.toLocaleString()}` }
+        }
+
+        // Deduct credit
+        const newBalance = currentBalance - totalCost
+        const { error: updateError } = await supabase
+            .from('dealer_credits')
+            .update({ balance: newBalance })
+            .eq('dealer_id', user.id)
+
+        if (updateError) {
+            return { success: false, error: 'ไม่สามารถตัดเครดิตได้: ' + updateError.message }
+        }
+
+        // Record transaction
+        await supabase.from('credit_transactions').insert({
+            dealer_id: user.id,
+            amount: -totalCost,
+            balance_after: newBalance,
+            reference_type: 'membership_fee',
+            description: `ค่าสมาชิกรายปี "${memberName}" (${years} ปี x ฿${pricePerYear.toLocaleString()})`,
+            metadata: {
+                member_name: memberName,
+                years: years,
+                price_per_year: pricePerYear,
+                total_cost: totalCost
+            }
+        })
+
+        return { success: true, totalCost, newBalance }
+    }
+
     // Membership Management Functions
     async function handleApproveMember(member) {
+        // If per_user_yearly, show years selection modal first
+        if (isPerUserYearly() && !member.is_dealer) {
+            setApproveMemberTarget(member)
+            setApproveYears(1)
+            setShowApproveYearsModal(true)
+            return
+        }
+
         try {
             const { error } = await supabase
                 .from('user_dealer_memberships')
@@ -925,6 +1016,86 @@ export default function Dealer() {
         } catch (error) {
             console.error('Error approving member:', error)
             toast.error('เกิดข้อผิดพลาดในการอนุมัติสมาชิก')
+        }
+    }
+
+    // Approve member with years (per_user_yearly)
+    async function handleApproveWithYears() {
+        if (!approveMemberTarget) return
+        setApproving(true)
+        try {
+            const memberName = approveMemberTarget.full_name || approveMemberTarget.email
+            const result = await deductMembershipCredit(approveYears, memberName)
+            if (!result.success) {
+                toast.error(result.error)
+                return
+            }
+
+            const expiresAt = new Date()
+            expiresAt.setFullYear(expiresAt.getFullYear() + approveYears)
+
+            const { error } = await supabase
+                .from('user_dealer_memberships')
+                .update({
+                    status: 'active',
+                    membership_expires_at: expiresAt.toISOString(),
+                    membership_years: approveYears
+                })
+                .eq('id', approveMemberTarget.membership_id)
+
+            if (error) throw error
+
+            toast.success(`อนุมัติ "${memberName}" สำเร็จ (${approveYears} ปี) ตัดเครดิต ฿${result.totalCost.toLocaleString()}`)
+            setShowApproveYearsModal(false)
+            setApproveMemberTarget(null)
+            fetchData()
+            fetchDealerCredit()
+        } catch (error) {
+            console.error('Error approving member with years:', error)
+            toast.error('เกิดข้อผิดพลาดในการอนุมัติสมาชิก')
+        } finally {
+            setApproving(false)
+        }
+    }
+
+    // Renew membership (per_user_yearly)
+    async function handleRenewMembership() {
+        if (!renewMember) return
+        setRenewing(true)
+        try {
+            const memberName = renewMember.full_name || renewMember.email
+            const result = await deductMembershipCredit(renewYears, memberName)
+            if (!result.success) {
+                toast.error(result.error)
+                return
+            }
+
+            // Calculate new expiry: if not yet expired, extend from current expiry; otherwise from now
+            const currentExpiry = renewMember.membership_expires_at ? new Date(renewMember.membership_expires_at) : null
+            const baseDate = (currentExpiry && currentExpiry > new Date()) ? currentExpiry : new Date()
+            const newExpiry = new Date(baseDate)
+            newExpiry.setFullYear(newExpiry.getFullYear() + renewYears)
+
+            const { error } = await supabase
+                .from('user_dealer_memberships')
+                .update({
+                    membership_expires_at: newExpiry.toISOString(),
+                    membership_years: renewYears
+                })
+                .eq('id', renewMember.membership_id)
+
+            if (error) throw error
+
+            toast.success(`ต่ออายุ "${memberName}" สำเร็จ (${renewYears} ปี) ตัดเครดิต ฿${result.totalCost.toLocaleString()}`)
+            setShowRenewModal(false)
+            setRenewMember(null)
+            fetchData()
+            fetchDealerCredit()
+        } catch (error) {
+            console.error('Error renewing membership:', error)
+            toast.error('เกิดข้อผิดพลาดในการต่ออายุสมาชิก')
+        } finally {
+            setRenewing(false)
         }
     }
 
@@ -969,6 +1140,31 @@ export default function Dealer() {
             return
         }
 
+        // For per_user_yearly: check credit before creating user
+        const perUserYearly = isPerUserYearly()
+        const years = parseInt(addMemberForm.membership_years) || 1
+        if (perUserYearly) {
+            const pricePerYear = getPricePerUserPerYear()
+            const totalCost = pricePerYear * years
+            if (totalCost > 0) {
+                const { data: creditData } = await supabase
+                    .from('dealer_credits')
+                    .select('balance, pending_deduction, is_blocked')
+                    .eq('dealer_id', user.id)
+                    .maybeSingle()
+
+                if (creditData?.is_blocked) {
+                    toast.error('เครดิตถูกระงับ ไม่สามารถสร้างสมาชิกได้')
+                    return
+                }
+                const availableCredit = (creditData?.balance || 0) - (creditData?.pending_deduction || 0)
+                if (availableCredit < totalCost) {
+                    toast.error(`เครดิตไม่เพียงพอ! ต้องการ ฿${totalCost.toLocaleString()} แต่เครดิตคงเหลือ ฿${availableCredit.toLocaleString()}`)
+                    return
+                }
+            }
+        }
+
         setAddingMember(true)
         try {
             const defaultPassword = '123456'
@@ -1005,14 +1201,38 @@ export default function Dealer() {
             }
 
             if (newUserId) {
+                // For per_user_yearly: deduct credit
+                let creditDeducted = false
+                if (perUserYearly) {
+                    const memberName = addMemberForm.full_name || addMemberForm.email
+                    const result = await deductMembershipCredit(years, memberName)
+                    if (!result.success) {
+                        toast.error(result.error)
+                        setAddingMember(false)
+                        return
+                    }
+                    creditDeducted = true
+                }
+
+                // Build membership data
+                const membershipData = {
+                    user_id: newUserId,
+                    dealer_id: user.id,
+                    status: 'active' // Auto-approve since dealer created them
+                }
+
+                // Add expiry for per_user_yearly
+                if (perUserYearly) {
+                    const expiresAt = new Date()
+                    expiresAt.setFullYear(expiresAt.getFullYear() + years)
+                    membershipData.membership_expires_at = expiresAt.toISOString()
+                    membershipData.membership_years = years
+                }
+
                 // Now create membership as dealer (RLS policy: dealer_id = auth.uid())
                 const { error: membershipError } = await supabase
                     .from('user_dealer_memberships')
-                    .insert({
-                        user_id: newUserId,
-                        dealer_id: user.id,
-                        status: 'active' // Auto-approve since dealer created them
-                    })
+                    .insert(membershipData)
 
                 if (membershipError) {
                     console.error('Membership error:', membershipError)
@@ -1027,9 +1247,13 @@ export default function Dealer() {
                     full_name: addMemberForm.full_name
                 })
 
-                toast.success('สร้างสมาชิกใหม่สำเร็จ!')
-                setAddMemberForm({ email: '', full_name: '', phone: '' })
+                const successMsg = perUserYearly && creditDeducted
+                    ? `สร้างสมาชิกใหม่สำเร็จ! (${years} ปี)`
+                    : 'สร้างสมาชิกใหม่สำเร็จ!'
+                toast.success(successMsg)
+                setAddMemberForm({ email: '', full_name: '', phone: '', membership_years: 1 })
                 fetchData()
+                if (creditDeducted) fetchDealerCredit()
             }
         } catch (error) {
             console.error('Error adding member:', error)
@@ -2137,6 +2361,11 @@ export default function Dealer() {
                                         รอตัด: ฿{dealerCredit.pendingDeduction.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                                     </div>
                                 )}
+                                {dealerCredit?.outstanding_debt > 0 && (
+                                    <div style={{ fontSize: '0.65rem', color: 'var(--color-danger)', marginTop: '0.1rem' }}>
+                                        ยอดค้าง: ฿{dealerCredit.outstanding_debt.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                    </div>
+                                )}
                             </div>
                             {isBlocked && (
                                 <div style={{
@@ -2198,7 +2427,8 @@ export default function Dealer() {
                     const daysLeft = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24))
                     const isExpired = daysLeft <= 0
                     const isExpiringSoon = daysLeft > 0 && daysLeft <= 7
-                    const isFixedPrice = (subscription.subscription_packages?.billing_model || subscription.billing_model) !== 'percentage'
+                    const bm = subscription.subscription_packages?.billing_model || subscription.billing_model
+                    const isFixedPrice = bm !== 'percentage' && bm !== 'profit_percentage' && bm !== 'per_user_yearly'
 
                     if (!isExpired && !isExpiringSoon) return null
                     if (!isFixedPrice) return null
@@ -2770,6 +3000,12 @@ export default function Dealer() {
                                                 onUpdateBank={(bankAccountId) => handleUpdateMemberBank(member, bankAccountId)}
                                                 isDealer={member.is_dealer}
                                                 onCopyCredentials={copyMemberCredentials}
+                                                isPerUserYearly={isPerUserYearly()}
+                                                onRenew={(m) => {
+                                                    setRenewMember(m)
+                                                    setRenewYears(1)
+                                                    setShowRenewModal(true)
+                                                }}
                                             />
                                         ))}
                                     </div>
@@ -3297,26 +3533,41 @@ export default function Dealer() {
 
                             // If the round was still 'open' before announcing, deduct credit now
                             // (closed rounds already had credit deducted in handleCloseRound)
+                            // For profit_percentage: ResultsModal.handleAnnounce already handles everything
                             const wasOpen = selectedRound.status === 'open' || 
                                 (!selectedRound.status && new Date() <= new Date(selectedRound.close_time))
                             if (wasOpen) {
                                 try {
-                                    const { data: immediateBillingResult, error: immediateBillingError } = await supabase
-                                        .rpc('create_immediate_billing_record', {
-                                            p_round_id: updatedRound.id,
-                                            p_dealer_id: user.id
-                                        })
+                                    // Check billing model - skip RPC deduction for profit_percentage
+                                    // (profit-based deduction is already done in ResultsModal)
+                                    const { data: dealerSubs } = await supabase
+                                        .from('dealer_subscriptions')
+                                        .select('billing_model, subscription_packages(billing_model)')
+                                        .eq('dealer_id', user.id)
+                                        .in('status', ['active', 'trial'])
+                                        .order('created_at', { ascending: false })
+                                        .limit(1)
+                                    
+                                    const billingModel = dealerSubs?.[0]?.subscription_packages?.billing_model || dealerSubs?.[0]?.billing_model
 
-                                    if (!immediateBillingError && immediateBillingResult?.success && immediateBillingResult?.amount_deducted > 0) {
-                                        console.log('Immediate billing on announce:', immediateBillingResult)
-                                        toast.info(`ตัดเครดิต ฿${immediateBillingResult.amount_deducted.toLocaleString()} สำเร็จ`)
-                                    } else {
-                                        const { data: result, error: creditError } = await supabase
-                                            .rpc('finalize_round_credit', { p_round_id: updatedRound.id })
+                                    if (billingModel !== 'profit_percentage') {
+                                        const { data: immediateBillingResult, error: immediateBillingError } = await supabase
+                                            .rpc('create_immediate_billing_record', {
+                                                p_round_id: updatedRound.id,
+                                                p_dealer_id: user.id
+                                            })
 
-                                        if (!creditError && result?.total_deducted > 0) {
-                                            console.log('Regular finalization on announce:', result)
-                                            toast.info(`ตัดเครดิต ฿${result.total_deducted.toLocaleString()} สำเร็จ`)
+                                        if (!immediateBillingError && immediateBillingResult?.success && immediateBillingResult?.amount_deducted > 0) {
+                                            console.log('Immediate billing on announce:', immediateBillingResult)
+                                            toast.info(`ตัดเครดิต ฿${immediateBillingResult.amount_deducted.toLocaleString()} สำเร็จ`)
+                                        } else {
+                                            const { data: result, error: creditError } = await supabase
+                                                .rpc('finalize_round_credit', { p_round_id: updatedRound.id })
+
+                                            if (!creditError && result?.total_deducted > 0) {
+                                                console.log('Regular finalization on announce:', result)
+                                                toast.info(`ตัดเครดิต ฿${result.total_deducted.toLocaleString()} สำเร็จ`)
+                                            }
                                         }
                                     }
                                 } catch (billingErr) {
@@ -3675,6 +3926,23 @@ export default function Dealer() {
                                         />
                                     </div>
 
+                                    {isPerUserYearly() && (
+                                        <div className="form-group" style={{ marginBottom: '1rem' }}>
+                                            <label className="form-label">จำนวนปีที่ใช้งาน</label>
+                                            <input
+                                                type="number"
+                                                className="form-input"
+                                                min="1"
+                                                max="10"
+                                                value={addMemberForm.membership_years}
+                                                onChange={e => setAddMemberForm({ ...addMemberForm, membership_years: parseInt(e.target.value) || 1 })}
+                                            />
+                                            <small style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
+                                                ค่าใช้จ่าย: ฿{((getPricePerUserPerYear() * (parseInt(addMemberForm.membership_years) || 1))).toLocaleString()} ({parseInt(addMemberForm.membership_years) || 1} ปี x ฿{getPricePerUserPerYear().toLocaleString()}/ปี)
+                                            </small>
+                                        </div>
+                                    )}
+
                                     <div style={{
                                         padding: '0.75rem',
                                         background: 'rgba(212, 175, 55, 0.1)',
@@ -3785,6 +4053,156 @@ export default function Dealer() {
                         }
                     }}
                 />
+            )}
+
+            {/* Renew Membership Modal */}
+            {showRenewModal && renewMember && (
+                <div className="modal-overlay" onClick={() => setShowRenewModal(false)} style={{ zIndex: 9999 }}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+                        <div className="modal-header">
+                            <h3><FiRefreshCw /> ต่ออายุสมาชิก</h3>
+                            <button className="modal-close" onClick={() => setShowRenewModal(false)}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <div style={{
+                                padding: '1rem',
+                                background: 'var(--color-surface-light)',
+                                borderRadius: 'var(--radius-md)',
+                                marginBottom: '1rem'
+                            }}>
+                                <div style={{ fontWeight: 600, fontSize: '1.1rem', marginBottom: '0.5rem' }}>
+                                    {renewMember.full_name || renewMember.email}
+                                </div>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                                    {renewMember.email}
+                                </div>
+                                {renewMember.membership_expires_at && (
+                                    <div style={{
+                                        marginTop: '0.5rem',
+                                        fontSize: '0.85rem',
+                                        color: new Date(renewMember.membership_expires_at) < new Date() ? 'var(--color-error)' : 'var(--color-text-muted)'
+                                    }}>
+                                        {new Date(renewMember.membership_expires_at) < new Date()
+                                            ? `หมดอายุแล้ว: ${new Date(renewMember.membership_expires_at).toLocaleDateString('th-TH')}`
+                                            : `หมดอายุ: ${new Date(renewMember.membership_expires_at).toLocaleDateString('th-TH')}`
+                                        }
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="form-group" style={{ marginBottom: '1rem' }}>
+                                <label className="form-label">จำนวนปีที่ต่ออายุ</label>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    min="1"
+                                    max="10"
+                                    value={renewYears}
+                                    onChange={e => setRenewYears(parseInt(e.target.value) || 1)}
+                                />
+                            </div>
+
+                            <div style={{
+                                padding: '0.75rem',
+                                background: 'rgba(212, 175, 55, 0.1)',
+                                borderRadius: 'var(--radius-md)',
+                                border: '1px solid rgba(212, 175, 55, 0.3)',
+                                fontSize: '0.9rem',
+                                textAlign: 'center'
+                            }}>
+                                ค่าใช้จ่าย: <strong style={{ color: 'var(--color-primary)', fontSize: '1.1rem' }}>
+                                    ฿{(getPricePerUserPerYear() * renewYears).toLocaleString()}
+                                </strong>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
+                                    ({renewYears} ปี x ฿{getPricePerUserPerYear().toLocaleString()}/ปี)
+                                </div>
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowRenewModal(false)}>
+                                ยกเลิก
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleRenewMembership}
+                                disabled={renewing}
+                            >
+                                {renewing ? 'กำลังดำเนินการ...' : <><FiRefreshCw /> ต่ออายุ</>}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Approve Member with Years Modal (per_user_yearly) */}
+            {showApproveYearsModal && approveMemberTarget && (
+                <div className="modal-overlay" onClick={() => setShowApproveYearsModal(false)} style={{ zIndex: 9999 }}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+                        <div className="modal-header">
+                            <h3><FiCheck /> อนุมัติสมาชิก</h3>
+                            <button className="modal-close" onClick={() => setShowApproveYearsModal(false)}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <div style={{
+                                padding: '1rem',
+                                background: 'var(--color-surface-light)',
+                                borderRadius: 'var(--radius-md)',
+                                marginBottom: '1rem'
+                            }}>
+                                <div style={{ fontWeight: 600, fontSize: '1.1rem', marginBottom: '0.5rem' }}>
+                                    {approveMemberTarget.full_name || approveMemberTarget.email}
+                                </div>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                                    {approveMemberTarget.email}
+                                </div>
+                            </div>
+
+                            <div className="form-group" style={{ marginBottom: '1rem' }}>
+                                <label className="form-label">จำนวนปีที่ใช้งาน</label>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    min="1"
+                                    max="10"
+                                    value={approveYears}
+                                    onChange={e => setApproveYears(parseInt(e.target.value) || 1)}
+                                />
+                            </div>
+
+                            <div style={{
+                                padding: '0.75rem',
+                                background: 'rgba(212, 175, 55, 0.1)',
+                                borderRadius: 'var(--radius-md)',
+                                border: '1px solid rgba(212, 175, 55, 0.3)',
+                                fontSize: '0.9rem',
+                                textAlign: 'center'
+                            }}>
+                                ค่าใช้จ่าย: <strong style={{ color: 'var(--color-primary)', fontSize: '1.1rem' }}>
+                                    ฿{(getPricePerUserPerYear() * approveYears).toLocaleString()}
+                                </strong>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
+                                    ({approveYears} ปี x ฿{getPricePerUserPerYear().toLocaleString()}/ปี)
+                                </div>
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowApproveYearsModal(false)}>
+                                ยกเลิก
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleApproveWithYears}
+                                disabled={approving}
+                            >
+                                {approving ? 'กำลังดำเนินการ...' : <><FiCheck /> อนุมัติ</>}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     )

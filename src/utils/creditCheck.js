@@ -38,8 +38,8 @@ export async function checkDealerCreditForBet(dealerId, roundId, newBetAmount) {
         // Use billing_model from dealer_subscriptions (updated when package is assigned)
         const billingModel = subscription.billing_model || pkg?.billing_model
         
-        // Only check for percentage billing model
-        if (billingModel !== 'percentage') {
+        // Only check for percentage or profit_percentage billing model
+        if (billingModel !== 'percentage' && billingModel !== 'profit_percentage') {
             return { allowed: true, message: 'Not percentage billing', details: {} }
         }
 
@@ -127,7 +127,7 @@ export async function checkUpstreamDealerCredit(upstreamDealerId, roundId, betAm
         // Use billing_model from dealer_subscriptions (updated when package is assigned)
         const billingModel = subscription.billing_model || pkg?.billing_model
         
-        if (billingModel !== 'percentage') {
+        if (billingModel !== 'percentage' && billingModel !== 'profit_percentage') {
             return { allowed: true, message: 'Not percentage billing', details: {} }
         }
 
@@ -280,7 +280,7 @@ export async function updatePendingDeduction(dealerId) {
         // dealer_subscriptions.billing_model may be stale/incorrect for older records
         const billingModel = subscription?.subscription_packages?.billing_model || subscription?.billing_model
         
-        if (!subscription || billingModel !== 'percentage') {
+        if (!subscription || (billingModel !== 'percentage' && billingModel !== 'profit_percentage')) {
             return { totalPending: 0, roundBreakdown: [] }
         }
 
@@ -592,6 +592,7 @@ export async function calculateRoundCreditFee(dealerId, roundId) {
                     id,
                     billing_model,
                     percentage_rate,
+                    profit_percentage_rate,
                     min_amount_before_charge,
                     min_deduction,
                     max_deduction
@@ -606,8 +607,8 @@ export async function calculateRoundCreditFee(dealerId, roundId) {
         // Use subscription_packages.billing_model as primary source of truth
         const billingModel = subscription?.subscription_packages?.billing_model || subscription?.billing_model
 
-        if (!subscription || billingModel !== 'percentage') {
-            return { fee: 0, details: { reason: 'Not percentage billing' } }
+        if (!subscription || (billingModel !== 'percentage' && billingModel !== 'profit_percentage')) {
+            return { fee: 0, details: { reason: 'Not percentage billing', billingModel } }
         }
 
         const percentageRate = subscription.subscription_packages?.percentage_rate || 0
@@ -734,7 +735,9 @@ export async function calculateRoundCreditFee(dealerId, roundId) {
 
         return {
             fee,
+            billingModel,
             details: {
+                billingModel,
                 dealerOwnVolume: netDealerOwnVolume,
                 dealerInputForOwnUsers: netDealerInputForOwnUsers,
                 selfInputVolume,
@@ -811,11 +814,13 @@ export async function deductAdditionalCreditForRound(dealerId, roundId, previous
                 .from('credit_transactions')
                 .insert({
                     dealer_id: dealerId,
+                    transaction_type: 'deduction',
                     amount: -actualDeduction,
-                    type: 'deduction',
-                    description: `ค่าธรรมเนียมเพิ่มเติมจากการแก้ไขงวด (Round ID: ${roundId})`,
-                    round_id: roundId,
-                    created_at: new Date().toISOString()
+                    balance_after: currentBalance - actualDeduction,
+                    reference_type: 'round',
+                    reference_id: roundId,
+                    description: `ค่าธรรมเนียมเพิ่มเติมจากการแก้ไขงวด`,
+                    metadata: { type: 'additional_deduction', currentFee, previouslyChargedAmount }
                 })
         }
 
@@ -841,6 +846,337 @@ export async function deductAdditionalCreditForRound(dealerId, roundId, previous
             success: false,
             amountDeducted: 0,
             message: 'เกิดข้อผิดพลาดในการตัดเครดิต: ' + error.message,
+            details: { error: error.message }
+        }
+    }
+}
+
+/**
+ * Calculate profit for a round (used by profit_percentage billing model)
+ * Profit = (Total Incoming Bets - Total Commission - Total Payout) + (Outgoing: wins + commission - bet amount)
+ * @param {string} dealerId - The dealer's user ID
+ * @param {string} roundId - The round ID
+ * @returns {Promise<{profit: number, details: object}>}
+ */
+export async function calculateRoundProfit(dealerId, roundId) {
+    try {
+        // Get all members of this dealer
+        const { data: memberships } = await supabase
+            .from('user_dealer_memberships')
+            .select('user_id')
+            .eq('dealer_id', dealerId)
+            .eq('status', 'active')
+
+        const memberUserIds = (memberships || []).map(m => m.user_id)
+
+        // Get all submissions for this round (incoming bets)
+        const { data: allSubs } = await supabase
+            .from('submissions')
+            .select('id, amount, user_id, source, commission_amount, prize_amount, is_winner, bet_type')
+            .eq('round_id', roundId)
+            .eq('is_deleted', false)
+
+        // Get user settings for commission calculation
+        const allUserIds = [...new Set((allSubs || []).map(s => s.user_id))]
+        let userSettingsMap = {}
+        if (allUserIds.length > 0) {
+            const { data: userSettings } = await supabase
+                .from('user_dealer_memberships')
+                .select('user_id, lottery_settings')
+                .eq('dealer_id', dealerId)
+                .in('user_id', allUserIds)
+            
+            for (const us of (userSettings || [])) {
+                userSettingsMap[us.user_id] = us.lottery_settings
+            }
+        }
+
+        // Get round info for lottery_type (needed for default commission/payout rates)
+        const { data: roundData } = await supabase
+            .from('lottery_rounds')
+            .select('lottery_type')
+            .eq('id', roundId)
+            .single()
+
+        const lotteryType = roundData?.lottery_type
+
+        // Calculate incoming totals
+        let totalBet = 0
+        let totalCommission = 0
+        let totalPayout = 0
+
+        for (const sub of (allSubs || [])) {
+            const amount = parseFloat(sub.amount || 0)
+            totalBet += amount
+
+            // Commission: use stored commission_amount if available
+            const commission = parseFloat(sub.commission_amount || 0)
+            totalCommission += commission
+
+            // Payout: use stored prize_amount if winner
+            if (sub.is_winner) {
+                totalPayout += parseFloat(sub.prize_amount || 0)
+            }
+        }
+
+        // Get outgoing bet_transfers for this round
+        const { data: outgoingTransfers } = await supabase
+            .from('bet_transfers')
+            .select('id, amount, status, target_dealer_id')
+            .eq('round_id', roundId)
+            .neq('status', 'returned')
+
+        // For each outgoing transfer, find the corresponding submission in the target round
+        // to get wins and commissions back
+        let outgoingBetAmount = 0
+        let outgoingWinnings = 0
+        let outgoingCommission = 0
+
+        if (outgoingTransfers && outgoingTransfers.length > 0) {
+            outgoingBetAmount = outgoingTransfers.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0)
+
+            // Get submissions that were created from transfers (source='transfer') in target dealer rounds
+            // These are tracked via bet_transfer_items or by matching source='transfer' 
+            const transferIds = outgoingTransfers.map(t => t.id)
+            
+            const { data: transferItems } = await supabase
+                .from('bet_transfer_items')
+                .select('transfer_id, target_submission_id')
+                .in('transfer_id', transferIds)
+
+            if (transferItems && transferItems.length > 0) {
+                const targetSubIds = transferItems.map(ti => ti.target_submission_id).filter(Boolean)
+                
+                if (targetSubIds.length > 0) {
+                    const { data: targetSubs } = await supabase
+                        .from('submissions')
+                        .select('id, amount, prize_amount, is_winner, commission_amount')
+                        .in('id', targetSubIds)
+                        .eq('is_deleted', false)
+
+                    for (const ts of (targetSubs || [])) {
+                        if (ts.is_winner) {
+                            outgoingWinnings += parseFloat(ts.prize_amount || 0)
+                        }
+                        outgoingCommission += parseFloat(ts.commission_amount || 0)
+                    }
+                }
+            }
+        }
+
+        // Calculate profit components
+        const memberProfit = totalBet - totalCommission - totalPayout
+        const upstreamProfit = outgoingWinnings + outgoingCommission - outgoingBetAmount
+        const totalProfit = memberProfit + upstreamProfit
+
+        return {
+            profit: totalProfit,
+            details: {
+                totalBet,
+                totalCommission,
+                totalPayout,
+                memberProfit,
+                outgoingBetAmount,
+                outgoingWinnings,
+                outgoingCommission,
+                upstreamProfit,
+                totalProfit
+            }
+        }
+    } catch (error) {
+        console.error('Error calculating round profit:', error)
+        return { profit: 0, details: { error: error.message } }
+    }
+}
+
+/**
+ * Deduct credit based on profit for profit_percentage billing model
+ * Called after results are announced. Refunds pending deduction and applies profit-based fee.
+ * Allows negative balance (outstanding debt tracked in dealer_credits.outstanding_debt)
+ * @param {string} dealerId - The dealer's user ID
+ * @param {string} roundId - The round ID
+ * @param {number} previousPendingAmount - The pending amount that was held during data entry (to be refunded)
+ * @returns {Promise<{success: boolean, amountDeducted: number, profitAmount: number, message: string, details: object}>}
+ */
+export async function deductProfitBasedCredit(dealerId, roundId, previousPendingAmount = 0) {
+    try {
+        // 1. Get dealer's subscription to get profit_percentage_rate
+        const { data: subscriptions } = await supabase
+            .from('dealer_subscriptions')
+            .select(`
+                *,
+                subscription_packages (
+                    id,
+                    billing_model,
+                    percentage_rate,
+                    profit_percentage_rate,
+                    min_amount_before_charge,
+                    min_deduction,
+                    max_deduction
+                )
+            `)
+            .eq('dealer_id', dealerId)
+            .in('status', ['active', 'trial'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+
+        const subscription = subscriptions?.[0] || null
+        const billingModel = subscription?.subscription_packages?.billing_model || subscription?.billing_model
+
+        if (!subscription || billingModel !== 'profit_percentage') {
+            return {
+                success: true,
+                amountDeducted: 0,
+                profitAmount: 0,
+                message: 'Not profit_percentage billing',
+                details: { billingModel }
+            }
+        }
+
+        const profitPercentageRate = subscription.subscription_packages?.profit_percentage_rate || 0
+        const minDeduction = subscription.subscription_packages?.min_deduction || 0
+        const maxDeduction = subscription.subscription_packages?.max_deduction || 100000
+
+        // 2. Calculate profit for this round
+        const { profit, details: profitDetails } = await calculateRoundProfit(dealerId, roundId)
+
+        // 3. Get current credit balance
+        const { data: creditData } = await supabase
+            .from('dealer_credits')
+            .select('balance, pending_deduction, outstanding_debt')
+            .eq('dealer_id', dealerId)
+            .single()
+
+        const currentBalance = creditData?.balance || 0
+        const currentPending = creditData?.pending_deduction || 0
+        const currentDebt = creditData?.outstanding_debt || 0
+
+        // 4. Refund the pending deduction first (add back to balance, reduce pending)
+        let newBalance = currentBalance + previousPendingAmount
+        let newPending = Math.max(0, currentPending - previousPendingAmount)
+
+        // 5. Calculate profit-based fee
+        let profitFee = 0
+        if (profit > 0) {
+            profitFee = profit * (profitPercentageRate / 100)
+
+            // Apply min/max deduction limits
+            if (profitFee > 0 && profitFee < minDeduction) {
+                profitFee = minDeduction
+            }
+            if (profitFee > maxDeduction) {
+                profitFee = maxDeduction
+            }
+        }
+        // If profit <= 0, no fee to charge
+
+        // 6. Apply deduction (allow negative balance)
+        let actualDeduction = profitFee
+        let newOutstandingDebt = currentDebt
+
+        if (profitFee > 0) {
+            newBalance = newBalance - profitFee
+            // If balance goes negative, track as outstanding debt
+            if (newBalance < 0) {
+                newOutstandingDebt = currentDebt + Math.abs(newBalance)
+                // Keep balance at the negative value — it will be recovered on top-up
+            }
+        }
+
+        // 7. Update dealer_credits
+        const { error: updateError } = await supabase
+            .from('dealer_credits')
+            .update({
+                balance: newBalance,
+                pending_deduction: newPending,
+                outstanding_debt: newOutstandingDebt,
+                updated_at: new Date().toISOString()
+            })
+            .eq('dealer_id', dealerId)
+
+        if (updateError) throw updateError
+
+        // 8. Record refund transaction (if there was a pending amount to refund)
+        if (previousPendingAmount > 0) {
+            await supabase
+                .from('credit_transactions')
+                .insert({
+                    dealer_id: dealerId,
+                    transaction_type: 'refund',
+                    amount: previousPendingAmount,
+                    balance_after: newBalance + profitFee, // balance after refund but before profit deduction
+                    reference_type: 'round',
+                    reference_id: roundId,
+                    description: `คืนเครดิตรอตัด (ก่อนคำนวณกำไร) งวด ${roundId.substring(0, 8)}`,
+                    metadata: { type: 'profit_percentage_refund', previousPendingAmount }
+                })
+        }
+
+        // 9. Record profit-based deduction transaction
+        if (profitFee > 0) {
+            await supabase
+                .from('credit_transactions')
+                .insert({
+                    dealer_id: dealerId,
+                    transaction_type: 'deduction',
+                    amount: -profitFee,
+                    balance_after: newBalance,
+                    reference_type: 'round',
+                    reference_id: roundId,
+                    description: `ค่าบริการจากกำไร (${profitPercentageRate}%) กำไร ฿${profit.toLocaleString('th-TH', {minimumFractionDigits: 2})}`,
+                    metadata: {
+                        type: 'profit_percentage_deduction',
+                        profit,
+                        profitPercentageRate,
+                        profitFee,
+                        minDeduction,
+                        maxDeduction,
+                        ...profitDetails
+                    }
+                })
+        }
+
+        // 10. Update the round's charged_credit_amount
+        await supabase
+            .from('lottery_rounds')
+            .update({ charged_credit_amount: profitFee })
+            .eq('id', roundId)
+
+        // 11. Clean up round_pending_credits for this round
+        await supabase
+            .from('round_pending_credits')
+            .delete()
+            .eq('round_id', roundId)
+            .eq('dealer_id', dealerId)
+
+        return {
+            success: true,
+            amountDeducted: profitFee,
+            profitAmount: profit,
+            message: profit > 0
+                ? `ตัดเครดิตจากกำไร ฿${profitFee.toLocaleString('th-TH', {minimumFractionDigits: 2})} (กำไร ฿${profit.toLocaleString('th-TH', {minimumFractionDigits: 2})} × ${profitPercentageRate}%)`
+                : 'ไม่มีกำไร ไม่ตัดเครดิต',
+            details: {
+                profit,
+                profitPercentageRate,
+                profitFee,
+                previousPendingAmount,
+                balanceBefore: currentBalance,
+                balanceAfterRefund: currentBalance + previousPendingAmount,
+                balanceAfter: newBalance,
+                outstandingDebt: newOutstandingDebt,
+                minDeduction,
+                maxDeduction,
+                ...profitDetails
+            }
+        }
+    } catch (error) {
+        console.error('Error deducting profit-based credit:', error)
+        return {
+            success: false,
+            amountDeducted: 0,
+            profitAmount: 0,
+            message: 'เกิดข้อผิดพลาดในการตัดเครดิตจากกำไร: ' + error.message,
             details: { error: error.message }
         }
     }

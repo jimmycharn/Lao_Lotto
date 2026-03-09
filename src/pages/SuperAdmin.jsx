@@ -134,6 +134,8 @@ export default function SuperAdmin() {
         monthly_price: '',
         yearly_price: '',
         percentage_rate: '',
+        profit_percentage_rate: '',
+        price_per_user_per_year: '',
         min_amount_before_charge: '',
         min_deduction: '0',
         max_deduction: '100000',
@@ -475,18 +477,34 @@ export default function SuperAdmin() {
                 throw updateError
             }
             
-            // Update dealer credit
+            // Update dealer credit (with outstanding debt recovery)
             const { data: creditData } = await supabase
                 .from('dealer_credits')
                 .select('*')
                 .eq('dealer_id', request.dealer_id)
                 .maybeSingle()
             
+            const topupAmount = parseFloat(request.amount)
+            let debtRecovered = 0
+
             if (creditData) {
+                const currentBalance = creditData.balance || 0
+                const outstandingDebt = creditData.outstanding_debt || 0
+                let newBalance = currentBalance + topupAmount
+                let newDebt = outstandingDebt
+
+                // Auto-recover outstanding debt
+                if (outstandingDebt > 0 && newBalance > 0) {
+                    debtRecovered = Math.min(outstandingDebt, newBalance)
+                    newBalance -= debtRecovered
+                    newDebt = outstandingDebt - debtRecovered
+                }
+
                 const { error: creditError } = await supabase
                     .from('dealer_credits')
                     .update({ 
-                        balance: (creditData.balance || 0) + parseFloat(request.amount),
+                        balance: newBalance,
+                        outstanding_debt: newDebt,
                         is_blocked: false,
                         updated_at: new Date().toISOString()
                     })
@@ -500,7 +518,8 @@ export default function SuperAdmin() {
                     .from('dealer_credits')
                     .insert({
                         dealer_id: request.dealer_id,
-                        balance: parseFloat(request.amount)
+                        balance: topupAmount,
+                        outstanding_debt: 0
                     })
                 
                 if (insertError) {
@@ -508,7 +527,8 @@ export default function SuperAdmin() {
                 }
             }
             
-            toast.success('อนุมัติคำขอเติมเครดิตสำเร็จ')
+            const debtMsg = debtRecovered > 0 ? ` (หักยอดค้าง ฿${debtRecovered.toLocaleString('th-TH', {minimumFractionDigits: 2})})` : ''
+            toast.success(`อนุมัติคำขอเติมเครดิตสำเร็จ${debtMsg}`)
             fetchTopupRequests()
             fetchDealerCredits()
         } catch (error) {
@@ -666,13 +686,26 @@ export default function SuperAdmin() {
                 
                 let newBalance = amount
                 
+                let adminDebtRecovered = 0
+
                 if (creditData) {
-                    // Update existing record
-                    newBalance = (creditData.balance || 0) + amount
+                    // Update existing record with debt recovery
+                    const currentBalance = creditData.balance || 0
+                    const outstandingDebt = creditData.outstanding_debt || 0
+                    newBalance = currentBalance + amount
+                    let newDebt = outstandingDebt
+
+                    if (outstandingDebt > 0 && newBalance > 0) {
+                        adminDebtRecovered = Math.min(outstandingDebt, newBalance)
+                        newBalance -= adminDebtRecovered
+                        newDebt = outstandingDebt - adminDebtRecovered
+                    }
+
                     const { error: updateError } = await supabase
                         .from('dealer_credits')
                         .update({ 
                             balance: newBalance,
+                            outstanding_debt: newDebt,
                             is_blocked: false,
                             blocked_reason: null,
                             updated_at: new Date().toISOString()
@@ -687,6 +720,7 @@ export default function SuperAdmin() {
                         .insert({
                             dealer_id: topupForm.dealer_id,
                             balance: amount,
+                            outstanding_debt: 0,
                             warning_threshold: 1000
                         })
                     
@@ -703,7 +737,9 @@ export default function SuperAdmin() {
                         balance_after: newBalance,
                         reference_type: 'admin_topup',
                         performed_by: user.id,
-                        description: topupForm.description || 'เติมเครดิตโดย Admin'
+                        description: adminDebtRecovered > 0
+                            ? `เติมเครดิตโดย Admin - หักยอดค้าง ฿${adminDebtRecovered.toLocaleString('th-TH', {minimumFractionDigits: 2})}`
+                            : (topupForm.description || 'เติมเครดิตโดย Admin')
                     })
             }
             
@@ -1026,6 +1062,8 @@ export default function SuperAdmin() {
                 monthly_price: pkg.monthly_price || '',
                 yearly_price: pkg.yearly_price || '',
                 percentage_rate: pkg.percentage_rate || '',
+                profit_percentage_rate: pkg.profit_percentage_rate || '',
+                price_per_user_per_year: pkg.price_per_user_per_year || '',
                 max_users: pkg.max_users || '',
                 extra_user_price: pkg.extra_user_price || '',
                 features: pkg.features || [],
@@ -1045,6 +1083,8 @@ export default function SuperAdmin() {
                 monthly_price: '',
                 yearly_price: '',
                 percentage_rate: '',
+                profit_percentage_rate: '',
+                price_per_user_per_year: '',
                 min_amount_before_charge: '',
                 min_deduction: '0',
                 max_deduction: '100000',
@@ -1076,6 +1116,8 @@ export default function SuperAdmin() {
                 monthly_price: parseFloat(packageForm.monthly_price) || 0,
                 yearly_price: parseFloat(packageForm.yearly_price) || 0,
                 percentage_rate: parseFloat(packageForm.percentage_rate) || 0,
+                profit_percentage_rate: parseFloat(packageForm.profit_percentage_rate) || 0,
+                price_per_user_per_year: parseFloat(packageForm.price_per_user_per_year) || 0,
                 min_amount_before_charge: parseFloat(packageForm.min_amount_before_charge) || 0,
                 min_deduction: parseFloat(packageForm.min_deduction) || 0,
                 max_deduction: parseFloat(packageForm.max_deduction) || 100000,
@@ -1489,7 +1531,9 @@ export default function SuperAdmin() {
         const labels = {
             per_device: 'ต่อเครื่อง + User',
             package: 'แพ็คเกจ',
-            percentage: 'เปอร์เซ็นต์'
+            percentage: 'เปอร์เซ็นต์',
+            profit_percentage: '% จากกำไร',
+            per_user_yearly: 'รายหัวต่อปี (สมาชิก)'
         }
         return labels[model] || model
     }
@@ -1854,10 +1898,26 @@ export default function SuperAdmin() {
                         </div>
 
                         <div className="package-pricing">
-                            {pkg.billing_model === 'percentage' ? (
+                            {pkg.billing_model === 'profit_percentage' ? (
+                                <>
+                                    <div className="price">
+                                        <span className="amount">{pkg.profit_percentage_rate}%</span>
+                                        <span className="period">ของกำไร</span>
+                                    </div>
+                                    <div className="price" style={{fontSize: '0.8em', opacity: 0.7}}>
+                                        <span className="amount">{pkg.percentage_rate}%</span>
+                                        <span className="period">รอตัด (จากยอด)</span>
+                                    </div>
+                                </>
+                            ) : pkg.billing_model === 'percentage' ? (
                                 <div className="price">
                                     <span className="amount">{pkg.percentage_rate}%</span>
                                     <span className="period">ของยอด</span>
+                                </div>
+                            ) : pkg.billing_model === 'per_user_yearly' ? (
+                                <div className="price">
+                                    <span className="amount">฿{(parseFloat(pkg.price_per_user_per_year) || 0).toLocaleString()}</span>
+                                    <span className="period">/คน/ปี</span>
                                 </div>
                             ) : (
                                 <>
@@ -2582,6 +2642,7 @@ export default function SuperAdmin() {
                                             {(() => {
                                                 const bal = credit.balance || 0
                                                 const pending = credit.pending_deduction || 0
+                                                const debt = credit.outstanding_debt || 0
                                                 const available = bal - pending
                                                 return (
                                                     <div>
@@ -2597,6 +2658,11 @@ export default function SuperAdmin() {
                                                         {pending > 0 && (
                                                             <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
                                                                 ยอดจริง ฿{bal.toLocaleString('th-TH', { minimumFractionDigits: 2 })} | รอตัด ฿{pending.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                                            </div>
+                                                        )}
+                                                        {debt > 0 && (
+                                                            <div style={{ fontSize: '0.7rem', color: 'var(--color-danger)' }}>
+                                                                ยอดค้าง ฿{debt.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                                                             </div>
                                                         )}
                                                     </div>
@@ -2860,7 +2926,7 @@ export default function SuperAdmin() {
                                 <option value="">ไม่กำหนด (ต้องกำหนดเอง)</option>
                                 {packages.map(pkg => (
                                     <option key={pkg.id} value={pkg.id}>
-                                        {pkg.name} ({pkg.billing_model === 'percentage' ? `${pkg.percentage_rate}%` : `฿${pkg.price}`})
+                                        {pkg.name} ({pkg.billing_model === 'per_user_yearly' ? `${pkg.price_per_user_per_year}/คน/ปี` : pkg.billing_model === 'profit_percentage' ? `${pkg.profit_percentage_rate}% กำไร` : pkg.billing_model === 'percentage' ? `${pkg.percentage_rate}%` : `฿${pkg.price}`})
                                     </option>
                                 ))}
                             </select>
@@ -3019,10 +3085,23 @@ export default function SuperAdmin() {
                                     <option value="package">แพ็คเกจ (รายเดือน/รายปี)</option>
                                     <option value="per_device">ต่อเครื่อง + User</option>
                                     <option value="percentage">เปอร์เซ็นต์จากยอด</option>
+                                    <option value="profit_percentage">เปอร์เซ็นต์จากกำไร</option>
+                                    <option value="per_user_yearly">รายหัวต่อปี (สมาชิก)</option>
                                 </select>
                             </div>
 
-                            {packageForm.billing_model !== 'percentage' ? (
+                            {packageForm.billing_model === 'per_user_yearly' ? (
+                                <div className="form-group">
+                                    <label>ราคาต่อสมาชิกต่อปี (฿)</label>
+                                    <input
+                                        type="number"
+                                        value={packageForm.price_per_user_per_year}
+                                        onChange={(e) => setPackageForm({ ...packageForm, price_per_user_per_year: e.target.value })}
+                                        placeholder="เช่น 3000"
+                                    />
+                                    <small className="form-hint">ตัดเครดิตจาก dealer เมื่อสร้าง/รับ/ต่ออายุสมาชิก (คูณจำนวนปี)</small>
+                                </div>
+                            ) : (packageForm.billing_model !== 'percentage' && packageForm.billing_model !== 'profit_percentage') ? (
                                 <div className="form-row">
                                     <div className="form-group">
                                         <label>ราคารายเดือน (฿)</label>
@@ -3044,14 +3123,29 @@ export default function SuperAdmin() {
                             ) : (
                                 <>
                                     <div className="form-group">
-                                        <label>อัตราเปอร์เซ็นต์ (%)</label>
+                                        <label>{packageForm.billing_model === 'profit_percentage' ? 'อัตรา % จากยอดขาย (สำหรับรอตัด)' : 'อัตราเปอร์เซ็นต์ (%)'}</label>
                                         <input
                                             type="number"
                                             step="0.1"
                                             value={packageForm.percentage_rate}
                                             onChange={(e) => setPackageForm({ ...packageForm, percentage_rate: e.target.value })}
                                         />
+                                        {packageForm.billing_model === 'profit_percentage' && (
+                                            <small className="form-hint">ใช้คำนวณระหว่างป้อนข้อมูล (รอตัด) ก่อนประกาศผล</small>
+                                        )}
                                     </div>
+                                    {packageForm.billing_model === 'profit_percentage' && (
+                                        <div className="form-group">
+                                            <label>อัตรา % จากกำไร (สำหรับตัดจริง)</label>
+                                            <input
+                                                type="number"
+                                                step="0.1"
+                                                value={packageForm.profit_percentage_rate}
+                                                onChange={(e) => setPackageForm({ ...packageForm, profit_percentage_rate: e.target.value })}
+                                            />
+                                            <small className="form-hint">ใช้คำนวณหลังประกาศผล ตัดจากกำไรจริง</small>
+                                        </div>
+                                    )}
                                     <div className="form-group">
                                         <label>จำนวนเงินขั้นต่ำก่อนตัดเครดิต (฿)</label>
                                         <input
@@ -3172,11 +3266,14 @@ export default function SuperAdmin() {
                                             <strong>ชื่อแพ็คเกจ:</strong> {selectedDealer.subscription.subscription_packages?.name || 'ไม่ระบุ'}
                                         </div>
                                         <div>
-                                            <strong>ประเภท:</strong> {selectedDealer.subscription.subscription_packages?.billing_model === 'percentage' ? 'หักเปอร์เซ็นต์จากยอดขาย' : 'รายเดือน/รายปี'}
+                                            <strong>ประเภท:</strong> {selectedDealer.subscription.subscription_packages?.billing_model === 'per_user_yearly' ? 'รายหัวต่อปี' : selectedDealer.subscription.subscription_packages?.billing_model === 'profit_percentage' ? 'หัก % จากกำไร' : selectedDealer.subscription.subscription_packages?.billing_model === 'percentage' ? 'หักเปอร์เซ็นต์จากยอดขาย' : 'รายเดือน/รายปี'}
                                         </div>
-                                        {selectedDealer.subscription.subscription_packages?.billing_model === 'percentage' && (
+                                        {(selectedDealer.subscription.subscription_packages?.billing_model === 'percentage' || selectedDealer.subscription.subscription_packages?.billing_model === 'profit_percentage') && (
                                             <div>
-                                                <strong>อัตราหัก:</strong> {selectedDealer.subscription.subscription_packages?.percentage_rate}%
+                                                <strong>อัตราหัก (ยอด):</strong> {selectedDealer.subscription.subscription_packages?.percentage_rate}%
+                                                {selectedDealer.subscription.subscription_packages?.billing_model === 'profit_percentage' && (
+                                                    <span style={{marginLeft: '1rem'}}><strong>อัตราหัก (กำไร):</strong> {selectedDealer.subscription.subscription_packages?.profit_percentage_rate}%</span>
+                                                )}
                                             </div>
                                         )}
                                         <div>
@@ -3212,7 +3309,13 @@ export default function SuperAdmin() {
                                     <option value="">-- เลือกแพ็คเกจ --</option>
                                     {packages.filter(p => p.is_active).map(pkg => (
                                         <option key={pkg.id} value={pkg.id}>
-                                            {pkg.name} - {formatCurrency(pkg.monthly_price)}/เดือน
+                                            {pkg.name} - {pkg.billing_model === 'per_user_yearly'
+                                                ? `${formatCurrency(pkg.price_per_user_per_year)}/คน/ปี`
+                                                : pkg.billing_model === 'profit_percentage' 
+                                                    ? `${pkg.profit_percentage_rate}% กำไร / ${pkg.percentage_rate}% ยอด`
+                                                    : pkg.billing_model === 'percentage'
+                                                        ? `${pkg.percentage_rate}% ยอดขาย`
+                                                        : `${formatCurrency(pkg.monthly_price)}/เดือน`}
                                         </option>
                                     ))}
                                 </select>
@@ -3620,6 +3723,7 @@ export default function SuperAdmin() {
                                         const cr = dealerCredits.find(c => c.dealer_id === selectedDealer.id)
                                         const bal = cr?.balance || 0
                                         const pending = cr?.pending_deduction || 0
+                                        const debt = cr?.outstanding_debt || 0
                                         const available = bal - pending
                                         return (
                                             <div style={{ textAlign: 'right' }}>
@@ -3629,6 +3733,11 @@ export default function SuperAdmin() {
                                                 {pending > 0 && (
                                                     <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
                                                         ยอดจริง ฿{bal.toLocaleString('th-TH', { minimumFractionDigits: 2 })} | รอตัด ฿{pending.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                                    </div>
+                                                )}
+                                                {debt > 0 && (
+                                                    <div style={{ fontSize: '0.7rem', color: 'var(--color-danger)' }}>
+                                                        ยอดค้าง ฿{debt.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                                                     </div>
                                                 )}
                                             </div>

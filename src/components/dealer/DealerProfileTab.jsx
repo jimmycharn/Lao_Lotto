@@ -296,9 +296,13 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                                                 subscription.status === 'expired' ? 'หมดอายุ' : subscription.status}
                                     </span>
                                     <span className="sub-type" style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                                        {subscription.subscription_packages.billing_model === 'percentage' 
-                                            ? `หักยอดขาย ${subscription.subscription_packages.percentage_rate}%`
-                                            : subscription.billing_cycle === 'yearly' ? 'รายปี' : 'รายเดือน'}
+                                        {subscription.subscription_packages.billing_model === 'per_user_yearly'
+                                            ? `รายหัวต่อปี ฿${parseFloat(subscription.subscription_packages.price_per_user_per_year || 0).toLocaleString()}/คน/ปี`
+                                            : subscription.subscription_packages.billing_model === 'profit_percentage' 
+                                                ? `หักกำไร ${subscription.subscription_packages.profit_percentage_rate}% / ยอด ${subscription.subscription_packages.percentage_rate}%`
+                                                : subscription.subscription_packages.billing_model === 'percentage' 
+                                                    ? `หักยอดขาย ${subscription.subscription_packages.percentage_rate}%`
+                                                    : subscription.billing_cycle === 'yearly' ? 'รายปี' : 'รายเดือน'}
                                     </span>
                                 </div>
                                 {subscription.expires_at ? (() => {

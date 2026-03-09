@@ -36,7 +36,8 @@ import {
     FiTrendingUp,
     FiTrendingDown,
     FiRotateCcw,
-    FiImage
+    FiImage,
+    FiAlertCircle
 } from 'react-icons/fi'
 import './UserDashboard.css'
 import './ViewToggle.css'
@@ -259,6 +260,8 @@ export default function UserDashboard() {
                 .select(`
                     dealer_id,
                     status,
+                    membership_expires_at,
+                    membership_years,
                     profiles:dealer_id (
                         id,
                         full_name,
@@ -270,11 +273,30 @@ export default function UserDashboard() {
                 .eq('status', 'active')
 
             if (!error && data) {
+                // Fetch billing models for all dealers in one go
+                const dealerIds = data.map(m => m.dealer_id).filter(Boolean)
+                let billingModelMap = {}
+                if (dealerIds.length > 0) {
+                    const { data: subsData } = await supabase
+                        .from('dealer_subscriptions')
+                        .select('dealer_id, subscription_packages(billing_model)')
+                        .in('dealer_id', dealerIds)
+                        .in('status', ['active', 'trial'])
+                    if (subsData) {
+                        subsData.forEach(s => {
+                            billingModelMap[s.dealer_id] = s.subscription_packages?.billing_model || null
+                        })
+                    }
+                }
+
                 const dealerList = data.map(m => ({
                     id: m.profiles?.id,
                     full_name: m.profiles?.full_name,
                     email: m.profiles?.email,
-                    role: m.profiles?.role
+                    role: m.profiles?.role,
+                    membership_expires_at: m.membership_expires_at || null,
+                    membership_years: m.membership_years || null,
+                    billing_model: billingModelMap[m.dealer_id] || null
                 }))
                     .filter(d => d.id && d.role === 'dealer')
 
@@ -283,6 +305,11 @@ export default function UserDashboard() {
                 // Auto-select first dealer if none selected
                 if (dealerList.length > 0 && !selectedDealer) {
                     setSelectedDealer(dealerList[0])
+                }
+                // If selectedDealer exists, update it with fresh data
+                if (selectedDealer) {
+                    const updated = dealerList.find(d => d.id === selectedDealer.id)
+                    if (updated) setSelectedDealer(updated)
                 }
             }
         } catch (error) {
@@ -605,10 +632,19 @@ export default function UserDashboard() {
         }
     }
 
+    // Check if membership is expired for the selected dealer (per_user_yearly)
+    function isMembershipExpired() {
+        if (!selectedDealer) return false
+        if (selectedDealer.billing_model !== 'per_user_yearly') return false
+        if (!selectedDealer.membership_expires_at) return true // No expiry set = expired for per_user_yearly
+        return new Date(selectedDealer.membership_expires_at) < new Date()
+    }
+
     // Check if can still submit (before close time)
     function canSubmit() {
         if (!selectedRound) return false
         if (selectedRound.status !== 'open') return false
+        if (isMembershipExpired()) return false
         return new Date() < new Date(selectedRound.close_time)
     }
 
@@ -2544,6 +2580,35 @@ export default function UserDashboard() {
                         </button>
                     ))}
                 </div>
+
+                {/* Membership Expiry Banner for per_user_yearly */}
+                {selectedDealer && selectedDealer.billing_model === 'per_user_yearly' && (
+                    <div style={{
+                        padding: '0.75rem 1rem',
+                        borderRadius: 'var(--radius-md)',
+                        marginBottom: '0.75rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        fontSize: '0.85rem',
+                        ...(isMembershipExpired()
+                            ? { background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: 'var(--color-error)' }
+                            : { background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', color: 'var(--color-success)' }
+                        )
+                    }}>
+                        {isMembershipExpired() ? (
+                            <>
+                                <FiAlertCircle size={16} />
+                                <span>สมาชิกภาพหมดอายุแล้ว กรุณาติดต่อเจ้ามือเพื่อต่ออายุ</span>
+                            </>
+                        ) : selectedDealer.membership_expires_at ? (
+                            <>
+                                <FiClock size={16} />
+                                <span>สมาชิกภาพใช้งานได้ถึง {new Date(selectedDealer.membership_expires_at).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                            </>
+                        ) : null}
+                    </div>
+                )}
 
                 {/* Tabs */}
                 <div className="user-tabs">

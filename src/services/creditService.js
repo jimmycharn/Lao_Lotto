@@ -78,36 +78,69 @@ export const updateDealerCredit = async (dealerId, amount) => {
 
         let newBalance = amount
         let error = null
+        let debtRecovered = 0
 
         if (creditData) {
-            newBalance = (creditData.balance || 0) + amount
+            const currentBalance = creditData.balance || 0
+            const outstandingDebt = creditData.outstanding_debt || 0
+            
+            newBalance = currentBalance + amount
+
+            // Auto-recover outstanding debt from top-up
+            let newDebt = outstandingDebt
+            if (outstandingDebt > 0 && newBalance > 0) {
+                debtRecovered = Math.min(outstandingDebt, newBalance)
+                newBalance -= debtRecovered
+                newDebt = outstandingDebt - debtRecovered
+            }
+
             const { error: updateError } = await supabase
                 .from('dealer_credits')
                 .update({
                     balance: newBalance,
+                    outstanding_debt: newDebt,
                     is_blocked: false,
                     updated_at: new Date().toISOString()
                 })
                 .eq('dealer_id', dealerId)
 
             error = updateError
+
+            // Record debt recovery transaction if any
+            if (!error && debtRecovered > 0) {
+                await supabase
+                    .from('credit_transactions')
+                    .insert({
+                        dealer_id: dealerId,
+                        transaction_type: 'debt_recovery',
+                        amount: -debtRecovered,
+                        balance_after: newBalance,
+                        description: `หักยอดค้างชำระ ฿${debtRecovered.toLocaleString('th-TH', {minimumFractionDigits: 2})} จากเครดิตที่เติม`,
+                        metadata: { 
+                            debt_before: outstandingDebt, 
+                            debt_after: newDebt, 
+                            topup_amount: amount 
+                        }
+                    })
+            }
         } else {
             // Create new record
             const { error: insertError } = await supabase
                 .from('dealer_credits')
                 .insert({
                     dealer_id: dealerId,
-                    balance: amount
+                    balance: amount,
+                    outstanding_debt: 0
                 })
             error = insertError
         }
 
         if (error) throw error
-        return { newBalance, error: null }
+        return { newBalance, debtRecovered, error: null }
 
     } catch (error) {
         console.error('Error in updateDealerCredit:', error)
-        return { newBalance: null, error }
+        return { newBalance: null, debtRecovered: 0, error }
     }
 }
 
@@ -173,8 +206,8 @@ export const processTopup = async ({
         })
         if (slipError) throw slipError
 
-        // 3. Update dealer credit
-        const { newBalance, error: creditError } = await updateDealerCredit(dealerId, amount)
+        // 3. Update dealer credit (auto-deducts outstanding debt if any)
+        const { newBalance, debtRecovered, error: creditError } = await updateDealerCredit(dealerId, amount)
         if (creditError) throw creditError
 
         // 4. Record transaction
@@ -183,11 +216,13 @@ export const processTopup = async ({
             transaction_type: 'topup',
             amount,
             balance_after: newBalance,
-            description: 'เติมเครดิตจากสลิป (อัตโนมัติ)'
+            description: debtRecovered > 0 
+                ? `เติมเครดิตจากสลิป (อัตโนมัติ) - หักยอดค้าง ฿${debtRecovered.toLocaleString('th-TH', {minimumFractionDigits: 2})}`
+                : 'เติมเครดิตจากสลิป (อัตโนมัติ)'
         })
         if (transError) throw transError // Non-critical but good to know
 
-        return { success: true, newBalance }
+        return { success: true, newBalance, debtRecovered: debtRecovered || 0 }
 
     } catch (error) {
         console.error('Error in processTopup:', error)

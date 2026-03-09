@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useToast } from '../../contexts/ToastContext'
 import { FiCheck, FiX, FiEdit2 } from 'react-icons/fi'
 import { LOTTERY_TYPES } from '../../constants/lotteryTypes'
-import { deductAdditionalCreditForRound } from '../../utils/creditCheck'
+import { deductAdditionalCreditForRound, deductProfitBasedCredit } from '../../utils/creditCheck'
 
 export default function ResultsModal({ round, onClose }) {
     const { toast } = useToast()
@@ -147,14 +147,39 @@ export default function ResultsModal({ round, onClose }) {
                 console.warn('RPC function not available:', rpcError)
             }
 
-            // Deduct additional credit if submissions were modified after round was closed
-            // This handles cases where dealer added/edited submissions for dealer-created users
-            const previouslyCharged = round.charged_credit_amount || 0
-            const creditResult = await deductAdditionalCreditForRound(round.dealer_id, round.id, previouslyCharged)
-            
+            // Check dealer's billing model to decide credit deduction method
             let creditMessage = ''
-            if (creditResult.amountDeducted > 0) {
-                creditMessage = ` (${creditResult.message})`
+            try {
+                const { data: dealerSubs } = await supabase
+                    .from('dealer_subscriptions')
+                    .select('billing_model, subscription_packages(billing_model, profit_percentage_rate)')
+                    .eq('dealer_id', round.dealer_id)
+                    .in('status', ['active', 'trial'])
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                
+                const dealerSub = dealerSubs?.[0]
+                const billingModel = dealerSub?.subscription_packages?.billing_model || dealerSub?.billing_model
+
+                if (billingModel === 'profit_percentage') {
+                    // For profit_percentage: refund pending + calculate profit-based deduction
+                    const previousPending = round.charged_credit_amount || 0
+                    const profitResult = await deductProfitBasedCredit(round.dealer_id, round.id, previousPending)
+                    if (profitResult.amountDeducted > 0) {
+                        creditMessage = ` (${profitResult.message})`
+                    } else if (profitResult.profitAmount <= 0) {
+                        creditMessage = ' (ไม่มีกำไร ไม่ตัดเครดิต)'
+                    }
+                } else {
+                    // For regular percentage: deduct additional credit if needed
+                    const previouslyCharged = round.charged_credit_amount || 0
+                    const creditResult = await deductAdditionalCreditForRound(round.dealer_id, round.id, previouslyCharged)
+                    if (creditResult.amountDeducted > 0) {
+                        creditMessage = ` (${creditResult.message})`
+                    }
+                }
+            } catch (creditErr) {
+                console.log('Credit deduction check skipped:', creditErr)
             }
 
             const message = isEditing
