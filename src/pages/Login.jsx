@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { FiMail, FiLock, FiUser, FiEye, FiEyeOff, FiGift } from 'react-icons/fi'
+import { checkDeviceSession, sendOtpEmail } from '../utils/deviceSession'
+import OtpVerificationModal from '../components/OtpVerificationModal'
 import './Auth.css'
 
 export default function Login() {
@@ -10,7 +12,10 @@ export default function Login() {
     const [showPassword, setShowPassword] = useState(false)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
-    const { signIn, user, profile, loading: authLoading, isDealer, isSuperAdmin } = useAuth()
+    const [showOtpModal, setShowOtpModal] = useState(false)
+    const [otpData, setOtpData] = useState(null) // { otpRequestId, userId, email, blockedUntil }
+    const [pendingSession, setPendingSession] = useState(null) // store Supabase session temporarily
+    const { signIn, signOut, user, profile, loading: authLoading, isDealer, isSuperAdmin } = useAuth()
     const navigate = useNavigate()
 
     const loadingTimerRef = useRef(null)
@@ -42,7 +47,8 @@ export default function Login() {
     }, [loading])
 
     // If user is already logged in and profile is loaded, redirect based on role
-    if (user && profile && !authLoading) {
+    // But NOT if we're showing OTP modal (pending verification)
+    if (user && profile && !authLoading && !showOtpModal) {
         // Super Admin goes to Super Admin dashboard
         if (isSuperAdmin) {
             return <Navigate to="/superadmin" replace />
@@ -61,6 +67,7 @@ export default function Login() {
         setLoading(true)
 
         try {
+            // Step 1: Authenticate with Supabase
             const { data, error: signInError } = await signIn(email, password)
             if (signInError) {
                 let msg = signInError.message
@@ -70,12 +77,92 @@ export default function Login() {
                 setLoading(false)
                 return
             }
+
+            // Step 2: Check device session
+            const userId = data?.user?.id
+            if (userId) {
+                try {
+                    const sessionResult = await checkDeviceSession(userId)
+
+                    if (sessionResult.needs_otp) {
+                        // Need OTP verification - user has active session on another device
+                        if (sessionResult.blocked) {
+                            setError(`ถูกบล็อคเนื่องจากกรอก OTP ผิดหลายครั้ง ลองใหม่ได้ในอีกสักครู่`)
+                            // Sign out since we can't proceed
+                            await signOut()
+                            setLoading(false)
+                            return
+                        }
+
+                        // Send OTP email
+                        const emailResult = await sendOtpEmail(
+                            sessionResult.email,
+                            sessionResult.otp_code,
+                            null
+                        )
+
+                        if (!emailResult.success) {
+                            console.error('Failed to send OTP email:', emailResult.error)
+                            // Even if email fails, still show OTP modal
+                            // (user might not receive email but we show error)
+                        }
+
+                        // Store OTP data and show modal
+                        setOtpData({
+                            otpRequestId: sessionResult.otp_request_id,
+                            userId: userId,
+                            email: sessionResult.email,
+                            blockedUntil: sessionResult.blocked_until || null
+                        })
+                        setPendingSession(data)
+
+                        // Sign out temporarily - will re-authenticate after OTP
+                        await signOut()
+                        setShowOtpModal(true)
+                        setLoading(false)
+                        return
+                    }
+
+                    // No OTP needed - session created, proceed normally
+                } catch (sessionErr) {
+                    console.error('Device session check failed:', sessionErr)
+                    // If session check fails, allow login anyway (graceful degradation)
+                }
+            }
+
             // Login successful - onAuthStateChange will handle profile fetching
             // Keep loading=true until authLoading becomes false (handled by useEffect)
         } catch (err) {
             setError('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง')
             setLoading(false)
         }
+    }
+
+    const handleOtpVerified = async () => {
+        // OTP verified successfully - re-authenticate
+        setShowOtpModal(false)
+        setOtpData(null)
+        setLoading(true)
+
+        try {
+            const { data, error: signInError } = await signIn(email, password)
+            if (signInError) {
+                setError('เกิดข้อผิดพลาด กรุณาเข้าสู่ระบบใหม่')
+                setLoading(false)
+                return
+            }
+            // Successfully re-authenticated after OTP - let normal flow proceed
+        } catch (err) {
+            setError('เกิดข้อผิดพลาด กรุณาเข้าสู่ระบบใหม่')
+            setLoading(false)
+        }
+    }
+
+    const handleOtpCancel = async () => {
+        setShowOtpModal(false)
+        setOtpData(null)
+        setPendingSession(null)
+        setLoading(false)
     }
 
     return (
@@ -151,6 +238,19 @@ export default function Login() {
                     </p>
                 </div>
             </div>
+
+            {/* OTP Verification Modal */}
+            {showOtpModal && otpData && (
+                <OtpVerificationModal
+                    isOpen={showOtpModal}
+                    onVerified={handleOtpVerified}
+                    onCancel={handleOtpCancel}
+                    otpRequestId={otpData.otpRequestId}
+                    userId={otpData.userId}
+                    email={otpData.email}
+                    blockedUntil={otpData.blockedUntil}
+                />
+            )}
         </div>
     )
 }

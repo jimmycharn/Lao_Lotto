@@ -5,6 +5,7 @@ import { ToastProvider } from './contexts/ToastContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import Navbar from './components/Navbar'
 import ErrorBoundary from './components/ErrorBoundary'
+import ForceLogoutOverlay from './components/ForceLogoutOverlay'
 import './index.css'
 
 // Lazy load pages - โหลดเฉพาะหน้าที่ใช้
@@ -147,6 +148,7 @@ function HomeRedirect() {
 function AppContent() {
   return (
     <Router>
+      <ForceLogoutOverlay />
       <Navbar />
       <main className="main-content">
         <ErrorBoundary>

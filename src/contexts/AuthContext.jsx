@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { supabase, ROLES } from '../lib/supabase'
+import { subscribeToSessionChanges, startSessionCheck, invalidateSession } from '../utils/deviceSession'
 
 const AuthContext = createContext({})
 
@@ -51,8 +52,10 @@ export function AuthProvider({ children }) {
     const [user, setUser] = useState(null)
     const [profile, setProfile] = useState(null)
     const [loading, setLoading] = useState(true)
+    const [forceLogoutReason, setForceLogoutReason] = useState(null)
     const fetchingRef = useRef(false)
     const loadingTimerRef = useRef(null)
+    const sessionCleanupRef = useRef(null)
 
     // Safety: ensure loading NEVER stays true longer than 10 seconds
     useEffect(() => {
@@ -352,8 +355,25 @@ export function AuthProvider({ children }) {
     }
 
     const signOut = async () => {
+        // Invalidate device session before clearing state
+        const currentUserId = user?.id
+        if (currentUserId) {
+            try {
+                await invalidateSession(currentUserId)
+            } catch (e) {
+                console.log('invalidateSession error (ignoring):', e)
+            }
+        }
+
+        // Cleanup session monitoring
+        if (sessionCleanupRef.current) {
+            sessionCleanupRef.current()
+            sessionCleanupRef.current = null
+        }
+
         // Clear ALL local state immediately
         clearAllAuthState()
+        setForceLogoutReason(null)
         setLoading(false)
 
         if (!supabase) return { error: null }
@@ -371,6 +391,50 @@ export function AuthProvider({ children }) {
         return { error: null }
     }
 
+    // Start session monitoring when user is authenticated
+    useEffect(() => {
+        if (!user?.id || !profile) return
+
+        // Don't monitor superadmin sessions
+        if (profile.role === ROLES.SUPERADMIN) return
+
+        // Cleanup previous monitoring
+        if (sessionCleanupRef.current) {
+            sessionCleanupRef.current()
+        }
+
+        const cleanups = []
+
+        // 1. Subscribe to realtime session changes
+        const unsubRealtime = subscribeToSessionChanges(user.id, (reason) => {
+            console.warn('Session invalidated via realtime:', reason)
+            setForceLogoutReason(reason || 'new_device_login')
+        })
+        cleanups.push(unsubRealtime)
+
+        // 2. Periodic session validity check (fallback if realtime misses)
+        const stopCheck = startSessionCheck(user.id, (reason) => {
+            console.warn('Session invalid via periodic check:', reason)
+            setForceLogoutReason(reason || 'session_invalidated')
+        })
+        cleanups.push(stopCheck)
+
+        sessionCleanupRef.current = () => {
+            cleanups.forEach(fn => fn())
+        }
+
+        return () => {
+            if (sessionCleanupRef.current) {
+                sessionCleanupRef.current()
+                sessionCleanupRef.current = null
+            }
+        }
+    }, [user?.id, profile?.role])
+
+    const dismissForceLogout = () => {
+        setForceLogoutReason(null)
+    }
+
     const value = {
         user,
         profile,
@@ -384,7 +448,9 @@ export function AuthProvider({ children }) {
         isUser: profile?.role === ROLES.USER,
         isConfigured: !!supabase,
         isDealerActive: profile?.role === ROLES.DEALER ? profile?.is_active !== false : true,
-        isAccountSuspended: profile?.is_active === false
+        isAccountSuspended: profile?.is_active === false,
+        forceLogoutReason,
+        dismissForceLogout
     }
 
     return (
