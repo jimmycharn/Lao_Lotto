@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { FiMail, FiLock, FiUser, FiEye, FiEyeOff, FiGift } from 'react-icons/fi'
-import { checkDeviceSession, sendOtpEmail } from '../utils/deviceSession'
+import { checkDeviceSession } from '../utils/deviceSession'
 import OtpVerificationModal from '../components/OtpVerificationModal'
 import './Auth.css'
 
@@ -14,7 +14,7 @@ export default function Login() {
     const [error, setError] = useState('')
     const [showOtpModal, setShowOtpModal] = useState(false)
     const [otpData, setOtpData] = useState(null) // { otpRequestId, userId, email, blockedUntil }
-    const [pendingSession, setPendingSession] = useState(null) // store Supabase session temporarily
+    const [pendingOtpUserId, setPendingOtpUserId] = useState(null) // userId waiting for OTP
     const { signIn, signOut, user, profile, loading: authLoading, isDealer, isSuperAdmin } = useAuth()
     const navigate = useNavigate()
 
@@ -49,7 +49,8 @@ export default function Login() {
 
     // If user is already logged in and profile is loaded, redirect based on role
     // But NOT if we're showing OTP modal (pending verification)
-    if (user && profile && !authLoading && !showOtpModal) {
+    // Also NOT if we have a pending OTP userId (modal might still be mounting)
+    if (user && profile && !authLoading && !showOtpModal && !pendingOtpUserId) {
         // Super Admin goes to Super Admin dashboard
         if (isSuperAdmin) {
             return <Navigate to="/superadmin" replace />
@@ -84,6 +85,8 @@ export default function Login() {
             if (userId) {
                 try {
                     console.log('Checking device session for user:', userId)
+                    // Block redirect immediately while we check
+                    setPendingOtpUserId(userId)
                     const sessionResult = await checkDeviceSession(userId)
                     console.log('Device session result:', sessionResult)
 
@@ -91,25 +94,14 @@ export default function Login() {
                         // Need OTP verification - user has active session on another device
                         if (sessionResult.blocked) {
                             setError(`ถูกบล็อคเนื่องจากกรอก OTP ผิดหลายครั้ง ลองใหม่ได้ในอีกสักครู่`)
+                            setPendingOtpUserId(null)
                             await signOut({ skipDeviceInvalidation: true })
                             setLoading(false)
                             return
                         }
 
-                        // Send OTP email
-                        console.log('Sending OTP email to:', sessionResult.email)
-                        const emailResult = await sendOtpEmail(
-                            sessionResult.email,
-                            sessionResult.otp_code,
-                            null
-                        )
-                        console.log('OTP email result:', emailResult)
-
-                        if (!emailResult.success) {
-                            console.error('Failed to send OTP email:', emailResult.error)
-                        }
-
-                        // Store OTP data and show modal FIRST, then sign out
+                        // Store OTP data and show modal
+                        // DO NOT sign out - keep user authenticated so modal stays visible
                         setOtpData({
                             otpRequestId: sessionResult.otp_request_id,
                             userId: userId,
@@ -118,19 +110,18 @@ export default function Login() {
                             otpHint: sessionResult.otp_code,
                             emailSent: sessionResult.email_sent === true
                         })
-                        setPendingSession(data)
                         setShowOtpModal(true)
                         setLoading(false)
-
-                        // Sign out from Supabase auth only (keep device session intact)
-                        await signOut({ skipDeviceInvalidation: true })
+                        console.log('OTP modal shown, user stays authenticated')
                         return
                     }
 
                     // No OTP needed - session created, proceed normally
+                    setPendingOtpUserId(null)
                     console.log('No OTP needed, session created')
                 } catch (sessionErr) {
                     console.error('Device session check failed:', sessionErr)
+                    setPendingOtpUserId(null)
                     // If session check fails, allow login anyway (graceful degradation)
                 }
             }
@@ -144,30 +135,22 @@ export default function Login() {
     }
 
     const handleOtpVerified = async () => {
-        // OTP verified successfully - re-authenticate
+        // OTP verified successfully
+        // User is still authenticated (we never signed out)
+        // Just close modal and clear pending state → redirect will happen automatically
         setShowOtpModal(false)
         setOtpData(null)
-        setLoading(true)
-
-        try {
-            const { data, error: signInError } = await signIn(email, password)
-            if (signInError) {
-                setError('เกิดข้อผิดพลาด กรุณาเข้าสู่ระบบใหม่')
-                setLoading(false)
-                return
-            }
-            // Successfully re-authenticated after OTP - let normal flow proceed
-        } catch (err) {
-            setError('เกิดข้อผิดพลาด กรุณาเข้าสู่ระบบใหม่')
-            setLoading(false)
-        }
+        setPendingOtpUserId(null)
+        // The redirect guard will now allow redirect since showOtpModal=false and pendingOtpUserId=null
     }
 
     const handleOtpCancel = async () => {
         setShowOtpModal(false)
         setOtpData(null)
-        setPendingSession(null)
+        setPendingOtpUserId(null)
         setLoading(false)
+        // Sign out since user cancelled OTP - don't invalidate device session of old device
+        await signOut({ skipDeviceInvalidation: true })
     }
 
     return (
