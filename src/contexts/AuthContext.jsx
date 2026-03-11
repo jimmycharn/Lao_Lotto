@@ -354,10 +354,10 @@ export function AuthProvider({ children }) {
         }
     }
 
-    const signOut = async () => {
-        // Invalidate device session before clearing state
+    const signOut = async ({ skipDeviceInvalidation = false } = {}) => {
+        // Invalidate device session before clearing state (unless skipped, e.g. during OTP flow)
         const currentUserId = user?.id
-        if (currentUserId) {
+        if (currentUserId && !skipDeviceInvalidation) {
             try {
                 await invalidateSession(currentUserId)
             } catch (e) {

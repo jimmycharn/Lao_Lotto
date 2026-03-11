@@ -9,7 +9,9 @@ export default function OtpVerificationModal({
     otpRequestId, 
     userId, 
     email,
-    blockedUntil: initialBlockedUntil
+    blockedUntil: initialBlockedUntil,
+    otpHint,      // OTP code for testing when email isn't configured
+    emailSent     // whether the OTP email was actually sent
 }) {
     const [otp, setOtp] = useState(['', '', '', '', '', ''])
     const [loading, setLoading] = useState(false)
@@ -194,8 +196,20 @@ export default function OtpVerificationModal({
                 {/* Email info */}
                 <div style={emailInfoStyle}>
                     <FiMail size={16} />
-                    <span>ส่งรหัส OTP ไปยัง <strong>{maskEmail(email)}</strong></span>
+                    <span>
+                        {emailSent 
+                            ? <>ส่งรหัส OTP ไปยัง <strong>{maskEmail(email)}</strong></>
+                            : <>กรุณากรอกรหัส OTP เพื่อยืนยันตัวตน</>
+                        }
+                    </span>
                 </div>
+
+                {/* OTP Hint - shown when email is NOT configured (for testing) */}
+                {otpHint && !emailSent && (
+                    <div style={otpHintStyle}>
+                        <span>🔑 รหัส OTP (สำหรับทดสอบ): <strong style={{ letterSpacing: '4px', fontSize: '18px' }}>{otpHint}</strong></span>
+                    </div>
+                )}
 
                 {/* Countdown */}
                 <div style={countdownStyle}>
@@ -359,6 +373,17 @@ const emailInfoStyle = {
     fontSize: '13px',
     color: 'rgba(255,255,255,0.7)',
     marginBottom: '12px'
+}
+
+const otpHintStyle = {
+    padding: '12px 16px',
+    background: 'rgba(255, 193, 7, 0.1)',
+    border: '1px dashed rgba(255, 193, 7, 0.4)',
+    borderRadius: '10px',
+    fontSize: '14px',
+    color: '#ffc107',
+    marginBottom: '12px',
+    textAlign: 'center'
 }
 
 const countdownStyle = {

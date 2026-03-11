@@ -21,11 +21,12 @@ export default function Login() {
     const loadingTimerRef = useRef(null)
 
     // Reset local loading state if authLoading finishes
+    // But NOT if we're in the OTP modal flow
     useEffect(() => {
-        if (!authLoading) {
+        if (!authLoading && !showOtpModal) {
             setLoading(false)
         }
-    }, [authLoading])
+    }, [authLoading, showOtpModal])
 
     // Safety: spinner can never be stuck for more than 12 seconds
     useEffect(() => {
@@ -82,48 +83,52 @@ export default function Login() {
             const userId = data?.user?.id
             if (userId) {
                 try {
+                    console.log('Checking device session for user:', userId)
                     const sessionResult = await checkDeviceSession(userId)
+                    console.log('Device session result:', sessionResult)
 
                     if (sessionResult.needs_otp) {
                         // Need OTP verification - user has active session on another device
                         if (sessionResult.blocked) {
                             setError(`ถูกบล็อคเนื่องจากกรอก OTP ผิดหลายครั้ง ลองใหม่ได้ในอีกสักครู่`)
-                            // Sign out since we can't proceed
-                            await signOut()
+                            await signOut({ skipDeviceInvalidation: true })
                             setLoading(false)
                             return
                         }
 
                         // Send OTP email
+                        console.log('Sending OTP email to:', sessionResult.email)
                         const emailResult = await sendOtpEmail(
                             sessionResult.email,
                             sessionResult.otp_code,
                             null
                         )
+                        console.log('OTP email result:', emailResult)
 
                         if (!emailResult.success) {
                             console.error('Failed to send OTP email:', emailResult.error)
-                            // Even if email fails, still show OTP modal
-                            // (user might not receive email but we show error)
                         }
 
-                        // Store OTP data and show modal
+                        // Store OTP data and show modal FIRST, then sign out
                         setOtpData({
                             otpRequestId: sessionResult.otp_request_id,
                             userId: userId,
                             email: sessionResult.email,
-                            blockedUntil: sessionResult.blocked_until || null
+                            blockedUntil: sessionResult.blocked_until || null,
+                            otpHint: sessionResult.otp_code,
+                            emailSent: sessionResult.email_sent === true
                         })
                         setPendingSession(data)
-
-                        // Sign out temporarily - will re-authenticate after OTP
-                        await signOut()
                         setShowOtpModal(true)
                         setLoading(false)
+
+                        // Sign out from Supabase auth only (keep device session intact)
+                        await signOut({ skipDeviceInvalidation: true })
                         return
                     }
 
                     // No OTP needed - session created, proceed normally
+                    console.log('No OTP needed, session created')
                 } catch (sessionErr) {
                     console.error('Device session check failed:', sessionErr)
                     // If session check fails, allow login anyway (graceful degradation)
@@ -249,6 +254,8 @@ export default function Login() {
                     userId={otpData.userId}
                     email={otpData.email}
                     blockedUntil={otpData.blockedUntil}
+                    otpHint={otpData.otpHint}
+                    emailSent={otpData.emailSent}
                 />
             )}
         </div>

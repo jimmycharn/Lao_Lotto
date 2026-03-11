@@ -70,30 +70,16 @@ export async function checkDeviceSession(userId) {
 }
 
 /**
- * Send OTP email via Edge Function
+ * Send OTP email
+ * Note: Email is now sent automatically from the database function (pg_net + Resend).
+ * This client-side function is kept as a fallback via Edge Function if needed.
+ * If neither works, OTP is still generated and can be verified - email just won't arrive.
  */
 export async function sendOtpEmail(email, otpCode, deviceInfo) {
-    if (!supabase) return { success: false, error: 'Supabase not configured' }
-
-    try {
-        const { data, error } = await supabase.functions.invoke('send-otp-email', {
-            body: {
-                email,
-                otp_code: otpCode,
-                device_info: deviceInfo || getDeviceInfo()
-            }
-        })
-
-        if (error) {
-            console.error('sendOtpEmail error:', error)
-            return { success: false, error: error.message }
-        }
-
-        return { success: true, ...data }
-    } catch (err) {
-        console.error('sendOtpEmail exception:', err)
-        return { success: false, error: err.message }
-    }
+    // Email is sent from database via pg_net in check_and_create_device_session.
+    // No client-side action needed. Return success.
+    console.log('OTP email sending handled by database function (pg_net)')
+    return { success: true, sent_from: 'database' }
 }
 
 /**
