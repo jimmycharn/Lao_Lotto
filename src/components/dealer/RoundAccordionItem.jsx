@@ -331,17 +331,15 @@ export default function RoundAccordionItem({
         }
     }
 
-    // Fetch summaries from upstream dealers we transferred bets to
+    // Fetch summaries from upstream dealers we transferred bets to (both linked and non-linked/external)
     async function fetchUpstreamSummaries() {
         setUpstreamSummaries(prev => ({ ...prev, loading: true }))
         try {
-            // Get all transfers from this round that were sent to linked upstream dealers
+            // Get ALL transfers from this round (linked + non-linked/external)
             const { data: transfers, error: transferError } = await supabase
                 .from('bet_transfers')
                 .select('*')
                 .eq('round_id', round.id)
-                .not('upstream_dealer_id', 'is', null)
-                .eq('is_linked', true)
             
             if (transferError) throw transferError
             if (!transfers || transfers.length === 0) {
@@ -349,15 +347,21 @@ export default function RoundAccordionItem({
                 return
             }
 
-            // Group transfers by upstream dealer
+            // Group transfers by dealer:
+            // - Linked transfers: group by upstream_dealer_id
+            // - Non-linked (external): group by target_dealer_name (since no upstream_dealer_id)
             const dealerTransfers = {}
             transfers.forEach(t => {
-                if (!dealerTransfers[t.upstream_dealer_id]) {
-                    dealerTransfers[t.upstream_dealer_id] = {
-                        dealerId: t.upstream_dealer_id,
+                // Use upstream_dealer_id for linked, or target_dealer_name for external
+                const groupKey = t.upstream_dealer_id || `external_${t.target_dealer_name || 'ไม่ระบุ'}`
+                
+                if (!dealerTransfers[groupKey]) {
+                    dealerTransfers[groupKey] = {
+                        dealerId: t.upstream_dealer_id || groupKey,
                         dealerName: t.target_dealer_name || 'ไม่ระบุชื่อ',
                         dealerContact: t.target_dealer_contact || '',
                         targetRoundId: t.target_round_id,
+                        isLinked: t.is_linked || false,
                         transfers: [],
                         totalBet: 0,
                         totalWin: 0,
@@ -366,84 +370,88 @@ export default function RoundAccordionItem({
                         ticketCount: 0
                     }
                 }
-                dealerTransfers[t.upstream_dealer_id].transfers.push(t)
-                dealerTransfers[t.upstream_dealer_id].totalBet += t.amount || 0
-                dealerTransfers[t.upstream_dealer_id].ticketCount++
+                dealerTransfers[groupKey].transfers.push(t)
+                dealerTransfers[groupKey].totalBet += t.amount || 0
+                dealerTransfers[groupKey].ticketCount++
             })
 
-            // For each upstream dealer, fetch their round's submissions that match our transfers
-            const dealerIds = Object.keys(dealerTransfers)
-            for (const dealerId of dealerIds) {
-                const dealer = dealerTransfers[dealerId]
-                if (!dealer.targetRoundId) continue
-
-                // Fetch the upstream round to check if announced
-                const { data: upstreamRound } = await supabase
-                    .from('lottery_rounds')
-                    .select('id, status, is_result_announced, winning_numbers, currency_symbol')
-                    .eq('id', dealer.targetRoundId)
-                    .single()
-
-                dealer.upstreamRound = upstreamRound
-                dealer.isAnnounced = upstreamRound?.status === 'announced' && upstreamRound?.is_result_announced
-                dealer.currencySymbol = upstreamRound?.currency_symbol || round.currency_symbol
-
-                // Always calculate commission for transfers (not just when announced)
-                // Fetch user_settings for commission calculation
-                // Commission we receive = settings that upstream dealer set for us
-                // This is stored as: user_id = our profile id, dealer_id = upstream dealer's profile id
-                const { data: settings } = await supabase
-                    .from('user_settings')
-                    .select('*')
-                    .eq('user_id', user.id)
-                    .eq('dealer_id', dealerId)
-                    .maybeSingle()
-
-                const lotteryKey = getLotteryTypeKey(round.lottery_type)
-                
-                // Helper to get settings key for bet type
-                const getBetSettingsKey = (betType, lKey) => {
-                    if (lKey === 'lao' || lKey === 'hanoi') {
-                        const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
-                        return LAO_MAP[betType] || betType
-                    }
-                    return betType
+            const lotteryKey = getLotteryTypeKey(round.lottery_type)
+            
+            // Helper to get settings key for bet type
+            const getBetSettingsKey = (betType, lKey) => {
+                if (lKey === 'lao' || lKey === 'hanoi') {
+                    const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
+                    return LAO_MAP[betType] || betType
                 }
+                return betType
+            }
 
-                // Calculate commission for each transfer
-                dealer.transfers.forEach(t => {
-                    const settingsKey = getBetSettingsKey(t.bet_type, lotteryKey)
-                    const betSettings = settings?.lottery_settings?.[lotteryKey]?.[settingsKey]
-                    const commissionRate = betSettings?.commission !== undefined 
-                        ? betSettings.commission 
-                        : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
-                    const commissionAmount = (t.amount || 0) * (commissionRate / 100)
-                    dealer.totalCommission += commissionAmount
-                })
+            // For each group, fetch details
+            const groupKeys = Object.keys(dealerTransfers)
+            for (const groupKey of groupKeys) {
+                const dealer = dealerTransfers[groupKey]
+                
+                // For linked transfers: fetch upstream round info and win data
+                if (dealer.isLinked && dealer.targetRoundId) {
+                    // Fetch the upstream round to check if announced
+                    const { data: upstreamRound } = await supabase
+                        .from('lottery_rounds')
+                        .select('id, status, is_result_announced, winning_numbers, currency_symbol')
+                        .eq('id', dealer.targetRoundId)
+                        .single()
 
-                // Only fetch win data if announced
-                if (dealer.isAnnounced) {
-                    // Fetch submissions from the upstream round that match our target_submission_ids
-                    const targetSubmissionIds = dealer.transfers
-                        .map(t => t.target_submission_id)
-                        .filter(Boolean)
+                    dealer.upstreamRound = upstreamRound
+                    dealer.isAnnounced = upstreamRound?.status === 'announced' && upstreamRound?.is_result_announced
+                    dealer.currencySymbol = upstreamRound?.currency_symbol || round.currency_symbol
 
-                    if (targetSubmissionIds.length > 0) {
-                        const { data: upstreamSubs } = await supabase
-                            .from('submissions')
-                            .select('*')
-                            .in('id', targetSubmissionIds)
-                            .eq('is_deleted', false)
+                    // Fetch user_settings for commission calculation
+                    const { data: settings } = await supabase
+                        .from('user_settings')
+                        .select('*')
+                        .eq('user_id', user.id)
+                        .eq('dealer_id', dealer.dealerId)
+                        .maybeSingle()
 
-                        if (upstreamSubs) {
-                            upstreamSubs.forEach(sub => {
-                                if (sub.is_winner) {
-                                    dealer.winCount++
-                                    dealer.totalWin += sub.prize_amount || 0
-                                }
-                            })
+                    // Calculate commission for each transfer
+                    dealer.transfers.forEach(t => {
+                        const settingsKey = getBetSettingsKey(t.bet_type, lotteryKey)
+                        const betSettings = settings?.lottery_settings?.[lotteryKey]?.[settingsKey]
+                        const commissionRate = betSettings?.commission !== undefined 
+                            ? betSettings.commission 
+                            : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
+                        const commissionAmount = (t.amount || 0) * (commissionRate / 100)
+                        dealer.totalCommission += commissionAmount
+                    })
+
+                    // Only fetch win data if announced
+                    if (dealer.isAnnounced) {
+                        const targetSubmissionIds = dealer.transfers
+                            .map(t => t.target_submission_id)
+                            .filter(Boolean)
+
+                        if (targetSubmissionIds.length > 0) {
+                            const { data: upstreamSubs } = await supabase
+                                .from('submissions')
+                                .select('*')
+                                .in('id', targetSubmissionIds)
+                                .eq('is_deleted', false)
+
+                            if (upstreamSubs) {
+                                upstreamSubs.forEach(sub => {
+                                    if (sub.is_winner) {
+                                        dealer.winCount++
+                                        dealer.totalWin += sub.prize_amount || 0
+                                    }
+                                })
+                            }
                         }
                     }
+                } else {
+                    // Non-linked (external) transfers: no upstream round info
+                    dealer.isAnnounced = false
+                    dealer.isExternal = true
+                    dealer.currencySymbol = round.currency_symbol
+                    // No commission for external transfers (managed outside system)
                 }
             }
 
@@ -2559,7 +2567,7 @@ export default function RoundAccordionItem({
                                                                 <div key={dealer.dealerId} className={`user-summary-card ${ourNet > 0 ? 'winner' : ourNet < 0 ? 'loser' : ''}`}>
                                                                     <div className="user-summary-header">
                                                                         <div className="user-info">
-                                                                            <span className="user-name">{dealer.dealerName}</span>
+                                                                            <span className="user-name">{dealer.dealerName} {dealer.isExternal && <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 400 }}>(นอกระบบ)</span>}</span>
                                                                             <span className="user-email">{dealer.dealerContact}</span>
                                                                         </div>
                                                                         <div className={`net-amount ${ourNet > 0 ? 'positive' : ourNet < 0 ? 'negative' : ''}`}>
@@ -2573,7 +2581,9 @@ export default function RoundAccordionItem({
                                                                         <div className="detail-item"><span className="detail-label">ถูก/ยอดได้</span><span className={`detail-value ${dealer.totalWin > 0 ? 'text-success' : ''}`}>{dealer.winCount > 0 ? `${dealer.winCount}/${dealer.currencySymbol}${dealer.totalWin.toLocaleString()}` : '-'}</span></div>
                                                                     </div>
                                                                     <div className="user-summary-footer">
-                                                                        {!dealer.isAnnounced ? (
+                                                                        {dealer.isExternal ? (
+                                                                            <span className="status-badge pending">นอกระบบ</span>
+                                                                        ) : !dealer.isAnnounced ? (
                                                                             <span className="status-badge pending">รอประกาศผล</span>
                                                                         ) : ourNet > 0 ? (
                                                                             <span className="status-badge won">ต้องเก็บ {dealer.currencySymbol}{ourNet.toLocaleString()}</span>
