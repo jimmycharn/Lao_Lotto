@@ -204,10 +204,10 @@ export default function OtpVerificationModal({
                     </span>
                 </div>
 
-                {/* OTP Hint - shown when email is NOT configured (for testing) */}
-                {otpHint && !emailSent && (
+                {/* OTP Hint - shown for testing until email is properly configured */}
+                {otpHint && (
                     <div style={otpHintStyle}>
-                        <span>🔑 รหัส OTP (สำหรับทดสอบ): <strong style={{ letterSpacing: '4px', fontSize: '18px' }}>{otpHint}</strong></span>
+                        <span>🔑 รหัส OTP: <strong style={{ letterSpacing: '4px', fontSize: '18px' }}>{otpHint}</strong></span>
                     </div>
                 )}
 

@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
 -- Insert default settings (won't overwrite if already exist)
 INSERT INTO app_settings (key, value, description) VALUES 
     ('resend_api_key', '', 'Resend API key for sending OTP emails'),
-    ('otp_from_email', 'noreply@yourdomain.com', 'Sender email address for OTP'),
+    ('otp_from_email', 'noreply@biglotto.app', 'Sender email address for OTP'),
     ('app_name', 'Big Lotto', 'Application name shown in OTP emails')
 ON CONFLICT (key) DO NOTHING;
 
@@ -56,7 +56,7 @@ BEGIN
     SELECT value INTO v_app_name FROM app_settings WHERE key = 'app_name';
 
     -- Default values
-    v_from_email := COALESCE(NULLIF(v_from_email, ''), 'noreply@yourdomain.com');
+    v_from_email := COALESCE(NULLIF(v_from_email, ''), 'noreply@biglotto.app');
     v_app_name := COALESCE(NULLIF(v_app_name, ''), 'Big Lotto');
 
     -- If no API key configured, skip sending but return success with note
