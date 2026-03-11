@@ -428,10 +428,12 @@ export async function updatePendingDeduction(dealerId) {
             }
 
             // Subtract transferred out amount from volumes
-            // Priority: subtract from dealerInputForOwnUsers first, then dealerOwnVolume
+            // Priority: subtract from dealerInputForOwnUsers first, then dealerOwnVolume, then selfInput, then downstream
             let remainingTransfer = transferredOutAmount
             let netDealerInputForOwnUsers = dealerInputForOwnUsers
             let netDealerOwnVolume = dealerOwnVolume
+            let netSelfInputVolume = selfInputVolume
+            let netDownstreamVolume = downstreamVolume
 
             if (remainingTransfer > 0) {
                 const deductFromDealerInput = Math.min(remainingTransfer, netDealerInputForOwnUsers)
@@ -443,10 +445,20 @@ export async function updatePendingDeduction(dealerId) {
                 netDealerOwnVolume -= deductFromDealerOwn
                 remainingTransfer -= deductFromDealerOwn
             }
+            if (remainingTransfer > 0) {
+                const deductFromSelfInput = Math.min(remainingTransfer, netSelfInputVolume)
+                netSelfInputVolume -= deductFromSelfInput
+                remainingTransfer -= deductFromSelfInput
+            }
+            if (remainingTransfer > 0) {
+                const deductFromDownstream = Math.min(remainingTransfer, netDownstreamVolume)
+                netDownstreamVolume -= deductFromDownstream
+                remainingTransfer -= deductFromDownstream
+            }
 
             // === Calculate chargeable volume ===
             // Total volume = all groups combined (after transfer deduction)
-            const totalVolume = netDealerOwnVolume + netDealerInputForOwnUsers + selfInputVolume + downstreamVolume
+            const totalVolume = netDealerOwnVolume + netDealerInputForOwnUsers + netSelfInputVolume + netDownstreamVolume
 
             // Apply minAmount to total volume: only charge amount exceeding minAmount
             let totalChargeableVolume = 0
@@ -456,8 +468,8 @@ export async function updatePendingDeduction(dealerId) {
 
             // Keep breakdown for reference
             const chargeableFromThreshold = Math.max(netDealerOwnVolume + netDealerInputForOwnUsers - minAmount, 0)
-            const chargeableFromSelfInput = selfInputVolume
-            const chargeableFromDownstream = downstreamVolume
+            const chargeableFromSelfInput = netSelfInputVolume
+            const chargeableFromDownstream = netDownstreamVolume
             const thresholdVolume = netDealerOwnVolume + netDealerInputForOwnUsers
 
             // Calculate pending fee for this round
@@ -480,8 +492,8 @@ export async function updatePendingDeduction(dealerId) {
                 lottery_name: round.lottery_name,
                 dealer_own_volume: netDealerOwnVolume,
                 dealer_input_for_own_users: netDealerInputForOwnUsers,
-                self_input_volume: selfInputVolume,
-                downstream_volume: downstreamVolume,
+                self_input_volume: netSelfInputVolume,
+                downstream_volume: netDownstreamVolume,
                 transferred_out: transferredOutAmount,
                 threshold_volume: thresholdVolume,
                 chargeable_from_threshold: chargeableFromThreshold,
@@ -500,8 +512,8 @@ export async function updatePendingDeduction(dealerId) {
                 round_id: round.id,
                 dealer_id: dealerId,
                 dealer_input_volume: netDealerOwnVolume + netDealerInputForOwnUsers,
-                member_input_volume: selfInputVolume,
-                upstream_volume: downstreamVolume,
+                member_input_volume: netSelfInputVolume,
+                upstream_volume: netDownstreamVolume,
                 total_chargeable_volume: totalChargeableVolume,
                 percentage_rate: percentageRate,
                 pending_fee: roundPending,
@@ -703,9 +715,12 @@ export async function calculateRoundCreditFee(dealerId, roundId) {
         }
 
         // Subtract transferred out amount
+        // Priority: dealerInputForOwnUsers → dealerOwnVolume → selfInput → downstream
         let remainingTransfer = transferredOutAmount
         let netDealerInputForOwnUsers = dealerInputForOwnUsers
         let netDealerOwnVolume = dealerOwnVolume
+        let netSelfInputVolume = selfInputVolume
+        let netDownstreamVolume = downstreamVolume
 
         if (remainingTransfer > 0) {
             const d = Math.min(remainingTransfer, netDealerInputForOwnUsers)
@@ -717,9 +732,19 @@ export async function calculateRoundCreditFee(dealerId, roundId) {
             netDealerOwnVolume -= d
             remainingTransfer -= d
         }
+        if (remainingTransfer > 0) {
+            const d = Math.min(remainingTransfer, netSelfInputVolume)
+            netSelfInputVolume -= d
+            remainingTransfer -= d
+        }
+        if (remainingTransfer > 0) {
+            const d = Math.min(remainingTransfer, netDownstreamVolume)
+            netDownstreamVolume -= d
+            remainingTransfer -= d
+        }
 
         // Calculate chargeable volume — apply minAmount to total volume
-        const totalVolume = netDealerOwnVolume + netDealerInputForOwnUsers + selfInputVolume + downstreamVolume
+        const totalVolume = netDealerOwnVolume + netDealerInputForOwnUsers + netSelfInputVolume + netDownstreamVolume
         let totalChargeableVolume = 0
         if (totalVolume > minAmount) {
             totalChargeableVolume = totalVolume - minAmount
@@ -740,13 +765,13 @@ export async function calculateRoundCreditFee(dealerId, roundId) {
                 billingModel,
                 dealerOwnVolume: netDealerOwnVolume,
                 dealerInputForOwnUsers: netDealerInputForOwnUsers,
-                selfInputVolume,
-                downstreamVolume,
+                selfInputVolume: netSelfInputVolume,
+                downstreamVolume: netDownstreamVolume,
                 transferredOutAmount,
                 thresholdVolume,
                 chargeableFromThreshold,
-                chargeableFromSelfInput: selfInputVolume,
-                chargeableFromDownstream: downstreamVolume,
+                chargeableFromSelfInput: netSelfInputVolume,
+                chargeableFromDownstream: netDownstreamVolume,
                 totalChargeableVolume,
                 percentageRate,
                 minAmount,
@@ -853,21 +878,26 @@ export async function deductAdditionalCreditForRound(dealerId, roundId, previous
 
 /**
  * Calculate profit for a round (used by profit_percentage billing model)
- * Profit = (Total Incoming Bets - Total Commission - Total Payout) + (Outgoing: wins + commission - bet amount)
+ * Profit = (Total Incoming Bets - Outgoing Transfers - Total Commission - Total Payout) 
+ *        + (Outgoing: wins + commission - bet amount)
  * @param {string} dealerId - The dealer's user ID
  * @param {string} roundId - The round ID
  * @returns {Promise<{profit: number, details: object}>}
  */
 export async function calculateRoundProfit(dealerId, roundId) {
     try {
-        // Get all members of this dealer
-        const { data: memberships } = await supabase
-            .from('user_dealer_memberships')
-            .select('user_id')
-            .eq('dealer_id', dealerId)
-            .eq('status', 'active')
+        // Get round info for lottery_type (needed for commission/payout rates)
+        const { data: roundData } = await supabase
+            .from('lottery_rounds')
+            .select('lottery_type')
+            .eq('id', roundId)
+            .single()
 
-        const memberUserIds = (memberships || []).map(m => m.user_id)
+        const lotteryType = roundData?.lottery_type
+        // Map lottery_type to settings key used in user_settings
+        const lotteryKey = lotteryType === 'thai' ? 'thai' 
+            : (lotteryType === 'lao' || lotteryType === 'hanoi') ? 'lao' 
+            : lotteryType === 'stock' ? 'stock' : 'thai'
 
         // Get all submissions for this round (incoming bets)
         const { data: allSubs } = await supabase
@@ -876,12 +906,12 @@ export async function calculateRoundProfit(dealerId, roundId) {
             .eq('round_id', roundId)
             .eq('is_deleted', false)
 
-        // Get user settings for commission calculation
+        // Get user settings for commission calculation (from user_settings table)
         const allUserIds = [...new Set((allSubs || []).map(s => s.user_id))]
         let userSettingsMap = {}
         if (allUserIds.length > 0) {
             const { data: userSettings } = await supabase
-                .from('user_dealer_memberships')
+                .from('user_settings')
                 .select('user_id, lottery_settings')
                 .eq('dealer_id', dealerId)
                 .in('user_id', allUserIds)
@@ -891,14 +921,24 @@ export async function calculateRoundProfit(dealerId, roundId) {
             }
         }
 
-        // Get round info for lottery_type (needed for default commission/payout rates)
-        const { data: roundData } = await supabase
-            .from('lottery_rounds')
-            .select('lottery_type')
-            .eq('id', roundId)
-            .single()
+        // Default commission rates (fallback if user_settings not found)
+        const DEFAULT_COMMISSIONS = {
+            'run_top': 15, 'run_bottom': 15,
+            'pak_top': 15, 'pak_bottom': 15,
+            '2_top': 15, '2_front': 15, '2_center': 15, '2_spread': 15, '2_run': 15, '2_bottom': 15,
+            '3_top': 15, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
+            '4_tod': 15, '4_set': 15, '4_float': 15, '5_float': 15, '6_top': 15
+        }
 
-        const lotteryType = roundData?.lottery_type
+        // Get outgoing bet_transfers for this round (amounts dealer sent to upstream)
+        const { data: outgoingTransfers } = await supabase
+            .from('bet_transfers')
+            .select('id, amount, status, target_submission_id, upstream_dealer_id')
+            .eq('round_id', roundId)
+        
+        // Filter out returned transfers
+        const activeOutgoing = (outgoingTransfers || []).filter(t => t.status !== 'returned')
+        const outgoingBetAmount = activeOutgoing.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0)
 
         // Calculate incoming totals
         let totalBet = 0
@@ -909,8 +949,13 @@ export async function calculateRoundProfit(dealerId, roundId) {
             const amount = parseFloat(sub.amount || 0)
             totalBet += amount
 
-            // Commission: use stored commission_amount if available
-            const commission = parseFloat(sub.commission_amount || 0)
+            // Commission: calculate from user_settings (commission_amount is NOT stored in submissions)
+            const userSettings = userSettingsMap[sub.user_id]
+            const betSettings = userSettings?.[lotteryKey]?.[sub.bet_type]
+            const commissionRate = betSettings?.commission !== undefined 
+                ? betSettings.commission 
+                : (DEFAULT_COMMISSIONS[sub.bet_type] || 15)
+            const commission = amount * (commissionRate / 100)
             totalCommission += commission
 
             // Payout: use stored prize_amount if winner
@@ -919,64 +964,54 @@ export async function calculateRoundProfit(dealerId, roundId) {
             }
         }
 
-        // Get outgoing bet_transfers for this round
-        const { data: outgoingTransfers } = await supabase
-            .from('bet_transfers')
-            .select('id, amount, status, target_dealer_id')
-            .eq('round_id', roundId)
-            .neq('status', 'returned')
-
-        // For each outgoing transfer, find the corresponding submission in the target round
-        // to get wins and commissions back
-        let outgoingBetAmount = 0
+        // Get outgoing transfer target submissions (to check if they won in upstream round)
         let outgoingWinnings = 0
         let outgoingCommission = 0
 
-        if (outgoingTransfers && outgoingTransfers.length > 0) {
-            outgoingBetAmount = outgoingTransfers.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0)
-
-            // Get submissions that were created from transfers (source='transfer') in target dealer rounds
-            // These are tracked via bet_transfer_items or by matching source='transfer' 
-            const transferIds = outgoingTransfers.map(t => t.id)
+        if (activeOutgoing.length > 0) {
+            // Use target_submission_id directly from bet_transfers (not bet_transfer_items which doesn't exist)
+            const targetSubIds = activeOutgoing
+                .map(t => t.target_submission_id)
+                .filter(Boolean)
             
-            const { data: transferItems } = await supabase
-                .from('bet_transfer_items')
-                .select('transfer_id, target_submission_id')
-                .in('transfer_id', transferIds)
+            if (targetSubIds.length > 0) {
+                const { data: targetSubs } = await supabase
+                    .from('submissions')
+                    .select('id, amount, prize_amount, is_winner, bet_type')
+                    .in('id', targetSubIds)
+                    .eq('is_deleted', false)
 
-            if (transferItems && transferItems.length > 0) {
-                const targetSubIds = transferItems.map(ti => ti.target_submission_id).filter(Boolean)
-                
-                if (targetSubIds.length > 0) {
-                    const { data: targetSubs } = await supabase
-                        .from('submissions')
-                        .select('id, amount, prize_amount, is_winner, commission_amount')
-                        .in('id', targetSubIds)
-                        .eq('is_deleted', false)
-
-                    for (const ts of (targetSubs || [])) {
-                        if (ts.is_winner) {
-                            outgoingWinnings += parseFloat(ts.prize_amount || 0)
-                        }
-                        outgoingCommission += parseFloat(ts.commission_amount || 0)
+                for (const ts of (targetSubs || [])) {
+                    if (ts.is_winner) {
+                        outgoingWinnings += parseFloat(ts.prize_amount || 0)
                     }
+                    // Commission we receive from upstream for transferred bets
+                    // This would need the upstream dealer's settings for us, but for simplicity
+                    // we approximate with default commission rate
+                    const commRate = DEFAULT_COMMISSIONS[ts.bet_type] || 15
+                    outgoingCommission += parseFloat(ts.amount || 0) * (commRate / 100)
                 }
             }
         }
 
         // Calculate profit components
-        const memberProfit = totalBet - totalCommission - totalPayout
-        const upstreamProfit = outgoingWinnings + outgoingCommission - outgoingBetAmount
+        // memberProfit = incoming bets MINUS outgoing transfers MINUS commission we pay MINUS prizes we pay
+        const netIncomingBet = totalBet - outgoingBetAmount
+        const memberProfit = netIncomingBet - totalCommission - totalPayout
+        // upstreamProfit = what we get back from upstream (winnings + commission) minus what we sent
+        // Note: outgoingBetAmount already subtracted from memberProfit, so upstream adds back gains
+        const upstreamProfit = outgoingWinnings + outgoingCommission
         const totalProfit = memberProfit + upstreamProfit
 
         return {
             profit: totalProfit,
             details: {
                 totalBet,
+                outgoingBetAmount,
+                netIncomingBet,
                 totalCommission,
                 totalPayout,
                 memberProfit,
-                outgoingBetAmount,
                 outgoingWinnings,
                 outgoingCommission,
                 upstreamProfit,
