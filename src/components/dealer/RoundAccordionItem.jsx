@@ -31,7 +31,8 @@ import {
     normalizeNumber,
     generateBatchId,
     getDefaultLimitsForType,
-    getLotteryTypeKey
+    getLotteryTypeKey,
+    calculate4SetPrizes
 } from '../../constants/lotteryTypes'
 import { findMatchingLimit, getEffectivePayoutPercent } from '../../utils/numberLimits'
 import DealerWriteSubmissionWrapper from './DealerWriteSubmissionWrapper'
@@ -333,6 +334,7 @@ export default function RoundAccordionItem({
 
     // Fetch summaries from upstream dealers we transferred bets to (both linked and non-linked/external)
     async function fetchUpstreamSummaries() {
+        console.log('fetchUpstreamSummaries called for round:', round.id)
         setUpstreamSummaries(prev => ({ ...prev, loading: true }))
         try {
             // Get ALL transfers from this round (linked + non-linked/external)
@@ -341,6 +343,7 @@ export default function RoundAccordionItem({
                 .select('*')
                 .eq('round_id', round.id)
             
+            console.log('fetchUpstreamSummaries transfers:', transfers?.length, 'error:', transferError)
             if (transferError) throw transferError
             if (!transfers || transfers.length === 0) {
                 setUpstreamSummaries({ loading: false, dealers: [] })
@@ -447,11 +450,96 @@ export default function RoundAccordionItem({
                         }
                     }
                 } else {
-                    // Non-linked (external) transfers: no upstream round info
-                    dealer.isAnnounced = false
+                    // Non-linked (external) transfers: use our own round data
                     dealer.isExternal = true
                     dealer.currencySymbol = round.currency_symbol
-                    // No commission for external transfers (managed outside system)
+                    
+                    // Calculate commission using default rates (external = no upstream settings)
+                    dealer.transfers.forEach(t => {
+                        const commissionRate = DEFAULT_COMMISSIONS[t.bet_type] || 15
+                        const commissionAmount = (t.amount || 0) * (commissionRate / 100)
+                        dealer.totalCommission += commissionAmount
+                    })
+
+                    // Check winners against our own round's winning_numbers
+                    const wn = round.winning_numbers
+                    if (wn && isAnnounced) {
+                        dealer.isAnnounced = true
+                        // Derive winning numbers based on lottery type
+                        const lt = round.lottery_type
+                        const w4set = wn['4_set'] || ''
+                        const w3top = wn['3_top'] || (lt !== 'thai' && w4set.length >= 3 ? w4set.slice(1) : '') || ''
+                        const w2top = wn['2_top'] || (lt !== 'thai' && w4set.length >= 2 ? w4set.slice(2) : '') || ''
+                        const w2bottom = wn['2_bottom'] || (lt === 'lao' && w4set.length >= 2 ? w4set.slice(0, 2) : '') || ''
+                        const w3topSorted = w3top.split('').sort().join('')
+
+                        // Helper: check if all digits of src exist in target (removing each once found)
+                        const floatCheck = (src, target) => {
+                            let temp = target
+                            for (const ch of src) {
+                                const idx = temp.indexOf(ch)
+                                if (idx === -1) return false
+                                temp = temp.slice(0, idx) + temp.slice(idx + 1)
+                            }
+                            return true
+                        }
+
+                        dealer.transfers.forEach(t => {
+                            const num = t.numbers || ''
+                            const bt = t.bet_type
+                            let isWinner = false
+                            let prize = 0
+
+                            // Payout rate from DEFAULT_PAYOUTS
+                            const payoutRate = DEFAULT_PAYOUTS[bt] || 1
+
+                            if (bt === 'run_top' && w3top && num.length === 1) {
+                                isWinner = w3top.includes(num)
+                            } else if (bt === 'run_bottom' && w2bottom && num.length === 1) {
+                                isWinner = w2bottom.includes(num)
+                            } else if (bt === 'pak_top' && w3top && w3top.length === 3 && num.length === 1) {
+                                isWinner = w3top.includes(num)
+                            } else if (bt === 'pak_bottom' && w2bottom && w2bottom.length === 2 && num.length === 1) {
+                                isWinner = w2bottom.includes(num)
+                            } else if (bt === '2_bottom' && w2bottom && num.length === 2) {
+                                isWinner = num === w2bottom
+                            } else if (bt === '2_top' && w2top && num.length === 2) {
+                                isWinner = num === w2top
+                            } else if (bt === '2_front' && w3top && w3top.length === 3 && num.length === 2) {
+                                isWinner = num === w3top.slice(0, 2)
+                            } else if ((bt === '2_center' || bt === '2_spread') && w3top && w3top.length === 3 && num.length === 2) {
+                                isWinner = num === (w3top[0] + w3top[2])
+                            } else if (bt === '2_run' && w3top && num.length === 2) {
+                                isWinner = w3top.includes(num[0]) && w3top.includes(num[1])
+                            } else if ((bt === '3_top' || bt === '3_straight') && w3top && num.length === 3) {
+                                isWinner = num === w3top
+                            } else if ((bt === '3_tod' || bt === '3_tod_single') && w3top && num.length === 3) {
+                                isWinner = num.split('').sort().join('') === w3topSorted && num !== w3top
+                            } else if (bt === '4_float' && w3top && w3top.length === 3 && num.length === 4) {
+                                isWinner = floatCheck(w3top, num)
+                            } else if (bt === '5_float' && w3top && w3top.length === 3 && num.length === 5) {
+                                isWinner = floatCheck(w3top, num)
+                            } else if (bt === '4_set' && w4set && num.length === 4) {
+                                // 4_set uses calculate4SetPrizes logic (fixed prize)
+                                const { totalPrize } = calculate4SetPrizes(num, w4set, round.set_prizes?.['4_top'] ? undefined : undefined)
+                                if (totalPrize > 0) {
+                                    isWinner = true
+                                    prize = totalPrize // Fixed prize, not multiplied by amount
+                                }
+                            }
+
+                            if (isWinner) {
+                                dealer.winCount++
+                                if (bt === '4_set') {
+                                    dealer.totalWin += prize
+                                } else {
+                                    dealer.totalWin += (t.amount || 0) * payoutRate
+                                }
+                            }
+                        })
+                    } else {
+                        dealer.isAnnounced = false
+                    }
                 }
             }
 
