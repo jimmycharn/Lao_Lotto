@@ -933,7 +933,7 @@ export async function calculateRoundProfit(dealerId, roundId) {
         // Get outgoing bet_transfers for this round (amounts dealer sent to upstream)
         const { data: outgoingTransfers } = await supabase
             .from('bet_transfers')
-            .select('id, amount, status, target_submission_id, upstream_dealer_id')
+            .select('id, amount, status, target_submission_id, upstream_dealer_id, bet_type')
             .eq('round_id', roundId)
         
         // Filter out returned transfers
@@ -969,12 +969,14 @@ export async function calculateRoundProfit(dealerId, roundId) {
         let outgoingCommission = 0
 
         if (activeOutgoing.length > 0) {
-            // Use target_submission_id directly from bet_transfers (not bet_transfer_items which doesn't exist)
-            const targetSubIds = activeOutgoing
-                .map(t => t.target_submission_id)
-                .filter(Boolean)
+            // Separate linked (has target_submission_id) vs external (no target_submission_id) transfers
+            const linkedOutgoing = activeOutgoing.filter(t => t.target_submission_id)
+            const externalOutgoing = activeOutgoing.filter(t => !t.target_submission_id)
             
-            if (targetSubIds.length > 0) {
+            // For linked transfers: fetch upstream submissions for win/commission data
+            if (linkedOutgoing.length > 0) {
+                const targetSubIds = linkedOutgoing.map(t => t.target_submission_id)
+                
                 const { data: targetSubs } = await supabase
                     .from('submissions')
                     .select('id, amount, prize_amount, is_winner, bet_type')
@@ -986,11 +988,16 @@ export async function calculateRoundProfit(dealerId, roundId) {
                         outgoingWinnings += parseFloat(ts.prize_amount || 0)
                     }
                     // Commission we receive from upstream for transferred bets
-                    // This would need the upstream dealer's settings for us, but for simplicity
-                    // we approximate with default commission rate
                     const commRate = DEFAULT_COMMISSIONS[ts.bet_type] || 15
                     outgoingCommission += parseFloat(ts.amount || 0) * (commRate / 100)
                 }
+            }
+
+            // For external transfers: calculate commission directly from transfer data
+            // (no upstream submission exists, so use bet_type and amount from bet_transfers)
+            for (const t of externalOutgoing) {
+                const commRate = DEFAULT_COMMISSIONS[t.bet_type] || 15
+                outgoingCommission += parseFloat(t.amount || 0) * (commRate / 100)
             }
         }
 

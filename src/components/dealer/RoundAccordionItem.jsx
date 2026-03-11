@@ -2669,7 +2669,7 @@ export default function RoundAccordionItem({
                                                                         <div className="detail-item"><span className="detail-label">ถูก/ยอดได้</span><span className={`detail-value ${dealer.totalWin > 0 ? 'text-success' : ''}`}>{dealer.winCount > 0 ? `${dealer.winCount}/${dealer.currencySymbol}${dealer.totalWin.toLocaleString()}` : '-'}</span></div>
                                                                     </div>
                                                                     <div className="user-summary-footer">
-                                                                        {dealer.isExternal ? (
+                                                                        {dealer.isExternal && !dealer.isAnnounced ? (
                                                                             <span className="status-badge pending">นอกระบบ</span>
                                                                         ) : !dealer.isAnnounced ? (
                                                                             <span className="status-badge pending">รอประกาศผล</span>
