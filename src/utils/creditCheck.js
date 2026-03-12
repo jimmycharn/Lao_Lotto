@@ -362,17 +362,20 @@ export async function updatePendingDeduction(dealerId) {
                 .eq('round_id', round.id)
                 .eq('is_deleted', false)
 
-            // Get bet_transfers FROM this round (outgoing transfers - these amounts should NOT be charged)
+            // Get bet_transfers FROM this round (outgoing transfers)
             const { data: outgoingTransfers } = await supabase
                 .from('bet_transfers')
-                .select('numbers, bet_type, amount, status')
+                .select('numbers, bet_type, amount, status, is_linked')
                 .eq('round_id', round.id)
             
             // Filter out returned transfers (status !== 'returned')
             const activeTransfers = (outgoingTransfers || []).filter(t => t.status !== 'returned')
 
-            // Calculate total amount that was transferred OUT (should not be charged)
-            const transferredOutAmount = activeTransfers.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0)
+            // Only subtract LINKED (in-system) transfers from chargeable volume
+            // External (non-linked) transfers should NOT reduce pending credit
+            // because that volume disappears from the system entirely
+            const linkedTransfers = activeTransfers.filter(t => t.is_linked)
+            const transferredOutAmount = linkedTransfers.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0)
 
             // === NEW LOGIC v3: Separate volumes by input type ===
             // 1. dealerInputForOwnUsers: dealer ป้อนแทน user ที่ dealer สร้าง (password_changed=false) → ใช้ min_amount
@@ -673,11 +676,14 @@ export async function calculateRoundCreditFee(dealerId, roundId) {
         // Get bet_transfers FROM this round (outgoing transfers)
         const { data: outgoingTransfers } = await supabase
             .from('bet_transfers')
-            .select('amount, status')
+            .select('amount, status, is_linked')
             .eq('round_id', roundId)
         
         const activeTransfers = (outgoingTransfers || []).filter(t => t.status !== 'returned')
-        const transferredOutAmount = activeTransfers.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0)
+        // Only subtract LINKED (in-system) transfers from chargeable volume
+        // External (non-linked) transfers should NOT reduce pending credit
+        const linkedTransfers = activeTransfers.filter(t => t.is_linked)
+        const transferredOutAmount = linkedTransfers.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0)
 
         // Separate volumes by input type (same logic as updatePendingDeduction v3)
         let dealerOwnVolume = 0
