@@ -1759,30 +1759,42 @@ export default function Dealer() {
                 .eq('id', roundId)
 
             if (!error) {
-                // Finalize credit deduction - try immediate first, then regular
-                // Only ONE of these will actually deduct (based on billing_cycle)
+                // Finalize credit deduction - but SKIP for profit_percentage billing
+                // For profit_percentage: 1% pending is just a guarantee, real deduction happens at announce (5% of profit)
+                // The 1% is only finalized if dealer deletes round without announcing
                 try {
-                    // Try immediate billing first (for immediate billing cycle)
-                    const { data: immediateBillingResult, error: immediateBillingError } = await supabase
-                        .rpc('create_immediate_billing_record', {
-                            p_round_id: roundId,
-                            p_dealer_id: user.id
-                        })
+                    const { data: dealerSubs } = await supabase
+                        .from('dealer_subscriptions')
+                        .select('billing_model, subscription_packages(billing_model)')
+                        .eq('dealer_id', user.id)
+                        .in('status', ['active', 'trial'])
+                        .order('created_at', { ascending: false })
+                        .limit(1)
+                    
+                    const billingModel = dealerSubs?.[0]?.subscription_packages?.billing_model || dealerSubs?.[0]?.billing_model
 
-                    if (!immediateBillingError && immediateBillingResult?.success && immediateBillingResult?.amount_deducted > 0) {
-                        // Immediate billing succeeded - don't call finalize_round_credit
-                        console.log('Immediate billing success:', immediateBillingResult)
-                        toast.info(`ตัดเครดิต ฿${immediateBillingResult.amount_deducted.toLocaleString()} สำเร็จ`)
-                    } else {
-                        // Immediate billing not applicable - try regular finalization
-                        const { data: result, error: creditError } = await supabase
-                            .rpc('finalize_round_credit', { p_round_id: roundId })
+                    if (billingModel !== 'profit_percentage') {
+                        // Regular percentage: deduct immediately on close
+                        const { data: immediateBillingResult, error: immediateBillingError } = await supabase
+                            .rpc('create_immediate_billing_record', {
+                                p_round_id: roundId,
+                                p_dealer_id: user.id
+                            })
 
-                        if (!creditError && result?.total_deducted > 0) {
-                            console.log('Regular finalization success:', result)
-                            toast.info(`ตัดเครดิต ฿${result.total_deducted.toLocaleString()} สำเร็จ`)
+                        if (!immediateBillingError && immediateBillingResult?.success && immediateBillingResult?.amount_deducted > 0) {
+                            console.log('Immediate billing success:', immediateBillingResult)
+                            toast.info(`ตัดเครดิต ฿${immediateBillingResult.amount_deducted.toLocaleString()} สำเร็จ`)
+                        } else {
+                            const { data: result, error: creditError } = await supabase
+                                .rpc('finalize_round_credit', { p_round_id: roundId })
+
+                            if (!creditError && result?.total_deducted > 0) {
+                                console.log('Regular finalization success:', result)
+                                toast.info(`ตัดเครดิต ฿${result.total_deducted.toLocaleString()} สำเร็จ`)
+                            }
                         }
                     }
+                    // profit_percentage: keep pending deduction as guarantee only, don't deduct from balance yet
                 } catch (billingErr) {
                     console.log('Credit system not configured:', billingErr)
                 }
@@ -1937,11 +1949,33 @@ export default function Dealer() {
                 }
             }
 
-            // Only deduct credit if round is still OPEN (not closed or announced)
-            // If round is closed/announced, credit was already deducted when closing
-            if (roundStatus === 'open') {
-                try {
-                    // Try immediate billing first
+            // Credit deduction before delete depends on billing model and round state
+            try {
+                const { data: dealerSubs } = await supabase
+                    .from('dealer_subscriptions')
+                    .select('billing_model, subscription_packages(billing_model)')
+                    .eq('dealer_id', user.id)
+                    .in('status', ['active', 'trial'])
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                
+                const billingModel = dealerSubs?.[0]?.subscription_packages?.billing_model || dealerSubs?.[0]?.billing_model
+                const isAnnounced = roundData.is_result_announced === true
+
+                if (billingModel === 'profit_percentage') {
+                    // profit_percentage:
+                    // - If NOT announced: finalize 1% pending as real charge (penalty for deleting without announcing)
+                    // - If announced: profit-based 5% was already deducted by ResultsModal, no action needed
+                    if (!isAnnounced) {
+                        const previouslyCharged = roundData.charged_credit_amount || 0
+                        const creditResult = await deductAdditionalCreditForRound(user.id, roundId, previouslyCharged)
+                        if (creditResult.amountDeducted > 0) {
+                            console.log('Pending 1% finalized before delete (profit_percentage):', creditResult)
+                            toast.info(`หักค่าธรรมเนียม ฿${creditResult.amountDeducted.toLocaleString()} ก่อนลบงวด`)
+                        }
+                    }
+                } else if (roundStatus === 'open') {
+                    // Regular percentage + open round: deduct immediately
                     const { data: immediateBillingResult, error: immediateBillingError } = await supabase
                         .rpc('create_immediate_billing_record', {
                             p_round_id: roundId,
@@ -1952,7 +1986,6 @@ export default function Dealer() {
                         console.log('Immediate billing before delete:', immediateBillingResult)
                         toast.info(`หักค่าธรรมเนียม ฿${immediateBillingResult.amount_deducted.toLocaleString()} ก่อนลบงวด`)
                     } else {
-                        // Immediate billing not applicable - try regular finalization
                         const { data: creditResult, error: creditError } = await supabase
                             .rpc('finalize_round_credit', { p_round_id: roundId })
 
@@ -1961,19 +1994,17 @@ export default function Dealer() {
                             toast.info(`หักค่าธรรมเนียม ฿${creditResult.total_deducted.toLocaleString()} ก่อนลบงวด`)
                         }
                     }
-                } catch (billingErr) {
-                    console.log('Billing before delete not configured:', billingErr)
+                } else {
+                    // Regular percentage + closed/announced: deduct additional if submissions were modified
+                    const previouslyCharged = roundData.charged_credit_amount || 0
+                    const creditResult = await deductAdditionalCreditForRound(user.id, roundId, previouslyCharged)
+                    if (creditResult.amountDeducted > 0) {
+                        console.log('Additional credit deducted before delete:', creditResult)
+                        toast.info(`หักค่าธรรมเนียมเพิ่มเติม ฿${creditResult.amountDeducted.toLocaleString()} ก่อนลบงวด`)
+                    }
                 }
-            } else {
-                // For closed/announced rounds: deduct additional credit if submissions were modified
-                console.log('Round already closed/announced - checking for additional credit to deduct')
-                const previouslyCharged = roundData.charged_credit_amount || 0
-                const creditResult = await deductAdditionalCreditForRound(user.id, roundId, previouslyCharged)
-                
-                if (creditResult.amountDeducted > 0) {
-                    console.log('Additional credit deducted before delete:', creditResult)
-                    toast.info(`หักค่าธรรมเนียมเพิ่มเติม ฿${creditResult.amountDeducted.toLocaleString()} ก่อนลบงวด`)
-                }
+            } catch (billingErr) {
+                console.log('Billing before delete not configured:', billingErr)
             }
 
             // Now delete the round

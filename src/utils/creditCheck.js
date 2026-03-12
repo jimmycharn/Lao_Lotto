@@ -1102,7 +1102,26 @@ export async function deductProfitBasedCredit(dealerId, roundId, previousPending
         // 2. Calculate profit for this round
         const { profit, details: profitDetails } = await calculateRoundProfit(dealerId, roundId)
 
-        // 3. Get current credit balance
+        // 3. Find any existing percentage-based deduction for this round
+        // (e.g. 1% "ค่าธรรมเนียมทันที" that was charged when closing the round)
+        // This must be refunded before applying profit-based fee
+        const { data: existingDeductions } = await supabase
+            .from('credit_transactions')
+            .select('id, amount')
+            .eq('dealer_id', dealerId)
+            .eq('reference_id', roundId)
+            .eq('reference_type', 'round')
+            .eq('transaction_type', 'deduction')
+            .not('metadata->>type', 'eq', 'profit_percentage_deduction')
+
+        // Sum up all previous deductions for this round (amount is negative)
+        const previouslyDeducted = (existingDeductions || []).reduce(
+            (sum, t) => sum + Math.abs(parseFloat(t.amount || 0)), 0
+        )
+        // Use whichever is larger: the param passed in or what we found in DB
+        const refundAmount = Math.max(previousPendingAmount, previouslyDeducted)
+
+        // 4. Get current credit balance
         const { data: creditData } = await supabase
             .from('dealer_credits')
             .select('balance, pending_deduction, outstanding_debt')
@@ -1113,11 +1132,11 @@ export async function deductProfitBasedCredit(dealerId, roundId, previousPending
         const currentPending = creditData?.pending_deduction || 0
         const currentDebt = creditData?.outstanding_debt || 0
 
-        // 4. Refund the pending deduction first (add back to balance, reduce pending)
-        let newBalance = currentBalance + previousPendingAmount
-        let newPending = Math.max(0, currentPending - previousPendingAmount)
+        // 5. Refund the previous deduction first (add back to balance, reduce pending)
+        let newBalance = currentBalance + refundAmount
+        let newPending = Math.max(0, currentPending - refundAmount)
 
-        // 5. Calculate profit-based fee
+        // 6. Calculate profit-based fee
         let profitFee = 0
         if (profit > 0) {
             profitFee = profit * (profitPercentageRate / 100)
@@ -1132,7 +1151,7 @@ export async function deductProfitBasedCredit(dealerId, roundId, previousPending
         }
         // If profit <= 0, no fee to charge
 
-        // 6. Apply deduction (allow negative balance)
+        // 7. Apply deduction (allow negative balance)
         let actualDeduction = profitFee
         let newOutstandingDebt = currentDebt
 
@@ -1145,7 +1164,7 @@ export async function deductProfitBasedCredit(dealerId, roundId, previousPending
             }
         }
 
-        // 7. Update dealer_credits
+        // 8. Update dealer_credits
         const { error: updateError } = await supabase
             .from('dealer_credits')
             .update({
@@ -1158,23 +1177,23 @@ export async function deductProfitBasedCredit(dealerId, roundId, previousPending
 
         if (updateError) throw updateError
 
-        // 8. Record refund transaction (if there was a pending amount to refund)
-        if (previousPendingAmount > 0) {
+        // 9. Record refund transaction (if there was a previous deduction to refund)
+        if (refundAmount > 0) {
             await supabase
                 .from('credit_transactions')
                 .insert({
                     dealer_id: dealerId,
                     transaction_type: 'refund',
-                    amount: previousPendingAmount,
+                    amount: refundAmount,
                     balance_after: newBalance + profitFee, // balance after refund but before profit deduction
                     reference_type: 'round',
                     reference_id: roundId,
-                    description: `คืนเครดิตรอตัด (ก่อนคำนวณกำไร) งวด ${roundId.substring(0, 8)}`,
-                    metadata: { type: 'profit_percentage_refund', previousPendingAmount }
+                    description: `คืนเครดิตค่าธรรมเนียมทันที (ก่อนคำนวณกำไร) ฿${refundAmount.toLocaleString('th-TH', {minimumFractionDigits: 2})}`,
+                    metadata: { type: 'profit_percentage_refund', refundAmount, previousPendingAmount, previouslyDeducted }
                 })
         }
 
-        // 9. Record profit-based deduction transaction
+        // 10. Record profit-based deduction transaction
         if (profitFee > 0) {
             await supabase
                 .from('credit_transactions')
@@ -1198,13 +1217,13 @@ export async function deductProfitBasedCredit(dealerId, roundId, previousPending
                 })
         }
 
-        // 10. Update the round's charged_credit_amount
+        // 11. Update the round's charged_credit_amount
         await supabase
             .from('lottery_rounds')
             .update({ charged_credit_amount: profitFee })
             .eq('id', roundId)
 
-        // 11. Clean up round_pending_credits for this round
+        // 12. Clean up round_pending_credits for this round
         await supabase
             .from('round_pending_credits')
             .delete()
@@ -1222,9 +1241,11 @@ export async function deductProfitBasedCredit(dealerId, roundId, previousPending
                 profit,
                 profitPercentageRate,
                 profitFee,
+                refundAmount,
                 previousPendingAmount,
+                previouslyDeducted,
                 balanceBefore: currentBalance,
-                balanceAfterRefund: currentBalance + previousPendingAmount,
+                balanceAfterRefund: currentBalance + refundAmount,
                 balanceAfter: newBalance,
                 outstandingDebt: newOutstandingDebt,
                 minDeduction,
