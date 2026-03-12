@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { getLotteryTypeKey, DEFAULT_COMMISSIONS, DEFAULT_PAYOUTS } from '../constants/lotteryTypes'
 
 /**
  * Check if dealer has sufficient credit for a new bet
@@ -892,18 +893,25 @@ export async function deductAdditionalCreditForRound(dealerId, roundId, previous
  */
 export async function calculateRoundProfit(dealerId, roundId) {
     try {
-        // Get round info for lottery_type (needed for commission/payout rates)
+        // Get round info (lottery_type + set_prices needed for commission/payout)
         const { data: roundData } = await supabase
             .from('lottery_rounds')
-            .select('lottery_type')
+            .select('lottery_type, set_prices')
             .eq('id', roundId)
             .single()
 
         const lotteryType = roundData?.lottery_type
-        // Map lottery_type to settings key used in user_settings
-        const lotteryKey = lotteryType === 'thai' ? 'thai' 
-            : (lotteryType === 'lao' || lotteryType === 'hanoi') ? 'lao' 
-            : lotteryType === 'stock' ? 'stock' : 'thai'
+        const lotteryKey = getLotteryTypeKey(lotteryType)
+        const setPrices = roundData?.set_prices || {}
+
+        // Helper: map bet_type to settings key (Lao/Hanoi use different keys)
+        const getSettingsKey = (betType) => {
+            if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+                const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
+                return LAO_MAP[betType] || betType
+            }
+            return betType
+        }
 
         // Get all submissions for this round (incoming bets)
         const { data: allSubs } = await supabase
@@ -912,7 +920,7 @@ export async function calculateRoundProfit(dealerId, roundId) {
             .eq('round_id', roundId)
             .eq('is_deleted', false)
 
-        // Get user settings for commission calculation (from user_settings table)
+        // Get user settings for commission/payout calculation
         const allUserIds = [...new Set((allSubs || []).map(s => s.user_id))]
         let userSettingsMap = {}
         if (allUserIds.length > 0) {
@@ -927,62 +935,77 @@ export async function calculateRoundProfit(dealerId, roundId) {
             }
         }
 
-        // Default commission rates (fallback if user_settings not found)
-        const DEFAULT_COMMISSIONS = {
-            'run_top': 15, 'run_bottom': 15,
-            'pak_top': 15, 'pak_bottom': 15,
-            '2_top': 15, '2_front': 15, '2_center': 15, '2_spread': 15, '2_run': 15, '2_bottom': 15,
-            '3_top': 15, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
-            '4_tod': 15, '4_set': 15, '4_float': 15, '5_float': 15, '6_top': 15
+        // Commission calculation — matches dealer dashboard getCommission() exactly
+        const calcCommission = (sub) => {
+            const amount = parseFloat(sub.amount || 0)
+            const settingsKey = getSettingsKey(sub.bet_type)
+            const settings = userSettingsMap[sub.user_id]?.[lotteryKey]?.[settingsKey]
+
+            // Special handling for 4_set/4_top: commission is fixed amount per set
+            if (sub.bet_type === '4_set' || sub.bet_type === '4_top') {
+                if (settings?.isSet && settings?.commission !== undefined) {
+                    const setPrice = settings.setPrice || setPrices['4_top'] || 120
+                    const numSets = Math.floor(amount / setPrice)
+                    return numSets * settings.commission
+                }
+                const defaultSetPrice = setPrices['4_top'] || 120
+                const numSets = Math.floor(amount / defaultSetPrice)
+                return numSets * 25
+            }
+
+            if (settings?.commission !== undefined) {
+                return settings.isFixed ? settings.commission : amount * (settings.commission / 100)
+            }
+            return amount * ((DEFAULT_COMMISSIONS[sub.bet_type] || 15) / 100)
         }
 
-        // Get outgoing bet_transfers for this round (amounts dealer sent to upstream)
+        // Payout calculation — matches dealer dashboard getExpectedPayout() exactly
+        const calcPayout = (sub) => {
+            if (!sub.is_winner) return 0
+            // For 4_set, use stored prize_amount (FIXED amount, not multiplied)
+            if (sub.bet_type === '4_set') {
+                return parseFloat(sub.prize_amount || 0)
+            }
+            const amount = parseFloat(sub.amount || 0)
+            const settingsKey = getSettingsKey(sub.bet_type)
+            const settings = userSettingsMap[sub.user_id]?.[lotteryKey]?.[settingsKey]
+            if (settings?.payout !== undefined) return amount * settings.payout
+            return amount * (DEFAULT_PAYOUTS[sub.bet_type] || 1)
+        }
+
+        // Get outgoing bet_transfers for this round
         const { data: outgoingTransfers } = await supabase
             .from('bet_transfers')
             .select('id, amount, status, target_submission_id, upstream_dealer_id, bet_type')
             .eq('round_id', roundId)
         
-        // Filter out returned transfers
         const activeOutgoing = (outgoingTransfers || []).filter(t => t.status !== 'returned')
         const outgoingBetAmount = activeOutgoing.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0)
 
-        // Calculate incoming totals
+        // Calculate incoming totals (same as dealer dashboard)
         let totalBet = 0
         let totalCommission = 0
         let totalPayout = 0
 
         for (const sub of (allSubs || [])) {
-            const amount = parseFloat(sub.amount || 0)
-            totalBet += amount
-
-            // Commission: calculate from user_settings (commission_amount is NOT stored in submissions)
-            const userSettings = userSettingsMap[sub.user_id]
-            const betSettings = userSettings?.[lotteryKey]?.[sub.bet_type]
-            const commissionRate = betSettings?.commission !== undefined 
-                ? betSettings.commission 
-                : (DEFAULT_COMMISSIONS[sub.bet_type] || 15)
-            const commission = amount * (commissionRate / 100)
-            totalCommission += commission
-
-            // Payout: use stored prize_amount if winner
-            if (sub.is_winner) {
-                totalPayout += parseFloat(sub.prize_amount || 0)
-            }
+            totalBet += parseFloat(sub.amount || 0)
+            totalCommission += calcCommission(sub)
+            totalPayout += calcPayout(sub)
         }
 
-        // Get outgoing transfer target submissions (to check if they won in upstream round)
-        let outgoingWinnings = 0
-        let outgoingCommission = 0
+        // dealerProfit = totalBet - totalPayout - totalCommission (matches dealer dashboard)
+        const dealerProfit = totalBet - totalPayout - totalCommission
+
+        // Outgoing (ตีออก) — matches dealer dashboard upstreamSummaries logic
+        let outgoingTotalWin = 0
+        let outgoingTotalCommission = 0
 
         if (activeOutgoing.length > 0) {
-            // Separate linked (has target_submission_id) vs external (no target_submission_id) transfers
             const linkedOutgoing = activeOutgoing.filter(t => t.target_submission_id)
             const externalOutgoing = activeOutgoing.filter(t => !t.target_submission_id)
             
-            // For linked transfers: fetch upstream submissions for win/commission data
             if (linkedOutgoing.length > 0) {
                 const targetSubIds = linkedOutgoing.map(t => t.target_submission_id)
-                
                 const { data: targetSubs } = await supabase
                     .from('submissions')
                     .select('id, amount, prize_amount, is_winner, bet_type')
@@ -991,43 +1014,34 @@ export async function calculateRoundProfit(dealerId, roundId) {
 
                 for (const ts of (targetSubs || [])) {
                     if (ts.is_winner) {
-                        outgoingWinnings += parseFloat(ts.prize_amount || 0)
+                        outgoingTotalWin += parseFloat(ts.prize_amount || 0)
                     }
-                    // Commission we receive from upstream for transferred bets
                     const commRate = DEFAULT_COMMISSIONS[ts.bet_type] || 15
-                    outgoingCommission += parseFloat(ts.amount || 0) * (commRate / 100)
+                    outgoingTotalCommission += parseFloat(ts.amount || 0) * (commRate / 100)
                 }
             }
 
-            // For external transfers: calculate commission directly from transfer data
-            // (no upstream submission exists, so use bet_type and amount from bet_transfers)
             for (const t of externalOutgoing) {
                 const commRate = DEFAULT_COMMISSIONS[t.bet_type] || 15
-                outgoingCommission += parseFloat(t.amount || 0) * (commRate / 100)
+                outgoingTotalCommission += parseFloat(t.amount || 0) * (commRate / 100)
             }
         }
 
-        // Calculate profit components
-        // memberProfit = incoming bets MINUS outgoing transfers MINUS commission we pay MINUS prizes we pay
-        const netIncomingBet = totalBet - outgoingBetAmount
-        const memberProfit = netIncomingBet - totalCommission - totalPayout
-        // upstreamProfit = what we get back from upstream (winnings + commission) minus what we sent
-        // Note: outgoingBetAmount already subtracted from memberProfit, so upstream adds back gains
-        const upstreamProfit = outgoingWinnings + outgoingCommission
-        const totalProfit = memberProfit + upstreamProfit
+        // outgoingProfit = win + commission - betAmount (matches dealer dashboard)
+        const outgoingProfit = outgoingTotalWin + outgoingTotalCommission - outgoingBetAmount
+        const totalProfit = dealerProfit + outgoingProfit
 
         return {
             profit: totalProfit,
             details: {
                 totalBet,
                 outgoingBetAmount,
-                netIncomingBet,
                 totalCommission,
                 totalPayout,
-                memberProfit,
-                outgoingWinnings,
-                outgoingCommission,
-                upstreamProfit,
+                dealerProfit,
+                outgoingTotalWin,
+                outgoingTotalCommission,
+                outgoingProfit,
                 totalProfit
             }
         }

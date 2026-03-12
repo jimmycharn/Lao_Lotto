@@ -38,7 +38,6 @@ import QRCode from 'react-qr-code'
 import ChangePasswordModal from '../components/ChangePasswordModal'
 import CopyButton from '../components/CopyButton'
 import { LOTTERY_TYPES } from '../constants/lotteryTypes'
-import { calculateRoundProfit, deductProfitBasedCredit } from '../utils/creditCheck'
 import './SuperAdmin.css'
 
 export default function SuperAdmin() {
@@ -1196,124 +1195,6 @@ export default function SuperAdmin() {
         }
     }
 
-    // === RECALCULATE PROFIT DEDUCTION ===
-    const [recalculating, setRecalculating] = useState(null) // deduction id being recalculated
-    const handleRecalculateProfit = async (deduction) => {
-        const dealerId = deduction.dealer_id
-        const roundId = deduction.reference_id
-        if (!dealerId || !roundId) {
-            toast.error('ไม่พบข้อมูล dealer หรือ round')
-            return
-        }
-        if (!window.confirm(`คำนวณกำไรใหม่สำหรับรายการนี้?\n\nเจ้ามือ: ${deduction.dealer?.full_name}\nยอดเดิม: ฿${Math.abs(deduction.amount || 0).toLocaleString('th-TH', {minimumFractionDigits: 2})}`)) {
-            return
-        }
-        setRecalculating(deduction.id)
-        try {
-            // 1. Get old deduction amount
-            const oldFee = Math.abs(deduction.amount || 0)
-
-            // 2. Recalculate profit
-            const { profit, details } = await calculateRoundProfit(dealerId, roundId)
-
-            // 3. Get subscription for profit_percentage_rate
-            const { data: subs } = await supabase
-                .from('dealer_subscriptions')
-                .select('*, subscription_packages(*)')
-                .eq('dealer_id', dealerId)
-                .in('status', ['active', 'trial'])
-                .order('created_at', { ascending: false })
-                .limit(1)
-            const sub = subs?.[0]
-            const rate = sub?.subscription_packages?.profit_percentage_rate || 0
-            const minDed = sub?.subscription_packages?.min_deduction || 0
-            const maxDed = sub?.subscription_packages?.max_deduction || 100000
-
-            // 4. Calculate new fee
-            let newFee = 0
-            if (profit > 0) {
-                newFee = profit * (rate / 100)
-                if (newFee > 0 && newFee < minDed) newFee = minDed
-                if (newFee > maxDed) newFee = maxDed
-            }
-
-            const diff = oldFee - newFee // positive = refund, negative = charge more
-
-            if (Math.abs(diff) < 0.01) {
-                toast.info('กำไรเท่าเดิม ไม่ต้องปรับ')
-                setRecalculating(null)
-                return
-            }
-
-            // 5. Update dealer_credits balance
-            const { data: creditData } = await supabase
-                .from('dealer_credits')
-                .select('balance, outstanding_debt')
-                .eq('dealer_id', dealerId)
-                .single()
-
-            const currentBalance = creditData?.balance || 0
-            const newBalance = currentBalance + diff // refund adds, extra charge subtracts
-
-            await supabase
-                .from('dealer_credits')
-                .update({ balance: newBalance, updated_at: new Date().toISOString() })
-                .eq('dealer_id', dealerId)
-
-            // 6. Update the original transaction
-            await supabase
-                .from('credit_transactions')
-                .update({
-                    amount: -newFee,
-                    balance_after: newBalance,
-                    description: `ค่าบริการจากกำไร (${rate}%) กำไร ฿${profit.toLocaleString('th-TH', {minimumFractionDigits: 2})} [คำนวณใหม่]`,
-                    metadata: {
-                        type: 'profit_percentage_deduction',
-                        profit,
-                        profitPercentageRate: rate,
-                        profitFee: newFee,
-                        oldFee,
-                        recalculated: true,
-                        recalculatedAt: new Date().toISOString(),
-                        ...details
-                    }
-                })
-                .eq('id', deduction.id)
-
-            // 7. Update round's charged_credit_amount
-            await supabase
-                .from('lottery_rounds')
-                .update({ charged_credit_amount: newFee })
-                .eq('id', roundId)
-
-            // 8. Record adjustment transaction
-            if (diff !== 0) {
-                await supabase
-                    .from('credit_transactions')
-                    .insert({
-                        dealer_id: dealerId,
-                        transaction_type: diff > 0 ? 'refund' : 'deduction',
-                        amount: diff,
-                        balance_after: newBalance,
-                        reference_type: 'round',
-                        reference_id: roundId,
-                        description: diff > 0
-                            ? `คืนเครดิต (คำนวณกำไรใหม่) ฿${diff.toLocaleString('th-TH', {minimumFractionDigits: 2})}`
-                            : `ตัดเครดิตเพิ่ม (คำนวณกำไรใหม่) ฿${Math.abs(diff).toLocaleString('th-TH', {minimumFractionDigits: 2})}`,
-                        metadata: { type: 'profit_recalculation', oldFee, newFee, diff, profit }
-                    })
-            }
-
-            toast.success(`คำนวณกำไรใหม่สำเร็จ! กำไร: ฿${profit.toLocaleString('th-TH', {minimumFractionDigits: 2})} | ค่าบริการเดิม: ฿${oldFee.toLocaleString('th-TH', {minimumFractionDigits: 2})} → ใหม่: ฿${newFee.toLocaleString('th-TH', {minimumFractionDigits: 2})}`)
-            await fetchCreditDeductions()
-        } catch (error) {
-            console.error('Error recalculating profit:', error)
-            toast.error('เกิดข้อผิดพลาดในการคำนวณใหม่: ' + error.message)
-        } finally {
-            setRecalculating(null)
-        }
-    }
-
     // === PAYMENT MANAGEMENT ===
     const handlePaymentAction = async (payment, action, reason = '') => {
         try {
@@ -2194,7 +2075,6 @@ export default function SuperAdmin() {
                             <th>ยอดเงิน</th>
                             <th>ยอดคงเหลือ</th>
                             <th>วันที่</th>
-                            <th>จัดการ</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2208,22 +2088,6 @@ export default function SuperAdmin() {
                                 <td><strong style={{ color: 'var(--color-success)' }}>฿{Math.abs(deduction.amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</strong></td>
                                 <td>฿{(deduction.balance_after || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
                                 <td>{formatDate(deduction.created_at)}</td>
-                                <td>
-                                    {deduction.metadata?.type === 'profit_percentage_deduction' && deduction.reference_id && (
-                                        <button
-                                            className="btn btn-sm"
-                                            style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', whiteSpace: 'nowrap' }}
-                                            onClick={() => handleRecalculateProfit(deduction)}
-                                            disabled={recalculating === deduction.id}
-                                        >
-                                            {recalculating === deduction.id ? (
-                                                <><FiRefreshCw style={{ animation: 'spin 1s linear infinite' }} /> กำลังคำนวณ...</>
-                                            ) : (
-                                                <><FiRefreshCw /> คำนวณใหม่</>
-                                            )}
-                                        </button>
-                                    )}
-                                </td>
                             </tr>
                         ))}
                     </tbody>
