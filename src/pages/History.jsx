@@ -69,15 +69,15 @@ export default function History() {
                 <div className="history-summary-card">
                     <div className="summary-item">
                         <span className="summary-label">ยอดส่งรวม</span>
-                        <span className="summary-value">฿{totalAmount.toLocaleString()}</span>
+                        <span className="summary-value danger">-฿{totalAmount.toLocaleString()}</span>
                     </div>
                     <div className="summary-item">
                         <span className="summary-label">ค่าคอมรวม</span>
-                        <span className="summary-value">฿{totalCommission.toLocaleString()}</span>
+                        <span className="summary-value success">+฿{totalCommission.toLocaleString()}</span>
                     </div>
                     <div className="summary-item">
                         <span className="summary-label">ยอดถูกรวม</span>
-                        <span className="summary-value success">฿{totalWinnings.toLocaleString()}</span>
+                        <span className="summary-value success">+฿{totalWinnings.toLocaleString()}</span>
                     </div>
                     <div className="summary-item">
                         <span className="summary-label">กำไร/ขาดทุน</span>
@@ -114,21 +114,23 @@ export default function History() {
                                 </div>
                                 <div className="history-item-stats">
                                     <div className="stat">
-                                        <span className="stat-label">ยอดส่งรวม</span>
-                                        <span className="stat-value">฿{item.total_amount?.toLocaleString()}</span>
+                                        <span className="stat-label">ยอดส่ง</span>
+                                        <span className="stat-value danger">-฿{(item.total_amount || 0).toLocaleString()}</span>
                                     </div>
                                     <div className="stat">
                                         <span className="stat-label">ค่าคอม</span>
-                                        <span className="stat-value">฿{item.total_commission?.toLocaleString()}</span>
+                                        <span className="stat-value success">+฿{(item.total_commission || 0).toLocaleString()}</span>
                                     </div>
                                     <div className="stat">
-                                        <span className="stat-label">รางวัลที่ได้</span>
-                                        <span className="stat-value success">฿{item.total_winnings?.toLocaleString()}</span>
+                                        <span className="stat-label">ถูกรางวัล</span>
+                                        <span className={`stat-value ${(item.total_winnings || 0) > 0 ? 'success' : ''}`}>
+                                            {(item.total_winnings || 0) > 0 ? '+' : ''}฿{(item.total_winnings || 0).toLocaleString()}
+                                        </span>
                                     </div>
                                     <div className="stat">
-                                        <span className="stat-label">ผลกำไร/ขาดทุน</span>
-                                        <span className={`stat-value ${item.profit_loss >= 0 ? 'success' : 'danger'}`}>
-                                            {item.profit_loss >= 0 ? '+' : ''}฿{item.profit_loss?.toLocaleString()}
+                                        <span className="stat-label">กำไร/ขาดทุน</span>
+                                        <span className={`stat-value ${(item.profit_loss || 0) >= 0 ? 'success' : 'danger'}`}>
+                                            {(item.profit_loss || 0) >= 0 ? '+' : ''}฿{(item.profit_loss || 0).toLocaleString()}
                                         </span>
                                     </div>
                                 </div>

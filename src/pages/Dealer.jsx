@@ -2623,31 +2623,82 @@ export default function Dealer() {
                                                                 <FiCalendar /> {formatDate(history.open_time || history.round_date)} {formatTime(history.open_time || history.round_date)} - {formatDate(history.close_time || history.round_date)} {formatTime(history.close_time || history.round_date)}
                                                             </div>
                                                             
-                                                            {/* Row 3: Summary Stats */}
+                                                            {/* Row 3: Summary Stats — matching dealer dashboard layout */}
+                                                            {(() => {
+                                                                const incomingProfit = (history.total_amount || 0) - (history.total_commission || 0) - (history.total_payout || 0)
+                                                                const outgoingBet = history.transferred_amount || 0
+                                                                const outgoingComm = history.upstream_commission || 0
+                                                                const outgoingWin = history.upstream_winnings || 0
+                                                                const outgoingProfit = outgoingWin + outgoingComm - outgoingBet
+                                                                const hasOutgoing = outgoingBet > 0
+                                                                return (
                                                             <div className="open-round-stats">
+                                                                {/* ยอดรับ */}
                                                                 <div className="stats-block incoming">
+                                                                    <div className="stats-block-header">ยอดรับ ({history.total_entries || 0})</div>
                                                                     <div className="stats-block-items">
                                                                         <div className="stat-item">
                                                                             <span className="stat-label">ยอดรวม</span>
-                                                                            <span className="stat-value">฿{history.total_amount?.toLocaleString()}</span>
+                                                                            <span className="stat-value success">+฿{(history.total_amount || 0).toLocaleString()}</span>
                                                                         </div>
                                                                         <div className="stat-item">
                                                                             <span className="stat-label">ค่าคอม</span>
-                                                                            <span className="stat-value success">-฿{history.total_commission?.toLocaleString()}</span>
+                                                                            <span className="stat-value danger">-฿{(history.total_commission || 0).toLocaleString()}</span>
                                                                         </div>
                                                                         <div className="stat-item">
                                                                             <span className="stat-label">จ่าย</span>
-                                                                            <span className="stat-value danger">-฿{history.total_payout?.toLocaleString()}</span>
+                                                                            <span className="stat-value danger">-฿{(history.total_payout || 0).toLocaleString()}</span>
                                                                         </div>
                                                                         <div className="stat-item">
                                                                             <span className="stat-label">กำไร</span>
-                                                                            <span className={`stat-value ${history.profit >= 0 ? 'success' : 'danger'}`}>
-                                                                                {history.profit >= 0 ? '+' : ''}฿{history.profit?.toLocaleString()}
+                                                                            <span className={`stat-value ${incomingProfit >= 0 ? 'success' : 'danger'}`}>
+                                                                                {incomingProfit >= 0 ? '+' : ''}฿{Math.round(incomingProfit).toLocaleString()}
                                                                             </span>
                                                                         </div>
                                                                     </div>
                                                                 </div>
+
+                                                                {/* ยอดส่ง (ตีออก) — only show if there are outgoing transfers */}
+                                                                {hasOutgoing && (
+                                                                <div className="stats-block outgoing">
+                                                                    <div className="stats-block-header">ยอดส่ง</div>
+                                                                    <div className="stats-block-items">
+                                                                        <div className="stat-item">
+                                                                            <span className="stat-label">ยอดรวม</span>
+                                                                            <span className="stat-value danger">-฿{outgoingBet.toLocaleString()}</span>
+                                                                        </div>
+                                                                        <div className="stat-item">
+                                                                            <span className="stat-label">ค่าคอม</span>
+                                                                            <span className="stat-value success">+฿{Math.round(outgoingComm).toLocaleString()}</span>
+                                                                        </div>
+                                                                        <div className="stat-item">
+                                                                            <span className="stat-label">รับ</span>
+                                                                            <span className={`stat-value ${outgoingWin > 0 ? 'success' : ''}`}>
+                                                                                {outgoingWin > 0 ? '+' : ''}฿{outgoingWin.toLocaleString()}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="stat-item">
+                                                                            <span className="stat-label">กำไร</span>
+                                                                            <span className={`stat-value ${outgoingProfit >= 0 ? 'success' : 'danger'}`}>
+                                                                                {outgoingProfit >= 0 ? '+' : ''}฿{Math.round(outgoingProfit).toLocaleString()}
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                )}
+
+                                                                {/* กำไรรวม */}
+                                                                <div className="stats-block" style={{ background: 'transparent', padding: '0.25rem 0.5rem' }}>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                                        <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>กำไรรวม</span>
+                                                                        <span className={`stat-value ${(history.profit || 0) >= 0 ? 'success' : 'danger'}`} style={{ fontWeight: 700, fontSize: '1rem' }}>
+                                                                            {(history.profit || 0) >= 0 ? '+' : ''}฿{Math.round(history.profit || 0).toLocaleString()}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
                                                             </div>
+                                                                )
+                                                            })()}
                                                         </div>
                                                     </div>
                                                     
@@ -2665,7 +2716,9 @@ export default function Dealer() {
                                                                 </div>
                                                             ) : (
                                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                                                    {userDetails.map((ud, idx) => (
+                                                                    {userDetails.map((ud, idx) => {
+                                                                        const dealerProfit = (ud.total_amount || 0) - (ud.total_commission || 0) - (ud.total_winnings || 0)
+                                                                        return (
                                                                         <div key={ud.id || idx} className="history-user-card">
                                                                             <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-primary)' }}>
                                                                                 <FiUser style={{ color: 'var(--color-primary)' }} />
@@ -2675,28 +2728,31 @@ export default function Dealer() {
                                                                                 <div className="stats-block incoming">
                                                                                     <div className="stats-block-items">
                                                                                         <div className="stat-item">
-                                                                                            <span className="stat-label">ยอดส่ง</span>
-                                                                                            <span className="stat-value">฿{(ud.total_amount || 0).toLocaleString()}</span>
+                                                                                            <span className="stat-label">ยอดรับ</span>
+                                                                                            <span className="stat-value success">+฿{(ud.total_amount || 0).toLocaleString()}</span>
                                                                                         </div>
                                                                                         <div className="stat-item">
                                                                                             <span className="stat-label">ค่าคอม</span>
-                                                                                            <span className="stat-value success">+฿{(ud.total_commission || 0).toLocaleString()}</span>
+                                                                                            <span className="stat-value danger">-฿{(ud.total_commission || 0).toLocaleString()}</span>
                                                                                         </div>
                                                                                         <div className="stat-item">
-                                                                                            <span className="stat-label">ถูกรางวัล</span>
-                                                                                            <span className="stat-value success">+฿{(ud.total_winnings || 0).toLocaleString()}</span>
+                                                                                            <span className="stat-label">จ่าย</span>
+                                                                                            <span className={`stat-value ${(ud.total_winnings || 0) > 0 ? 'danger' : ''}`}>
+                                                                                                {(ud.total_winnings || 0) > 0 ? '-' : ''}฿{(ud.total_winnings || 0).toLocaleString()}
+                                                                                            </span>
                                                                                         </div>
                                                                                         <div className="stat-item">
                                                                                             <span className="stat-label">กำไร/ขาดทุน</span>
-                                                                                            <span className={`stat-value ${(ud.profit_loss || 0) >= 0 ? 'success' : 'danger'}`}>
-                                                                                                {(ud.profit_loss || 0) >= 0 ? '+' : ''}฿{(ud.profit_loss || 0).toLocaleString()}
+                                                                                            <span className={`stat-value ${dealerProfit >= 0 ? 'success' : 'danger'}`}>
+                                                                                                {dealerProfit >= 0 ? '+' : ''}฿{dealerProfit.toLocaleString()}
                                                                                             </span>
                                                                                         </div>
                                                                                     </div>
                                                                                 </div>
                                                                             </div>
                                                                         </div>
-                                                                    ))}
+                                                                        )
+                                                                    })}
                                                                 </div>
                                                             )}
                                                         </div>
