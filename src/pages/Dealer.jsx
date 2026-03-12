@@ -59,7 +59,8 @@ import {
     generateBatchId,
     getDefaultLimitsForType,
     getDefaultSetPricesForType,
-    getLotteryTypeKey
+    getLotteryTypeKey,
+    calculate4SetPrizes
 } from '../constants/lotteryTypes'
 
 // Import separated modal components
@@ -1848,36 +1849,188 @@ export default function Dealer() {
             })
 
             if (shouldSaveHistory) {
-                // Get transfers for this round
+                const lotteryKey = getLotteryTypeKey(roundData.lottery_type)
+                const getSettingsKey = (betType, lKey) => {
+                    if (lKey === 'lao' || lKey === 'hanoi') {
+                        const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
+                        return LAO_MAP[betType] || betType
+                    }
+                    return betType
+                }
+
+                // Fetch user_settings for all users in this round (for accurate commission/payout)
+                const uniqueUserIds = [...new Set((submissions || []).map(s => s.user_id))]
+                let allUserSettings = {}
+                if (uniqueUserIds.length > 0) {
+                    const { data: settingsData } = await supabase
+                        .from('user_settings')
+                        .select('*')
+                        .in('user_id', uniqueUserIds)
+                        .eq('dealer_id', user.id)
+                    ;(settingsData || []).forEach(s => { allUserSettings[s.user_id] = s })
+                }
+
+                // Helper: calculate commission for a submission (matches dealer dashboard getCommission)
+                const calcCommission = (sub) => {
+                    const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
+                    const settings = allUserSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
+                    if (sub.bet_type === '4_set' || sub.bet_type === '4_top') {
+                        if (settings?.isSet && settings?.commission !== undefined) {
+                            const setPrice = settings.setPrice || roundData?.set_prices?.['4_top'] || 120
+                            return Math.floor((sub.amount || 0) / setPrice) * settings.commission
+                        }
+                        const defaultSetPrice = roundData?.set_prices?.['4_top'] || 120
+                        return Math.floor((sub.amount || 0) / defaultSetPrice) * 25
+                    }
+                    if (settings?.commission !== undefined) {
+                        return settings.isFixed ? settings.commission : (sub.amount || 0) * (settings.commission / 100)
+                    }
+                    return (sub.amount || 0) * ((DEFAULT_COMMISSIONS[sub.bet_type] || 15) / 100)
+                }
+
+                // Helper: calculate payout for a submission (matches dealer dashboard getExpectedPayout)
+                const calcPayout = (sub) => {
+                    if (!sub.is_winner) return 0
+                    if (sub.bet_type === '4_set') return sub.prize_amount || 0
+                    const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
+                    const settings = allUserSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
+                    if (settings?.payout !== undefined) return (sub.amount || 0) * settings.payout
+                    return (sub.amount || 0) * (DEFAULT_PAYOUTS[sub.bet_type] || 1)
+                }
+
+                // Calculate incoming totals
+                const totalEntries = submissions?.length || 0
+                let totalCommission = 0
+                let totalPayout = 0
+                const userSubmissions = {}
+
+                for (const s of (submissions || [])) {
+                    const comm = calcCommission(s)
+                    const payout = calcPayout(s)
+                    totalCommission += comm
+                    totalPayout += payout
+
+                    if (!userSubmissions[s.user_id]) {
+                        userSubmissions[s.user_id] = { entries: 0, amount: 0, commission: 0, winnings: 0 }
+                    }
+                    userSubmissions[s.user_id].entries += 1
+                    userSubmissions[s.user_id].amount += s.amount || 0
+                    userSubmissions[s.user_id].commission += comm
+                    userSubmissions[s.user_id].winnings += payout
+                }
+
+                // === Calculate outgoing (ตีออก) from bet_transfers ===
                 const { data: transfers } = await supabase
                     .from('bet_transfers')
                     .select('*')
                     .eq('round_id', roundId)
 
-                // Calculate dealer summary
-                // Note: submissions table uses commission_amount and prize_amount fields
-                const totalEntries = submissions?.length || 0
-                const totalCommission = submissions?.reduce((sum, s) => sum + (s.commission_amount || 0), 0) || 0
-                const totalPayout = submissions?.reduce((sum, s) => sum + (s.prize_amount || 0), 0) || 0
+                const transferredAmount = (transfers || []).reduce((sum, t) => sum + (t.amount || 0), 0)
+                let upstreamCommission = 0
+                let upstreamWinnings = 0
+
+                if (transfers && transfers.length > 0) {
+                    // Group transfers by upstream dealer
+                    const dealerGroups = {}
+                    for (const t of transfers) {
+                        const key = t.upstream_dealer_id || `ext_${t.target_dealer_name || 'unknown'}`
+                        if (!dealerGroups[key]) {
+                            dealerGroups[key] = {
+                                dealerId: t.upstream_dealer_id,
+                                isLinked: t.is_linked || false,
+                                targetRoundId: t.target_round_id,
+                                transfers: []
+                            }
+                        }
+                        dealerGroups[key].transfers.push(t)
+                    }
+
+                    for (const group of Object.values(dealerGroups)) {
+                        if (group.isLinked && group.dealerId) {
+                            // Linked: fetch user_settings for commission with upstream dealer
+                            const { data: upSettings } = await supabase
+                                .from('user_settings')
+                                .select('*')
+                                .eq('user_id', user.id)
+                                .eq('dealer_id', group.dealerId)
+                                .maybeSingle()
+
+                            for (const t of group.transfers) {
+                                const settingsKey = getSettingsKey(t.bet_type, lotteryKey)
+                                const betSettings = upSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
+                                const commRate = betSettings?.commission !== undefined
+                                    ? betSettings.commission
+                                    : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
+                                upstreamCommission += (t.amount || 0) * (commRate / 100)
+                            }
+
+                            // Linked: fetch upstream submissions for winnings
+                            const targetSubIds = group.transfers.map(t => t.target_submission_id).filter(Boolean)
+                            if (targetSubIds.length > 0) {
+                                const { data: upSubs } = await supabase
+                                    .from('submissions')
+                                    .select('id, is_winner, prize_amount')
+                                    .in('id', targetSubIds)
+                                    .eq('is_deleted', false)
+                                for (const sub of (upSubs || [])) {
+                                    if (sub.is_winner) upstreamWinnings += sub.prize_amount || 0
+                                }
+                            }
+                        } else {
+                            // External: use default commission rates
+                            for (const t of group.transfers) {
+                                const commRate = DEFAULT_COMMISSIONS[t.bet_type] || 15
+                                upstreamCommission += (t.amount || 0) * (commRate / 100)
+                            }
+
+                            // External: check winners against our own winning_numbers
+                            const wn = roundData.winning_numbers
+                            if (wn && roundData.is_result_announced) {
+                                const lt = roundData.lottery_type
+                                const w4set = wn['4_set'] || ''
+                                const w3top = wn['3_top'] || (lt !== 'thai' && w4set.length >= 3 ? w4set.slice(1) : '') || ''
+                                const w2top = wn['2_top'] || (lt !== 'thai' && w4set.length >= 2 ? w4set.slice(2) : '') || ''
+                                const w2bottom = wn['2_bottom'] || (lt === 'lao' && w4set.length >= 2 ? w4set.slice(0, 2) : '') || ''
+                                const w3topSorted = w3top.split('').sort().join('')
+                                const floatCheck = (src, target) => {
+                                    let temp = target
+                                    for (const ch of src) { const idx = temp.indexOf(ch); if (idx === -1) return false; temp = temp.slice(0, idx) + temp.slice(idx + 1) }
+                                    return true
+                                }
+
+                                for (const t of group.transfers) {
+                                    const num = t.numbers || '', bt = t.bet_type
+                                    let isWinner = false, prize = 0
+                                    const payoutRate = DEFAULT_PAYOUTS[bt] || 1
+                                    if (bt === 'run_top' && w3top && num.length === 1) isWinner = w3top.includes(num)
+                                    else if (bt === 'run_bottom' && w2bottom && num.length === 1) isWinner = w2bottom.includes(num)
+                                    else if (bt === '2_bottom' && w2bottom && num.length === 2) isWinner = num === w2bottom
+                                    else if (bt === '2_top' && w2top && num.length === 2) isWinner = num === w2top
+                                    else if ((bt === '3_top' || bt === '3_straight') && w3top && num.length === 3) isWinner = num === w3top
+                                    else if ((bt === '3_tod' || bt === '3_tod_single') && w3top && num.length === 3) isWinner = num.split('').sort().join('') === w3topSorted && num !== w3top
+                                    else if (bt === '4_set' && w4set && num.length === 4) {
+                                        const r = calculate4SetPrizes(num, w4set)
+                                        if (r.totalPrize > 0) { isWinner = true; prize = r.totalPrize }
+                                    }
+                                    if (isWinner) upstreamWinnings += bt === '4_set' ? prize : (t.amount || 0) * payoutRate
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Calculate profit: dealer perspective
+                // กำไรฝั่งรับ = ยอดรับ - ค่าคอม - จ่ายถูก
+                // กำไรฝั่งส่ง = ค่าคอมที่ได้ + รับถูก - ยอดส่ง
+                const incomingProfit = totalAmount - totalCommission - totalPayout
+                const outgoingProfit = upstreamCommission + upstreamWinnings - transferredAmount
+                const profit = incomingProfit + outgoingProfit
 
                 console.log('History save debug:', {
-                    totalEntries,
-                    totalAmount,
-                    totalCommission,
-                    totalPayout,
-                    sampleSubmission: submissions?.[0]
+                    totalEntries, totalAmount, totalCommission, totalPayout, incomingProfit,
+                    transferredAmount, upstreamCommission, upstreamWinnings, outgoingProfit,
+                    profit
                 })
-
-                // Calculate upstream transfers
-                const transferredAmount = transfers?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0
-                const upstreamCommission = transfers?.reduce((sum, t) => sum + (t.commission_earned || 0), 0) || 0
-                const upstreamWinnings = transfers?.reduce((sum, t) => sum + (t.winnings || 0), 0) || 0
-
-                // Calculate profit
-                // กำไร = (ยอดรับ - ค่าคอม - จ่ายถูก) + (ยอดส่ง - (ค่าคอมที่ได้ + รับถูก))
-                const memberProfit = totalAmount - totalCommission - totalPayout
-                const upstreamProfit = transferredAmount - upstreamCommission - upstreamWinnings
-                const profit = memberProfit + upstreamProfit
 
                 // Save dealer round history
                 const { error: historyError } = await supabase
@@ -1904,24 +2057,7 @@ export default function Dealer() {
                     console.error('Error saving dealer history:', historyError)
                 }
 
-                // Save user round history for each user
-                const userSubmissions = {}
-                submissions?.forEach(s => {
-                    if (!userSubmissions[s.user_id]) {
-                        userSubmissions[s.user_id] = {
-                            entries: 0,
-                            amount: 0,
-                            commission: 0,
-                            winnings: 0
-                        }
-                    }
-                    userSubmissions[s.user_id].entries += 1
-                    userSubmissions[s.user_id].amount += s.amount || 0
-                    userSubmissions[s.user_id].commission += s.commission_amount || 0
-                    userSubmissions[s.user_id].winnings += s.prize_amount || 0
-                })
-
-                // Insert user histories
+                // Insert user histories (using calculated commission/payout, not raw DB values)
                 const userHistories = Object.entries(userSubmissions).map(([userId, data]) => ({
                     user_id: userId,
                     dealer_id: user.id,
@@ -2688,14 +2824,19 @@ export default function Dealer() {
                                                                 )}
 
                                                                 {/* กำไรรวม */}
+                                                                {(() => {
+                                                                    const totalProfit = incomingProfit + outgoingProfit
+                                                                    return (
                                                                 <div className="stats-block" style={{ background: 'transparent', padding: '0.25rem 0.5rem' }}>
                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                                                         <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>กำไรรวม</span>
-                                                                        <span className={`stat-value ${(history.profit || 0) >= 0 ? 'success' : 'danger'}`} style={{ fontWeight: 700, fontSize: '1rem' }}>
-                                                                            {(history.profit || 0) >= 0 ? '+' : ''}฿{Math.round(history.profit || 0).toLocaleString()}
+                                                                        <span className={`stat-value ${totalProfit >= 0 ? 'success' : 'danger'}`} style={{ fontWeight: 700, fontSize: '1rem' }}>
+                                                                            {totalProfit >= 0 ? '+' : ''}฿{Math.round(totalProfit).toLocaleString()}
                                                                         </span>
                                                                     </div>
                                                                 </div>
+                                                                    )
+                                                                })()}
                                                             </div>
                                                                 )
                                                             })()}
