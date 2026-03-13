@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { FiX, FiTrash2, FiEdit2, FiPlus, FiCheck, FiRefreshCw, FiVolume2, FiVolumeX } from 'react-icons/fi'
 import { getPermutations } from '../constants/lotteryTypes'
 import { parseMultiLinePaste } from '../utils/pasteParser'
+import { useDragReorder } from '../utils/useDragReorder'
 import { fetchNumberLimits, fetchCurrentTotals, findMatchingLimit, getEffectivePayoutPercent } from '../utils/numberLimits'
 import './WriteSubmissionModal.css'
 
@@ -448,6 +449,7 @@ export default function WriteSubmissionModal({
     const longPressTimerRef = useRef(null)
     const clearLongPressRef = useRef(null)
     const [showClearAllConfirm, setShowClearAllConfirm] = useState(false)
+    const { dragState, handleDragStart, handleDragOver, handleDragEnd, handleTouchStart, handleTouchMove, handleTouchEnd, setRowRef } = useDragReorder(lines, setLines)
     const isEditMode = !!editingData
 
     // Save default types to localStorage when changed
@@ -2531,9 +2533,17 @@ export default function WriteSubmissionModal({
                         return (
                             <div 
                                 key={index} 
-                                className={`line-item ${editingIndex === index ? 'editing' : ''} ${hasError ? 'has-error' : ''}`}
+                                ref={(el) => setRowRef(index, el)}
+                                className={`line-item ${editingIndex === index ? 'editing' : ''} ${hasError ? 'has-error' : ''} ${dragState.dragging && dragState.fromIndex === index ? 'dragging' : ''} ${dragState.dragging && dragState.overIndex === index && dragState.fromIndex !== index ? 'drag-over' : ''}`}
                                 onClick={() => handleEditLine(index)}
-                                style={{ cursor: 'pointer' }}
+                                draggable
+                                onDragStart={() => handleDragStart(index)}
+                                onDragOver={(e) => handleDragOver(e, index)}
+                                onDragEnd={handleDragEnd}
+                                onTouchStart={(e) => handleTouchStart(e, index)}
+                                onTouchMove={handleTouchMove}
+                                onTouchEnd={handleTouchEnd}
+                                style={{ cursor: 'grab' }}
                             >
                                 <div className="line-content">
                                     <span className="line-number">{index + 1}.</span>

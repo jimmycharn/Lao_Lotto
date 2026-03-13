@@ -443,6 +443,17 @@
     border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
+.line-item.dragging {
+    opacity: 0.4;
+    background: rgba(102, 126, 234, 0.15);
+    border: 1px dashed rgba(102, 126, 234, 0.5);
+}
+
+.line-item.drag-over {
+    border-top: 2px solid var(--color-primary, #d4af37);
+    background: rgba(212, 175, 55, 0.12);
+}
+
 .line-item.current {
     background: rgba(34, 197, 94, 0.2);
     border: 2px solid rgba(34, 197, 94, 0.5);

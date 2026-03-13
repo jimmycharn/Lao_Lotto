@@ -21,6 +21,7 @@ import {
     generateUUID
 } from '../../constants/lotteryTypes'
 import { parseMultiLinePaste } from '../../utils/pasteParser'
+import { useDragReorder } from '../../utils/useDragReorder'
 
 export default function WriteSubmissionModal({ 
     round, 
@@ -49,6 +50,11 @@ export default function WriteSubmissionModal({
     const [pasteText, setPasteText] = useState('')
     const [lastClickedBetType, setLastClickedBetType] = useState(null) // Track last clicked bet type button
     const [showCloseConfirm, setShowCloseConfirm] = useState(false) // Confirm before closing modal
+    const [dealerDrag, setDealerDrag] = useState({ dragging: false, fromIndex: null, overIndex: null })
+    const dealerDragTouchY = useRef(null)
+    const dealerDragTimer = useRef(null)
+    const dealerDragActive = useRef(false)
+    const dealerRowRefs = useRef([])
     const [soundEnabled, setSoundEnabled] = useState(() => {
         try {
             const saved = localStorage.getItem('lao_lotto_sound_enabled')
@@ -90,6 +96,104 @@ export default function WriteSubmissionModal({
         } catch (e) {
             console.log('Audio not supported')
         }
+    }
+
+    // Helper: get grouped drafts (preserving insertion order)
+    const getDraftGroups = () => {
+        const groups = []
+        const seen = new Set()
+        for (const d of drafts) {
+            if (!seen.has(d.entry_id)) {
+                seen.add(d.entry_id)
+                groups.push({
+                    entry_id: d.entry_id,
+                    display_numbers: d.display_numbers || d.numbers,
+                    display_bet_type: d.display_bet_type || BET_TYPES[d.bet_type]?.label,
+                    display_amount: d.display_amount || d.amount.toString(),
+                    totalAmount: 0,
+                    items: []
+                })
+            }
+        }
+        for (const d of drafts) {
+            const g = groups.find(g => g.entry_id === d.entry_id)
+            if (g) {
+                g.totalAmount += d.amount
+                g.items.push(d)
+            }
+        }
+        return groups
+    }
+
+    // Reorder drafts by swapping groups at fromIdx and toIdx
+    const reorderDraftGroups = (fromIdx, toIdx) => {
+        const groups = getDraftGroups()
+        if (fromIdx < 0 || toIdx < 0 || fromIdx >= groups.length || toIdx >= groups.length) return
+        const [moved] = groups.splice(fromIdx, 1)
+        groups.splice(toIdx, 0, moved)
+        // Flatten back to drafts array
+        setDrafts(groups.flatMap(g => g.items))
+    }
+
+    // Dealer drag handlers (mouse)
+    const handleDealerDragStart = (idx) => {
+        setDealerDrag({ dragging: true, fromIndex: idx, overIndex: idx })
+    }
+    const handleDealerDragOver = (e, idx) => {
+        e.preventDefault()
+        setDealerDrag(prev => ({ ...prev, overIndex: idx }))
+    }
+    const handleDealerDragEnd = () => {
+        if (dealerDrag.fromIndex !== null && dealerDrag.overIndex !== null && dealerDrag.fromIndex !== dealerDrag.overIndex) {
+            reorderDraftGroups(dealerDrag.fromIndex, dealerDrag.overIndex)
+        }
+        setDealerDrag({ dragging: false, fromIndex: null, overIndex: null })
+    }
+    // Dealer drag handlers (touch)
+    const handleDealerTouchStart = (e, idx) => {
+        dealerDragTouchY.current = e.touches[0].clientY
+        dealerDragActive.current = false
+        dealerDragTimer.current = setTimeout(() => {
+            dealerDragActive.current = true
+            setDealerDrag({ dragging: true, fromIndex: idx, overIndex: idx })
+        }, 300)
+    }
+    const handleDealerTouchMove = (e) => {
+        if (!dealerDragActive.current) {
+            if (dealerDragTimer.current) {
+                const dy = Math.abs(e.touches[0].clientY - dealerDragTouchY.current)
+                if (dy > 10) {
+                    clearTimeout(dealerDragTimer.current)
+                    dealerDragTimer.current = null
+                }
+            }
+            return
+        }
+        if (e.cancelable) e.preventDefault()
+        const touch = e.touches[0]
+        for (let i = 0; i < dealerRowRefs.current.length; i++) {
+            const el = dealerRowRefs.current[i]
+            if (!el) continue
+            const rect = el.getBoundingClientRect()
+            if (touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
+                setDealerDrag(prev => ({ ...prev, overIndex: i }))
+                break
+            }
+        }
+    }
+    const handleDealerTouchEnd = () => {
+        if (dealerDragTimer.current) {
+            clearTimeout(dealerDragTimer.current)
+            dealerDragTimer.current = null
+        }
+        if (dealerDragActive.current) {
+            if (dealerDrag.fromIndex !== null && dealerDrag.overIndex !== null && dealerDrag.fromIndex !== dealerDrag.overIndex) {
+                reorderDraftGroups(dealerDrag.fromIndex, dealerDrag.overIndex)
+            }
+            setDealerDrag({ dragging: false, fromIndex: null, overIndex: null })
+        }
+        dealerDragActive.current = false
+        dealerDragTouchY.current = null
     }
 
     useEffect(() => {
@@ -1347,26 +1451,25 @@ export default function WriteSubmissionModal({
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {Object.values(
-                                            drafts.reduce((acc, d) => {
-                                                const key = d.entry_id
-                                                if (!acc[key]) {
-                                                    acc[key] = {
-                                                        entry_id: d.entry_id,
-                                                        display_numbers: d.display_numbers || d.numbers,
-                                                        display_bet_type: d.display_bet_type || BET_TYPES[d.bet_type]?.label,
-                                                        display_amount: d.display_amount || d.amount.toString(),
-                                                        totalAmount: d.amount,
-                                                        items: [d]
-                                                    }
-                                                } else {
-                                                    acc[key].totalAmount += d.amount
-                                                    acc[key].items.push(d)
-                                                }
-                                                return acc
-                                            }, {})
-                                        ).map((group, idx) => (
-                                            <tr key={idx} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                                        {getDraftGroups().map((group, idx) => (
+                                            <tr 
+                                                key={group.entry_id} 
+                                                ref={(el) => { dealerRowRefs.current[idx] = el }}
+                                                draggable
+                                                onDragStart={() => handleDealerDragStart(idx)}
+                                                onDragOver={(e) => handleDealerDragOver(e, idx)}
+                                                onDragEnd={handleDealerDragEnd}
+                                                onTouchStart={(e) => handleDealerTouchStart(e, idx)}
+                                                onTouchMove={handleDealerTouchMove}
+                                                onTouchEnd={handleDealerTouchEnd}
+                                                style={{ 
+                                                    borderBottom: '1px solid var(--color-border)',
+                                                    cursor: 'grab',
+                                                    opacity: dealerDrag.dragging && dealerDrag.fromIndex === idx ? 0.4 : 1,
+                                                    borderTop: dealerDrag.dragging && dealerDrag.overIndex === idx && dealerDrag.fromIndex !== idx ? '2px solid var(--color-primary, #d4af37)' : undefined,
+                                                    background: dealerDrag.dragging && dealerDrag.overIndex === idx && dealerDrag.fromIndex !== idx ? 'rgba(212, 175, 55, 0.12)' : undefined,
+                                                }}
+                                            >
                                                 <td style={{ padding: '0.5rem', fontWeight: 600, color: 'var(--color-primary)' }}>
                                                     {group.display_numbers}
                                                 </td>
