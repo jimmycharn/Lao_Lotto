@@ -449,7 +449,7 @@ export default function WriteSubmissionModal({
     const longPressTimerRef = useRef(null)
     const clearLongPressRef = useRef(null)
     const [showClearAllConfirm, setShowClearAllConfirm] = useState(false)
-    const { dragState, handleDragStart, handleDragOver, handleDragEnd, handleTouchStart, handleTouchMove, handleTouchEnd, setRowRef } = useDragReorder(lines, setLines)
+    const { dragState, handleDragStart, handleDragOver, handleDrop, handleDragEnd, handleTouchStart, handleTouchMove, handleTouchEnd, setRowRef, shouldAllowClick } = useDragReorder(lines, setLines)
     const isEditMode = !!editingData
 
     // Save default types to localStorage when changed
@@ -2535,10 +2535,11 @@ export default function WriteSubmissionModal({
                                 key={index} 
                                 ref={(el) => setRowRef(index, el)}
                                 className={`line-item ${editingIndex === index ? 'editing' : ''} ${hasError ? 'has-error' : ''} ${dragState.dragging && dragState.fromIndex === index ? 'dragging' : ''} ${dragState.dragging && dragState.overIndex === index && dragState.fromIndex !== index ? 'drag-over' : ''}`}
-                                onClick={() => handleEditLine(index)}
+                                onClick={() => { if (shouldAllowClick()) handleEditLine(index) }}
                                 draggable
-                                onDragStart={() => handleDragStart(index)}
+                                onDragStart={(e) => handleDragStart(e, index)}
                                 onDragOver={(e) => handleDragOver(e, index)}
+                                onDrop={(e) => handleDrop(e, index)}
                                 onDragEnd={handleDragEnd}
                                 onTouchStart={(e) => handleTouchStart(e, index)}
                                 onTouchMove={handleTouchMove}

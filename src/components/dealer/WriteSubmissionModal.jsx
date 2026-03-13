@@ -55,6 +55,8 @@ export default function WriteSubmissionModal({
     const dealerDragTimer = useRef(null)
     const dealerDragActive = useRef(false)
     const dealerRowRefs = useRef([])
+    const dealerDidReorder = useRef(false)
+    const dealerFromIdx = useRef(null)
     const [soundEnabled, setSoundEnabled] = useState(() => {
         try {
             const saved = localStorage.getItem('lao_lotto_sound_enabled')
@@ -136,23 +138,39 @@ export default function WriteSubmissionModal({
     }
 
     // Dealer drag handlers (mouse)
-    const handleDealerDragStart = (idx) => {
+    const handleDealerDragStart = (e, idx) => {
+        dealerDidReorder.current = false
+        dealerFromIdx.current = idx
         setDealerDrag({ dragging: true, fromIndex: idx, overIndex: idx })
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
     }
     const handleDealerDragOver = (e, idx) => {
         e.preventDefault()
-        setDealerDrag(prev => ({ ...prev, overIndex: idx }))
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+        setDealerDrag(prev => {
+            if (prev.overIndex === idx) return prev
+            return { ...prev, overIndex: idx }
+        })
     }
-    const handleDealerDragEnd = () => {
-        if (dealerDrag.fromIndex !== null && dealerDrag.overIndex !== null && dealerDrag.fromIndex !== dealerDrag.overIndex) {
-            reorderDraftGroups(dealerDrag.fromIndex, dealerDrag.overIndex)
+    const handleDealerDrop = (e, idx) => {
+        e.preventDefault()
+        if (!dealerDidReorder.current && dealerFromIdx.current !== null && idx !== null && dealerFromIdx.current !== idx) {
+            dealerDidReorder.current = true
+            reorderDraftGroups(dealerFromIdx.current, idx)
         }
         setDealerDrag({ dragging: false, fromIndex: null, overIndex: null })
+    }
+    const handleDealerDragEnd = () => {
+        // Fallback only — onDrop already handled it
+        setDealerDrag({ dragging: false, fromIndex: null, overIndex: null })
+        dealerFromIdx.current = null
     }
     // Dealer drag handlers (touch)
     const handleDealerTouchStart = (e, idx) => {
         dealerDragTouchY.current = e.touches[0].clientY
         dealerDragActive.current = false
+        dealerDidReorder.current = false
+        dealerFromIdx.current = idx
         dealerDragTimer.current = setTimeout(() => {
             dealerDragActive.current = true
             setDealerDrag({ dragging: true, fromIndex: idx, overIndex: idx })
@@ -176,7 +194,10 @@ export default function WriteSubmissionModal({
             if (!el) continue
             const rect = el.getBoundingClientRect()
             if (touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
-                setDealerDrag(prev => ({ ...prev, overIndex: i }))
+                setDealerDrag(prev => {
+                    if (prev.overIndex === i) return prev
+                    return { ...prev, overIndex: i }
+                })
                 break
             }
         }
@@ -186,14 +207,20 @@ export default function WriteSubmissionModal({
             clearTimeout(dealerDragTimer.current)
             dealerDragTimer.current = null
         }
-        if (dealerDragActive.current) {
-            if (dealerDrag.fromIndex !== null && dealerDrag.overIndex !== null && dealerDrag.fromIndex !== dealerDrag.overIndex) {
-                reorderDraftGroups(dealerDrag.fromIndex, dealerDrag.overIndex)
-            }
+        if (dealerDragActive.current && !dealerDidReorder.current) {
+            setDealerDrag(prev => {
+                if (prev.fromIndex !== null && prev.overIndex !== null && prev.fromIndex !== prev.overIndex) {
+                    dealerDidReorder.current = true
+                    reorderDraftGroups(prev.fromIndex, prev.overIndex)
+                }
+                return { dragging: false, fromIndex: null, overIndex: null }
+            })
+        } else {
             setDealerDrag({ dragging: false, fromIndex: null, overIndex: null })
         }
         dealerDragActive.current = false
         dealerDragTouchY.current = null
+        dealerFromIdx.current = null
     }
 
     useEffect(() => {
@@ -1456,8 +1483,9 @@ export default function WriteSubmissionModal({
                                                 key={group.entry_id} 
                                                 ref={(el) => { dealerRowRefs.current[idx] = el }}
                                                 draggable
-                                                onDragStart={() => handleDealerDragStart(idx)}
+                                                onDragStart={(e) => handleDealerDragStart(e, idx)}
                                                 onDragOver={(e) => handleDealerDragOver(e, idx)}
+                                                onDrop={(e) => handleDealerDrop(e, idx)}
                                                 onDragEnd={handleDealerDragEnd}
                                                 onTouchStart={(e) => handleDealerTouchStart(e, idx)}
                                                 onTouchMove={handleDealerTouchMove}
