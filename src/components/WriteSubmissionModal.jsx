@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { FiX, FiTrash2, FiEdit2, FiPlus, FiCheck, FiRefreshCw, FiVolume2, FiVolumeX } from 'react-icons/fi'
 import { getPermutations } from '../constants/lotteryTypes'
+import { parseMultiLinePaste } from '../utils/pasteParser'
 import { fetchNumberLimits, fetchCurrentTotals, findMatchingLimit, getEffectivePayoutPercent } from '../utils/numberLimits'
 import './WriteSubmissionModal.css'
 
@@ -1896,59 +1897,47 @@ export default function WriteSubmissionModal({
         }
     }
 
-    // Handle paste numbers - parse 4-digit numbers from clipboard text
+    // Handle paste numbers - parse multi-line text with auto bet type detection
     const handlePasteNumbers = async () => {
         if (!pasteText.trim()) {
             setError('กรุณาวางข้อมูลก่อน')
             return
         }
 
-        const textLines = pasteText.split('\n')
-        const newLines = []
-        let addedCount = 0
-
-        textLines.forEach(textLine => {
-            // Find all 4-digit sequences in the line
-            const matches = textLine.match(/\d{4}/g)
-            if (matches) {
-                matches.forEach(numbers => {
-                    // Format as "1234=1 4ตัวชุด" (1 set of 4-digit)
-                    const formattedLine = `${numbers}=1 4ตัวชุด`
-                    newLines.push(formattedLine)
-                    addedCount++
-                })
-            }
-        })
-
-        if (newLines.length > 0) {
-            // Check number limits for pasted lines
-            const allowedLines = []
-            const blockedNums = []
-            const limitedInfoAll = []
-            for (const nl of newLines) {
-                const { allowed, blocked, limitedInfo } = await checkLineAgainstLimits(nl)
-                if (allowed) {
-                    allowedLines.push(nl)
-                    limitedInfoAll.push(...limitedInfo)
-                } else {
-                    blockedNums.push(...blocked)
-                }
-            }
-            if (allowedLines.length > 0) {
-                setLines(prev => [...prev, ...allowedLines])
-                playSound('success')
-            }
-            if (blockedNums.length > 0) {
-                setError(`🔴 เลขปิดรับ: ${[...new Set(blockedNums)].join(', ')}`)
-            }
-            if (limitedInfoAll.length > 0) {
-                setLimitInfo(`⚠️ เลขอั้น: ${[...new Set(limitedInfoAll)].join(', ')}`)
-            }
-            setShowPasteModal(false)
-            setPasteText('')
-        } else {
-            setError('ไม่พบเลข 4 ตัวในข้อความ')
+        const parsed = parseMultiLinePaste(pasteText, lotteryType)
+        if (parsed.length === 0) {
+            setError('ไม่พบรายการเลขในข้อความ')
+            return
         }
+
+        // Convert parsed entries to formatted line strings (compatible with parseLine)
+        const newLines = parsed.map(p => p.formattedLine)
+
+        // Check number limits for all parsed lines
+        const allowedLines = []
+        const blockedNums = []
+        const limitedInfoAll = []
+        for (const nl of newLines) {
+            const { allowed, blocked, limitedInfo } = await checkLineAgainstLimits(nl)
+            if (allowed) {
+                allowedLines.push(nl)
+                limitedInfoAll.push(...limitedInfo)
+            } else {
+                blockedNums.push(...blocked)
+            }
+        }
+        if (allowedLines.length > 0) {
+            setLines(prev => [...prev, ...allowedLines])
+            playSound('success')
+        }
+        if (blockedNums.length > 0) {
+            setError(`🔴 เลขปิดรับ: ${[...new Set(blockedNums)].join(', ')}`)
+        }
+        if (limitedInfoAll.length > 0) {
+            setLimitInfo(`⚠️ เลขอั้น: ${[...new Set(limitedInfoAll)].join(', ')}`)
+        }
+        setShowPasteModal(false)
+        setPasteText('')
     }
 
     // Handle submit
@@ -2803,66 +2792,57 @@ export default function WriteSubmissionModal({
                     <div className="confirm-dialog-overlay" onClick={() => setShowPasteModal(false)}>
                         <div className="paste-modal" onClick={e => e.stopPropagation()}>
                             <div className="paste-modal-header">
-                                <h3>วางเลข 4 ตัว</h3>
-                                <button className="close-btn" onClick={() => setShowPasteModal(false)}>
+                                <h3>วางเลข</h3>
+                                <button className="close-btn" onClick={() => { setShowPasteModal(false); setPasteText('') }}>
                                     <FiX />
                                 </button>
                             </div>
                             <div className="paste-modal-body">
-                                <p className="paste-hint">วางข้อความที่มีเลข 4 ตัว ระบบจะเพิ่มอัตโนมัติ</p>
+                                <p className="paste-hint">วางข้อความที่มีเลข ระบบจะวิเคราะห์ประเภทอัตโนมัติ</p>
                                 <textarea
                                     className="paste-textarea"
                                     rows={6}
-                                    placeholder="วางข้อความที่นี่ (Ctrl+V)..."
+                                    placeholder={'ตัวอย่าง:\nบน\n123=20\n12=10*10\n1=500\n\nหรือ: 123=50*6 คูณชุด'}
                                     autoFocus
-                                    onPaste={async (e) => {
-                                        e.preventDefault()
-                                        const text = e.clipboardData.getData('text')
-                                        if (!text.trim()) return
-                                        
-                                        const textLines = text.split('\n')
-                                        const newLines = []
-                                        
-                                        textLines.forEach(textLine => {
-                                            const matches = textLine.match(/\d{4}/g)
-                                            if (matches) {
-                                                matches.forEach(numbers => {
-                                                    newLines.push(`${numbers}=1 4ตัวชุด`)
-                                                })
-                                            }
-                                        })
-                                        
-                                        if (newLines.length > 0) {
-                                            // Check number limits for pasted lines
-                                            const allowedLines = []
-                                            const blockedNums = []
-                                            const limitedInfoAll = []
-                                            for (const nl of newLines) {
-                                                const { allowed, blocked, limitedInfo } = await checkLineAgainstLimits(nl)
-                                                if (allowed) {
-                                                    allowedLines.push(nl)
-                                                    limitedInfoAll.push(...limitedInfo)
-                                                } else {
-                                                    blockedNums.push(...blocked)
-                                                }
-                                            }
-                                            if (allowedLines.length > 0) {
-                                                setLines(prev => [...prev, ...allowedLines])
-                                                playSound('success')
-                                            }
-                                            if (blockedNums.length > 0) {
-                                                setError(`🔴 เลขปิดรับ: ${[...new Set(blockedNums)].join(', ')}`)
-                                            }
-                                            if (limitedInfoAll.length > 0) {
-                                                setLimitInfo(`⚠️ เลขอั้น: ${[...new Set(limitedInfoAll)].join(', ')}`)
-                                            }
-                                            setShowPasteModal(false)
-                                        } else {
-                                            setError('ไม่พบเลข 4 ตัวในข้อความ')
-                                            setShowPasteModal(false)
-                                        }
-                                    }}
+                                    value={pasteText}
+                                    onChange={e => setPasteText(e.target.value)}
                                 />
+                                {pasteText.trim() && (() => {
+                                    const preview = parseMultiLinePaste(pasteText, lotteryType)
+                                    return preview.length > 0 ? (
+                                        <div className="paste-preview" style={{ marginTop: '8px', maxHeight: '150px', overflowY: 'auto', fontSize: '0.85rem', background: 'rgba(0,0,0,0.05)', borderRadius: '8px', padding: '8px' }}>
+                                            <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-muted)' }}>
+                                                ตัวอย่างผลลัพธ์ ({preview.length} รายการ):
+                                            </div>
+                                            {preview.map((p, i) => (
+                                                <div key={i} style={{ padding: '2px 0', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                                                    <span style={{ fontFamily: 'monospace' }}>{p.formattedLine}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#e74c3c' }}>
+                                            ไม่พบรายการเลขในข้อความ
+                                        </div>
+                                    )
+                                })()}
+                            </div>
+                            <div className="paste-modal-footer" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', padding: '12px 16px', borderTop: '1px solid rgba(0,0,0,0.08)' }}>
+                                <button
+                                    className="close-btn"
+                                    style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.15)', background: 'transparent', cursor: 'pointer' }}
+                                    onClick={() => { setShowPasteModal(false); setPasteText('') }}
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'var(--color-primary, #4f46e5)', color: '#fff', fontWeight: 600, cursor: 'pointer', opacity: pasteText.trim() ? 1 : 0.5 }}
+                                    disabled={!pasteText.trim()}
+                                    onClick={handlePasteNumbers}
+                                >
+                                    <FiPlus style={{ marginRight: '4px', verticalAlign: 'middle' }} />
+                                    เพิ่มเลข
+                                </button>
                             </div>
                         </div>
                     </div>

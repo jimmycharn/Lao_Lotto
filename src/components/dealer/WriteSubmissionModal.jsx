@@ -20,6 +20,7 @@ import {
     getUnique3DigitPermsFrom5,
     generateUUID
 } from '../../constants/lotteryTypes'
+import { parseMultiLinePaste } from '../../utils/pasteParser'
 
 export default function WriteSubmissionModal({ 
     round, 
@@ -530,60 +531,197 @@ export default function WriteSubmissionModal({
         }
     }
 
-    // Handle paste numbers for 4-digit sets (Lao/Hanoi)
+    // Handle paste numbers - parse multi-line text with auto bet type detection
     function handlePasteNumbers() {
         if (!pasteText.trim()) {
             toast.warning('กรุณาวางข้อมูลก่อน')
             return
         }
 
-        const isLaoOrHanoi = ['lao', 'hanoi'].includes(round.lottery_type)
-        if (!isLaoOrHanoi) {
-            toast.warning('ฟีเจอร์นี้ใช้ได้เฉพาะหวยลาว และ หวยฮานอย')
+        const parsed = parseMultiLinePaste(pasteText, round.lottery_type)
+        if (parsed.length === 0) {
+            toast.warning('ไม่พบรายการเลขในข้อความ')
             return
         }
 
+        const isLaoOrHanoi = ['lao', 'hanoi'].includes(round.lottery_type)
         const lotteryKey = round.lottery_type
-        const userSetPrice = userSettings?.lottery_settings?.[lotteryKey]?.['4_set']?.setPrice
-        const setPrice = userSetPrice || round.set_prices?.['4_top'] || 120
-        const commInfo = getCommissionForBetType('4_top')
-        const commissionPerSet = commInfo.rate
-
-        const lines = pasteText.split('\n')
-        const newDrafts = []
         const timestamp = new Date().toISOString()
-        let addedCount = 0
+        const newDrafts = []
 
-        lines.forEach(line => {
-            const matches = line.match(/\d{4}/g)
-            if (matches) {
-                matches.forEach(numbers => {
-                    const entryId = generateUUID()
+        for (const p of parsed) {
+            const entryId = generateUUID()
+
+            if (p.betType === '4_set') {
+                // 4 ตัวชุด
+                const userSetPrice = userSettings?.lottery_settings?.[lotteryKey]?.['4_set']?.setPrice
+                const setPrice = userSetPrice || round.set_prices?.['4_top'] || 120
+                const setCount = p.amount || 1
+                const finalAmount = setCount * setPrice
+                const commInfo = getCommissionForBetType('4_top')
+                newDrafts.push({
+                    entry_id: entryId,
+                    bet_type: '4_set',
+                    numbers: p.numbers,
+                    amount: finalAmount,
+                    commission_rate: commInfo.rate,
+                    commission_amount: setCount * commInfo.rate,
+                    display_numbers: p.numbers,
+                    display_amount: `${finalAmount} บาท (${setCount} ชุด)`,
+                    display_bet_type: '4 ตัวชุด',
+                    created_at: timestamp
+                })
+            } else if (p.specialType === '3xPerm') {
+                // คูณชุด (4 or 5 digit → 3-digit combos)
+                let perms = []
+                if (p.numbers.length === 4) perms = getUnique3DigitPermsFrom4(p.numbers)
+                else if (p.numbers.length === 5) perms = getUnique3DigitPermsFrom5(p.numbers)
+                const commInfo = getCommissionForBetType('3_top')
+                const commPerItem = commInfo.isFixed ? commInfo.rate : (p.amount * commInfo.rate) / 100
+                perms.forEach(perm => {
                     newDrafts.push({
                         entry_id: entryId,
-                        bet_type: '4_set',
-                        numbers: numbers,
-                        amount: setPrice,
-                        commission_rate: commissionPerSet,
-                        commission_amount: commissionPerSet,
-                        display_numbers: numbers,
-                        display_amount: `${setPrice} บาท (1 ชุด)`,
-                        display_bet_type: '4 ตัวชุด',
+                        bet_type: '3_top',
+                        numbers: perm,
+                        amount: p.amount,
+                        commission_rate: commInfo.rate,
+                        commission_amount: commPerItem,
+                        display_numbers: p.numbers,
+                        display_amount: `${p.amount} (${perms.length} ชุด)`,
+                        display_bet_type: `คูณชุด ${perms.length}`,
                         created_at: timestamp
                     })
-                    addedCount++
+                })
+            } else if (p.specialType === 'set3' || p.specialType === 'set6' || (p.specialType && p.specialType.startsWith('set'))) {
+                // คูณชุด 3 digit
+                const perms = getPermutations(p.numbers)
+                const commInfo = getCommissionForBetType('3_top')
+                const commPerItem = commInfo.isFixed ? commInfo.rate : (p.amount * commInfo.rate) / 100
+                perms.forEach(perm => {
+                    newDrafts.push({
+                        entry_id: entryId,
+                        bet_type: '3_top',
+                        numbers: perm,
+                        amount: p.amount,
+                        commission_rate: commInfo.rate,
+                        commission_amount: commPerItem,
+                        display_numbers: p.numbers,
+                        display_amount: `${p.amount} (${perms.length} ชุด)`,
+                        display_bet_type: `คูณชุด ${perms.length}`,
+                        created_at: timestamp
+                    })
+                })
+            } else if (p.specialType === 'tengTod') {
+                // เต็งโต๊ด
+                const straightAmt = p.amount
+                const todAmt = p.amount2 || p.amount
+                if (straightAmt > 0) {
+                    const commInfo = getCommissionForBetType('3_top')
+                    newDrafts.push({
+                        entry_id: entryId,
+                        bet_type: '3_top',
+                        numbers: p.numbers,
+                        amount: straightAmt,
+                        commission_rate: commInfo.rate,
+                        commission_amount: commInfo.isFixed ? commInfo.rate : (straightAmt * commInfo.rate) / 100,
+                        display_numbers: p.numbers,
+                        display_amount: `${straightAmt}*${todAmt}`,
+                        display_bet_type: 'เต็ง-โต๊ด',
+                        created_at: timestamp
+                    })
+                }
+                if (todAmt > 0) {
+                    const commInfo = getCommissionForBetType('3_tod')
+                    const sortedNumbers = p.numbers.split('').sort().join('')
+                    newDrafts.push({
+                        entry_id: entryId,
+                        bet_type: '3_tod',
+                        numbers: sortedNumbers,
+                        amount: todAmt,
+                        commission_rate: commInfo.rate,
+                        commission_amount: commInfo.isFixed ? commInfo.rate : (todAmt * commInfo.rate) / 100,
+                        display_numbers: p.numbers,
+                        display_amount: `${straightAmt}*${todAmt}`,
+                        display_bet_type: 'เต็ง-โต๊ด',
+                        created_at: timestamp
+                    })
+                }
+            } else if (p.specialType === 'reverse') {
+                // กลับ (2 digit)
+                const reversedNumbers = p.numbers.split('').reverse().join('')
+                const amt1 = p.amount
+                const amt2 = p.amount2 || p.amount
+                const commInfo = getCommissionForBetType(p.betType)
+                if (amt1 > 0) {
+                    newDrafts.push({
+                        entry_id: entryId,
+                        bet_type: p.betType,
+                        numbers: p.numbers,
+                        amount: amt1,
+                        commission_rate: commInfo.rate,
+                        commission_amount: commInfo.isFixed ? commInfo.rate : (amt1 * commInfo.rate) / 100,
+                        display_numbers: p.numbers,
+                        display_amount: `${amt1}*${amt2}`,
+                        display_bet_type: p.typeLabel,
+                        created_at: timestamp
+                    })
+                }
+                if (amt2 > 0 && reversedNumbers !== p.numbers) {
+                    newDrafts.push({
+                        entry_id: entryId,
+                        bet_type: p.betType,
+                        numbers: reversedNumbers,
+                        amount: amt2,
+                        commission_rate: commInfo.rate,
+                        commission_amount: commInfo.isFixed ? commInfo.rate : (amt2 * commInfo.rate) / 100,
+                        display_numbers: p.numbers,
+                        display_amount: `${amt1}*${amt2}`,
+                        display_bet_type: p.typeLabel,
+                        created_at: timestamp
+                    })
+                }
+            } else if (p.betType === '4_float' || p.betType === '5_float') {
+                // ลอยแพ
+                const sortedNumbers = p.numbers.split('').sort().join('')
+                const commInfo = getCommissionForBetType(p.betType)
+                newDrafts.push({
+                    entry_id: entryId,
+                    bet_type: p.betType,
+                    numbers: sortedNumbers,
+                    amount: p.amount,
+                    commission_rate: commInfo.rate,
+                    commission_amount: commInfo.isFixed ? commInfo.rate : (p.amount * commInfo.rate) / 100,
+                    display_numbers: p.numbers,
+                    display_amount: p.amount.toString(),
+                    display_bet_type: p.typeLabel,
+                    created_at: timestamp
+                })
+            } else {
+                // Normal single bet (2_top, 2_bottom, 3_top, run_top, run_bottom, etc.)
+                const commInfo = getCommissionForBetType(p.betType)
+                newDrafts.push({
+                    entry_id: entryId,
+                    bet_type: p.betType,
+                    numbers: p.numbers,
+                    amount: p.amount,
+                    commission_rate: commInfo.rate,
+                    commission_amount: commInfo.isFixed ? commInfo.rate : (p.amount * commInfo.rate) / 100,
+                    display_numbers: p.numbers,
+                    display_amount: p.amount.toString(),
+                    display_bet_type: p.typeLabel,
+                    created_at: timestamp
                 })
             }
-        })
+        }
 
         if (newDrafts.length > 0) {
             setDrafts(prev => [...prev, ...newDrafts])
             setShowPasteModal(false)
             setPasteText('')
             playAddSound()
-            toast.success(`เพิ่ม ${addedCount} รายการสำเร็จ`)
+            toast.success(`เพิ่ม ${parsed.length} รายการสำเร็จ`)
         } else {
-            toast.warning('ไม่พบเลข 4 ตัวในข้อความ')
+            toast.warning('ไม่พบรายการเลขในข้อความ')
         }
     }
 
@@ -1299,32 +1437,52 @@ export default function WriteSubmissionModal({
 
             {/* Paste Modal */}
             {showPasteModal && (
-                <div className="modal-overlay" onClick={() => setShowPasteModal(false)} style={{ zIndex: 1001 }}>
+                <div className="modal-overlay" onClick={() => { setShowPasteModal(false); setPasteText('') }} style={{ zIndex: 1001 }}>
                     <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
                         <div className="modal-header">
-                            <h3>วางเลข 4 ตัว</h3>
-                            <button className="modal-close" onClick={() => setShowPasteModal(false)}>
+                            <h3>วางเลข</h3>
+                            <button className="modal-close" onClick={() => { setShowPasteModal(false); setPasteText('') }}>
                                 <FiX />
                             </button>
                         </div>
                         <div className="modal-body">
                             <p style={{ marginBottom: '1rem', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
-                                วางข้อความที่มีเลข 4 ตัว ระบบจะดึงเลข 4 ตัวทั้งหมดมาเพิ่มเป็น "4 ตัวชุด"
+                                วางข้อความที่มีเลข ระบบจะวิเคราะห์ประเภทอัตโนมัติ
                             </p>
                             <textarea
                                 className="form-input"
                                 rows={6}
-                                placeholder="วางข้อความที่นี่..."
+                                placeholder={'ตัวอย่าง:\nบน\n123=20\n12=10*10\n1=500\n\nหรือ: 123=50*6 คูณชุด'}
                                 value={pasteText}
                                 onChange={e => setPasteText(e.target.value)}
+                                autoFocus
                                 style={{ width: '100%', resize: 'vertical' }}
                             />
+                            {pasteText.trim() && (() => {
+                                const preview = parseMultiLinePaste(pasteText, round.lottery_type)
+                                return preview.length > 0 ? (
+                                    <div style={{ marginTop: '8px', maxHeight: '150px', overflowY: 'auto', fontSize: '0.85rem', background: 'rgba(0,0,0,0.05)', borderRadius: '8px', padding: '8px' }}>
+                                        <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-muted)' }}>
+                                            ตัวอย่างผลลัพธ์ ({preview.length} รายการ):
+                                        </div>
+                                        {preview.map((p, i) => (
+                                            <div key={i} style={{ padding: '2px 0', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                                                <span style={{ fontFamily: 'monospace' }}>{p.formattedLine}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#e74c3c' }}>
+                                        ไม่พบรายการเลขในข้อความ
+                                    </div>
+                                )
+                            })()}
                         </div>
                         <div className="modal-footer">
-                            <button className="btn btn-secondary" onClick={() => setShowPasteModal(false)}>
+                            <button className="btn btn-secondary" onClick={() => { setShowPasteModal(false); setPasteText('') }}>
                                 ยกเลิก
                             </button>
-                            <button className="btn btn-primary" onClick={handlePasteNumbers}>
+                            <button className="btn btn-primary" onClick={handlePasteNumbers} disabled={!pasteText.trim()}>
                                 <FiPlus /> เพิ่มเลข
                             </button>
                         </div>
