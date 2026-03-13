@@ -446,6 +446,8 @@ export default function WriteSubmissionModal({
     const modalRef = useRef(null)
     const typeButtonsRef = useRef([])
     const longPressTimerRef = useRef(null)
+    const clearLongPressRef = useRef(null)
+    const [showClearAllConfirm, setShowClearAllConfirm] = useState(false)
     const isEditMode = !!editingData
 
     // Save default types to localStorage when changed
@@ -2685,7 +2687,47 @@ export default function WriteSubmissionModal({
                             <button type="button" onClick={() => handleNumberClick('4')}>4</button>
                             <button type="button" onClick={() => handleNumberClick('5')}>5</button>
                             <button type="button" onClick={() => handleNumberClick('6')}>6</button>
-                            <button type="button" onClick={handleClear} className="clear">C</button>
+                            <button 
+                                type="button" 
+                                onClick={handleClear} 
+                                onTouchStart={() => {
+                                    if (lines.length > 0) {
+                                        clearLongPressRef.current = setTimeout(() => {
+                                            clearLongPressRef.current = 'fired'
+                                            playSound('click')
+                                            setShowClearAllConfirm(true)
+                                        }, 800)
+                                    }
+                                }}
+                                onTouchEnd={() => {
+                                    if (clearLongPressRef.current && clearLongPressRef.current !== 'fired') {
+                                        clearTimeout(clearLongPressRef.current)
+                                    }
+                                    clearLongPressRef.current = null
+                                }}
+                                onMouseDown={() => {
+                                    if (lines.length > 0) {
+                                        clearLongPressRef.current = setTimeout(() => {
+                                            clearLongPressRef.current = 'fired'
+                                            playSound('click')
+                                            setShowClearAllConfirm(true)
+                                        }, 800)
+                                    }
+                                }}
+                                onMouseUp={() => {
+                                    if (clearLongPressRef.current && clearLongPressRef.current !== 'fired') {
+                                        clearTimeout(clearLongPressRef.current)
+                                    }
+                                    clearLongPressRef.current = null
+                                }}
+                                onMouseLeave={() => {
+                                    if (clearLongPressRef.current && clearLongPressRef.current !== 'fired') {
+                                        clearTimeout(clearLongPressRef.current)
+                                    }
+                                    clearLongPressRef.current = null
+                                }}
+                                className="clear"
+                            >C</button>
                             
                             {/* Row 3: 1, 2, 3, Toggle บน/ล่าง */}
                             <button type="button" onClick={() => handleNumberClick('1')}>1</button>
@@ -2768,6 +2810,32 @@ export default function WriteSubmissionModal({
                     </div>
                 )}
                 
+                {/* Clear All Confirmation Dialog */}
+                {showClearAllConfirm && (
+                    <div className="confirm-dialog-overlay">
+                        <div className="confirm-dialog">
+                            <h3>ยืนยันการล้างทั้งหมด</h3>
+                            <p>ต้องการล้างรายการทั้งหมด ({lines.length} รายการ) หรือไม่?</p>
+                            <div className="confirm-dialog-buttons">
+                                <button className="confirm-btn cancel" onClick={() => setShowClearAllConfirm(false)}>
+                                    ยกเลิก
+                                </button>
+                                <button className="confirm-btn ok" onClick={() => {
+                                    setLines([])
+                                    setCurrentInput('')
+                                    setEditingIndex(null)
+                                    setError('')
+                                    setLimitInfo('')
+                                    setShowClearAllConfirm(false)
+                                    playSound('success')
+                                }}>
+                                    ล้างทั้งหมด
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Close Confirmation Dialog */}
                 {showCloseConfirm && (
                     <div className="confirm-dialog-overlay">
@@ -2802,47 +2870,55 @@ export default function WriteSubmissionModal({
                                 <textarea
                                     className="paste-textarea"
                                     rows={6}
-                                    placeholder={'ตัวอย่าง:\nบน\n123=20\n12=10*10\n1=500\n\nหรือ: 123=50*6 คูณชุด'}
+                                    placeholder={'วางข้อความที่นี่ (Ctrl+V)...'}
                                     autoFocus
                                     value={pasteText}
+                                    onPaste={async (e) => {
+                                        e.preventDefault()
+                                        const text = e.clipboardData.getData('text')
+                                        if (text.trim()) {
+                                            setPasteText(text)
+                                            // Auto-submit after a tick so state updates
+                                            setTimeout(() => {
+                                                const parsed = parseMultiLinePaste(text, lotteryType)
+                                                if (parsed.length === 0) {
+                                                    setError('ไม่พบรายการเลขในข้อความ')
+                                                    setShowPasteModal(false)
+                                                    setPasteText('')
+                                                    return
+                                                }
+                                                const newLines = parsed.map(p => p.formattedLine)
+                                                ;(async () => {
+                                                    const allowedLines = []
+                                                    const blockedNums = []
+                                                    const limitedInfoAll = []
+                                                    for (const nl of newLines) {
+                                                        const { allowed, blocked, limitedInfo } = await checkLineAgainstLimits(nl)
+                                                        if (allowed) {
+                                                            allowedLines.push(nl)
+                                                            limitedInfoAll.push(...limitedInfo)
+                                                        } else {
+                                                            blockedNums.push(...blocked)
+                                                        }
+                                                    }
+                                                    if (allowedLines.length > 0) {
+                                                        setLines(prev => [...prev, ...allowedLines])
+                                                        playSound('success')
+                                                    }
+                                                    if (blockedNums.length > 0) {
+                                                        setError(`🔴 เลขปิดรับ: ${[...new Set(blockedNums)].join(', ')}`)
+                                                    }
+                                                    if (limitedInfoAll.length > 0) {
+                                                        setLimitInfo(`⚠️ เลขอั้น: ${[...new Set(limitedInfoAll)].join(', ')}`)
+                                                    }
+                                                    setShowPasteModal(false)
+                                                    setPasteText('')
+                                                })()
+                                            }, 0)
+                                        }
+                                    }}
                                     onChange={e => setPasteText(e.target.value)}
                                 />
-                                {pasteText.trim() && (() => {
-                                    const preview = parseMultiLinePaste(pasteText, lotteryType)
-                                    return preview.length > 0 ? (
-                                        <div className="paste-preview" style={{ marginTop: '8px', maxHeight: '150px', overflowY: 'auto', fontSize: '0.85rem', background: 'rgba(0,0,0,0.05)', borderRadius: '8px', padding: '8px' }}>
-                                            <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--color-text-muted)' }}>
-                                                ตัวอย่างผลลัพธ์ ({preview.length} รายการ):
-                                            </div>
-                                            {preview.map((p, i) => (
-                                                <div key={i} style={{ padding: '2px 0', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                                                    <span style={{ fontFamily: 'monospace' }}>{p.formattedLine}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#e74c3c' }}>
-                                            ไม่พบรายการเลขในข้อความ
-                                        </div>
-                                    )
-                                })()}
-                            </div>
-                            <div className="paste-modal-footer" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', padding: '12px 16px', borderTop: '1px solid rgba(0,0,0,0.08)' }}>
-                                <button
-                                    className="close-btn"
-                                    style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.15)', background: 'transparent', cursor: 'pointer' }}
-                                    onClick={() => { setShowPasteModal(false); setPasteText('') }}
-                                >
-                                    ยกเลิก
-                                </button>
-                                <button
-                                    style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'var(--color-primary, #4f46e5)', color: '#fff', fontWeight: 600, cursor: 'pointer', opacity: pasteText.trim() ? 1 : 0.5 }}
-                                    disabled={!pasteText.trim()}
-                                    onClick={handlePasteNumbers}
-                                >
-                                    <FiPlus style={{ marginRight: '4px', verticalAlign: 'middle' }} />
-                                    เพิ่มเลข
-                                </button>
                             </div>
                         </div>
                     </div>
