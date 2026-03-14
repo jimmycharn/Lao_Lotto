@@ -4,9 +4,12 @@ import { getPermutations } from '../constants/lotteryTypes'
  * Parse multi-line pasted text into bet entries.
  * 
  * Supports:
- * - Context lines: "บน", "บ", "บ.", "ล่าง", "ล", "ล." set top/bottom mode
- * - Number lines: "123=20", "123=20*20", "123 20*20", "1234", etc.
- * - Auto-detection of bet type from digit count, amount parts, and permutation count
+ * - Context lines: "บน", "บ", "บ.", "ล่าง", "ล", "ล.", "บนล่าง", "บล", "ลบ", etc.
+ * - Bare number buffering: bare digit lines accumulate until an amount-bearing line resolves them
+ * - Trailing amount line: "15*ชุด", "=100", "20×20" applies amount to all buffered bare numbers
+ * - Last line with number+amount: "395=15*ชุด" adds 395 to buffer then applies amount to all
+ * - Inline context: "บน.77=30", "72=20*20 ล่าง", "39=บล10*10"
+ * - "บนล่าง" mode: duplicates entries as both top and bottom
  * 
  * @param {string} text - Raw pasted text (multi-line)
  * @param {string} lotteryType - 'thai', 'lao', or 'hanoi'
@@ -19,25 +22,290 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
     const lines = text.split('\n')
     const results = []
     let contextMode = 'top' // default: บน
+    let bareNumberBuffer = [] // accumulate bare numbers waiting for a trailing amount line
 
-    for (const rawLine of lines) {
-        const trimmed = rawLine.trim()
+    /**
+     * Flush bare number buffer: process each number individually (no trailing amount found).
+     * For lao/hanoi 4-digit bare numbers → 4_set=1, others get skipped if no amount.
+     */
+    function flushBareBuffer() {
+        for (const bareNum of bareNumberBuffer) {
+            const parsed = parseNumberLine(bareNum, contextMode, isLaoOrHanoi, lotteryType)
+            if (parsed) {
+                if (contextMode === 'both') {
+                    results.push(...emitBoth(bareNum, isLaoOrHanoi, lotteryType))
+                } else {
+                    results.push(...parsed)
+                }
+            }
+        }
+        bareNumberBuffer = []
+    }
+
+    /**
+     * Apply an amount string to all buffered bare numbers, then clear the buffer.
+     */
+    function applyAmountToBuffer(amountStr, mode) {
+        const ctx = mode || contextMode
+        console.log(`[applyAmountToBuffer] amountStr="${amountStr}" mode=${mode} ctx=${ctx} buffer=[${bareNumberBuffer.join(',')}]`)
+        for (const bareNum of bareNumberBuffer) {
+            const synthLine = `${bareNum}=${amountStr}`
+            if (ctx === 'both') {
+                const bothEntries = emitBoth(synthLine, isLaoOrHanoi, lotteryType)
+                console.log(`[applyAmountToBuffer] emitBoth("${synthLine}") → ${bothEntries.length} entries:`, bothEntries.map(e => e.formattedLine))
+                results.push(...bothEntries)
+            } else {
+                const parsed = parseNumberLine(synthLine, ctx, isLaoOrHanoi, lotteryType)
+                if (parsed) results.push(...parsed)
+            }
+        }
+        bareNumberBuffer = []
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim()
         if (!trimmed) continue
 
-        // Check if this line is a context-setting line (บน/ล่าง)
+        console.log(`[pasteParser] Line ${i}: "${trimmed}" | buffer=[${bareNumberBuffer.join(',')}] | contextMode=${contextMode}`)
+
+        // Check if this line is a context-setting line (บน/ล่าง/บนล่าง)
         const modeResult = parseContextLine(trimmed)
         if (modeResult !== null) {
+            console.log(`[pasteParser]   → context line: ${modeResult}`)
+            // Flush pending bare numbers before switching context
+            if (bareNumberBuffer.length > 0) flushBareBuffer()
             contextMode = modeResult
             continue
         }
 
-        // Try to parse as a number line
-        const parsed = parseNumberLine(trimmed, contextMode, isLaoOrHanoi, lotteryType)
-        if (parsed) {
-            results.push(...parsed)
+        // Check if this is a bare number line (digits only, 1-5 digits)
+        if (isBareNumberLine(trimmed)) {
+            console.log(`[pasteParser]   → bare number, added to buffer`)
+            bareNumberBuffer.push(trimmed)
+            continue
+        }
+
+        // Strip prefix noise (timestamps, Thai names, etc.) and re-check
+        const stripped = stripPrefixNoise(trimmed)
+        const lineToProcess = stripped || trimmed
+        console.log(`[pasteParser]   → stripped: "${stripped}" from "${trimmed}"`)
+
+        // After stripping noise, the cleaned line might be a bare number
+        if (stripped && isBareNumberLine(stripped)) {
+            console.log(`[pasteParser]   → stripped to bare number, added to buffer`)
+            bareNumberBuffer.push(stripped)
+            continue
+        }
+
+        // Not a bare number — check if it can resolve the buffer
+        if (bareNumberBuffer.length > 0) {
+            // Try to extract amount info from this line (try ORIGINAL first to preserve context like บล, fallback to stripped)
+            const amountInfo = extractAmountFromLine(trimmed) || extractAmountFromLine(lineToProcess)
+            console.log(`[pasteParser]   → extractAmountFromLine:`, JSON.stringify(amountInfo))
+            if (amountInfo) {
+                // If this line also has its own number, add it to the buffer first
+                if (amountInfo.number) {
+                    bareNumberBuffer.push(amountInfo.number)
+                }
+                applyAmountToBuffer(amountInfo.amountStr, amountInfo.mode)
+                continue
+            }
+            // This line is not an amount line — flush buffer individually first
+            console.log(`[pasteParser]   → flushing buffer (no amount found)`)
+            flushBareBuffer()
+        }
+
+        // Process as a normal number+amount line (use stripped version if available)
+        const processLine = (stripped && stripped !== trimmed) ? stripped : trimmed
+        const lineCtx = getLineEffectiveContext(processLine, contextMode)
+        console.log(`[pasteParser]   → normal line: "${processLine}", lineCtx=${lineCtx}`)
+        if (lineCtx === 'both') {
+            const bothResults = emitBoth(processLine, isLaoOrHanoi, lotteryType)
+            console.log(`[pasteParser]   → emitBoth produced ${bothResults.length} entries`)
+            results.push(...bothResults)
+        } else {
+            const parsed = parseNumberLine(processLine, contextMode, isLaoOrHanoi, lotteryType)
+            console.log(`[pasteParser]   → parseNumberLine produced ${parsed ? parsed.length : 0} entries`)
+            if (parsed) results.push(...parsed)
         }
     }
 
+    // Flush remaining bare numbers at end of input
+    if (bareNumberBuffer.length > 0) flushBareBuffer()
+
+    return results
+}
+
+/**
+ * Check if a line is a bare number (digits only, no amount, no separators)
+ */
+function isBareNumberLine(line) {
+    return /^\d{1,5}$/.test(line.trim())
+}
+
+/**
+ * Extract amount information from a non-bare line to apply to buffered bare numbers.
+ * 
+ * Returns { amountStr, mode, number } or null.
+ *   - amountStr: the amount portion (e.g. "15*ชุด", "100", "20*20")
+ *   - mode: 'top', 'bottom', 'both', or null (inherit from contextMode)
+ *   - number: if this line has its own number (e.g. "395=15*ชุด" → number="395"), else null
+ * 
+ * Cases:
+ *   "15*ชุด"         → { amountStr: "15*ชุด", number: null }
+ *   "=100"           → { amountStr: "100", number: null }
+ *   "20×20"          → { amountStr: "20×20", number: null }
+ *   "20×20 บนล่าง"   → { amountStr: "20×20", mode: "both", number: null }
+ *   "395=15*ชุด"     → { amountStr: "15*ชุด", number: "395" }
+ *   "395 15*ชุด"     → { amountStr: "15*ชุด", number: "395" }
+ *   "39=บล10*10"     → { amountStr: "10*10", mode: "both", number: "39" }
+ */
+function extractAmountFromLine(line) {
+    let s = line.trim()
+    console.log(`[extractAmount] input: "${s}" | charCodes: [${[...s].map(c => c.charCodeAt(0)).join(',')}]`)
+
+    // --- Normalize ชุด variants: "20ชุด", "20 ชุด", "20-ชุด", "20+ชุด" → "20*ชุด" ---
+    s = s.replace(/(\d+)\s*[*×xX\-+]?\s*ชุด/g, '$1*ชุด')
+
+    // --- Extract trailing context suffix (บนล่าง/ลบ/ล่างบน/บน/ล่าง etc.) ---
+    let mode = null
+    const bothSuffix = s.match(/\s+(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล\.?|ล[+\-]?บ\.?|บล\.?|ลบ\.?)\s*$/)
+    if (bothSuffix) {
+        mode = 'both'
+        s = s.slice(0, bothSuffix.index).trim()
+    } else {
+        const singleCtx = s.match(/\s+(บน|บ\.?|ล่าง|ล\.?)\s*$/)
+        if (singleCtx) {
+            const modeStr = singleCtx[1].replace('.', '')
+            mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
+            s = s.slice(0, singleCtx.index).trim()
+        }
+    }
+
+    // --- Check for inline context prefix right after = (e.g. "39=บล10*10", "39=ลบ10*10") ---
+    const eqInlineMatch = s.match(/^(\d{1,5})\s*=\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(.+)$/)
+    if (eqInlineMatch) {
+        return { amountStr: eqInlineMatch[3].trim(), mode: 'both', number: eqInlineMatch[1] }
+    }
+
+    // --- Context prefix attached to amount (no =): "บล50*50", "89 บล50*50", "89=บล50*50" ---
+    // "both" prefix variants: บล, ลบ, บนล่าง, ล่างบน, บ+ล, ล+บ, etc.
+    const bothPrefixRe = /^(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(\d.+)$/
+    // "single" prefix variants: บน, บ, ล่าง, ล
+    const singlePrefixRe = /^(บน|บ|ล่าง|ล)\.?\s*(\d.+)$/
+
+    // Case: "number space/= contextAmount" e.g. "89 บล50*50" or "89=บล50*50"
+    const numCtxMatch = s.match(/^(\d{1,5})\s*[=\s]\s*((?:บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*\d.+)$/)
+    if (numCtxMatch) {
+        const ctxPart = numCtxMatch[2].trim()
+        const bothM = ctxPart.match(bothPrefixRe)
+        if (bothM) {
+            const amt = bothM[2].trim()
+            if (isAmountPattern(amt)) return { amountStr: amt, mode: 'both', number: numCtxMatch[1] }
+        }
+        const singleM = ctxPart.match(singlePrefixRe)
+        if (singleM) {
+            const amt = singleM[2].trim()
+            const mStr = singleM[1]
+            const m = (mStr === 'บน' || mStr === 'บ') ? 'top' : 'bottom'
+            if (isAmountPattern(amt)) return { amountStr: amt, mode: m, number: numCtxMatch[1] }
+        }
+    }
+
+    // Case: pure context-prefixed amount (no number): "บล50*50", "บน20*20"
+    const pureBothM = s.match(bothPrefixRe)
+    if (pureBothM) {
+        const amt = pureBothM[2].trim()
+        if (isAmountPattern(amt)) return { amountStr: amt, mode: 'both', number: null }
+    }
+    const pureSingleM = s.match(singlePrefixRe)
+    if (pureSingleM) {
+        const amt = pureSingleM[2].trim()
+        const mStr = pureSingleM[1]
+        const m = (mStr === 'บน' || mStr === 'บ') ? 'top' : 'bottom'
+        if (isAmountPattern(amt)) return { amountStr: amt, mode: m, number: null }
+    }
+
+    // --- "=amountStr" (no number before =) ---
+    const eqOnlyMatch = s.match(/^=\s*(.+)$/)
+    if (eqOnlyMatch) {
+        const amt = eqOnlyMatch[1].trim()
+        if (isAmountPattern(amt)) return { amountStr: amt, mode, number: null }
+        return null
+    }
+
+    // --- "number=amountStr" or "number amountStr" ---
+    const eqMatch = s.match(/^(\d{1,5})\s*=\s*(.+)$/)
+    if (eqMatch) {
+        const amt = eqMatch[2].trim()
+        if (isAmountPattern(amt)) return { amountStr: amt, mode, number: eqMatch[1] }
+        return null
+    }
+    const spaceMatch = s.match(/^(\d{1,5})\s+(.+)$/)
+    if (spaceMatch) {
+        const amt = spaceMatch[2].trim()
+        if (isAmountPattern(amt)) return { amountStr: amt, mode, number: spaceMatch[1] }
+        return null
+    }
+
+    // --- Pure amount pattern (no number, no =) e.g. "15*ชุด", "20×20" ---
+    if (isAmountPattern(s)) return { amountStr: s, mode, number: null }
+
+    return null
+}
+
+/**
+ * Check if a string is a pure amount pattern (digits with separators/ชุด, NOT a bare number).
+ * Must contain at least one non-digit character (*, ×, x, -, +, ชุด) to distinguish from bare numbers.
+ */
+function isAmountPattern(s) {
+    if (!s || !s.trim()) return false
+    const t = s.trim()
+    // Must have at least one separator or ชุด to be an amount pattern
+    if (/^\d+$/.test(t)) return false // pure digits = bare number, not amount
+    // Match common amount patterns:
+    //   50*50, 20×20, 10x10, 10+10, 10-10
+    //   15*ชุด, 20ชุด, 20 ชุด, 20-ชุด, 20+ชุด
+    //   50*50*ชุด
+    return /^\d+[*×xX\-+](\d+|ชุด)$/.test(t) ||  // "50*50" or "15*ชุด"
+           /^\d+[*×xX\-+]\d+[*×xX\-+]ชุด$/.test(t) ||  // "50*50*ชุด"
+           /^\d+\s*ชุด$/.test(t)  // "20ชุด" or "20 ชุด"
+}
+
+/**
+ * Get the effective context for a line (checks inline context).
+ * Returns 'top', 'bottom', 'both', or the passed contextMode.
+ */
+function getLineEffectiveContext(line, contextMode) {
+    const preClean = line.trim()
+    let inlineCtx = extractInlineContext(preClean)
+    if (inlineCtx.mode) return inlineCtx.mode
+    const normalized = stripPrefixNoise(preClean)
+    if (normalized) {
+        inlineCtx = extractInlineContext(normalized)
+        if (inlineCtx.mode) return inlineCtx.mode
+    }
+    return contextMode
+}
+
+/**
+ * Emit entries for both top and bottom context (for "บนล่าง" mode).
+ * Strips inline context from the line, then parses with 'top' and 'bottom' separately.
+ */
+function emitBoth(rawLine, isLaoOrHanoi, lotteryType) {
+    const results = []
+    const inlineCtx = extractInlineContext(rawLine.trim())
+    const cleanLine = inlineCtx.mode ? inlineCtx.cleaned : rawLine
+    // Also strip "บล/ลบ" from after = sign
+    const eqCtx = cleanLine.match(/^(\d{1,5}\s*=\s*)(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(.+)$/)
+    const finalLine = eqCtx ? `${eqCtx[1]}${eqCtx[3]}` : cleanLine
+    console.log(`[emitBoth] rawLine="${rawLine}" cleanLine="${cleanLine}" finalLine="${finalLine}"`)
+    const topParsed = parseNumberLine(finalLine, 'top', isLaoOrHanoi, lotteryType)
+    const botParsed = parseNumberLine(finalLine, 'bottom', isLaoOrHanoi, lotteryType)
+    console.log(`[emitBoth] topParsed=${topParsed ? topParsed.length : 'null'} botParsed=${botParsed ? botParsed.length : 'null'}`)
+    if (botParsed) console.log(`[emitBoth] botParsed:`, JSON.stringify(botParsed.map(e => e.formattedLine || e.rawLine)))
+    if (topParsed) results.push(...topParsed)
+    if (botParsed) results.push(...botParsed)
     return results
 }
 
@@ -63,19 +331,26 @@ function stripPrefixNoise(line) {
 }
 
 /**
- * Check if a line is a context-setting line (บน/ล่าง)
- * Returns 'top', 'bottom', or null if not a context line
+ * Check if a line is a context-setting line (บน/ล่าง/บนล่าง)
+ * Returns 'top', 'bottom', 'both', or null if not a context line
  */
 function parseContextLine(line) {
-    // Match standalone "บ", "บ.", "บน" (not attached to other Thai chars)
-    // Match standalone "ล", "ล.", "ล่าง" (not attached to other Thai chars)
+    const withPunct = line.trim()
+
+    // Check for "บนล่าง" / "ล่างบน" variants first (must come before single checks)
+    // Matches: "บนล่าง", "ล่างบน", "บน ล่าง", "ล่าง บน", "บน-ล่าง", "ล่าง-บน",
+    //          "บล", "ลบ", "บล.", "ลบ.", "บ+ล", "ล+บ", "บ-ล", "ล-บ", "บ+ล.", "ล+บ."
+    const cleanedBoth = withPunct.replace(/[\s.+\-]/g, '')
+    if (/^(บนล่าง|ล่างบน|บล|ลบ)$/.test(cleanedBoth)) return 'both'
+
+    // Match standalone "บ", "บ.", "บน"
+    // Match standalone "ล", "ล.", "ล่าง"
     const cleaned = line.replace(/[^ก-๛a-zA-Z0-9]/g, '').trim()
 
     if (/^(บน|บ)$/.test(cleaned)) return 'top'
     if (/^(ล่าง|ล)$/.test(cleaned)) return 'bottom'
 
     // Also check original line with punctuation: "บ.", "ล."
-    const withPunct = line.trim()
     if (/^บ\.?$/.test(withPunct)) return 'top'
     if (/^ล\.?$/.test(withPunct)) return 'bottom'
     if (/^บน$/.test(withPunct)) return 'top'
@@ -94,16 +369,17 @@ function getPermutationCount(numStr) {
 }
 
 /**
- * Extract inline context (บน/ล่าง) from a line as prefix or suffix.
- * Returns { cleaned, mode } where mode is 'top', 'bottom', or null (no inline context found).
- * 
- * Supported patterns:
- *   Prefix: "บน.77=30", "บน72=20*20", "บ.77=30", "ล่าง.77=30", "ล.77=30"
- *   Suffix: "72=20*20 ล่าง", "1=500 บน", "77=30 บ", "77=30 ล"
- *   Middle: "2 ล่าง 500" → numbers=2, amount=500, mode=bottom
+ * Extract inline context (บน/ล่าง/บนล่าง) from a line as prefix or suffix.
+ * Returns { cleaned, mode } where mode is 'top', 'bottom', 'both', or null.
  */
 function extractInlineContext(line) {
     let s = line.trim()
+
+    // --- PREFIX "บนล่าง/ลบ/บล" variants followed by digit or = ---
+    const bothPrefix = s.match(/^(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(\d.*)$/)
+    if (bothPrefix) {
+        return { cleaned: bothPrefix[2].trim(), mode: 'both' }
+    }
 
     // --- PREFIX patterns: "บน.", "บน", "บ.", "บ", "ล่าง.", "ล่าง", "ล.", "ล" followed by digit ---
     const prefixMatch = s.match(/^(บน|บ|ล่าง|ล)\.?\s*(\d.*)$/)
@@ -114,8 +390,14 @@ function extractInlineContext(line) {
         return { cleaned: rest.trim(), mode }
     }
 
-    // --- SUFFIX patterns: digits/amounts followed by "บน", "บ", "ล่าง", "ล" at end ---
-    const suffixMatch = s.match(/^(.+?)\s+(บน|บ\.?|ล่าง|ล\.?)\s*$/)
+    // --- SUFFIX "บนล่าง/ลบ/ล่างบน" variants ---
+    const bothSuffix = s.match(/^(.+?)\s+(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล|ล[+\-]?บ|บล|ลบ)\s*$/)
+    if (bothSuffix) {
+        return { cleaned: bothSuffix[1].trim(), mode: 'both' }
+    }
+
+    // --- SUFFIX patterns: "บน", "บ", "ล่าง", "ล" at end ---
+    const suffixMatch = s.match(/^(.+?)\s+(บน|บ|ล่าง|ล)\.?\s*$/)
     if (suffixMatch) {
         const rest = suffixMatch[1]
         const modeStr = suffixMatch[2].replace('.', '')
@@ -123,7 +405,21 @@ function extractInlineContext(line) {
         return { cleaned: rest.trim(), mode }
     }
 
-    // --- MIDDLE pattern: "2 ล่าง 500" or "2 บน 500" (single digit + context + amount) ---
+    // --- MIDDLE pattern: "number contextAmount" e.g. "89 บล50*50", "89 บน50*50" ---
+    // "both" context prefix attached to amount
+    const midBothMatch = s.match(/^(\d+)\s+(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(\d.+)$/)
+    if (midBothMatch) {
+        return { cleaned: `${midBothMatch[1]} ${midBothMatch[3].trim()}`, mode: 'both' }
+    }
+    // "single" context prefix attached to amount
+    const midSingleMatch = s.match(/^(\d+)\s+(บน|บ|ล่าง|ล)\.?\s*(\d.+)$/)
+    if (midSingleMatch) {
+        const modeStr = midSingleMatch[2]
+        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
+        return { cleaned: `${midSingleMatch[1]} ${midSingleMatch[3].trim()}`, mode }
+    }
+
+    // --- MIDDLE pattern: "2 ล่าง 500" or "2 บน 500" (context with spaces around it) ---
     const middleMatch = s.match(/^(\d+)\s+(บน|บ|ล่าง|ล)\s+(\d[\d*=\-+]*)$/)
     if (middleMatch) {
         const num = middleMatch[1]
@@ -133,6 +429,12 @@ function extractInlineContext(line) {
         return { cleaned: `${num} ${amt}`, mode }
     }
 
+    // --- Inline context after = sign: "39=บล10*10", "39=ลบ10*10" ---
+    const eqInline = s.match(/^(\d+\s*=\s*)(บนล่าง|ล่างบน|บล\.?|ลบ\.?|บ[+\-]?ล\.?|ล[+\-]?บ\.?)(.+)$/)
+    if (eqInline) {
+        return { cleaned: `${eqInline[1]}${eqInline[3]}`.trim(), mode: 'both' }
+    }
+
     return { cleaned: s, mode: null }
 }
 
@@ -140,16 +442,13 @@ function extractInlineContext(line) {
  * Parse a single number line into one or more bet entries
  */
 function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
-    // Try inline context (บน/ล่าง) on raw line first (e.g. "บน.77=30")
+    // Extract inline context
     const preClean = line.trim()
     let inlineCtx = extractInlineContext(preClean)
     let normalized
     if (inlineCtx.mode) {
-        // Found context on raw line, strip noise from the cleaned part only
         normalized = stripPrefixNoise(inlineCtx.cleaned)
     } else {
-        // No inline context found on raw line — strip noise first, then try again
-        // This handles e.g. "08:18 ชื่อ บน.77=30" where timestamp/name comes before context
         normalized = stripPrefixNoise(preClean)
         if (normalized) {
             inlineCtx = extractInlineContext(normalized)
@@ -159,6 +458,7 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
         }
     }
     const effectiveContext = inlineCtx.mode || contextMode
+    const parseContext = (effectiveContext === 'both') ? 'top' : effectiveContext
     if (!normalized) return null
 
     // Normalize separators:
@@ -167,8 +467,8 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
     // Replace - and + between amounts with *
     // Also handle "ชุด" keyword
 
-    // Handle "ชุด" attached to number: "123=50ชุด" → "123=50*ชุด"
-    normalized = normalized.replace(/(\d)(ชุด)/g, '$1*ชุด')
+    // Handle "ชุด" variants: "123=50ชุด", "123=50 ชุด", "123=50-ชุด" → "123=50*ชุด"
+    normalized = normalized.replace(/(\d+)\s*[*×xX\-+]?\s*ชุด/g, '$1*ชุด')
 
     // Normalize dot-separated format: "258.33.20" → "258=33*20"
     // Pattern: digits.digits.digits (3 groups separated by dots)
@@ -236,7 +536,7 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
     const permCount = numLen >= 2 ? getPermutationCount(numbers) : 1
 
     // Determine bet type and format based on digit count, amounts, context
-    return determineBetType(numbers, numLen, amount1, amount2, hasChud, permCount, effectiveContext, isLaoOrHanoi, lotteryType, line)
+    return determineBetType(numbers, numLen, amount1, amount2, hasChud, permCount, parseContext, isLaoOrHanoi, lotteryType, line)
 }
 
 /**
