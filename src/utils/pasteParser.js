@@ -94,11 +94,71 @@ function getPermutationCount(numStr) {
 }
 
 /**
+ * Extract inline context (บน/ล่าง) from a line as prefix or suffix.
+ * Returns { cleaned, mode } where mode is 'top', 'bottom', or null (no inline context found).
+ * 
+ * Supported patterns:
+ *   Prefix: "บน.77=30", "บน72=20*20", "บ.77=30", "ล่าง.77=30", "ล.77=30"
+ *   Suffix: "72=20*20 ล่าง", "1=500 บน", "77=30 บ", "77=30 ล"
+ *   Middle: "2 ล่าง 500" → numbers=2, amount=500, mode=bottom
+ */
+function extractInlineContext(line) {
+    let s = line.trim()
+
+    // --- PREFIX patterns: "บน.", "บน", "บ.", "บ", "ล่าง.", "ล่าง", "ล.", "ล" followed by digit ---
+    const prefixMatch = s.match(/^(บน|บ|ล่าง|ล)\.?\s*(\d.*)$/)
+    if (prefixMatch) {
+        const modeStr = prefixMatch[1]
+        const rest = prefixMatch[2]
+        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
+        return { cleaned: rest.trim(), mode }
+    }
+
+    // --- SUFFIX patterns: digits/amounts followed by "บน", "บ", "ล่าง", "ล" at end ---
+    const suffixMatch = s.match(/^(.+?)\s+(บน|บ\.?|ล่าง|ล\.?)\s*$/)
+    if (suffixMatch) {
+        const rest = suffixMatch[1]
+        const modeStr = suffixMatch[2].replace('.', '')
+        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
+        return { cleaned: rest.trim(), mode }
+    }
+
+    // --- MIDDLE pattern: "2 ล่าง 500" or "2 บน 500" (single digit + context + amount) ---
+    const middleMatch = s.match(/^(\d+)\s+(บน|บ|ล่าง|ล)\s+(\d[\d*=\-+]*)$/)
+    if (middleMatch) {
+        const num = middleMatch[1]
+        const modeStr = middleMatch[2]
+        const amt = middleMatch[3]
+        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
+        return { cleaned: `${num} ${amt}`, mode }
+    }
+
+    return { cleaned: s, mode: null }
+}
+
+/**
  * Parse a single number line into one or more bet entries
  */
 function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
-    // Strip timestamp/Thai text prefixes first
-    let normalized = stripPrefixNoise(line)
+    // Try inline context (บน/ล่าง) on raw line first (e.g. "บน.77=30")
+    const preClean = line.trim()
+    let inlineCtx = extractInlineContext(preClean)
+    let normalized
+    if (inlineCtx.mode) {
+        // Found context on raw line, strip noise from the cleaned part only
+        normalized = stripPrefixNoise(inlineCtx.cleaned)
+    } else {
+        // No inline context found on raw line — strip noise first, then try again
+        // This handles e.g. "08:18 ชื่อ บน.77=30" where timestamp/name comes before context
+        normalized = stripPrefixNoise(preClean)
+        if (normalized) {
+            inlineCtx = extractInlineContext(normalized)
+            if (inlineCtx.mode) {
+                normalized = inlineCtx.cleaned
+            }
+        }
+    }
+    const effectiveContext = inlineCtx.mode || contextMode
     if (!normalized) return null
 
     // Normalize separators:
@@ -176,7 +236,7 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
     const permCount = numLen >= 2 ? getPermutationCount(numbers) : 1
 
     // Determine bet type and format based on digit count, amounts, context
-    return determineBetType(numbers, numLen, amount1, amount2, hasChud, permCount, contextMode, isLaoOrHanoi, lotteryType, line)
+    return determineBetType(numbers, numLen, amount1, amount2, hasChud, permCount, effectiveContext, isLaoOrHanoi, lotteryType, line)
 }
 
 /**
