@@ -391,6 +391,27 @@ export default function UserDashboard() {
         }
     }, [selectedDealer])
 
+    // Realtime subscription: auto-refresh rounds when dealer changes is_active or status
+    useEffect(() => {
+        if (!selectedDealer) return
+
+        const channel = supabase
+            .channel(`user-rounds-${selectedDealer.id}`)
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'lottery_rounds',
+                filter: `dealer_id=eq.${selectedDealer.id}`
+            }, () => {
+                fetchRounds()
+            })
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
+    }, [selectedDealer])
+
     async function fetchUserSettings() {
         if (!selectedDealer) return
         try {
@@ -456,6 +477,7 @@ export default function UserDashboard() {
                     type_limits (*)
                 `)
                 .eq('dealer_id', selectedDealer.id)
+                .eq('is_active', true)
                 .in('status', ['open', 'closed'])
                 .order('round_date', { ascending: false })
                 .limit(50)

@@ -94,6 +94,27 @@ export default function BuyLottery() {
         }
     }, [profile])
 
+    // Realtime: auto-refresh when dealer toggles is_active
+    useEffect(() => {
+        if (!profile?.dealer_id) return
+
+        const channel = supabase
+            .channel(`buy-rounds-${profile.dealer_id}`)
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'lottery_rounds',
+                filter: `dealer_id=eq.${profile.dealer_id}`
+            }, () => {
+                fetchActiveRound()
+            })
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
+    }, [profile?.dealer_id])
+
     async function fetchActiveRound() {
         setFetchingRound(true)
         try {
@@ -102,6 +123,7 @@ export default function BuyLottery() {
                 .select('*')
                 .eq('dealer_id', profile.dealer_id)
                 .eq('status', 'open')
+                .eq('is_active', true)
                 .order('close_time', { ascending: true })
                 .limit(1)
                 .single()

@@ -20,7 +20,8 @@ import {
     FiCopy,
     FiFileText,
     FiRefreshCw,
-    FiChevronRight
+    FiChevronRight,
+    FiPower
 } from 'react-icons/fi'
 import {
     LOTTERY_TYPES,
@@ -43,6 +44,7 @@ export default function RoundAccordionItem({
     onSelect, 
     onShowSubmissions, 
     onCloseRound, 
+    onToggleActive,
     onEditRound, 
     onShowNumberLimits, 
     onDeleteRound, 
@@ -2361,6 +2363,17 @@ export default function RoundAccordionItem({
                                     {round.status === 'open' && <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onCloseRound(); }} title="ปิดงวด"><FiLock /></button>}
                                     <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onShowNumberLimits(); }} title="ตั้งค่าเลขอั้น"><FiAlertTriangle /></button>
                                     <button className="icon-btn" onClick={(e) => { e.stopPropagation(); fetchSummaryData(); }} title="รีเฟรช"><FiRefreshCw /></button>
+                                    <button 
+                                        className={`icon-btn ${round.is_active ? 'success' : ''}`} 
+                                        onClick={(e) => { e.stopPropagation(); onToggleActive(); }} 
+                                        title={round.is_active ? 'ปิดใช้งาน (ซ่อนจาก user)' : 'เปิดใช้งาน (แสดงให้ user เห็น)'}
+                                        style={round.is_active 
+                                            ? { color: '#22c55e', border: '1.5px solid #22c55e' } 
+                                            : { color: '#888', border: '1.5px dashed #555' }
+                                        }
+                                    >
+                                        <FiPower />
+                                    </button>
                                 </div>
                                 <svg className={`chevron ${isExpanded ? 'rotated' : ''}`} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <polyline points="6 9 12 15 18 9"></polyline>

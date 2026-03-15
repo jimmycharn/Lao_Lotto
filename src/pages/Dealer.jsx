@@ -1715,7 +1715,8 @@ export default function Dealer() {
                     delete_after_submit_minutes: roundForm.delete_after_submit_minutes,
                     currency_symbol: roundForm.currency_symbol,
                     currency_name: roundForm.currency_name,
-                    set_prices: roundForm.set_prices
+                    set_prices: roundForm.set_prices,
+                    is_active: false
                 })
                 .select()
                 .single()
@@ -1745,6 +1746,24 @@ export default function Dealer() {
 
         } catch (error) {
             console.error('Error creating round:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+
+    // Toggle round active/inactive
+    async function handleToggleActive(roundId, currentIsActive) {
+        try {
+            const newActive = !currentIsActive
+            const { error } = await supabase
+                .from('lottery_rounds')
+                .update({ is_active: newActive })
+                .eq('id', roundId)
+
+            if (error) throw error
+            toast.success(newActive ? 'เปิดใช้งานงวดหวยแล้ว' : 'ปิดใช้งานงวดหวยแล้ว')
+            fetchData()
+        } catch (error) {
+            console.error('Error toggling active:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
         }
     }
@@ -2384,6 +2403,9 @@ export default function Dealer() {
         if (now < openTime) {
             return <span className="status-badge pending"><FiClock /> รอเปิดรับ</span>
         }
+        if (!round.is_active) {
+            return <span className="status-badge pending" style={{ opacity: 0.7 }}><FiClock /> รอเปิดใช้งาน</span>
+        }
         return <span className="status-badge open"><FiClock /> เปิดรับอยู่</span>
     }
 
@@ -2925,6 +2947,7 @@ export default function Dealer() {
                                                     onSelect={setSelectedRound}
                                                     onShowSubmissions={() => { setSelectedRound(round); setShowSubmissionsModal(true); }}
                                                     onCloseRound={() => handleCloseRound(round.id)}
+                                                    onToggleActive={() => handleToggleActive(round.id, round.is_active)}
                                                     onEditRound={() => handleOpenEditModal(round)}
                                                     onShowNumberLimits={() => { setSelectedRound(round); setShowNumberLimitsModal(true); }}
                                                     onDeleteRound={() => handleDeleteRound(round.id, round.status)}
