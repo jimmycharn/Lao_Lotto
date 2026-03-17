@@ -910,13 +910,18 @@ export async function calculateRoundProfit(dealerId, roundId) {
         const lotteryKey = getLotteryTypeKey(lotteryType)
         const setPrices = roundData?.set_prices || {}
 
-        // Helper: map bet_type to settings key (Lao/Hanoi use different keys)
+        // Helper: map bet_type to settings key (Lao/Hanoi use different keys, position types use pak)
         const getSettingsKey = (betType) => {
+            const POSITION_MAP = {
+                'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
+                'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
+            }
+            const mapped = POSITION_MAP[betType] || betType
             if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
                 const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
-                return LAO_MAP[betType] || betType
+                return LAO_MAP[mapped] || mapped
             }
-            return betType
+            return mapped
         }
 
         // Get all submissions for this round (incoming bets)

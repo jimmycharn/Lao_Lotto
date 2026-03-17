@@ -44,16 +44,21 @@ export default function SummaryModal({ round, onClose }) {
         }
     }
 
-    // Map bet_type to settings key for Lao/Hanoi lottery
+    // Map bet_type to settings key for Lao/Hanoi lottery and position bet types
     const getSettingsKey = (betType, lotteryKey) => {
+        const POSITION_MAP = {
+            'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
+            'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
+        }
+        const mapped = POSITION_MAP[betType] || betType
         if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
             const LAO_BET_TYPE_MAP = {
                 '3_top': '3_straight',
                 '3_tod': '3_tod_single'
             }
-            return LAO_BET_TYPE_MAP[betType] || betType
+            return LAO_BET_TYPE_MAP[mapped] || mapped
         }
-        return betType
+        return mapped
     }
 
     const getCommission = (sub) => {

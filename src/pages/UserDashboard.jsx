@@ -569,10 +569,14 @@ export default function UserDashboard() {
                                 return s.commission_amount
                             }
                             // Fallback: calculate from user settings
-                            let settingsKeyC = s.bet_type
+                            const POSITION_MAP_C = {
+                                'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
+                                'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
+                            }
+                            let settingsKeyC = POSITION_MAP_C[s.bet_type] || s.bet_type
                             if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
                                 const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
-                                settingsKeyC = LAO_MAP[s.bet_type] || s.bet_type
+                                settingsKeyC = LAO_MAP[settingsKeyC] || settingsKeyC
                             }
                             const settingsC = userSettings?.lottery_settings?.[lotteryKey]?.[settingsKeyC]
                             if (s.bet_type === '4_set' || s.bet_type === '4_top') {
@@ -597,14 +601,18 @@ export default function UserDashboard() {
                             if (s.bet_type === '4_set') {
                                 return sum + (s.prize_amount || 0)
                             }
-                            // Map bet_type to settings key (Lao/Hanoi use different keys)
-                            let settingsKey = s.bet_type
+                            // Map position bet types to pak_top/pak_bottom settings
+                            const POSITION_MAP_P = {
+                                'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
+                                'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
+                            }
+                            let settingsKey = POSITION_MAP_P[s.bet_type] || s.bet_type
                             if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
                                 const LAO_BET_TYPE_MAP = {
                                     '3_top': '3_straight',
                                     '3_tod': '3_tod_single'
                                 }
-                                settingsKey = LAO_BET_TYPE_MAP[s.bet_type] || s.bet_type
+                                settingsKey = LAO_BET_TYPE_MAP[settingsKey] || settingsKey
                             }
                             const settings = userSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
                             if (settings?.payout !== undefined) {
@@ -612,6 +620,8 @@ export default function UserDashboard() {
                             }
                             const defaultPayouts = {
                                 'run_top': 3, 'run_bottom': 4, 'pak_top': 8, 'pak_bottom': 6,
+                                'front_top_1': 8, 'middle_top_1': 8, 'back_top_1': 8,
+                                'front_bottom_1': 6, 'back_bottom_1': 6,
                                 '2_top': 65, '2_front': 65, '2_center': 65, '2_spread': 65, '2_run': 10, '2_bottom': 65,
                                 '3_top': 550, '3_tod': 100, '3_bottom': 135, '3_front': 100, '3_back': 135,
                                 '4_float': 20, '4_tod': 100, '5_float': 10, '6_top': 1000000
@@ -780,16 +790,22 @@ export default function UserDashboard() {
         const currentSettings = settingsOverride || userSettings
         const lotteryKey = getLotteryKeyForDraft(currentRound.lottery_type)
 
+        // Map position bet types to pak_top/pak_bottom settings
+        const POSITION_MAP = {
+            'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
+            'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
+        }
+        let settingsKey = POSITION_MAP[betType] || betType
+
         // Map bet_type to settings key for Lao/Hanoi lottery
         // In settings, Lao uses different keys than the actual bet_type used in submissions
-        let settingsKey = betType
         if (lotteryKey === 'lao') {
             const LAO_BET_TYPE_MAP = {
                 '3_top': '3_straight',      // 3 ตัวตรง
                 '3_tod': '3_tod_single',    // 3 ตัวโต๊ด
                 '4_top': '4_set'            // 4 ตัวตรง (ชุด) - stored as 4_set in settings
             }
-            settingsKey = LAO_BET_TYPE_MAP[betType] || betType
+            settingsKey = LAO_BET_TYPE_MAP[settingsKey] || settingsKey
         }
 
         const settings = currentSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
@@ -2499,6 +2515,8 @@ export default function UserDashboard() {
     const DEFAULT_PAYOUTS = {
         'run_top': 3, 'run_bottom': 4,
         'pak_top': 8, 'pak_bottom': 6,
+        'front_top_1': 8, 'middle_top_1': 8, 'back_top_1': 8,
+        'front_bottom_1': 6, 'back_bottom_1': 6,
         '2_top': 65, '2_front': 65, '2_center': 65, '2_spread': 65, '2_run': 10, '2_bottom': 65,
         '3_top': 550, '3_tod': 100, '3_bottom': 135, '3_front': 100, '3_back': 135,
         '4_float': 20, '4_tod': 100, '4_set': 100, '5_float': 10, '6_top': 1000000
@@ -2523,14 +2541,18 @@ export default function UserDashboard() {
 
         const lotteryKey = getLotteryTypeKey(round?.lottery_type)
 
-        // Map bet_type to settings key (Lao/Hanoi use different keys in settings)
-        let settingsKey = sub.bet_type
+        // Map position bet types to pak_top/pak_bottom settings
+        const POSITION_MAP = {
+            'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
+            'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
+        }
+        let settingsKey = POSITION_MAP[sub.bet_type] || sub.bet_type
         if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
             const LAO_BET_TYPE_MAP = {
                 '3_top': '3_straight',
                 '3_tod': '3_tod_single'
             }
-            settingsKey = LAO_BET_TYPE_MAP[sub.bet_type] || sub.bet_type
+            settingsKey = LAO_BET_TYPE_MAP[settingsKey] || settingsKey
         }
 
         const settings = userSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
@@ -2552,10 +2574,14 @@ export default function UserDashboard() {
         }
         // Fallback to calculation from user settings (for old submissions without commission_amount)
         const lotteryKey = getLotteryTypeKey(round?.lottery_type)
-        let settingsKey = sub.bet_type
+        const POSITION_MAP = {
+            'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
+            'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
+        }
+        let settingsKey = POSITION_MAP[sub.bet_type] || sub.bet_type
         if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
             const LAO_BET_TYPE_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
-            settingsKey = LAO_BET_TYPE_MAP[sub.bet_type] || sub.bet_type
+            settingsKey = LAO_BET_TYPE_MAP[settingsKey] || settingsKey
         }
         const settings = userSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
         if (sub.bet_type === '4_set' || sub.bet_type === '4_top') {
@@ -3080,10 +3106,6 @@ export default function UserDashboard() {
                                                                     <FiCopy />
                                                                 </button>
                                                             )}
-                                                        </div>
-                                                        {/* DEBUG BANNER - ลบหลังแก้บั๊ก */}
-                                                        <div style={{ background: '#ffe0b2', padding: '4px 8px', borderRadius: '4px', fontSize: '0.7rem', color: '#333', marginBottom: '4px' }}>
-                                                            DEBUG: round_id={selectedRound?.id?.slice(0,8)} | subs={submissions.length} | total={submissions.reduce((s,x)=>s+(x.amount||0),0)} | user={user?.id?.slice(0,8)}
                                                         </div>
                                                         {submissions.length === 0 ? (
                                                             <div className="empty-state">
@@ -3675,10 +3697,6 @@ export default function UserDashboard() {
                                                         </div>
                                                     )}
 
-                                                    {/* DEBUG BANNER - ลบหลังแก้บั๊ก */}
-                                                    <div style={{ background: '#ffe0b2', padding: '4px 8px', borderRadius: '4px', fontSize: '0.7rem', color: '#333', marginBottom: '4px' }}>
-                                                        DEBUG(user-results): round_id={round?.id?.slice(0,8)} | user={user?.id?.slice(0,8)} | subs={summary?.ticketCount || 0} | totalAmount={summary?.totalAmount} | totalComm={summary?.totalCommission} | prize={summary?.totalPrize}
-                                                    </div>
                                                     {/* Summary Cards - use same data as header for consistency */}
                                                     {hasSummary && (
                                                         <div className="submissions-summary results-summary">

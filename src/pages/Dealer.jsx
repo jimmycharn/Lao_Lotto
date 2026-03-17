@@ -1873,11 +1873,16 @@ export default function Dealer() {
             if (shouldSaveHistory) {
                 const lotteryKey = getLotteryTypeKey(roundData.lottery_type)
                 const getSettingsKey = (betType, lKey) => {
+                    const POSITION_MAP = {
+                        'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
+                        'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
+                    }
+                    const mapped = POSITION_MAP[betType] || betType
                     if (lKey === 'lao' || lKey === 'hanoi') {
                         const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
-                        return LAO_MAP[betType] || betType
+                        return LAO_MAP[mapped] || mapped
                     }
-                    return betType
+                    return mapped
                 }
 
                 // Fetch user_settings for all users in this round (for accurate commission/payout)
@@ -2031,6 +2036,13 @@ export default function Dealer() {
                                     const payoutRate = DEFAULT_PAYOUTS[bt] || 1
                                     if (bt === 'run_top' && w3top && num.length === 1) isWinner = w3top.includes(num)
                                     else if (bt === 'run_bottom' && w2bottom && num.length === 1) isWinner = w2bottom.includes(num)
+                                    else if (bt === 'front_top_1' && w3top && w3top.length === 3 && num.length === 1) isWinner = num === w3top[0]
+                                    else if (bt === 'middle_top_1' && w3top && w3top.length === 3 && num.length === 1) isWinner = num === w3top[1]
+                                    else if (bt === 'back_top_1' && w3top && w3top.length === 3 && num.length === 1) isWinner = num === w3top[2]
+                                    else if (bt === 'front_bottom_1' && w2bottom && w2bottom.length === 2 && num.length === 1) isWinner = num === w2bottom[0]
+                                    else if (bt === 'back_bottom_1' && w2bottom && w2bottom.length === 2 && num.length === 1) isWinner = num === w2bottom[1]
+                                    else if (bt === 'pak_top' && w3top && w3top.length === 3 && num.length === 1) isWinner = w3top.includes(num)
+                                    else if (bt === 'pak_bottom' && w2bottom && w2bottom.length === 2 && num.length === 1) isWinner = w2bottom.includes(num)
                                     else if (bt === '2_bottom' && w2bottom && num.length === 2) isWinner = num === w2bottom
                                     else if (bt === '2_top' && w2top && num.length === 2) isWinner = num === w2top
                                     else if ((bt === '3_top' || bt === '3_straight') && w3top && num.length === 3) isWinner = num === w3top

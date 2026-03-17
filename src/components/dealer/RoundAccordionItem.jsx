@@ -514,6 +514,16 @@ export default function RoundAccordionItem({
                                 isWinner = w3top.includes(num)
                             } else if (bt === 'run_bottom' && w2bottom && num.length === 1) {
                                 isWinner = w2bottom.includes(num)
+                            } else if (bt === 'front_top_1' && w3top && w3top.length === 3 && num.length === 1) {
+                                isWinner = num === w3top[0]
+                            } else if (bt === 'middle_top_1' && w3top && w3top.length === 3 && num.length === 1) {
+                                isWinner = num === w3top[1]
+                            } else if (bt === 'back_top_1' && w3top && w3top.length === 3 && num.length === 1) {
+                                isWinner = num === w3top[2]
+                            } else if (bt === 'front_bottom_1' && w2bottom && w2bottom.length === 2 && num.length === 1) {
+                                isWinner = num === w2bottom[0]
+                            } else if (bt === 'back_bottom_1' && w2bottom && w2bottom.length === 2 && num.length === 1) {
+                                isWinner = num === w2bottom[1]
                             } else if (bt === 'pak_top' && w3top && w3top.length === 3 && num.length === 1) {
                                 isWinner = w3top.includes(num)
                             } else if (bt === 'pak_bottom' && w2bottom && w2bottom.length === 2 && num.length === 1) {
@@ -2165,16 +2175,22 @@ export default function RoundAccordionItem({
         }
     }
 
-    // Map bet_type to settings key for Lao/Hanoi lottery
+    // Map bet_type to settings key for Lao/Hanoi lottery and position bet types
     const getSettingsKey = (betType, lotteryKey) => {
+        // Position bet types use pak_top/pak_bottom settings
+        const POSITION_MAP = {
+            'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
+            'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
+        }
+        const mapped = POSITION_MAP[betType] || betType
         if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
             const LAO_BET_TYPE_MAP = {
                 '3_top': '3_straight',
                 '3_tod': '3_tod_single'
             }
-            return LAO_BET_TYPE_MAP[betType] || betType
+            return LAO_BET_TYPE_MAP[mapped] || mapped
         }
-        return betType
+        return mapped
     }
 
     const getCommission = (sub) => {
@@ -2303,7 +2319,7 @@ export default function RoundAccordionItem({
                                 {/* ยอดรับ Row */}
                                 <div className="stats-row incoming-stats">
                                     <div className="stats-section">
-                                        <span className="section-label">ยอดรับ ({summaryData.submissions?.length || 0})</span>
+                                        <span className="section-label">ยอดรับ {summaryData.submissions?.length || 0} รายการ</span>
                                         <div className="stats-items">
                                             <span className="stat-box">
                                                 <span className="stat-label">ยอดรวม</span>
@@ -2555,62 +2571,46 @@ export default function RoundAccordionItem({
                                         </button>
                                     </div>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
-                                        {round.lottery_type === 'thai' && (
-                                            <>
-                                                {round.winning_numbers.first_prize && (
-                                                    <div style={{ textAlign: 'center' }}>
-                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>รางวัลที่ 1</div>
-                                                        <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-primary)', fontFamily: 'monospace', letterSpacing: '0.1em' }}>{round.winning_numbers.first_prize}</div>
+                                        {(() => {
+                                            const wn = round.winning_numbers
+                                            const isLaoHanoi = ['lao', 'hanoi'].includes(round.lottery_type)
+                                            const isThai = round.lottery_type === 'thai'
+                                            const displayOrder = isLaoHanoi
+                                                ? ['4_set', '3_top', '2_top', '2_bottom']
+                                                : isThai
+                                                    ? ['6_top', '3_bottom', '2_bottom']
+                                                    : ['6_top', '3_top', '2_bottom', '3_bottom']
+
+                                            const betTypeLabels = {
+                                                '6_top': 'รางวัลที่ 1',
+                                                '4_set': 'เลขชุด 4 ตัว',
+                                                '3_top': '3 ตัวบน',
+                                                '3_bottom': '3 ตัวล่าง',
+                                                '2_top': '2 ตัวบน',
+                                                '2_bottom': '2 ตัวล่าง'
+                                            }
+
+                                            return displayOrder.map(key => {
+                                                const number = wn[key]
+                                                if (!number) return null
+                                                const label = betTypeLabels[key] || key
+                                                const displayNumber = Array.isArray(number) ? number.join(', ') : number
+                                                const isMain = ['6_top', '4_set'].includes(key)
+
+                                                return (
+                                                    <div key={key} style={{ textAlign: 'center' }}>
+                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{label}</div>
+                                                        <div style={{
+                                                            fontSize: isMain ? '1.5rem' : '1.25rem',
+                                                            fontWeight: isMain ? 700 : 600,
+                                                            color: isMain ? 'var(--color-primary)' : 'var(--color-text)',
+                                                            fontFamily: 'monospace',
+                                                            letterSpacing: '0.1em'
+                                                        }}>{displayNumber}</div>
                                                     </div>
-                                                )}
-                                                {round.winning_numbers.last_3_digits && round.winning_numbers.last_3_digits.length > 0 && (
-                                                    <div style={{ textAlign: 'center' }}>
-                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>3 ตัวล่าง</div>
-                                                        <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--color-text)', fontFamily: 'monospace' }}>{round.winning_numbers.last_3_digits.join(', ')}</div>
-                                                    </div>
-                                                )}
-                                                {round.winning_numbers.last_2_digits && (
-                                                    <div style={{ textAlign: 'center' }}>
-                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>2 ตัวล่าง</div>
-                                                        <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--color-text)', fontFamily: 'monospace' }}>{round.winning_numbers.last_2_digits}</div>
-                                                    </div>
-                                                )}
-                                            </>
-                                        )}
-                                        {(round.lottery_type === 'lao' || round.lottery_type === 'hanoi') && (
-                                            <>
-                                                {round.winning_numbers['4_set'] && (
-                                                    <div style={{ textAlign: 'center' }}>
-                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>เลขชุด 4 ตัว</div>
-                                                        <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-primary)', fontFamily: 'monospace', letterSpacing: '0.1em' }}>{round.winning_numbers['4_set']}</div>
-                                                    </div>
-                                                )}
-                                                {round.winning_numbers['3_top'] && (
-                                                    <div style={{ textAlign: 'center' }}>
-                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>3 ตัวบน</div>
-                                                        <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--color-text)', fontFamily: 'monospace' }}>{round.winning_numbers['3_top']}</div>
-                                                    </div>
-                                                )}
-                                                {round.winning_numbers['2_top'] && (
-                                                    <div style={{ textAlign: 'center' }}>
-                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>2 ตัวบน</div>
-                                                        <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--color-text)', fontFamily: 'monospace' }}>{round.winning_numbers['2_top']}</div>
-                                                    </div>
-                                                )}
-                                                {round.winning_numbers['2_bottom'] && (
-                                                    <div style={{ textAlign: 'center' }}>
-                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>2 ตัวล่าง</div>
-                                                        <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--color-text)', fontFamily: 'monospace' }}>{round.winning_numbers['2_bottom']}</div>
-                                                    </div>
-                                                )}
-                                            </>
-                                        )}
-                                        {round.lottery_type === 'yeekee' && round.winning_numbers.result && (
-                                            <div style={{ textAlign: 'center' }}>
-                                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>ผลยี่กี</div>
-                                                <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-primary)', fontFamily: 'monospace', letterSpacing: '0.1em' }}>{round.winning_numbers.result}</div>
-                                            </div>
-                                        )}
+                                                )
+                                            })
+                                        })()}
                                     </div>
                                 </div>
                             )}
@@ -2639,11 +2639,6 @@ export default function RoundAccordionItem({
                                 ) : (
                                     <>
                                         <div className="user-summary-list">
-                                            {/* DEBUG BANNER - ลบหลังแก้บั๊ก */}
-                                            <div style={{ background: '#bbdefb', padding: '4px 8px', borderRadius: '4px', fontSize: '0.65rem', color: '#333', marginBottom: '4px', wordBreak: 'break-all' }}>
-                                                DEBUG(dealer-results): round_id={round?.id?.slice(0,8)} | total_subs={summaryData.submissions?.length}
-                                                {userSummaries.map(u => ` | ${u.userName}:subs=${u.ticketCount},bet=${u.totalBet},comm=${Math.round(u.totalCommission)},win=${u.totalWin}`).join('')}
-                                            </div>
                                             <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-text-muted)' }}>รายละเอียดแต่ละคน</h4>
                                             
                                             {/* Tabs for incoming/outgoing */}
@@ -2851,16 +2846,6 @@ export default function RoundAccordionItem({
                                 <>
                                     {inlineTab === 'total' && (
                                         <div className="inline-tab-content">
-                                            {/* DEBUG BANNER - ลบหลังแก้บั๊ก */}
-                                            <div style={{ background: '#bbdefb', padding: '4px 8px', borderRadius: '4px', fontSize: '0.7rem', color: '#333', marginBottom: '4px' }}>
-                                                DEBUG: round_id={round?.id?.slice(0,8)} | subs={inlineSubmissions.length} | total={inlineSubmissions.reduce((s,x)=>s+(x.amount||0),0)}
-                                                {' | per_user: '}
-                                                {Object.entries(inlineSubmissions.reduce((acc, s) => {
-                                                    const name = s.profiles?.full_name || s.profiles?.email || s.user_id?.slice(0,6)
-                                                    acc[name] = (acc[name] || 0) + 1
-                                                    return acc
-                                                }, {})).map(([name, count]) => `${name}:${count}`).join(', ')}
-                                            </div>
                                             {/* Member filter and view mode - responsive layout */}
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
                                                 {/* Row 0: Member filter buttons */}
