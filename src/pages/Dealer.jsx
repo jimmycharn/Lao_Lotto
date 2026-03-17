@@ -3,7 +3,7 @@ import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useTheme, DASHBOARDS } from '../contexts/ThemeContext'
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAllRows } from '../lib/supabase'
 import { processTopup } from '../services/creditService'
 import { checkDealerCreditForBet, checkUpstreamDealerCredit, getDealerCreditSummary, updatePendingDeduction, deductAdditionalCreditForRound } from '../utils/creditCheck'
 import QRCode from 'react-qr-code'
@@ -1845,11 +1845,14 @@ export default function Dealer() {
             }
 
             // Get all submissions for this round
-            const { data: submissions } = await supabase
-                .from('submissions')
-                .select('*')
-                .eq('round_id', roundId)
-                .eq('is_deleted', false)
+            const { data: submissions } = await fetchAllRows(
+                (from, to) => supabase
+                    .from('submissions')
+                    .select('*')
+                    .eq('round_id', roundId)
+                    .eq('is_deleted', false)
+                    .range(from, to)
+            )
 
             // Calculate total amount
             const totalAmount = submissions?.reduce((sum, s) => sum + (s.amount || 0), 0) || 0
@@ -1889,8 +1892,13 @@ export default function Dealer() {
                     ;(settingsData || []).forEach(s => { allUserSettings[s.user_id] = s })
                 }
 
-                // Helper: calculate commission for a submission (matches dealer dashboard getCommission)
+                // Helper: calculate commission for a submission
+                // Use commission_amount from DB first for consistency with user dashboard
                 const calcCommission = (sub) => {
+                    if (sub.commission_amount !== undefined && sub.commission_amount !== null) {
+                        return sub.commission_amount
+                    }
+                    // Fallback to calculation if commission_amount not recorded (old submissions)
                     const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
                     const settings = allUserSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
                     if (sub.bet_type === '4_set' || sub.bet_type === '4_top') {

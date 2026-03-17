@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../../lib/supabase'
+import { supabase, fetchAllRows } from '../../lib/supabase'
 import { useToast } from '../../contexts/ToastContext'
 import { updatePendingDeduction } from '../../utils/creditCheck'
 import {
@@ -275,14 +275,29 @@ export default function RoundAccordionItem({
         console.log('fetchSummaryData called for round:', round.id, 'isAnnounced:', isAnnounced)
         setSummaryData(prev => ({ ...prev, loading: true }))
         try {
-            const { data: submissionsData, error: submissionsError } = await supabase
-                .from('submissions')
-                .select('*, profiles:user_id(id, full_name, email)')
-                .eq('round_id', round.id)
-                .eq('is_deleted', false)
-                .order('created_at', { ascending: false })
+            const { data: submissionsData, error: submissionsError } = await fetchAllRows(
+                (from, to) => supabase
+                    .from('submissions')
+                    .select('*, profiles:user_id(id, full_name, email)')
+                    .eq('round_id', round.id)
+                    .eq('is_deleted', false)
+                    .order('created_at', { ascending: false })
+                    .range(from, to)
+            )
             
             console.log('fetchSummaryData submissions:', submissionsData?.length, 'error:', submissionsError)
+            // Debug: log per-user breakdown
+            if (submissionsData && submissionsData.length > 0) {
+                const perUser = {}
+                submissionsData.forEach(s => {
+                    const uid = s.user_id
+                    if (!perUser[uid]) perUser[uid] = { count: 0, totalAmount: 0, totalCommDB: 0, name: s.profiles?.full_name || s.profiles?.email || uid }
+                    perUser[uid].count++
+                    perUser[uid].totalAmount += s.amount || 0
+                    perUser[uid].totalCommDB += s.commission_amount || 0
+                })
+                console.log('[DEALER-SUMMARY] per-user breakdown:', JSON.stringify(perUser, null, 2))
+            }
 
             const userIds = [...new Set((submissionsData || []).map(s => s.user_id))]
             const settingsMap = {}
@@ -565,12 +580,15 @@ export default function RoundAccordionItem({
         
         try {
             const [subsResult, typeLimitsResult, numLimitsResult, transfersResult] = await Promise.all([
-                supabase
-                    .from('submissions')
-                    .select(`*, profiles:user_id (full_name, email)`)
-                    .eq('round_id', round.id)
-                    .eq('is_deleted', false)
-                    .order('created_at', { ascending: false }),
+                fetchAllRows(
+                    (from, to) => supabase
+                        .from('submissions')
+                        .select(`*, profiles:user_id (full_name, email)`)
+                        .eq('round_id', round.id)
+                        .eq('is_deleted', false)
+                        .order('created_at', { ascending: false })
+                        .range(from, to)
+                ),
                 supabase
                     .from('type_limits')
                     .select('*')
@@ -588,7 +606,22 @@ export default function RoundAccordionItem({
             
             clearTimeout(timeoutId)
             
-            console.log('Fetched submissions:', subsResult.data, 'Error:', subsResult.error)
+            console.log('Fetched submissions:', subsResult.data?.length, 'Error:', subsResult.error)
+            // Debug: per-user breakdown for inline submissions
+            if (subsResult.data && subsResult.data.length > 0) {
+                const perUser = {}
+                subsResult.data.forEach(s => {
+                    const name = s.profiles?.full_name || s.profiles?.email || s.user_id
+                    if (!perUser[name]) perUser[name] = { count: 0, totalAmount: 0, ids: [] }
+                    perUser[name].count++
+                    perUser[name].totalAmount += s.amount || 0
+                    perUser[name].ids.push(s.id)
+                })
+                Object.entries(perUser).forEach(([name, info]) => {
+                    console.log(`[DEALER-INLINE] user="${name}" subs=${info.count} totalAmount=${info.totalAmount}`)
+                    console.log(`[DEALER-INLINE] IDs:`, info.ids.sort())
+                })
+            }
             setInlineSubmissions(subsResult.data || [])
 
             const defaultLimits = getDefaultLimitsForType(round.lottery_type)
@@ -2145,8 +2178,12 @@ export default function RoundAccordionItem({
     }
 
     const getCommission = (sub) => {
-        // Always calculate commission from settings to ensure consistency with user dashboard
-        // This fixes the issue where stored commission_amount may have been calculated with wrong rates
+        // Use commission_amount that was recorded when submission was made
+        // This ensures consistency between dealer and user dashboards
+        if (sub.commission_amount !== undefined && sub.commission_amount !== null) {
+            return sub.commission_amount
+        }
+        // Fallback to calculation if commission_amount not recorded (old submissions)
         const lotteryKey = getLotteryTypeKey(round.lottery_type)
         const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
         const settings = summaryData.userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
@@ -2206,6 +2243,11 @@ export default function RoundAccordionItem({
             return acc
         }, {})
     ).sort((a, b) => (b.totalWin + b.totalCommission - b.totalBet) - (a.totalWin + a.totalCommission - a.totalBet)) : []
+
+    // Debug: log userSummaries
+    if (userSummaries.length > 0) {
+        console.log('[DEALER-USERSUMMARY] userSummaries:', userSummaries.map(u => ({ name: u.userName, userId: u.userId, totalBet: u.totalBet, totalCommission: u.totalCommission, ticketCount: u.ticketCount })))
+    }
 
     // Incoming (รับเข้า) totals
     const grandTotalBet = userSummaries.reduce((sum, u) => sum + u.totalBet, 0)
@@ -2597,6 +2639,11 @@ export default function RoundAccordionItem({
                                 ) : (
                                     <>
                                         <div className="user-summary-list">
+                                            {/* DEBUG BANNER - ลบหลังแก้บั๊ก */}
+                                            <div style={{ background: '#bbdefb', padding: '4px 8px', borderRadius: '4px', fontSize: '0.65rem', color: '#333', marginBottom: '4px', wordBreak: 'break-all' }}>
+                                                DEBUG(dealer-results): round_id={round?.id?.slice(0,8)} | total_subs={summaryData.submissions?.length}
+                                                {userSummaries.map(u => ` | ${u.userName}:subs=${u.ticketCount},bet=${u.totalBet},comm=${Math.round(u.totalCommission)},win=${u.totalWin}`).join('')}
+                                            </div>
                                             <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-text-muted)' }}>รายละเอียดแต่ละคน</h4>
                                             
                                             {/* Tabs for incoming/outgoing */}
@@ -2804,6 +2851,16 @@ export default function RoundAccordionItem({
                                 <>
                                     {inlineTab === 'total' && (
                                         <div className="inline-tab-content">
+                                            {/* DEBUG BANNER - ลบหลังแก้บั๊ก */}
+                                            <div style={{ background: '#bbdefb', padding: '4px 8px', borderRadius: '4px', fontSize: '0.7rem', color: '#333', marginBottom: '4px' }}>
+                                                DEBUG: round_id={round?.id?.slice(0,8)} | subs={inlineSubmissions.length} | total={inlineSubmissions.reduce((s,x)=>s+(x.amount||0),0)}
+                                                {' | per_user: '}
+                                                {Object.entries(inlineSubmissions.reduce((acc, s) => {
+                                                    const name = s.profiles?.full_name || s.profiles?.email || s.user_id?.slice(0,6)
+                                                    acc[name] = (acc[name] || 0) + 1
+                                                    return acc
+                                                }, {})).map(([name, count]) => `${name}:${count}`).join(', ')}
+                                            </div>
                                             {/* Member filter and view mode - responsive layout */}
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
                                                 {/* Row 0: Member filter buttons */}

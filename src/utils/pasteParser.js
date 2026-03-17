@@ -90,6 +90,24 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
         const lineToProcess = stripped || trimmed
         console.log(`[pasteParser]   → stripped: "${stripped}" from "${trimmed}"`)
 
+        // After stripping noise, re-check if the result is a context line
+        // e.g. "12:48 ไอซ์(ร้านตัดผม) ล่าง" → stripped still has noise but ends with "ล่าง"
+        const strippedMode = parseContextLine(stripped)
+        if (strippedMode !== null) {
+            console.log(`[pasteParser]   → stripped to context line: ${strippedMode}`)
+            if (bareNumberBuffer.length > 0) flushBareBuffer()
+            contextMode = strippedMode
+            continue
+        }
+        // Also check if the original line ends with a trailing context keyword (after noise)
+        const trailingCtx = extractTrailingContext(trimmed)
+        if (trailingCtx !== null) {
+            console.log(`[pasteParser]   → trailing context detected: ${trailingCtx}`)
+            if (bareNumberBuffer.length > 0) flushBareBuffer()
+            contextMode = trailingCtx
+            continue
+        }
+
         // After stripping noise, the cleaned line might be a bare number
         if (stripped && isBareNumberLine(stripped)) {
             console.log(`[pasteParser]   → stripped to bare number, added to buffer`)
@@ -167,18 +185,34 @@ function extractAmountFromLine(line) {
     // --- Normalize ชุด variants: "20ชุด", "20 ชุด", "20-ชุด", "20+ชุด" → "20*ชุด" ---
     s = s.replace(/(\d+)\s*[*×xX\-+]?\s*ชุด/g, '$1*ชุด')
 
-    // --- Extract trailing context suffix (บนล่าง/ลบ/ล่างบน/บน/ล่าง etc.) ---
+    // --- Extract trailing context suffix (วิ่ง/ลอย/โต๊ด/บนล่าง/ลบ/ล่างบน/บน/ล่าง etc.) ---
     let mode = null
-    const bothSuffix = s.match(/\s+(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล\.?|ล[+\-]?บ\.?|บล\.?|ลบ\.?)\s*$/)
-    if (bothSuffix) {
-        mode = 'both'
-        s = s.slice(0, bothSuffix.index).trim()
-    } else {
-        const singleCtx = s.match(/\s+(บน|บ\.?|ล่าง|ล\.?)\s*$/)
-        if (singleCtx) {
-            const modeStr = singleCtx[1].replace('.', '')
-            mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
-            s = s.slice(0, singleCtx.index).trim()
+    // Float suffix: "วิ่งล่าง", "ลอยล่าง" → float_bottom
+    const floatBotSuffix = s.match(/\s+(วิ่งล่าง|ลอยล่าง)\s*$/)
+    if (floatBotSuffix) {
+        mode = 'float_bottom'
+        s = s.slice(0, floatBotSuffix.index).trim()
+    }
+    // Float suffix: "วิ่งบน", "ลอยบน", "วิ่ง", "ลอย", "โต๊ด" → float_top
+    if (!mode) {
+        const floatTopSuffix = s.match(/\s+(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด)\s*$/)
+        if (floatTopSuffix) {
+            mode = 'float_top'
+            s = s.slice(0, floatTopSuffix.index).trim()
+        }
+    }
+    if (!mode) {
+        const bothSuffix = s.match(/\s+(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล\.?|ล[+\-]?บ\.?|บล\.?|ลบ\.?)\s*$/)
+        if (bothSuffix) {
+            mode = 'both'
+            s = s.slice(0, bothSuffix.index).trim()
+        } else {
+            const singleCtx = s.match(/\s+(บน|บ\.?|ล่าง|ล\.?)\s*$/)
+            if (singleCtx) {
+                const modeStr = singleCtx[1].replace('.', '')
+                mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
+                s = s.slice(0, singleCtx.index).trim()
+            }
         }
     }
 
@@ -337,6 +371,18 @@ function stripPrefixNoise(line) {
 function parseContextLine(line) {
     const withPunct = line.trim()
 
+    // Check for "วิ่ง/ลอย/โต๊ด/มี" float context FIRST (before บน/ล่าง checks)
+    // These keywords indicate "ลอย" (float/run) bet type
+    const cleanedFloat = withPunct.replace(/[\s.+\-]/g, '')
+    // "วิ่งบน", "ลอยบน", "วิ่ง บน" → float_top
+    if (/^(วิ่งบน|ลอยบน|วิ่งบ|ลอยบ)$/.test(cleanedFloat)) return 'float_top'
+    // "วิ่งล่าง", "ลอยล่าง", "วิ่ง ล่าง" → float_bottom
+    if (/^(วิ่งล่าง|ลอยล่าง|วิ่งล|ลอยล)$/.test(cleanedFloat)) return 'float_bottom'
+    // "วิ่ง", "ลอย", "โต๊ด" standalone → float_top (default to บน)
+    if (/^(วิ่ง|ลอย|โต๊ด)$/.test(cleanedFloat)) return 'float_top'
+    // "2ตัวมี", "2 ตัว มี", "2ตัววิ่ง", "2ตัวลอย", "2ตัวโต๊ด" → float_top
+    if (/^2ตัว(มี|วิ่ง|ลอย|โต๊ด)$/.test(cleanedFloat)) return 'float_top'
+
     // Check for "บนล่าง" / "ล่างบน" variants first (must come before single checks)
     // Matches: "บนล่าง", "ล่างบน", "บน ล่าง", "ล่าง บน", "บน-ล่าง", "ล่าง-บน",
     //          "บล", "ลบ", "บล.", "ลบ.", "บ+ล", "ล+บ", "บ-ล", "ล-บ", "บ+ล.", "ล+บ."
@@ -360,6 +406,48 @@ function parseContextLine(line) {
 }
 
 /**
+ * Extract a trailing context keyword from a noisy line.
+ * Handles cases like "12:48 ไอซ์(ร้านตัดผม) ล่าง" where the line is mostly noise
+ * but ends with a context keyword that should set the mode.
+ * Returns 'top', 'bottom', 'both', or null.
+ */
+function extractTrailingContext(line) {
+    const s = line.trim()
+
+    // Helper: strip timestamp from the "before" portion so it doesn't count as having digits
+    function stripTimestamp(str) {
+        return str.replace(/^\d{1,2}[:.:]\d{2}([:.:]\d{2})?\s*/, '').trim()
+    }
+
+    // Helper: check if the "before" part is pure noise (no bet-related digits after removing timestamp)
+    function isPureNoise(before) {
+        if (!before) return false
+        const noTs = stripTimestamp(before)
+        // After removing timestamp, should have no digits (only Thai text, parens, spaces, etc.)
+        return !/\d/.test(noTs)
+    }
+
+    // Check if the line ends with a "both" context keyword
+    const bothMatch = s.match(/(?:^|\s)(บนล่าง|ล่างบน|บล\.?|ลบ\.?|บ[+\-]?ล\.?|ล[+\-]?บ\.?)\s*$/)
+    if (bothMatch) {
+        const before = s.slice(0, bothMatch.index).trim()
+        if (isPureNoise(before)) return 'both'
+    }
+
+    // Check if the line ends with a "single" context keyword
+    const singleMatch = s.match(/(?:^|\s)(บน|บ\.?|ล่าง|ล\.?)\s*$/)
+    if (singleMatch) {
+        const before = s.slice(0, singleMatch.index).trim()
+        if (isPureNoise(before)) {
+            const kw = singleMatch[1].replace('.', '')
+            return (kw === 'บน' || kw === 'บ') ? 'top' : 'bottom'
+        }
+    }
+
+    return null
+}
+
+/**
  * Get unique permutation count for a number string
  */
 function getPermutationCount(numStr) {
@@ -374,6 +462,36 @@ function getPermutationCount(numStr) {
  */
 function extractInlineContext(line) {
     let s = line.trim()
+
+    // --- FLOAT PREFIX: "วิ่ง83=100", "ลอย25=20", "โต๊ด78=500" followed by digit ---
+    const floatPrefixTop = s.match(/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด)\.?\s*(\d.*)$/)
+    if (floatPrefixTop) {
+        const kw = floatPrefixTop[1]
+        const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top'
+        return { cleaned: floatPrefixTop[2].trim(), mode }
+    }
+    const floatPrefixBot = s.match(/^(วิ่งล่าง|ลอยล่าง)\.?\s*(\d.*)$/)
+    if (floatPrefixBot) {
+        return { cleaned: floatPrefixBot[2].trim(), mode: 'float_bottom' }
+    }
+
+    // --- FLOAT SUFFIX: "83=100 วิ่ง", "83=100 ลอย", "2=150 วิ่งล่าง" ---
+    const floatSuffixBot = s.match(/^(.+?)\s+(วิ่งล่าง|ลอยล่าง)\s*$/)
+    if (floatSuffixBot) {
+        return { cleaned: floatSuffixBot[1].trim(), mode: 'float_bottom' }
+    }
+    const floatSuffix = s.match(/^(.+?)\s+(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด)\s*$/)
+    if (floatSuffix) {
+        return { cleaned: floatSuffix[1].trim(), mode: 'float_top' }
+    }
+
+    // --- FLOAT MIDDLE: "78 โต๊ด 500", "78 วิ่ง 500", "78 ลอย 500", "78 มี 500" ---
+    const floatMiddle = s.match(/^(\d+)\s+(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|มี)\s+(\d[\d*=\-+]*)$/)
+    if (floatMiddle) {
+        const kw = floatMiddle[2]
+        const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top'
+        return { cleaned: `${floatMiddle[1]}=${floatMiddle[3].trim()}`, mode }
+    }
 
     // --- PREFIX "บนล่าง/ลบ/บล" variants followed by digit or = ---
     const bothPrefix = s.match(/^(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(\d.*)$/)
@@ -459,6 +577,7 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
     }
     const effectiveContext = inlineCtx.mode || contextMode
     const parseContext = (effectiveContext === 'both') ? 'top' : effectiveContext
+    // float_top and float_bottom pass through to determineBetType as-is
     if (!normalized) return null
 
     // Normalize separators:
@@ -567,7 +686,8 @@ function parseAmountPart(str) {
  * Determine bet type and return formatted entries
  */
 function determineBetType(numbers, numLen, amount1, amount2, hasChud, permCount, contextMode, isLaoOrHanoi, lotteryType, rawLine) {
-    const isTop = contextMode === 'top'
+    const isFloat = contextMode === 'float_top' || contextMode === 'float_bottom'
+    const isTop = contextMode === 'top' || contextMode === 'float_top'
     const results = []
 
     // === 1 digit ===
@@ -590,6 +710,20 @@ function determineBetType(numbers, numLen, amount1, amount2, hasChud, permCount,
     // === 2 digits ===
     if (numLen === 2) {
         if (amount1 === null) return null
+
+        // Float mode (วิ่ง/ลอย/โต๊ด/มี) → 2_run (ลอย)
+        if (isFloat) {
+            results.push({
+                numbers,
+                amount: amount1,
+                amount2: null,
+                betType: '2_run',
+                typeLabel: 'ลอย',
+                rawLine,
+                formattedLine: `${numbers}=${amount1} ลอย`
+            })
+            return results
+        }
 
         if (amount2 !== null) {
             // 2 amounts → กลับ (reverse)

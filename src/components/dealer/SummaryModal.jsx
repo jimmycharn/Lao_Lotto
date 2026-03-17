@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../../lib/supabase'
+import { supabase, fetchAllRows } from '../../lib/supabase'
 import { FiDollarSign, FiX } from 'react-icons/fi'
 import { DEFAULT_COMMISSIONS, DEFAULT_PAYOUTS, getLotteryTypeKey } from '../../constants/lotteryTypes'
 
@@ -15,12 +15,15 @@ export default function SummaryModal({ round, onClose }) {
     async function fetchData() {
         setLoading(true)
         try {
-            const { data: submissionsData } = await supabase
-                .from('submissions')
-                .select(`*, profiles (id, full_name, email)`)
-                .eq('round_id', round.id)
-                .eq('is_deleted', false)
-                .order('created_at', { ascending: false })
+            const { data: submissionsData } = await fetchAllRows(
+                (from, to) => supabase
+                    .from('submissions')
+                    .select(`*, profiles (id, full_name, email)`)
+                    .eq('round_id', round.id)
+                    .eq('is_deleted', false)
+                    .order('created_at', { ascending: false })
+                    .range(from, to)
+            )
 
             if (submissionsData) setSubmissions(submissionsData)
 

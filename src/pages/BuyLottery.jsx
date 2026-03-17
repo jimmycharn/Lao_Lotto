@@ -84,6 +84,15 @@ export default function BuyLottery() {
     const [cart, setCart] = useState([])
     const [loading, setLoading] = useState(false)
     const [fetchingRound, setFetchingRound] = useState(true)
+    const [userSettings, setUserSettings] = useState(null)
+
+    const DEFAULT_COMMISSIONS = {
+        'run_top': 15, 'run_bottom': 15,
+        '2_top': 15, '2_bottom': 15, '2_front': 15, '2_center': 15, '2_run': 15,
+        '3_top': 15, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
+        '4_top': 25, '4_set': 25, '4_float': 15, '4_tod': 15,
+        '5_float': 15, '6_top': 15
+    }
 
     // Fetch active round from dealer
     useEffect(() => {
@@ -132,6 +141,16 @@ export default function BuyLottery() {
                 console.error('Error fetching round:', error)
             } else {
                 setActiveRound(data)
+                // Fetch user settings for commission calculation
+                if (data && user?.id && profile?.dealer_id) {
+                    const { data: settings } = await supabase
+                        .from('user_settings')
+                        .select('*')
+                        .eq('user_id', user.id)
+                        .eq('dealer_id', profile.dealer_id)
+                        .maybeSingle()
+                    setUserSettings(settings)
+                }
             }
         } catch (err) {
             console.error(err)
@@ -250,13 +269,21 @@ export default function BuyLottery() {
         setLoading(true)
 
         try {
-            const submissions = cart.map(item => ({
-                round_id: activeRound.id,
-                user_id: user.id,
-                bet_type: item.betTypeId,
-                numbers: item.numbers,
-                amount: item.amount
-            }))
+            const submissions = cart.map(item => {
+                const lotteryKey = activeRound.lottery_type === 'lao' || activeRound.lottery_type === 'hanoi' ? 'lao' : activeRound.lottery_type || 'thai'
+                const settings = userSettings?.lottery_settings?.[lotteryKey]?.[item.betTypeId]
+                const commissionRate = settings?.commission !== undefined ? settings.commission : (DEFAULT_COMMISSIONS[item.betTypeId] || 15)
+                const commissionAmount = settings?.isFixed ? commissionRate : Math.round(item.amount * commissionRate / 100)
+                return {
+                    round_id: activeRound.id,
+                    user_id: user.id,
+                    bet_type: item.betTypeId,
+                    numbers: item.numbers,
+                    amount: item.amount,
+                    commission_rate: commissionRate,
+                    commission_amount: commissionAmount
+                }
+            })
 
             const { error } = await supabase
                 .from('submissions')

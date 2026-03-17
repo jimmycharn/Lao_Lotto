@@ -2,7 +2,7 @@
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useTheme, DASHBOARDS } from '../contexts/ThemeContext'
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAllRows } from '../lib/supabase'
 import { checkDealerCreditForBet, updatePendingDeduction } from '../utils/creditCheck'
 import { fetchNumberLimits, fetchCurrentTotals, checkBatchSubmissions } from '../utils/numberLimits'
 import { Html5Qrcode } from 'html5-qrcode'
@@ -497,16 +497,22 @@ export default function UserDashboard() {
 
     async function fetchSubmissions() {
         try {
-            const { data, error } = await supabase
-                .from('submissions')
-                .select('*')
-                .eq('round_id', selectedRound.id)
-                .eq('user_id', user.id)
-                .eq('is_deleted', false)
-                .order('created_at', { ascending: false })
+            const { data, error } = await fetchAllRows(
+                (from, to) => supabase
+                    .from('submissions')
+                    .select('*')
+                    .eq('round_id', selectedRound.id)
+                    .eq('user_id', user.id)
+                    .eq('is_deleted', false)
+                    .order('created_at', { ascending: false })
+                    .range(from, to)
+            )
 
             if (!error) {
                 setSubmissions(data || [])
+                console.log(`[USER-ROUNDS] round=${selectedRound.id} user=${user.id} subs=${(data||[]).length} totalAmount=${(data||[]).reduce((s,x)=>s+(x.amount||0),0)}`)
+                console.log(`[USER-ROUNDS] IDs:`, (data||[]).map(s => s.id).sort())
+                console.log(`[USER-ROUNDS] bills:`, [...new Set((data||[]).map(s => s.bill_id))])
             }
         } catch (error) {
             console.error('Error:', error)
@@ -533,16 +539,21 @@ export default function UserDashboard() {
                 // Fetch submissions for each round to calculate summaries
                 const summaries = {}
                 for (const round of data) {
-                    const { data: subs } = await supabase
-                        .from('submissions')
-                        .select('*')
-                        .eq('round_id', round.id)
-                        .eq('user_id', user.id)
-                        .eq('is_deleted', false)
+                    const { data: subs } = await fetchAllRows(
+                        (from, to) => supabase
+                            .from('submissions')
+                            .select('*')
+                            .eq('round_id', round.id)
+                            .eq('user_id', user.id)
+                            .eq('is_deleted', false)
+                            .range(from, to)
+                    )
 
                     if (subs && subs.length > 0) {
                         const totalAmount = subs.reduce((sum, s) => sum + (s.amount || 0), 0)
                         const winCount = subs.filter(s => s.is_winner).length
+                        console.log(`[USER-RESULTS] round=${round.id} user=${user.id} subs=${subs.length} totalAmount=${totalAmount} totalCommission=${subs.reduce((sum, s) => sum + (s.commission_amount || 0), 0)}`)
+                        console.log(`[USER-RESULTS] submissions:`, subs.map(s => ({ id: s.id, amount: s.amount, commission_amount: s.commission_amount, bet_type: s.bet_type, numbers: s.numbers, is_deleted: s.is_deleted })))
 
                         // Calculate total prize and commission using same logic as getCalculatedPrize/getCalculatedCommission
                         const lotteryKey = (() => {
@@ -552,9 +563,33 @@ export default function UserDashboard() {
                             return 'thai'
                         })()
 
-                        // Use commission_amount that was recorded when submission was made
-                        // This ensures consistency between submission time and results display
-                        const totalCommission = subs.reduce((sum, s) => sum + (s.commission_amount || 0), 0)
+                        // Use commission_amount from DB, fallback to calculation for old submissions
+                        const calcCommissionFallback = (s) => {
+                            if (s.commission_amount !== undefined && s.commission_amount !== null) {
+                                return s.commission_amount
+                            }
+                            // Fallback: calculate from user settings
+                            let settingsKeyC = s.bet_type
+                            if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+                                const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
+                                settingsKeyC = LAO_MAP[s.bet_type] || s.bet_type
+                            }
+                            const settingsC = userSettings?.lottery_settings?.[lotteryKey]?.[settingsKeyC]
+                            if (s.bet_type === '4_set' || s.bet_type === '4_top') {
+                                if (settingsC?.isSet && settingsC?.commission !== undefined) {
+                                    const setPrice = settingsC.setPrice || round?.set_prices?.['4_top'] || 120
+                                    return Math.floor((s.amount || 0) / setPrice) * settingsC.commission
+                                }
+                                const defaultSetPrice = round?.set_prices?.['4_top'] || 120
+                                return Math.floor((s.amount || 0) / defaultSetPrice) * 25
+                            }
+                            if (settingsC?.commission !== undefined) {
+                                return settingsC.isFixed ? settingsC.commission : (s.amount || 0) * (settingsC.commission / 100)
+                            }
+                            const defRate = DEFAULT_COMMISSIONS[s.bet_type] || 15
+                            return (s.amount || 0) * (defRate / 100)
+                        }
+                        const totalCommission = subs.reduce((sum, s) => sum + calcCommissionFallback(s), 0)
 
                         const totalPrize = subs.reduce((sum, s) => {
                             if (!s.is_winner) return sum
@@ -609,13 +644,16 @@ export default function UserDashboard() {
     async function fetchResultSubmissions(roundId) {
         try {
             // Always fetch all submissions first for summary calculations
-            const { data: allData, error: allError } = await supabase
-                .from('submissions')
-                .select('*')
-                .eq('round_id', roundId)
-                .eq('user_id', user.id)
-                .eq('is_deleted', false)
-                .order('created_at', { ascending: false })
+            const { data: allData, error: allError } = await fetchAllRows(
+                (from, to) => supabase
+                    .from('submissions')
+                    .select('*')
+                    .eq('round_id', roundId)
+                    .eq('user_id', user.id)
+                    .eq('is_deleted', false)
+                    .order('created_at', { ascending: false })
+                    .range(from, to)
+            )
 
             if (!allError) {
                 setAllResultSubmissions(allData || [])
@@ -2506,11 +2544,35 @@ export default function UserDashboard() {
         return sub.amount * defaultRate
     }
 
-    // Calculate commission for a submission - use recorded commission_amount for consistency
+    // Calculate commission for a submission - use recorded commission_amount, fallback to settings
     const getCalculatedCommission = (sub, round) => {
-        // Always use commission_amount that was recorded when submission was made
-        // This ensures consistency between submission time and results display
-        return sub.commission_amount || 0
+        // Use commission_amount from DB first
+        if (sub.commission_amount !== undefined && sub.commission_amount !== null) {
+            return sub.commission_amount
+        }
+        // Fallback to calculation from user settings (for old submissions without commission_amount)
+        const lotteryKey = getLotteryTypeKey(round?.lottery_type)
+        let settingsKey = sub.bet_type
+        if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+            const LAO_BET_TYPE_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
+            settingsKey = LAO_BET_TYPE_MAP[sub.bet_type] || sub.bet_type
+        }
+        const settings = userSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
+        if (sub.bet_type === '4_set' || sub.bet_type === '4_top') {
+            if (settings?.isSet && settings?.commission !== undefined) {
+                const setPrice = settings.setPrice || round?.set_prices?.['4_top'] || 120
+                const numSets = Math.floor((sub.amount || 0) / setPrice)
+                return numSets * settings.commission
+            }
+            const defaultSetPrice = round?.set_prices?.['4_top'] || 120
+            const numSets = Math.floor((sub.amount || 0) / defaultSetPrice)
+            return numSets * 25
+        }
+        if (settings?.commission !== undefined) {
+            return settings.isFixed ? settings.commission : (sub.amount || 0) * (settings.commission / 100)
+        }
+        const defaultRate = DEFAULT_COMMISSIONS[sub.bet_type] || 15
+        return (sub.amount || 0) * (defaultRate / 100)
     }
 
     // Loading dealers
@@ -3019,6 +3081,10 @@ export default function UserDashboard() {
                                                                 </button>
                                                             )}
                                                         </div>
+                                                        {/* DEBUG BANNER - ลบหลังแก้บั๊ก */}
+                                                        <div style={{ background: '#ffe0b2', padding: '4px 8px', borderRadius: '4px', fontSize: '0.7rem', color: '#333', marginBottom: '4px' }}>
+                                                            DEBUG: round_id={selectedRound?.id?.slice(0,8)} | subs={submissions.length} | total={submissions.reduce((s,x)=>s+(x.amount||0),0)} | user={user?.id?.slice(0,8)}
+                                                        </div>
                                                         {submissions.length === 0 ? (
                                                             <div className="empty-state">
                                                                 <FiList className="empty-icon" />
@@ -3490,12 +3556,16 @@ export default function UserDashboard() {
                                                                     e.stopPropagation()
                                                                     await fetchResultsRounds()
                                                                     if (isExpanded) {
-                                                                        const { data } = await supabase
-                                                                            .from('submissions')
-                                                                            .select('*')
-                                                                            .eq('round_id', round.id)
-                                                                            .eq('is_deleted', false)
-                                                                            .order('created_at', { ascending: false })
+                                                                        const { data } = await fetchAllRows(
+                                                                            (from, to) => supabase
+                                                                                .from('submissions')
+                                                                                .select('*')
+                                                                                .eq('round_id', round.id)
+                                                                                .eq('user_id', user.id)
+                                                                                .eq('is_deleted', false)
+                                                                                .order('created_at', { ascending: false })
+                                                                                .range(from, to)
+                                                                        )
                                                                         if (data) {
                                                                             setAllResultSubmissions(data)
                                                                             if (resultViewMode === 'winners') {
@@ -3605,6 +3675,10 @@ export default function UserDashboard() {
                                                         </div>
                                                     )}
 
+                                                    {/* DEBUG BANNER - ลบหลังแก้บั๊ก */}
+                                                    <div style={{ background: '#ffe0b2', padding: '4px 8px', borderRadius: '4px', fontSize: '0.7rem', color: '#333', marginBottom: '4px' }}>
+                                                        DEBUG(user-results): round_id={round?.id?.slice(0,8)} | user={user?.id?.slice(0,8)} | subs={summary?.ticketCount || 0} | totalAmount={summary?.totalAmount} | totalComm={summary?.totalCommission} | prize={summary?.totalPrize}
+                                                    </div>
                                                     {/* Summary Cards - use same data as header for consistency */}
                                                     {hasSummary && (
                                                         <div className="submissions-summary results-summary">

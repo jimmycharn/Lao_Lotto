@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAllRows } from '../lib/supabase'
 
 /**
  * Create a new bill with multiple submissions
@@ -33,12 +33,15 @@ export const createBill = async (submissions) => {
  */
 export const fetchSubmissions = async (roundId, userId) => {
     try {
-        const { data, error } = await supabase
-            .from('submissions')
-            .select('*')
-            .eq('round_id', roundId)
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false })
+        const { data, error } = await fetchAllRows(
+            (from, to) => supabase
+                .from('submissions')
+                .select('*')
+                .eq('round_id', roundId)
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false })
+                .range(from, to)
+        )
 
         if (error) throw error
 

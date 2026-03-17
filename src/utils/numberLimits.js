@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAllRows } from '../lib/supabase'
 
 /**
  * Fetch all active number limits for a round
@@ -27,11 +27,14 @@ export async function fetchNumberLimits(roundId) {
  * Returns a Map: key = `${bet_type}|${numbers}` => total amount
  */
 export async function fetchCurrentTotals(roundId) {
-    const { data, error } = await supabase
-        .from('submissions')
-        .select('bet_type, numbers, amount')
-        .eq('round_id', roundId)
-        .eq('is_deleted', false)
+    const { data, error } = await fetchAllRows(
+        (from, to) => supabase
+            .from('submissions')
+            .select('bet_type, numbers, amount')
+            .eq('round_id', roundId)
+            .eq('is_deleted', false)
+            .range(from, to)
+    )
 
     if (error) {
         console.error('Error fetching current totals:', error)

@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAllRows } from '../lib/supabase'
 import { getLotteryTypeKey, DEFAULT_COMMISSIONS, DEFAULT_PAYOUTS } from '../constants/lotteryTypes'
 
 /**
@@ -357,11 +357,14 @@ export async function updatePendingDeduction(dealerId) {
 
         for (const round of rounds) {
             // Get all submissions for this round INCLUDING submitted_by_type
-            const { data: allSubs } = await supabase
-                .from('submissions')
-                .select('id, amount, user_id, source, submitted_by_type')
-                .eq('round_id', round.id)
-                .eq('is_deleted', false)
+            const { data: allSubs } = await fetchAllRows(
+                (from, to) => supabase
+                    .from('submissions')
+                    .select('id, amount, user_id, source, submitted_by_type')
+                    .eq('round_id', round.id)
+                    .eq('is_deleted', false)
+                    .range(from, to)
+            )
 
             // Get bet_transfers FROM this round (outgoing transfers)
             const { data: outgoingTransfers } = await supabase
@@ -668,11 +671,14 @@ export async function calculateRoundCreditFee(dealerId, roundId) {
         const downstreamDealerIds = new Set(activeDownstream.map(d => d.dealer_id))
 
         // Get all submissions for this round INCLUDING submitted_by_type
-        const { data: allSubs } = await supabase
-            .from('submissions')
-            .select('id, amount, user_id, source, submitted_by_type')
-            .eq('round_id', roundId)
-            .eq('is_deleted', false)
+        const { data: allSubs } = await fetchAllRows(
+            (from, to) => supabase
+                .from('submissions')
+                .select('id, amount, user_id, source, submitted_by_type')
+                .eq('round_id', roundId)
+                .eq('is_deleted', false)
+                .range(from, to)
+        )
 
         // Get bet_transfers FROM this round (outgoing transfers)
         const { data: outgoingTransfers } = await supabase
@@ -914,11 +920,14 @@ export async function calculateRoundProfit(dealerId, roundId) {
         }
 
         // Get all submissions for this round (incoming bets)
-        const { data: allSubs } = await supabase
-            .from('submissions')
-            .select('id, amount, user_id, source, commission_amount, prize_amount, is_winner, bet_type')
-            .eq('round_id', roundId)
-            .eq('is_deleted', false)
+        const { data: allSubs } = await fetchAllRows(
+            (from, to) => supabase
+                .from('submissions')
+                .select('id, amount, user_id, source, commission_amount, prize_amount, is_winner, bet_type')
+                .eq('round_id', roundId)
+                .eq('is_deleted', false)
+                .range(from, to)
+        )
 
         // Get user settings for commission/payout calculation
         const allUserIds = [...new Set((allSubs || []).map(s => s.user_id))]

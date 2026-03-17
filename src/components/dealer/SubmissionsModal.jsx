@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
-import { supabase } from '../../lib/supabase'
+import { supabase, fetchAllRows } from '../../lib/supabase'
 import { checkUpstreamDealerCredit, updatePendingDeduction } from '../../utils/creditCheck'
 import { jsPDF } from 'jspdf'
 import { addThaiFont } from '../../utils/thaiFontLoader'
@@ -138,12 +138,15 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
         setLoading(true)
         try {
             // Fetch submissions
-            const { data: subsData } = await supabase
-                .from('submissions')
-                .select(`*, profiles (full_name, email)`)
-                .eq('round_id', round.id)
-                .eq('is_deleted', false)
-                .order('created_at', { ascending: false })
+            const { data: subsData } = await fetchAllRows(
+                (from, to) => supabase
+                    .from('submissions')
+                    .select(`*, profiles (full_name, email)`)
+                    .eq('round_id', round.id)
+                    .eq('is_deleted', false)
+                    .order('created_at', { ascending: false })
+                    .range(from, to)
+            )
 
             setSubmissions(subsData || [])
 
