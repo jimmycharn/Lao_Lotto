@@ -37,6 +37,7 @@ import {
 } from '../../constants/lotteryTypes'
 import { findMatchingLimit, getEffectivePayoutPercent } from '../../utils/numberLimits'
 import DealerWriteSubmissionWrapper from './DealerWriteSubmissionWrapper'
+import AIAnalysisModal from './AIAnalysisModal'
 
 export default function RoundAccordionItem({ 
     round, 
@@ -113,6 +114,7 @@ export default function RoundAccordionItem({
     // Inline excess transfer states
     const [selectedExcessItems, setSelectedExcessItems] = useState({})
     const [showTransferModal, setShowTransferModal] = useState(false)
+    const [showAIAnalysis, setShowAIAnalysis] = useState(false)
     const [transferForm, setTransferForm] = useState({ target_dealer_name: '', target_dealer_contact: '', notes: '' })
     const [savingTransfer, setSavingTransfer] = useState(false)
     
@@ -2855,6 +2857,26 @@ export default function RoundAccordionItem({
                                 >
                                     <FiRotateCcw className={inlineLoading ? 'spinning' : ''} />
                                 </button>
+                                <button
+                                    className="inline-tab"
+                                    onClick={() => setShowAIAnalysis(true)}
+                                    style={{ 
+                                        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', 
+                                        color: '#fff', 
+                                        border: 'none', 
+                                        borderRadius: '8px',
+                                        fontSize: '0.8rem',
+                                        padding: '0.4rem 0.75rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.3rem',
+                                        cursor: 'pointer',
+                                        whiteSpace: 'nowrap'
+                                    }}
+                                    title="AI วิเคราะห์ตีออก"
+                                >
+                                    🤖 AI วิเคราะห์
+                                </button>
                             </div>
 
                             {inlineLoading ? (
@@ -4169,13 +4191,23 @@ export default function RoundAccordionItem({
                                                                 />
                                                                 <span>เลือกทั้งหมด ({filteredExcessItems.length})</span>
                                                             </label>
-                                                            <button
-                                                                className="btn btn-warning"
-                                                                onClick={(e) => { e.stopPropagation(); if (filteredSelectedCount === 0) { toast.warning('กรุณาเลือกรายการที่ต้องการตีออก'); return; } setShowTransferModal(true); }}
-                                                                disabled={filteredSelectedCount === 0}
-                                                            >
-                                                                <FiSend /> ตีออก ({filteredSelectedCount})
-                                                            </button>
+                                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                                <button
+                                                                    className="btn btn-sm"
+                                                                    onClick={(e) => { e.stopPropagation(); setShowAIAnalysis(true); }}
+                                                                    style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', border: 'none', fontSize: '0.8rem' }}
+                                                                    title="AI วิเคราะห์ตีออก"
+                                                                >
+                                                                    🤖 AI วิเคราะห์
+                                                                </button>
+                                                                <button
+                                                                    className="btn btn-warning"
+                                                                    onClick={(e) => { e.stopPropagation(); if (filteredSelectedCount === 0) { toast.warning('กรุณาเลือกรายการที่ต้องการตีออก'); return; } setShowTransferModal(true); }}
+                                                                    disabled={filteredSelectedCount === 0}
+                                                                >
+                                                                    <FiSend /> ตีออก ({filteredSelectedCount})
+                                                                </button>
+                                                            </div>
                                                         </div>
 
                                                         {/* Table Header */}
@@ -4579,6 +4611,37 @@ export default function RoundAccordionItem({
                     editingData={editingBillData}
                 />
             )}
+
+            {/* AI Analysis Modal */}
+            <AIAnalysisModal
+                show={showAIAnalysis}
+                onClose={() => setShowAIAnalysis(false)}
+                round={round}
+                user={user}
+                onApplyRecommendations={(recommendations) => {
+                    // Auto-select excess items that match AI recommendations
+                    const newSelected = {}
+                    const excessItems = calculateExcessItems()
+                    recommendations.forEach(rec => {
+                        // Find matching excess item
+                        const matchKey = `${rec.bet_type}|${rec.numbers}`
+                        const matchingItem = excessItems.find(item => `${item.bet_type}|${item.numbers}` === matchKey)
+                        if (matchingItem) {
+                            newSelected[matchKey] = true
+                        }
+                    })
+                    setSelectedExcessItems(newSelected)
+                    setInlineTab('excess')
+                    // Open transfer modal if items were selected
+                    const selectedCount = Object.keys(newSelected).length
+                    if (selectedCount > 0) {
+                        toast.success(`AI เลือก ${selectedCount} รายการสำหรับตีออก`)
+                        setShowTransferModal(true)
+                    } else {
+                        toast.info('ไม่พบรายการที่ตรงกับยอดเกินปัจจุบัน')
+                    }
+                }}
+            />
         </div>
     )
 }
