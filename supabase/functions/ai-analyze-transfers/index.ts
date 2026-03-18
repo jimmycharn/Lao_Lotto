@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') || ''
+const AI_API_KEY = Deno.env.get('OPENROUTER_API_KEY') || Deno.env.get('OPENAI_API_KEY') || ''
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || ''
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
 
@@ -69,10 +69,10 @@ serve(async (req) => {
   }
 
   try {
-    if (!OPENAI_API_KEY) {
+    if (!AI_API_KEY) {
       return new Response(
-        JSON.stringify({ success: false, message: 'OpenAI API Key not configured. Set OPENAI_API_KEY in Supabase Secrets.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        JSON.stringify({ success: false, message: 'API Key not configured. Set OPENROUTER_API_KEY in Supabase Secrets.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       )
     }
 
@@ -81,7 +81,7 @@ serve(async (req) => {
     if (!round_id || !budget || !dealer_id) {
       return new Response(
         JSON.stringify({ success: false, message: 'Missing required fields: round_id, budget, dealer_id' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       )
     }
 
@@ -243,15 +243,17 @@ serve(async (req) => {
 รายการเลขเรียงตามความเสี่ยง (สูงสุดก่อน):
 ${JSON.stringify(topRiskItems, null, 2)}`
 
-    // Call OpenAI API
-    const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Call OpenRouter API (compatible with OpenAI format)
+    const openaiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
+        'Authorization': `Bearer ${AI_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': SUPABASE_URL,
+        'X-Title': 'LaoLotto AI Analysis'
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'google/gemini-2.0-flash-001',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
@@ -266,8 +268,8 @@ ${JSON.stringify(topRiskItems, null, 2)}`
       const errText = await openaiResponse.text()
       console.error('OpenAI API error:', errText)
       return new Response(
-        JSON.stringify({ success: false, message: `OpenAI API error: ${openaiResponse.status}` }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        JSON.stringify({ success: false, message: `AI API error: ${openaiResponse.status} - ${errText.substring(0, 200)}` }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       )
     }
 
@@ -281,7 +283,7 @@ ${JSON.stringify(topRiskItems, null, 2)}`
       console.error('Failed to parse AI response:', aiContent)
       return new Response(
         JSON.stringify({ success: false, message: 'AI returned invalid JSON', raw: aiContent }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       )
     }
 
@@ -326,9 +328,10 @@ ${JSON.stringify(topRiskItems, null, 2)}`
 
   } catch (error) {
     console.error('Error:', error)
+    console.error('Full error:', JSON.stringify(error, Object.getOwnPropertyNames(error)))
     return new Response(
-      JSON.stringify({ success: false, message: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      JSON.stringify({ success: false, message: error.message || 'Unknown error occurred' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     )
   }
 })

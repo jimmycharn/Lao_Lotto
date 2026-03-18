@@ -46,17 +46,27 @@ export default function AIAnalysisModal({
         setResult(null)
 
         try {
-            const { data, error: fnError } = await supabase.functions.invoke('ai-analyze-transfers', {
-                body: {
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+            const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+            const session = (await supabase.auth.getSession())?.data?.session
+
+            const response = await fetch(`${supabaseUrl}/functions/v1/ai-analyze-transfers`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token || supabaseAnonKey}`,
+                    'apikey': supabaseAnonKey
+                },
+                body: JSON.stringify({
                     round_id: round.id,
                     budget: budgetNum,
                     dealer_id: user.id,
                     lottery_type: round.lottery_type,
                     currency_symbol: currencySymbol
-                }
+                })
             })
 
-            if (fnError) throw fnError
+            const data = await response.json()
             if (!data?.success) throw new Error(data?.message || 'AI analysis failed')
 
             setResult(data)
