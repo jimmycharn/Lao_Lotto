@@ -397,13 +397,18 @@ export default function RoundAccordionItem({
 
             const lotteryKey = getLotteryTypeKey(round.lottery_type)
             
-            // Helper to get settings key for bet type
+            // Helper to get settings key for bet type (with position mapping)
             const getBetSettingsKey = (betType, lKey) => {
+                const POSITION_MAP = {
+                    'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
+                    'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
+                }
+                const mapped = POSITION_MAP[betType] || betType
                 if (lKey === 'lao' || lKey === 'hanoi') {
                     const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
-                    return LAO_MAP[betType] || betType
+                    return LAO_MAP[mapped] || mapped
                 }
-                return betType
+                return mapped
             }
 
             // For each group, fetch details
@@ -666,42 +671,54 @@ export default function RoundAccordionItem({
 
         const lotteryKey = getLotteryTypeKey(round.lottery_type)
         
-        // Helper to get settings key for bet type
+        // Helper to get settings key for bet type (with position mapping)
         const getBetSettingsKey = (betType, lKey) => {
+            const POSITION_MAP = {
+                'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
+                'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
+            }
+            const mapped = POSITION_MAP[betType] || betType
             if (lKey === 'lao' || lKey === 'hanoi') {
                 const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
-                return LAO_MAP[betType] || betType
+                return LAO_MAP[mapped] || mapped
             }
-            return betType
+            return mapped
         }
 
-        // Group transfers by upstream_dealer_id
+        // Group transfers by upstream_dealer_id (linked) or target_dealer_name (external)
         const dealerTransfers = {}
         transfersData.forEach(t => {
-            const dealerId = t.upstream_dealer_id
-            if (!dealerId) return
-            if (!dealerTransfers[dealerId]) {
-                dealerTransfers[dealerId] = []
+            const groupKey = t.upstream_dealer_id || `external_${t.target_dealer_name || 'ไม่ระบุ'}`
+            if (!dealerTransfers[groupKey]) {
+                dealerTransfers[groupKey] = {
+                    isLinked: !!(t.upstream_dealer_id && t.is_linked),
+                    upstreamDealerId: t.upstream_dealer_id,
+                    transfers: []
+                }
             }
-            dealerTransfers[dealerId].push(t)
+            dealerTransfers[groupKey].transfers.push(t)
         })
 
         const commissions = {}
 
-        // For each upstream dealer, fetch their settings and calculate commission
-        for (const dealerId of Object.keys(dealerTransfers)) {
-            // Fetch user_settings: settings that upstream dealer set for us
-            const { data: settings } = await supabase
-                .from('user_settings')
-                .select('*')
-                .eq('user_id', user.id)
-                .eq('dealer_id', dealerId)
-                .maybeSingle()
+        // For each group, fetch settings and calculate commission
+        for (const groupKey of Object.keys(dealerTransfers)) {
+            const group = dealerTransfers[groupKey]
+            let settings = null
+
+            // For linked transfers, fetch upstream dealer's settings for us
+            if (group.isLinked && group.upstreamDealerId) {
+                const { data: settingsData } = await supabase
+                    .from('user_settings')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .eq('dealer_id', group.upstreamDealerId)
+                    .maybeSingle()
+                settings = settingsData
+            }
 
             let totalCommission = 0
-            const transfersList = dealerTransfers[dealerId]
-
-            transfersList.forEach(t => {
+            group.transfers.forEach(t => {
                 const settingsKey = getBetSettingsKey(t.bet_type, lotteryKey)
                 const betSettings = settings?.lottery_settings?.[lotteryKey]?.[settingsKey]
                 const commissionRate = betSettings?.commission !== undefined 
@@ -711,10 +728,10 @@ export default function RoundAccordionItem({
                 totalCommission += commissionAmount
             })
 
-            commissions[dealerId] = {
+            commissions[groupKey] = {
                 totalCommission,
-                transferCount: transfersList.length,
-                totalAmount: transfersList.reduce((sum, t) => sum + (t.amount || 0), 0)
+                transferCount: group.transfers.length,
+                totalAmount: group.transfers.reduce((sum, t) => sum + (t.amount || 0), 0)
             }
         }
 
@@ -4373,7 +4390,7 @@ export default function RoundAccordionItem({
                                                                 <div className="bulk-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-surface)', borderRadius: '8px', flexWrap: 'wrap', gap: '0.5rem' }}>
                                                                     <label className="checkbox-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                                                                         <input type="checkbox" checked={revertableBatches.length > 0 && revertableBatches.every(b => selectedTransferBatches[b.id])} onChange={() => toggleSelectAllBatches(revertableBatchIds)} style={{ width: '18px', height: '18px', accentColor: 'var(--color-danger)' }} />
-                                                                        <span>เลือกทั้งหมด (นอกระบบ: {revertableBatches.length})</span>
+                                                                        <span>เลือกทั้งหมด ({revertableBatches.length})</span>
                                                                     </label>
                                                                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                                                                         <button className="btn btn-outline" onClick={(e) => { e.stopPropagation(); handleCopySelectedBatches(batchList); }} disabled={getSelectedBatchCount(batchList.map(b => b.id)) === 0} title="คัดลอกรายการที่เลือก">
