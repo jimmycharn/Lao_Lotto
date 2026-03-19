@@ -48,13 +48,12 @@ export default function AIAnalysisModal({
         try {
             const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
             const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-            const session = (await supabase.auth.getSession())?.data?.session
 
             const response = await fetch(`${supabaseUrl}/functions/v1/ai-analyze-transfers`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session?.access_token || supabaseAnonKey}`,
+                    'Authorization': `Bearer ${supabaseAnonKey}`,
                     'apikey': supabaseAnonKey
                 },
                 body: JSON.stringify({
@@ -222,16 +221,18 @@ export default function AIAnalysisModal({
                                         <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{currencySymbol}{analysis.budget?.toLocaleString()}</span>
                                     </div>
                                     <div style={{ fontSize: '0.8rem' }}>
-                                        <span style={{ color: 'var(--color-text-muted)' }}>ความเสี่ยงรวม: </span>
-                                        <span style={{ fontWeight: 600, color: 'var(--color-danger)' }}>{currencySymbol}{analysis.total_exposure?.toLocaleString()}</span>
+                                        <span style={{ color: 'var(--color-text-muted)' }}>จ่ายสูงสุด (worst case): </span>
+                                        <span style={{ fontWeight: 600, color: 'var(--color-danger)' }}>{currencySymbol}{(analysis.worst_case_payout || meta?.worst_case_payout)?.toLocaleString()}</span>
                                     </div>
                                     <div style={{ fontSize: '0.8rem' }}>
-                                        <span style={{ color: 'var(--color-text-muted)' }}>เสี่ยงสูงสุด (เลขเดียว): </span>
-                                        <span style={{ fontWeight: 600 }}>{currencySymbol}{analysis.max_single_loss?.toLocaleString()}</span>
+                                        <span style={{ color: 'var(--color-text-muted)' }}>เลขเสี่ยงสูงสุด: </span>
+                                        <span style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: '0.95rem' }}>{analysis.worst_case_number || meta?.worst_case_number || '-'}</span>
                                     </div>
                                     <div style={{ fontSize: '0.8rem' }}>
-                                        <span style={{ color: 'var(--color-text-muted)' }}>ค่าคอมรวม: </span>
-                                        <span style={{ fontWeight: 600, color: 'var(--color-success)' }}>+{currencySymbol}{meta?.total_commission?.toLocaleString()}</span>
+                                        <span style={{ color: 'var(--color-text-muted)' }}>scenarios เกินงบ: </span>
+                                        <span style={{ fontWeight: 600, color: meta?.scenarios_over_budget > 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
+                                            {meta?.scenarios_over_budget || 0} / {meta?.scenario_count || 0}
+                                        </span>
                                     </div>
                                 </div>
 
