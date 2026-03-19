@@ -4576,6 +4576,9 @@ export default function RoundAccordionItem({
                 onClose={() => setShowAIAnalysis(false)}
                 round={round}
                 user={user}
+                submissions={inlineSubmissions}
+                transfers={inlineTransfers}
+                userSettingsMap={summaryData.userSettings}
                 onApplyRecommendations={(recommendations) => {
                     // Auto-select excess items that match AI recommendations
                     const newSelected = {}
