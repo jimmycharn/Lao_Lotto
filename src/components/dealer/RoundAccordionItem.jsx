@@ -2854,7 +2854,7 @@ export default function RoundAccordionItem({
                                             {/* Member filter and view mode - responsive layout */}
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
                                                 {/* Row 0: Member filter buttons */}
-                                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                <div className="member-filter-row">
                                                     <button
                                                         className={`filter-btn ${memberFilterMode === 'all' ? 'active' : ''}`}
                                                         onClick={() => { setMemberFilterMode('all'); setInlineUserFilter('all'); }}
