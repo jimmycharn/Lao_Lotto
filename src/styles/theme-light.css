@@ -152,7 +152,15 @@
 :root.theme-light .modal,
 [data-theme="light"] .modal {
     background: #ffffff;
-    border: 1px solid rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+:root.theme-light .modal-content,
+[data-theme="light"] .modal-content {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
 }
 
 :root.theme-light .modal-header,

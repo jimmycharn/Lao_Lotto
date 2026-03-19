@@ -274,7 +274,7 @@ export default function RoundAccordionItem({
     }
 
     async function fetchSummaryData() {
-        console.log('fetchSummaryData called for round:', round.id, 'isAnnounced:', isAnnounced)
+        // fetchSummaryData called
         setSummaryData(prev => ({ ...prev, loading: true }))
         try {
             const { data: submissionsData, error: submissionsError } = await fetchAllRows(
@@ -287,20 +287,6 @@ export default function RoundAccordionItem({
                     .range(from, to)
             )
             
-            console.log('fetchSummaryData submissions:', submissionsData?.length, 'error:', submissionsError)
-            // Debug: log per-user breakdown
-            if (submissionsData && submissionsData.length > 0) {
-                const perUser = {}
-                submissionsData.forEach(s => {
-                    const uid = s.user_id
-                    if (!perUser[uid]) perUser[uid] = { count: 0, totalAmount: 0, totalCommDB: 0, name: s.profiles?.full_name || s.profiles?.email || uid }
-                    perUser[uid].count++
-                    perUser[uid].totalAmount += s.amount || 0
-                    perUser[uid].totalCommDB += s.commission_amount || 0
-                })
-                console.log('[DEALER-SUMMARY] per-user breakdown:', JSON.stringify(perUser, null, 2))
-            }
-
             const userIds = [...new Set((submissionsData || []).map(s => s.user_id))]
             const settingsMap = {}
 
@@ -353,7 +339,7 @@ export default function RoundAccordionItem({
 
     // Fetch summaries from upstream dealers we transferred bets to (both linked and non-linked/external)
     async function fetchUpstreamSummaries() {
-        console.log('fetchUpstreamSummaries called for round:', round.id)
+        // fetchUpstreamSummaries called
         setUpstreamSummaries(prev => ({ ...prev, loading: true }))
         try {
             // Get ALL transfers from this round (linked + non-linked/external)
@@ -362,7 +348,7 @@ export default function RoundAccordionItem({
                 .select('*')
                 .eq('round_id', round.id)
             
-            console.log('fetchUpstreamSummaries transfers:', transfers?.length, 'error:', transferError)
+            // transfers fetched
             if (transferError) throw transferError
             if (!transfers || transfers.length === 0) {
                 setUpstreamSummaries({ loading: false, dealers: [] })
@@ -623,22 +609,6 @@ export default function RoundAccordionItem({
             
             clearTimeout(timeoutId)
             
-            console.log('Fetched submissions:', subsResult.data?.length, 'Error:', subsResult.error)
-            // Debug: per-user breakdown for inline submissions
-            if (subsResult.data && subsResult.data.length > 0) {
-                const perUser = {}
-                subsResult.data.forEach(s => {
-                    const name = s.profiles?.full_name || s.profiles?.email || s.user_id
-                    if (!perUser[name]) perUser[name] = { count: 0, totalAmount: 0, ids: [] }
-                    perUser[name].count++
-                    perUser[name].totalAmount += s.amount || 0
-                    perUser[name].ids.push(s.id)
-                })
-                Object.entries(perUser).forEach(([name, info]) => {
-                    console.log(`[DEALER-INLINE] user="${name}" subs=${info.count} totalAmount=${info.totalAmount}`)
-                    console.log(`[DEALER-INLINE] IDs:`, info.ids.sort())
-                })
-            }
             setInlineSubmissions(subsResult.data || [])
 
             const defaultLimits = getDefaultLimitsForType(round.lottery_type)
@@ -827,10 +797,10 @@ export default function RoundAccordionItem({
                 totalAmount: itemsList.reduce((sum, s) => sum + (s.amount || 0), 0),
                 dealerName: dealerProfile.full_name || dealerEmail || 'ไม่ระบุ'
             }
-            console.log('Incoming commission for', billNote, ':', { dealerEmail, fullName: dealerProfile.full_name, dealerName: commissions[billNote].dealerName })
+            // incoming commission calculated
         }
 
-        console.log('Final inlineIncomingCommissions:', commissions)
+        // inlineIncomingCommissions ready
         setInlineIncomingCommissions(commissions)
     }
 
@@ -1338,9 +1308,8 @@ export default function RoundAccordionItem({
             if (canSendToUpstream && selectedUpstreamDealer?.upstream_dealer_id) {
                 try {
                     await updatePendingDeduction(selectedUpstreamDealer.upstream_dealer_id)
-                    console.log('Upstream dealer pending deduction updated')
                 } catch (err) {
-                    console.log('Error updating upstream pending deduction:', err)
+                    // Error updating upstream pending deduction
                 }
             }
             
@@ -1460,9 +1429,9 @@ export default function RoundAccordionItem({
                         .eq('status', 'active')
                         .select()
                     
-                    console.log(`Updated bet_transfer for ${sub.numbers} via target_round_id:`, updated2, err2)
+                    // updated via target_round_id
                 } else {
-                    console.log(`Updated bet_transfer for ${sub.numbers} via target_submission_id:`, updated)
+                    // updated via target_submission_id
                 }
             }
 
@@ -1953,7 +1922,7 @@ export default function RoundAccordionItem({
                     }
                 }
             } catch (err) {
-                console.log('Could not fetch target dealer settings, using default')
+                // Could not fetch target dealer settings, using default
             }
         }
 
@@ -2280,9 +2249,7 @@ export default function RoundAccordionItem({
     ).sort((a, b) => (b.totalWin + b.totalCommission - b.totalBet) - (a.totalWin + a.totalCommission - a.totalBet)) : []
 
     // Debug: log userSummaries
-    if (userSummaries.length > 0) {
-        console.log('[DEALER-USERSUMMARY] userSummaries:', userSummaries.map(u => ({ name: u.userName, userId: u.userId, totalBet: u.totalBet, totalCommission: u.totalCommission, ticketCount: u.ticketCount })))
-    }
+    // userSummaries ready
 
     // Incoming (รับเข้า) totals
     const grandTotalBet = userSummaries.reduce((sum, u) => sum + u.totalBet, 0)
@@ -2813,8 +2780,7 @@ export default function RoundAccordionItem({
 
                             <div className="inline-tabs">
                                 <button className={`inline-tab ${inlineTab === 'total' ? 'active' : ''}`} onClick={() => setInlineTab('total')}>
-                                    ยอดรวม <span className="tab-count">{(() => {
-                                        // Group by normalizedNumbers+bet_type to count unique numbers
+                                    ยอดรวม <span className="tab-count">({(() => {
                                         const grouped = {}
                                         inlineSubmissions.forEach(s => {
                                             const normalized = normalizeNumber(s.numbers, s.bet_type)
@@ -2822,11 +2788,10 @@ export default function RoundAccordionItem({
                                             grouped[key] = true
                                         })
                                         return Object.keys(grouped).length
-                                    })()}</span>
+                                    })()})</span>
                                 </button>
                                 <button className={`inline-tab ${inlineTab === 'remaining' ? 'active' : ''}`} onClick={() => setInlineTab('remaining')}>
-                                    ยอดที่เหลือ <span className="tab-count">{(() => {
-                                        // Calculate remaining items (submissions - transfers) grouped by normalizedNumbers+bet_type
+                                    ยอดเหลือ <span className="tab-count">({(() => {
                                         const submissionsByKey = {}
                                         inlineSubmissions.forEach(s => {
                                             const normalized = normalizeNumber(s.numbers, s.bet_type)
@@ -2839,23 +2804,24 @@ export default function RoundAccordionItem({
                                             const key = `${normalized}|${t.bet_type}`
                                             if (submissionsByKey[key]) submissionsByKey[key] -= t.amount || 0
                                         })
-                                        // Count items with remaining amount > 0
                                         return Object.values(submissionsByKey).filter(amt => amt > 0).length
-                                    })()}</span>
+                                    })()})</span>
                                 </button>
                                 <button className={`inline-tab ${inlineTab === 'excess' ? 'active' : ''}`} onClick={() => setInlineTab('excess')}>
-                                    ยอดเกิน <span className="tab-count">{excessItems.length}</span>
+                                    ยอดเกิน <span className="tab-count">({excessItems.length})</span>
                                 </button>
                                 <button className={`inline-tab ${inlineTab === 'transferred' ? 'active' : ''}`} onClick={() => setInlineTab('transferred')}>
-                                    ยอดตีออก <span className="tab-count">{inlineTransfers.length}</span>
+                                    ยอดตีออก <span className="tab-count">({inlineTransfers.length})</span>
                                 </button>
+                            </div>
+                            <div className="inline-tabs-row" style={{ marginBottom: '0.75rem' }}>
                                 <button 
                                     className="inline-tab refresh-btn" 
                                     onClick={() => fetchInlineSubmissions(true)}
                                     disabled={inlineLoading}
                                     title="รีเฟรชข้อมูล"
                                 >
-                                    <FiRotateCcw className={inlineLoading ? 'spinning' : ''} />
+                                    <FiRotateCcw className={inlineLoading ? 'spinning' : ''} /> รีเฟรช
                                 </button>
                                 <button
                                     className="inline-tab"
@@ -2866,7 +2832,7 @@ export default function RoundAccordionItem({
                                         border: 'none', 
                                         borderRadius: '8px',
                                         fontSize: '0.8rem',
-                                        padding: '0.4rem 0.75rem',
+                                        padding: '0.5rem 0.75rem',
                                         display: 'flex',
                                         alignItems: 'center',
                                         gap: '0.3rem',
@@ -4192,14 +4158,6 @@ export default function RoundAccordionItem({
                                                                 <span>เลือกทั้งหมด ({filteredExcessItems.length})</span>
                                                             </label>
                                                             <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                                <button
-                                                                    className="btn btn-sm"
-                                                                    onClick={(e) => { e.stopPropagation(); setShowAIAnalysis(true); }}
-                                                                    style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', border: 'none', fontSize: '0.8rem' }}
-                                                                    title="AI วิเคราะห์ตีออก"
-                                                                >
-                                                                    🤖 AI วิเคราะห์
-                                                                </button>
                                                                 <button
                                                                     className="btn btn-warning"
                                                                     onClick={(e) => { e.stopPropagation(); if (filteredSelectedCount === 0) { toast.warning('กรุณาเลือกรายการที่ต้องการตีออก'); return; } setShowTransferModal(true); }}
