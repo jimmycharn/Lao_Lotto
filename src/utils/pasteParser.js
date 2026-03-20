@@ -133,16 +133,30 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
             flushBareBuffer()
         }
 
-        // Process as a normal number+amount line (use stripped version if available)
-        const processLine = (stripped && stripped !== trimmed) ? stripped : trimmed
-        const lineCtx = getLineEffectiveContext(processLine, contextMode)
+        // Process as a normal number+amount line
+        // IMPORTANT: Check inline context from ORIGINAL line first (before stripping noise)
+        // because stripPrefixNoise removes Thai text like "ล่าง" which is a context keyword.
+        let processLine = (stripped && stripped !== trimmed) ? stripped : trimmed
+        let lineCtx = getLineEffectiveContext(processLine, contextMode)
+        // If stripped version lost context, try extracting from original trimmed line
+        if (lineCtx === contextMode && stripped && stripped !== trimmed) {
+            const origCtx = getLineEffectiveContext(trimmed, contextMode)
+            if (origCtx !== contextMode) {
+                lineCtx = origCtx
+                // Also use the cleaned line from extractInlineContext on the original
+                const origInline = extractInlineContext(trimmed)
+                if (origInline.mode) {
+                    processLine = origInline.cleaned
+                }
+            }
+        }
         console.log(`[pasteParser]   → normal line: "${processLine}", lineCtx=${lineCtx}`)
         if (lineCtx === 'both') {
             const bothResults = emitBoth(processLine, isLaoOrHanoi, lotteryType)
             console.log(`[pasteParser]   → emitBoth produced ${bothResults.length} entries`)
             results.push(...bothResults)
         } else {
-            const parsed = parseNumberLine(processLine, contextMode, isLaoOrHanoi, lotteryType)
+            const parsed = parseNumberLine(processLine, lineCtx, isLaoOrHanoi, lotteryType)
             console.log(`[pasteParser]   → parseNumberLine produced ${parsed ? parsed.length : 0} entries`)
             if (parsed) results.push(...parsed)
         }
@@ -258,6 +272,19 @@ function extractAmountFromLine(line) {
         const mStr = pureSingleM[1]
         const m = (mStr === 'บน' || mStr === 'บ') ? 'top' : 'bottom'
         if (isAmountPattern(amt)) return { amountStr: amt, mode: m, number: null }
+    }
+
+    // --- Normalize -/* separated formats to = format ---
+    // e.g., "258*20*20" → "258=20*20", "967-40*40" → "967=40*40", "213-50" → "213=50"
+    // Only apply when there's no = already AND the string is NOT a valid amount pattern
+    // (to avoid converting "20*20" buffer-amount into "20=20")
+    if (!s.includes('=') && !isAmountPattern(s)) {
+        const sepNorm = s.match(/^(\d{1,5})\s*[\-*]\s*(\d.*)$/)
+        if (sepNorm) {
+            let amtPart = sepNorm[2]
+            amtPart = amtPart.replace(/(\d)\s*\-\s*(\d)/g, '$1*$2')
+            s = `${sepNorm[1]}=${amtPart}`
+        }
     }
 
     // --- "=amountStr" (no number before =) ---
@@ -602,6 +629,33 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
     // Replace 'x' or 'X' only when between digits: "11x10" → "11*10"
     normalized = normalized.replace(/(\d)[xX](\d)/g, '$1*$2')
 
+    // === KEY NORMALIZATION: Convert -/* separated formats to = format ===
+    // If no = sign present, and the line has 2-3 digit groups separated by - or *,
+    // convert the FIRST separator to = so it becomes "number=amount" or "number=amount*amount".
+    //
+    // Examples:
+    //   258*20*20      → 258=20*20   (เต็งโต๊ด)
+    //   967-40*40      → 967=40*40   (เต็งโต๊ด)
+    //   213-50         → 213=50      (บน)
+    //   375-100*6      → 375=100*6   (ชุด)
+    //   220-50*ชุด     → 220=50*ชุด  (ชุด)
+    //   23*10*10       → 23=10*10    (บนกลับ)
+    //   45*20-20       → 45=20*20    (กลับ — normalize remaining - to *)
+    //
+    // ONLY apply when there's no = already and the first group is 1-5 digit number
+    if (!normalized.includes('=')) {
+        // Match: digits{1-5} followed by - or * followed by more content containing digits
+        const sepMatch = normalized.match(/^(\d{1,5})\s*[\-*]\s*(\d.*)$/)
+        if (sepMatch) {
+            const numPart = sepMatch[1]
+            let amtPart = sepMatch[2]
+            // Normalize remaining - between digit groups in amount part to *
+            // e.g., "20-20" → "20*20", but keep "50*ชุด" as is
+            amtPart = amtPart.replace(/(\d)\s*\-\s*(\d)/g, '$1*$2')
+            normalized = `${numPart}=${amtPart}`
+        }
+    }
+
     // Extract numbers and amounts from the line
     // Supported formats:
     //   123=20          → numbers=123, amount1=20
@@ -614,6 +668,10 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
     //   258.33.20       → numbers=258, amount1=33, amount2=20
     //   54=50&50        → numbers=54, amount1=50, amount2=50
     //   304=11×10       → numbers=304, amount1=11, amount2=10
+    //   258*20*20       → numbers=258, amount1=20, amount2=20
+    //   967-40*40       → numbers=967, amount1=40, amount2=40
+    //   213-50          → numbers=213, amount1=50
+    //   375-100*6       → numbers=375, amount1=100, amount2=6
 
     let numbers = null
     let amount1 = null
