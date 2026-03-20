@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { FiX, FiTrash2, FiEdit2, FiPlus, FiCheck, FiRefreshCw, FiVolume2, FiVolumeX } from 'react-icons/fi'
 import { getPermutations } from '../constants/lotteryTypes'
-import { parseMultiLinePaste } from '../utils/pasteParser'
+import { parseMultiLinePaste, get3DigitPermCount } from '../utils/pasteParser'
 import { useDragReorder } from '../utils/useDragReorder'
 import { fetchNumberLimits, fetchCurrentTotals, findMatchingLimit, getEffectivePayoutPercent } from '../utils/numberLimits'
 import './WriteSubmissionModal.css'
@@ -793,42 +793,46 @@ export default function WriteSubmissionModal({
                 }
             }
         } else if (numLen === 4) {
+            // For 4-digit คูณชุด, use 3-digit perm count (not full permutation count)
+            const perm3Count = get3DigitPermCount(numbers)
             if (endsWithAsterisk) {
                 // Input ends with * (e.g., "1234=20*") - show คูณชุด
-                if (permCount > 1) {
-                    buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true, appendAmount: permCount.toString() })
+                if (perm3Count > 1) {
+                    buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true, appendAmount: perm3Count.toString() })
                 }
                 buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true, appendAmount: amount1 })
             } else if (hasValidSecondAmount) {
                 // Has complete second amount - check if it could be permutation count
                 const amt2Num = parseInt(amount2, 10)
-                if (permCount > 1 && (amt2Num === permCount || permCount > 1)) {
+                if (perm3Count > 1 && (amt2Num === perm3Count || perm3Count > 1)) {
                     buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
                 }
                 buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
             } else {
                 buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
-                if (permCount > 1) {
+                if (perm3Count > 1) {
                     buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
                 }
             }
         } else if (numLen === 5) {
+            // For 5-digit คูณชุด, use 3-digit perm count (not full permutation count)
+            const perm3Count = get3DigitPermCount(numbers)
             if (endsWithAsterisk) {
                 // Input ends with * (e.g., "12345=20*") - show คูณชุด
-                if (permCount > 1) {
-                    buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true, appendAmount: permCount.toString() })
+                if (perm3Count > 1) {
+                    buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true, appendAmount: perm3Count.toString() })
                 }
                 buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true, appendAmount: amount1 })
             } else if (hasValidSecondAmount) {
                 // Has complete second amount - check if it could be permutation count
                 const amt2Num = parseInt(amount2, 10)
-                if (permCount > 1 && (amt2Num === permCount || permCount > 1)) {
+                if (perm3Count > 1 && (amt2Num === perm3Count || perm3Count > 1)) {
                     buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
                 }
                 buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
             } else {
                 buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
-                if (permCount > 1) {
+                if (perm3Count > 1) {
                     buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
                 }
             }
@@ -1424,8 +1428,8 @@ export default function WriteSubmissionModal({
                 // If input ends with * (no amount2), determine what to append based on type
                 if (endsWithAsterisk || !amount2) {
                     if (type === 'คูณชุด') {
-                        // คูณชุด - append permutation count
-                        const permCount = getPermutationCount(numbers)
+                        // คูณชุด - for 4-5 digits use 3-digit perm count, for 3 digits use full perm count
+                        const permCount = numLen >= 4 ? get3DigitPermCount(numbers) : getPermutationCount(numbers)
                         amount2 = permCount.toString()
                     } else {
                         // Other types (เต็งโต๊ด, กลับ, etc.) - append same amount as amount1
@@ -1445,8 +1449,8 @@ export default function WriteSubmissionModal({
                     // เต็งโต๊ด without * means same amount for both
                     displayLine = `${numbers}=${amount1}*${amount1} ${type}`
                 } else if (type === 'คูณชุด') {
-                    // คูณชุด - calculate permutation count
-                    const permCount = getPermutationCount(numbers)
+                    // คูณชุด - for 4-5 digits use 3-digit perm count, for 3 digits use full perm count
+                    const permCount = numLen >= 4 ? get3DigitPermCount(numbers) : getPermutationCount(numbers)
                     displayLine = `${numbers}=${amount1}*${permCount} ${type}`
                 } else {
                     displayLine = `${numbers}=${amount1} ${type}`
@@ -1762,7 +1766,7 @@ export default function WriteSubmissionModal({
                 // Build the line with locked amount and default type
                 // Special handling for คูณชุด - need to add *permutation only if lockedAmount doesn't have *
                 if (defaultType === 'คูณชุด') {
-                    const permCount = getPermutationCount(trimmed)
+                    const permCount = trimmed.length >= 4 ? get3DigitPermCount(trimmed) : getPermutationCount(trimmed)
                     if (lockedHasSecondAmount) {
                         // lockedAmount already has * (e.g., "20*20"), just use it as is
                         trimmed = `${trimmed}=${lockedAmount} ${defaultType}`
@@ -2122,27 +2126,27 @@ export default function WriteSubmissionModal({
             }
         } else if (numLen === 4) {
             if (hasSecondAmount) return []
-            const permCount = getPermutationCount(numbers)
+            const perm3Count = get3DigitPermCount(numbers)
             if (isLaoOrHanoi) {
                 const amountNum = parseInt(amount1)
                 if (amountNum <= 99) {
                     buttons.push({ label: '4ตัวชุด', value: '4ตัวชุด', autoSubmit: true })
                 }
                 buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
-                if (permCount > 1) {
+                if (perm3Count > 1) {
                     buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
                 }
             } else {
                 buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
-                if (permCount > 1) {
+                if (perm3Count > 1) {
                     buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
                 }
             }
         } else if (numLen === 5) {
             if (hasSecondAmount) return []
-            const permCount = getPermutationCount(numbers)
+            const perm3Count = get3DigitPermCount(numbers)
             buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
-            if (permCount > 1) {
+            if (perm3Count > 1) {
                 buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
             }
         }
@@ -2319,17 +2323,18 @@ export default function WriteSubmissionModal({
                 }
             }
         } else if (numLen === 4) {
-            // 4 digits
+            // 4 digits - use 3-digit perm count for คูณชุด
+            const perm3Count = get3DigitPermCount(numbers)
             if (endsWithAsterisk) {
                 // Input ends with * (e.g., "1234=20*") - show คูณชุด and ลอยแพ
-                if (permCount > 1) {
+                if (perm3Count > 1) {
                     buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
                 }
                 buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
             } else if (hasValidSecondAmount) {
-                // มี * และครบ 2 ส่วน - แสดง คูณชุด (ถ้า amount2 = permCount) และ ลอยแพ
+                // มี * และครบ 2 ส่วน - แสดง คูณชุด (ถ้า amount2 = perm3Count) และ ลอยแพ
                 const amt2Num = parseInt(amount2, 10)
-                if (permCount > 1 && amt2Num === permCount) {
+                if (perm3Count > 1 && amt2Num === perm3Count) {
                     buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
                 }
                 buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
@@ -2342,36 +2347,37 @@ export default function WriteSubmissionModal({
                         buttons.push({ label: '4ตัวชุด', value: '4ตัวชุด', autoSubmit: true })
                     }
                     buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
-                    if (permCount > 1) {
+                    if (perm3Count > 1) {
                         buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
                     }
                 } else {
                     // หวยไทย: ลอยแพ, คูณชุด
                     buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
-                    if (permCount > 1) {
+                    if (perm3Count > 1) {
                         buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
                     }
                 }
             }
         } else if (numLen === 5) {
-            // 5 digits
+            // 5 digits - use 3-digit perm count for คูณชุด
+            const perm3Count = get3DigitPermCount(numbers)
             if (endsWithAsterisk) {
                 // Input ends with * (e.g., "12345=20*") - show คูณชุด and ลอยแพ
-                if (permCount > 1) {
+                if (perm3Count > 1) {
                     buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
                 }
                 buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
             } else if (hasValidSecondAmount) {
-                // มี * และครบ 2 ส่วน - แสดง คูณชุด (ถ้า amount2 = permCount) และ ลอยแพ
+                // มี * และครบ 2 ส่วน - แสดง คูณชุด (ถ้า amount2 = perm3Count) และ ลอยแพ
                 const amt2Num = parseInt(amount2, 10)
-                if (permCount > 1 && amt2Num === permCount) {
+                if (perm3Count > 1 && amt2Num === perm3Count) {
                     buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
                 }
                 buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
             } else {
                 // ไม่มี * ในจำนวนเงิน
                 buttons.push({ label: 'ลอยแพ', value: 'ลอยแพ', autoSubmit: true })
-                if (permCount > 1) {
+                if (perm3Count > 1) {
                     buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
                 }
             }

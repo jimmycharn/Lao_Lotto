@@ -15,6 +15,8 @@ import { getPermutations } from '../constants/lotteryTypes'
  * @param {string} lotteryType - 'thai', 'lao', or 'hanoi'
  * @returns {Array<{ numbers: string, amount: number, amount2: number|null, betType: string, typeLabel: string, rawLine: string, formattedLine: string }>}
  */
+export { get3DigitPermCount }
+
 export function parseMultiLinePaste(text, lotteryType = 'lao') {
     if (!text || !text.trim()) return []
 
