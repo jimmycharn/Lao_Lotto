@@ -362,11 +362,20 @@ function emitBoth(rawLine, isLaoOrHanoi, lotteryType) {
     const finalLine = eqCtx ? `${eqCtx[1]}${eqCtx[3]}` : cleanLine
     console.log(`[emitBoth] rawLine="${rawLine}" cleanLine="${cleanLine}" finalLine="${finalLine}"`)
     const topParsed = parseNumberLine(finalLine, 'top', isLaoOrHanoi, lotteryType)
-    const botParsed = parseNumberLine(finalLine, 'bottom', isLaoOrHanoi, lotteryType)
-    console.log(`[emitBoth] topParsed=${topParsed ? topParsed.length : 'null'} botParsed=${botParsed ? botParsed.length : 'null'}`)
-    if (botParsed) console.log(`[emitBoth] botParsed:`, JSON.stringify(botParsed.map(e => e.formattedLine || e.rawLine)))
     if (topParsed) results.push(...topParsed)
-    if (botParsed) results.push(...botParsed)
+
+    // Only emit bottom version for 1-2 digit numbers.
+    // 3+ digit numbers don't have separate top/bottom bet types,
+    // so "บน-ล่าง" context should NOT duplicate them.
+    const numDigits = topParsed && topParsed.length > 0 ? topParsed[0].numbers.length : 0
+    if (numDigits <= 2) {
+        const botParsed = parseNumberLine(finalLine, 'bottom', isLaoOrHanoi, lotteryType)
+        console.log(`[emitBoth] topParsed=${topParsed ? topParsed.length : 'null'} botParsed=${botParsed ? botParsed.length : 'null'}`)
+        if (botParsed) console.log(`[emitBoth] botParsed:`, JSON.stringify(botParsed.map(e => e.formattedLine || e.rawLine)))
+        if (botParsed) results.push(...botParsed)
+    } else {
+        console.log(`[emitBoth] ${numDigits}-digit number, skipping bottom (no top/bottom distinction for 3+ digits)`)
+    }
     return results
 }
 
