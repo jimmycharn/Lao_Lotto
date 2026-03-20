@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase, fetchAllRows } from '../../lib/supabase'
 import { FiDollarSign, FiX } from 'react-icons/fi'
-import { DEFAULT_COMMISSIONS, DEFAULT_PAYOUTS, getLotteryTypeKey } from '../../constants/lotteryTypes'
+import { DEFAULT_COMMISSIONS, DEFAULT_PAYOUTS, DEFAULT_4_SET_SETTINGS, getLotteryTypeKey } from '../../constants/lotteryTypes'
 
 export default function SummaryModal({ round, onClose }) {
     const [submissions, setSubmissions] = useState([])
@@ -71,6 +71,14 @@ export default function SummaryModal({ round, onClose }) {
         const lotteryKey = getLotteryTypeKey(round.lottery_type)
         const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
         const settings = userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
+
+        // 4_set/4_top: commission is fixed amount per set (บาท/ชุด), not percentage
+        if (sub.bet_type === '4_set' || sub.bet_type === '4_top') {
+            const setPrice = settings?.setPrice || round?.set_prices?.['4_top'] || 120
+            const numSets = Math.floor((sub.amount || 0) / setPrice)
+            const commRate = settings?.commission !== undefined ? settings.commission : (DEFAULT_4_SET_SETTINGS.commission || 25)
+            return numSets * commRate
+        }
 
         if (settings?.commission !== undefined) {
             return settings.isFixed ? settings.commission : sub.amount * (settings.commission / 100)

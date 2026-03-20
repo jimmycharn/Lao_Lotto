@@ -55,6 +55,7 @@ import {
     BET_TYPES_BY_LOTTERY,
     DEFAULT_COMMISSIONS,
     DEFAULT_PAYOUTS,
+    DEFAULT_4_SET_SETTINGS,
     normalizeNumber,
     generateBatchId,
     getDefaultLimitsForType,
@@ -1990,10 +1991,18 @@ export default function Dealer() {
                             for (const t of group.transfers) {
                                 const settingsKey = getSettingsKey(t.bet_type, lotteryKey)
                                 const betSettings = upSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
-                                const commRate = betSettings?.commission !== undefined
-                                    ? betSettings.commission
-                                    : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
-                                upstreamCommission += (t.amount || 0) * (commRate / 100)
+                                // 4_set: commission is fixed amount per set (บาท/ชุด), not percentage
+                                if (t.bet_type === '4_set') {
+                                    const setPrice = betSettings?.setPrice || roundData?.set_prices?.['4_top'] || 120
+                                    const numSets = Math.floor((t.amount || 0) / setPrice)
+                                    const commRate = betSettings?.commission !== undefined ? betSettings.commission : (DEFAULT_4_SET_SETTINGS.commission || 25)
+                                    upstreamCommission += numSets * commRate
+                                } else {
+                                    const commRate = betSettings?.commission !== undefined
+                                        ? betSettings.commission
+                                        : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
+                                    upstreamCommission += (t.amount || 0) * (commRate / 100)
+                                }
                             }
 
                             // Linked: fetch upstream submissions for winnings
@@ -2011,8 +2020,15 @@ export default function Dealer() {
                         } else {
                             // External: use default commission rates
                             for (const t of group.transfers) {
-                                const commRate = DEFAULT_COMMISSIONS[t.bet_type] || 15
-                                upstreamCommission += (t.amount || 0) * (commRate / 100)
+                                // 4_set: commission is fixed amount per set (บาท/ชุด), not percentage
+                                if (t.bet_type === '4_set') {
+                                    const setPrice = roundData?.set_prices?.['4_top'] || 120
+                                    const numSets = Math.floor((t.amount || 0) / setPrice)
+                                    upstreamCommission += numSets * (DEFAULT_4_SET_SETTINGS.commission || 25)
+                                } else {
+                                    const commRate = DEFAULT_COMMISSIONS[t.bet_type] || 15
+                                    upstreamCommission += (t.amount || 0) * (commRate / 100)
+                                }
                             }
 
                             // External: check winners against our own winning_numbers

@@ -146,7 +146,14 @@ export default function DealerWriteSubmissionWrapper({
             const betType = entry.betType || entry.bet_type  // รองรับทั้ง camelCase และ snake_case
             const commissionRate = getCommissionRate(betType)
             const isSetBet = betType === '4_set'
-            const commissionAmount = isSetBet ? commissionRate : (entry.amount * commissionRate) / 100
+            let commissionAmount
+            if (isSetBet) {
+                const setPrice = userSettings?.lottery_settings?.[round.lottery_type]?.['4_set']?.setPrice || round?.set_prices?.['4_top'] || 120
+                const numSets = Math.floor((entry.amount || 0) / setPrice)
+                commissionAmount = numSets * commissionRate
+            } else {
+                commissionAmount = (entry.amount * commissionRate) / 100
+            }
             
             // Add milliseconds offset to preserve order (each entry gets +1ms)
             const entryTimestamp = new Date(baseTimestamp.getTime() + index).toISOString()
@@ -271,7 +278,14 @@ export default function DealerWriteSubmissionWrapper({
             const betType = entry.betType || entry.bet_type
             const commissionRate = getCommissionRate(betType)
             const isSetBet = betType === '4_set'
-            const commissionAmount = isSetBet ? commissionRate : (entry.amount * commissionRate) / 100
+            let commissionAmount
+            if (isSetBet) {
+                const setPrice = userSettings?.lottery_settings?.[round.lottery_type]?.['4_set']?.setPrice || round?.set_prices?.['4_top'] || 120
+                const numSets = Math.floor((entry.amount || 0) / setPrice)
+                commissionAmount = numSets * commissionRate
+            } else {
+                commissionAmount = (entry.amount * commissionRate) / 100
+            }
             
             // Add milliseconds offset to preserve order (each entry gets +1ms)
             const entryTimestamp = new Date(baseTimestamp.getTime() + index).toISOString()

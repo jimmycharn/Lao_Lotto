@@ -273,7 +273,15 @@ export default function BuyLottery() {
                 const lotteryKey = activeRound.lottery_type === 'lao' || activeRound.lottery_type === 'hanoi' ? 'lao' : activeRound.lottery_type || 'thai'
                 const settings = userSettings?.lottery_settings?.[lotteryKey]?.[item.betTypeId]
                 const commissionRate = settings?.commission !== undefined ? settings.commission : (DEFAULT_COMMISSIONS[item.betTypeId] || 15)
-                const commissionAmount = settings?.isFixed ? commissionRate : Math.round(item.amount * commissionRate / 100)
+                let commissionAmount
+                // 4_set/4_top: commission is fixed amount per set (บาท/ชุด), not percentage
+                if (item.betTypeId === '4_set' || item.betTypeId === '4_top') {
+                    const setPrice = settings?.setPrice || activeRound?.set_prices?.['4_top'] || 120
+                    const numSets = Math.floor((item.amount || 0) / setPrice)
+                    commissionAmount = numSets * commissionRate
+                } else {
+                    commissionAmount = settings?.isFixed ? commissionRate : Math.round(item.amount * commissionRate / 100)
+                }
                 return {
                     round_id: activeRound.id,
                     user_id: user.id,

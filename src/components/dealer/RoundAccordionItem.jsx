@@ -29,6 +29,7 @@ import {
     BET_TYPES_BY_LOTTERY,
     DEFAULT_COMMISSIONS,
     DEFAULT_PAYOUTS,
+    DEFAULT_4_SET_SETTINGS,
     normalizeNumber,
     generateBatchId,
     getDefaultLimitsForType,
@@ -429,11 +430,18 @@ export default function RoundAccordionItem({
                     dealer.transfers.forEach(t => {
                         const settingsKey = getBetSettingsKey(t.bet_type, lotteryKey)
                         const betSettings = settings?.lottery_settings?.[lotteryKey]?.[settingsKey]
-                        const commissionRate = betSettings?.commission !== undefined 
-                            ? betSettings.commission 
-                            : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
-                        const commissionAmount = (t.amount || 0) * (commissionRate / 100)
-                        dealer.totalCommission += commissionAmount
+                        // 4_set: commission is fixed amount per set (บาท/ชุด), not percentage
+                        if (t.bet_type === '4_set') {
+                            const setPrice = betSettings?.setPrice || round?.set_prices?.['4_top'] || 120
+                            const numSets = Math.floor((t.amount || 0) / setPrice)
+                            const commRate = betSettings?.commission !== undefined ? betSettings.commission : (DEFAULT_4_SET_SETTINGS.commission || 25)
+                            dealer.totalCommission += numSets * commRate
+                        } else {
+                            const commissionRate = betSettings?.commission !== undefined 
+                                ? betSettings.commission 
+                                : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
+                            dealer.totalCommission += (t.amount || 0) * (commissionRate / 100)
+                        }
                     })
 
                     // Only fetch win data if announced
@@ -466,9 +474,15 @@ export default function RoundAccordionItem({
                     
                     // Calculate commission using default rates (external = no upstream settings)
                     dealer.transfers.forEach(t => {
-                        const commissionRate = DEFAULT_COMMISSIONS[t.bet_type] || 15
-                        const commissionAmount = (t.amount || 0) * (commissionRate / 100)
-                        dealer.totalCommission += commissionAmount
+                        // 4_set: commission is fixed amount per set (บาท/ชุด), not percentage
+                        if (t.bet_type === '4_set') {
+                            const setPrice = round?.set_prices?.['4_top'] || 120
+                            const numSets = Math.floor((t.amount || 0) / setPrice)
+                            dealer.totalCommission += numSets * (DEFAULT_4_SET_SETTINGS.commission || 25)
+                        } else {
+                            const commissionRate = DEFAULT_COMMISSIONS[t.bet_type] || 15
+                            dealer.totalCommission += (t.amount || 0) * (commissionRate / 100)
+                        }
                     })
 
                     // Check winners against our own round's winning_numbers
@@ -693,11 +707,18 @@ export default function RoundAccordionItem({
             group.transfers.forEach(t => {
                 const settingsKey = getBetSettingsKey(t.bet_type, lotteryKey)
                 const betSettings = settings?.lottery_settings?.[lotteryKey]?.[settingsKey]
-                const commissionRate = betSettings?.commission !== undefined 
-                    ? betSettings.commission 
-                    : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
-                const commissionAmount = (t.amount || 0) * (commissionRate / 100)
-                totalCommission += commissionAmount
+                // 4_set: commission is fixed amount per set (บาท/ชุด), not percentage
+                if (t.bet_type === '4_set') {
+                    const setPrice = betSettings?.setPrice || round?.set_prices?.['4_top'] || 120
+                    const numSets = Math.floor((t.amount || 0) / setPrice)
+                    const commRate = betSettings?.commission !== undefined ? betSettings.commission : (DEFAULT_4_SET_SETTINGS.commission || 25)
+                    totalCommission += numSets * commRate
+                } else {
+                    const commissionRate = betSettings?.commission !== undefined 
+                        ? betSettings.commission 
+                        : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
+                    totalCommission += (t.amount || 0) * (commissionRate / 100)
+                }
             })
 
             commissions[groupKey] = {
@@ -759,7 +780,14 @@ export default function RoundAccordionItem({
                 let totalCommission = 0
                 dealerGroups[billNote].forEach(sub => {
                     const commissionRate = DEFAULT_COMMISSIONS[sub.bet_type] || 15
-                    totalCommission += (sub.amount || 0) * (commissionRate / 100)
+                    // 4_set: commission is fixed amount per set (บาท/ชุด), not percentage
+                    if (sub.bet_type === '4_set') {
+                        const setPrice = round?.set_prices?.['4_top'] || 120
+                        const numSets = Math.floor((sub.amount || 0) / setPrice)
+                        totalCommission += numSets * (DEFAULT_4_SET_SETTINGS.commission || 25)
+                    } else {
+                        totalCommission += (sub.amount || 0) * (commissionRate / 100)
+                    }
                 })
                 commissions[billNote] = {
                     totalCommission,
@@ -784,11 +812,18 @@ export default function RoundAccordionItem({
             itemsList.forEach(sub => {
                 const settingsKey = getBetSettingsKey(sub.bet_type, lotteryKey)
                 const betSettings = settings?.lottery_settings?.[lotteryKey]?.[settingsKey]
-                const commissionRate = betSettings?.commission !== undefined 
-                    ? betSettings.commission 
-                    : (DEFAULT_COMMISSIONS[sub.bet_type] || 15)
-                const commissionAmount = (sub.amount || 0) * (commissionRate / 100)
-                totalCommission += commissionAmount
+                // 4_set: commission is fixed amount per set (บาท/ชุด), not percentage
+                if (sub.bet_type === '4_set') {
+                    const setPrice = betSettings?.setPrice || round?.set_prices?.['4_top'] || 120
+                    const numSets = Math.floor((sub.amount || 0) / setPrice)
+                    const commRate = betSettings?.commission !== undefined ? betSettings.commission : (DEFAULT_4_SET_SETTINGS.commission || 25)
+                    totalCommission += numSets * commRate
+                } else {
+                    const commissionRate = betSettings?.commission !== undefined 
+                        ? betSettings.commission 
+                        : (DEFAULT_COMMISSIONS[sub.bet_type] || 15)
+                    totalCommission += (sub.amount || 0) * (commissionRate / 100)
+                }
             })
 
             commissions[billNote] = {
@@ -1252,7 +1287,13 @@ export default function RoundAccordionItem({
                         let commissionAmount = 0
                         const settingsKey = getBetSettingsKey(item.bet_type, lotteryKey)
                         const betSettings = ourSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
-                        if (betSettings?.commission !== undefined) {
+                        // 4_set: commission is fixed amount per set (บาท/ชุด), not percentage
+                        if (item.bet_type === '4_set') {
+                            const setPrice = betSettings?.setPrice || round?.set_prices?.['4_top'] || 120
+                            const numSets = Math.floor((amount || 0) / setPrice)
+                            const commRate = betSettings?.commission !== undefined ? betSettings.commission : (DEFAULT_4_SET_SETTINGS.commission || 25)
+                            commissionAmount = numSets * commRate
+                        } else if (betSettings?.commission !== undefined) {
                             commissionAmount = betSettings.isFixed ? betSettings.commission : amount * (betSettings.commission / 100)
                         } else {
                             // Use default commission rate (15% if not specified)

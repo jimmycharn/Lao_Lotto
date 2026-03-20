@@ -22,6 +22,7 @@ import {
     BET_TYPES,
     generateBatchId,
     DEFAULT_COMMISSIONS,
+    DEFAULT_4_SET_SETTINGS,
     getLotteryTypeKey
 } from '../../constants/lotteryTypes'
 import '../../pages/Dealer.css'
@@ -235,11 +236,18 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
             transfersList.forEach(t => {
                 const settingsKey = getBetSettingsKey(t.bet_type, lotteryKey)
                 const betSettings = settings?.lottery_settings?.[lotteryKey]?.[settingsKey]
-                const commissionRate = betSettings?.commission !== undefined 
-                    ? betSettings.commission 
-                    : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
-                const commissionAmount = (t.amount || 0) * (commissionRate / 100)
-                totalCommission += commissionAmount
+                // 4_set: commission is fixed amount per set (บาท/ชุด), not percentage
+                if (t.bet_type === '4_set') {
+                    const setPrice = betSettings?.setPrice || round?.set_prices?.['4_top'] || 120
+                    const numSets = Math.floor((t.amount || 0) / setPrice)
+                    const commRate = betSettings?.commission !== undefined ? betSettings.commission : (DEFAULT_4_SET_SETTINGS.commission || 25)
+                    totalCommission += numSets * commRate
+                } else {
+                    const commissionRate = betSettings?.commission !== undefined 
+                        ? betSettings.commission 
+                        : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
+                    totalCommission += (t.amount || 0) * (commissionRate / 100)
+                }
             })
 
             commissions[dealerId] = {

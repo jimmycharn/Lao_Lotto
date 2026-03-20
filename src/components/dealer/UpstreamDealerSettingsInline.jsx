@@ -321,7 +321,7 @@ export default function UpstreamDealerSettingsInline({ dealer, isLinked, onSaved
                             />
                         </div>
                         <div>
-                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>ค่าคอม (%)</label>
+                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>ค่าคอม (บาท/ชุด)</label>
                             <input
                                 type="number"
                                 className="form-input"
