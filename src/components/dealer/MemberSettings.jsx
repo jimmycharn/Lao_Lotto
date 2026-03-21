@@ -101,6 +101,7 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
     })
 
     const [settings, setSettings] = useState(getDefaultSettings())
+    const [blockedLotteryTypes, setBlockedLotteryTypes] = useState([])
 
     // Labels for each bet type
     const BET_LABELS = {
@@ -184,6 +185,7 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
             if (data && data.lottery_settings) {
                 const merged = { ...getDefaultSettings() }
                 Object.keys(data.lottery_settings).forEach(tab => {
+                    if (tab === '_blocked_lottery_types') return
                     if (merged[tab]) {
                         Object.keys(data.lottery_settings[tab]).forEach(key => {
                             if (merged[tab][key]) {
@@ -205,6 +207,10 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                     }
                 })
                 setSettings(merged)
+                // Load blocked lottery types
+                if (data.lottery_settings._blocked_lottery_types) {
+                    setBlockedLotteryTypes(data.lottery_settings._blocked_lottery_types)
+                }
             }
         } catch (error) {
             console.error('Error fetching user settings:', error)
@@ -216,12 +222,13 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
     async function handleSave() {
         setSaving(true)
         try {
+            const settingsToSave = { ...settings, _blocked_lottery_types: blockedLotteryTypes }
             const { error } = await supabase
                 .from('user_settings')
                 .upsert({
                     user_id: member.id,
                     dealer_id: user.id,
-                    lottery_settings: settings,
+                    lottery_settings: settingsToSave,
                     updated_at: new Date().toISOString()
                 }, { onConflict: 'user_id, dealer_id' })
 
@@ -314,6 +321,33 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                                 </button>
                             ))}
                         </div>
+
+                        {/* ไม่อนุญาตส่งโพย Checkbox */}
+                        <label
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                margin: '0.75rem 0 1rem',
+                                cursor: 'pointer',
+                                fontSize: '0.95rem',
+                                color: blockedLotteryTypes.includes(activeTab) ? '#ef4444' : 'var(--color-text)'
+                            }}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={blockedLotteryTypes.includes(activeTab)}
+                                onChange={(e) => {
+                                    setBlockedLotteryTypes(prev => 
+                                        e.target.checked 
+                                            ? [...prev, activeTab]
+                                            : prev.filter(t => t !== activeTab)
+                                    )
+                                }}
+                                style={{ width: '18px', height: '18px', accentColor: '#ef4444', cursor: 'pointer' }}
+                            />
+                            <span style={{ fontWeight: 500 }}>ไม่อนุญาตส่งโพย</span>
+                        </label>
 
                         {/* 4 ตัวชุด Section for Lao or Hanoi */}
                         {(activeTab === 'lao' || activeTab === 'hanoi') && settings[activeTab]?.['4_set'] && (

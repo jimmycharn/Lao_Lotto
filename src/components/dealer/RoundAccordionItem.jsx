@@ -68,6 +68,7 @@ export default function RoundAccordionItem({
     const isExpanded = isExpandedProp !== undefined ? isExpandedProp : internalExpanded
     const setIsExpanded = onToggle || setInternalExpanded
     const [summaryData, setSummaryData] = useState({ loading: false, submissions: [], userSettings: {} })
+    const [allMemberSettings, setAllMemberSettings] = useState({}) // { userId: { lottery_settings: {...} } }
 
     // Inline submissions view states
     const [viewMode, setViewMode] = useState('summary')
@@ -152,6 +153,42 @@ export default function RoundAccordionItem({
         // Always fetch summary data to show stats in header
         fetchSummaryData()
     }, [round.id])
+
+    // Fetch all member settings (for blocked lottery types)
+    useEffect(() => {
+        if (user?.id && allMembers.length > 0) {
+            fetchAllMemberSettings()
+        }
+    }, [user?.id, allMembers.length])
+
+    async function fetchAllMemberSettings() {
+        try {
+            const memberIds = allMembers.map(m => m.id)
+            if (memberIds.length === 0) return
+            const { data } = await supabase
+                .from('user_settings')
+                .select('user_id, lottery_settings')
+                .in('user_id', memberIds)
+                .eq('dealer_id', user.id)
+            if (data) {
+                const map = {}
+                data.forEach(s => { map[s.user_id] = s })
+                setAllMemberSettings(map)
+            }
+        } catch (err) {
+            console.error('Error fetching member settings:', err)
+        }
+    }
+
+    // Check if a member is blocked for this round's lottery type
+    const isMemberBlockedForRound = (memberId) => {
+        const settings = allMemberSettings[memberId]
+        const blocked = settings?.lottery_settings?._blocked_lottery_types || []
+        return blocked.includes(round.lottery_type)
+    }
+
+    // Get allMembers filtered to exclude blocked members for this round
+    const allowedMembers = allMembers.filter(m => !isMemberBlockedForRound(m.id))
 
     // Fetch upstream dealers on mount
     useEffect(() => {
@@ -861,9 +898,9 @@ export default function RoundAccordionItem({
 
     // Open write bet modal for selected member
     const handleOpenWriteBet = () => {
-        // Find the member object from allMembers based on selected name
+        // Find the member object from allowedMembers based on selected name
         const memberName = inlineUserFilter
-        const member = allMembers.find(m => 
+        const member = allowedMembers.find(m => 
             (m.full_name || m.email || 'ไม่ระบุ') === memberName
         )
         if (member) {
@@ -882,10 +919,10 @@ export default function RoundAccordionItem({
     const canWriteBetForSelectedMember = () => {
         if (inlineUserFilter === 'all') return false
         const memberName = inlineUserFilter
-        const member = allMembers.find(m => 
+        const member = allowedMembers.find(m => 
             (m.full_name || m.email || 'ไม่ระบุ') === memberName
         )
-        // Can write bet only if member exists and hasn't changed password
+        // Can write bet only if member exists, hasn't changed password, and not blocked
         return member && !member.password_changed
     }
 
@@ -2332,11 +2369,38 @@ export default function RoundAccordionItem({
                                 <div className="action-buttons-left">
                                     <button className="icon-btn-sm" onClick={(e) => { e.stopPropagation(); onEditRound(); }} title="แก้ไข"><FiEdit2 /></button>
                                     <button className="icon-btn-sm warning" onClick={(e) => { e.stopPropagation(); onShowNumberLimits(); }} title="เลขอั้น"><FiAlertTriangle /></button>
-                                    <button className="icon-btn-sm" onClick={(e) => { e.stopPropagation(); fetchSummaryData(); }} title="รีเฟรช"><FiRefreshCw /></button>
+                                    <button className="icon-btn-sm" onClick={(e) => { e.stopPropagation(); fetchSummaryData(); fetchInlineSubmissions(true); }} title="รีเฟรชทั้งหมด"><FiRefreshCw /></button>
                                 </div>
                                 <svg className={`chevron ${isExpanded ? 'rotated' : ''}`} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <polyline points="6 9 12 15 18 9"></polyline>
                                 </svg>
+                            </div>
+                            {/* Row: เขียนโพย + AI วิเคราะห์ */}
+                            <div className="open-round-extra-actions">
+                                <button
+                                    className="extra-action-btn write-bet-btn"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        if (allowedMembers.length > 0) {
+                                            const firstMember = allowedMembers[0]
+                                            if (!firstMember.password_changed) {
+                                                setSelectedMemberForBet(firstMember)
+                                                setEditingBillData(null)
+                                                setShowWriteBetModal(true)
+                                            }
+                                        }
+                                    }}
+                                    title="เขียนโพย"
+                                >
+                                    <FiFileText /> เขียนโพย
+                                </button>
+                                <button
+                                    className="extra-action-btn ai-btn"
+                                    onClick={(e) => { e.stopPropagation(); setShowAIAnalysis(true); }}
+                                    title="AI วิเคราะห์ตีออก"
+                                >
+                                    🤖 AI วิเคราะห์
+                                </button>
                             </div>
                         </div>
                         
@@ -2441,28 +2505,52 @@ export default function RoundAccordionItem({
                                 <FiCalendar /> {formatDate(round.open_time)} {formatTime(round.open_time)} - {formatDate(round.close_time)} {formatTime(round.close_time)}
                             </div>
                             
-                            {/* Row 3: Actions (left) + Chevron (right) */}
+                            {/* Row 3: Icon actions + Chevron */}
                             <div className="open-round-actions-row">
                                 <div className="round-actions">
                                     <button className="icon-btn" onClick={(e) => { e.stopPropagation(); onEditRound(); }} title="แก้ไขงวด"><FiEdit2 /></button>
                                     {round.status === 'open' && <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onCloseRound(); }} title="ปิดงวด"><FiLock /></button>}
                                     <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onShowNumberLimits(); }} title="ตั้งค่าเลขอั้น"><FiAlertTriangle /></button>
-                                    <button className="icon-btn" onClick={(e) => { e.stopPropagation(); fetchSummaryData(); }} title="รีเฟรช"><FiRefreshCw /></button>
-                                    <button 
-                                        className={`icon-btn ${round.is_active ? 'success' : ''}`} 
-                                        onClick={(e) => { e.stopPropagation(); onToggleActive(); }} 
-                                        title={round.is_active ? 'ปิดใช้งาน (ซ่อนจาก user)' : 'เปิดใช้งาน (แสดงให้ user เห็น)'}
-                                        style={round.is_active 
-                                            ? { color: '#22c55e', border: '1.5px solid #22c55e' } 
-                                            : { color: '#888', border: '1.5px dashed #555' }
-                                        }
-                                    >
-                                        <FiPower />
-                                    </button>
+                                    <button className="icon-btn" onClick={(e) => { e.stopPropagation(); fetchSummaryData(); fetchInlineSubmissions(true); }} title="รีเฟรชทั้งหมด"><FiRefreshCw /></button>
                                 </div>
                                 <svg className={`chevron ${isExpanded ? 'rotated' : ''}`} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <polyline points="6 9 12 15 18 9"></polyline>
                                 </svg>
+                            </div>
+
+                            {/* Row 4: Active toggle + เขียนโพย + AI วิเคราะห์ */}
+                            <div className="open-round-extra-actions">
+                                <button 
+                                    className={`extra-action-btn ${round.is_active ? 'active-on' : 'active-off'}`}
+                                    onClick={(e) => { e.stopPropagation(); onToggleActive(); }} 
+                                    title={round.is_active ? 'ปิดใช้งาน (ซ่อนจาก user)' : 'เปิดใช้งาน (แสดงให้ user เห็น)'}
+                                >
+                                    <FiPower /> {round.is_active ? 'เปิดอยู่' : 'ปิดอยู่'}
+                                </button>
+                                <button
+                                    className="extra-action-btn write-bet-btn"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        if (allowedMembers.length > 0) {
+                                            const firstMember = allowedMembers[0]
+                                            if (!firstMember.password_changed) {
+                                                setSelectedMemberForBet(firstMember)
+                                                setEditingBillData(null)
+                                                setShowWriteBetModal(true)
+                                            }
+                                        }
+                                    }}
+                                    title="เขียนโพย"
+                                >
+                                    <FiFileText /> เขียนโพย
+                                </button>
+                                <button
+                                    className="extra-action-btn ai-btn"
+                                    onClick={(e) => { e.stopPropagation(); setShowAIAnalysis(true); }}
+                                    title="AI วิเคราะห์ตีออก"
+                                >
+                                    🤖 AI วิเคราะห์
+                                </button>
                             </div>
                             
                             {/* Row 3: Stats - ยอดรับ/ยอดส่ง (แสดงเฉพาะเมื่อมีรายการ) */}
@@ -2855,36 +2943,7 @@ export default function RoundAccordionItem({
                                     ยอดตีออก <span className="tab-count">({inlineTransfers.length})</span>
                                 </button>
                             </div>
-                            <div className="inline-tabs-row" style={{ marginBottom: '0.75rem' }}>
-                                <button 
-                                    className="inline-tab refresh-btn" 
-                                    onClick={() => fetchInlineSubmissions(true)}
-                                    disabled={inlineLoading}
-                                    title="รีเฟรชข้อมูล"
-                                >
-                                    <FiRotateCcw className={inlineLoading ? 'spinning' : ''} /> รีเฟรช
-                                </button>
-                                <button
-                                    className="inline-tab"
-                                    onClick={() => setShowAIAnalysis(true)}
-                                    style={{ 
-                                        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', 
-                                        color: '#fff', 
-                                        border: 'none', 
-                                        borderRadius: '8px',
-                                        fontSize: '0.8rem',
-                                        padding: '0.5rem 0.75rem',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '0.3rem',
-                                        cursor: 'pointer',
-                                        whiteSpace: 'nowrap'
-                                    }}
-                                    title="AI วิเคราะห์ตีออก"
-                                >
-                                    🤖 AI วิเคราะห์
-                                </button>
-                            </div>
+                            
 
                             {inlineLoading ? (
                                 <div className="loading-state"><div className="spinner"></div></div>
@@ -2911,7 +2970,7 @@ export default function RoundAccordionItem({
                                                             whiteSpace: 'nowrap'
                                                         }}
                                                     >
-                                                        สมาชิกทั้งหมด ({allMembers.length})
+                                                        สมาชิกทั้งหมด ({allowedMembers.length})
                                                     </button>
                                                     <button
                                                         className={`filter-btn ${memberFilterMode === 'submitted' ? 'active' : ''}`}
@@ -2937,7 +2996,7 @@ export default function RoundAccordionItem({
                                                     <select value={inlineUserFilter} onChange={(e) => setInlineUserFilter(e.target.value)} className="form-input" style={{ flex: 1, minHeight: '40px', fontSize: '0.85rem' }}>
                                                         <option value="all">ทุกคน</option>
                                                         {memberFilterMode === 'all' ? (
-                                                            allMembers.map(member => (
+                                                            allowedMembers.map(member => (
                                                                 <option key={member.id} value={member.full_name || member.email || 'ไม่ระบุ'}>
                                                                     {member.full_name || member.email || 'ไม่ระบุ'}
                                                                 </option>
@@ -4596,7 +4655,7 @@ export default function RoundAccordionItem({
                     round={round}
                     targetUser={selectedMemberForBet}
                     dealerId={user.id}
-                    allMembers={allMembers}
+                    allMembers={allowedMembers}
                     onMemberChange={(member) => setSelectedMemberForBet(member)}
                     onClose={() => {
                         setShowWriteBetModal(false)
@@ -4605,6 +4664,7 @@ export default function RoundAccordionItem({
                     }}
                     onSuccess={() => {
                         fetchInlineSubmissions(true)
+                        fetchSummaryData()
                         if (onCreditUpdate) onCreditUpdate()
                     }}
                     editingData={editingBillData}

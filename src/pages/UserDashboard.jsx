@@ -412,6 +412,34 @@ export default function UserDashboard() {
         }
     }, [selectedDealer])
 
+    // Realtime subscription: auto-refresh user settings when dealer updates (e.g. blocked lottery types)
+    useEffect(() => {
+        if (!selectedDealer || !user) return
+
+        const channel = supabase
+            .channel(`user-settings-${user.id}-${selectedDealer.id}`)
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'user_settings',
+                filter: `user_id=eq.${user.id}`
+            }, (payload) => {
+                // Only update if the change is for the current dealer
+                if (payload.new && payload.new.dealer_id === selectedDealer.id) {
+                    console.log('[UserDashboard] Realtime user_settings update:', payload.new)
+                    setUserSettings(payload.new)
+                } else {
+                    // Fallback: re-fetch to be safe
+                    fetchUserSettings()
+                }
+            })
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
+    }, [selectedDealer, user])
+
     async function fetchUserSettings() {
         if (!selectedDealer) return
         try {
@@ -427,6 +455,7 @@ export default function UserDashboard() {
                 return
             }
             // Even if data is null, we'll use defaults in the commission calculation
+            console.log('[UserDashboard] fetchUserSettings result:', { userId: user.id, dealerId: selectedDealer.id, data, blockedTypes: data?.lottery_settings?._blocked_lottery_types })
             setUserSettings(data)
         } catch (error) {
             console.error('Error fetching user settings:', error)
@@ -2761,13 +2790,19 @@ export default function UserDashboard() {
                                 <div className="loading-state">
                                     <div className="spinner"></div>
                                 </div>
-                            ) : rounds.length === 0 ? (
+                            ) : rounds.filter(r => {
+                                const blocked = userSettings?.lottery_settings?._blocked_lottery_types || []
+                                return !blocked.includes(r.lottery_type)
+                            }).length === 0 ? (
                                 <div className="empty-state card">
                                     <FiCalendar className="empty-icon" />
                                     <p>ไม่มีงวดที่เปิดรับ</p>
                                 </div>
                             ) : (
-                                rounds.map(round => {
+                                rounds.filter(r => {
+                                    const blocked = userSettings?.lottery_settings?._blocked_lottery_types || []
+                                    return !blocked.includes(r.lottery_type)
+                                }).map(round => {
                                     try {
                                     const isExpanded = selectedRound?.id === round.id;
                                     return (
