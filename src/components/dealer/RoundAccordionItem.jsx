@@ -115,6 +115,7 @@ export default function RoundAccordionItem({
 
     // Inline excess transfer states
     const [selectedExcessItems, setSelectedExcessItems] = useState({})
+    const [aiRecommendedItems, setAiRecommendedItems] = useState([]) // AI-recommended transfer items (excess-item format)
     const [showTransferModal, setShowTransferModal] = useState(false)
     const [showAIAnalysis, setShowAIAnalysis] = useState(false)
     const [transferForm, setTransferForm] = useState({ target_dealer_name: '', target_dealer_contact: '', notes: '' })
@@ -688,6 +689,14 @@ export default function RoundAccordionItem({
         }
     }
 
+    // Open AI analysis: ensure submissions are loaded first
+    async function handleOpenAIAnalysis() {
+        if (inlineSubmissions.length === 0 && !inlineLoading) {
+            await fetchInlineSubmissions(true)
+        }
+        setShowAIAnalysis(true)
+    }
+
     // Calculate commissions for inline transfers
     async function calculateInlineTransferCommissions(transfersData) {
         if (!user?.id || !transfersData || transfersData.length === 0) return
@@ -1251,7 +1260,19 @@ export default function RoundAccordionItem({
         })
     }
 
-    const excessItems = calculateExcessItems()
+    const baseExcessItems = calculateExcessItems()
+    // Merge AI-recommended items that don't already exist in type-limit excess
+    const excessItems = (() => {
+        if (aiRecommendedItems.length === 0) return baseExcessItems
+        const existingKeys = new Set(baseExcessItems.map(item => `${item.bet_type}|${item.numbers}`))
+        const merged = [...baseExcessItems]
+        aiRecommendedItems.forEach(aiItem => {
+            if (!existingKeys.has(`${aiItem.bet_type}|${aiItem.numbers}`)) {
+                merged.push(aiItem)
+            }
+        })
+        return merged
+    })()
 
     const toggleExcessItem = (item) => {
         const key = `${item.bet_type}|${item.numbers}`
@@ -1399,6 +1420,7 @@ export default function RoundAccordionItem({
             await fetchInlineSubmissions(true)
             setShowTransferModal(false)
             setSelectedExcessItems({})
+            setAiRecommendedItems([])
             setSelectedUpstreamDealer(null)
             setTransferForm({ target_dealer_name: '', target_dealer_contact: '', notes: '' })
             
@@ -2396,7 +2418,7 @@ export default function RoundAccordionItem({
                                 </button>
                                 <button
                                     className="extra-action-btn ai-btn"
-                                    onClick={(e) => { e.stopPropagation(); setShowAIAnalysis(true); }}
+                                    onClick={(e) => { e.stopPropagation(); handleOpenAIAnalysis(); }}
                                     title="AI วิเคราะห์ตีออก"
                                 >
                                     🤖 AI วิเคราะห์
@@ -2546,7 +2568,7 @@ export default function RoundAccordionItem({
                                 </button>
                                 <button
                                     className="extra-action-btn ai-btn"
-                                    onClick={(e) => { e.stopPropagation(); setShowAIAnalysis(true); }}
+                                    onClick={(e) => { e.stopPropagation(); handleOpenAIAnalysis(); }}
                                     title="AI วิเคราะห์ตีออก"
                                 >
                                     🤖 AI วิเคราะห์
@@ -4681,26 +4703,49 @@ export default function RoundAccordionItem({
                 transfers={inlineTransfers}
                 userSettingsMap={summaryData.userSettings}
                 onApplyRecommendations={(recommendations) => {
-                    // Auto-select excess items that match AI recommendations
+                    const currentSetPrice = round?.set_prices?.['4_top'] || 120
+                    const isSetBased = ['lao', 'hanoi'].includes(round.lottery_type)
+                    // Convert AI recommendations to excess-item-compatible format
+                    const aiItems = recommendations.map(rec => {
+                        const isSet = isSetBased && (rec.bet_type === '4_set' || rec.bet_type === '4_top')
+                        const transferAmt = rec.transfer_amount || 0
+                        const numSets = isSet ? Math.ceil(transferAmt / currentSetPrice) : 0
+                        return {
+                            bet_type: rec.bet_type,
+                            numbers: rec.numbers,
+                            total: rec.current_amount || transferAmt,
+                            setCount: isSet ? (rec.num_sets || numSets) : 0,
+                            excess: isSet ? numSets : transferAmt,
+                            isSetBased: isSet,
+                            excessType: rec.bet_type,
+                            isAIRecommended: true,
+                            reason: rec.reason || 'AI แนะนำ',
+                            submissions: []
+                        }
+                    })
+                    // Store AI items so they merge into excessItems
+                    setAiRecommendedItems(aiItems)
+                    // Select all AI-recommended items
                     const newSelected = {}
-                    const excessItems = calculateExcessItems()
-                    recommendations.forEach(rec => {
-                        // Find matching excess item
-                        const matchKey = `${rec.bet_type}|${rec.numbers}`
-                        const matchingItem = excessItems.find(item => `${item.bet_type}|${item.numbers}` === matchKey)
-                        if (matchingItem) {
-                            newSelected[matchKey] = true
+                    aiItems.forEach(item => {
+                        newSelected[`${item.bet_type}|${item.numbers}`] = true
+                    })
+                    // Also select any existing excess items that match
+                    const currentExcess = calculateExcessItems()
+                    currentExcess.forEach(item => {
+                        const key = `${item.bet_type}|${item.numbers}`
+                        if (recommendations.some(rec => `${rec.bet_type}|${rec.numbers}` === key)) {
+                            newSelected[key] = true
                         }
                     })
                     setSelectedExcessItems(newSelected)
                     setInlineTab('excess')
-                    // Open transfer modal if items were selected
                     const selectedCount = Object.keys(newSelected).length
                     if (selectedCount > 0) {
                         toast.success(`AI เลือก ${selectedCount} รายการสำหรับตีออก`)
                         setShowTransferModal(true)
                     } else {
-                        toast.info('ไม่พบรายการที่ตรงกับยอดเกินปัจจุบัน')
+                        toast.info('ไม่พบรายการแนะนำตีออก')
                     }
                 }}
             />
