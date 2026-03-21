@@ -527,6 +527,9 @@ export default function AIAnalysisModal({
                                 <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
                                     ความเสี่ยงอยู่ในระดับที่วงเงินสู้รับไหว
                                 </p>
+                                <button className="btn btn-outline" onClick={resetAnalysis} style={{ marginTop: '1rem' }}>
+                                    วิเคราะห์ใหม่
+                                </button>
                             </div>
                         )}
 
