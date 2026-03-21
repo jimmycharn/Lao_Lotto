@@ -943,26 +943,33 @@ export function greedyRecommendations(scenarios, betItems, budget, setPrice = 12
 
     const recommendations = Object.values(recMap)
 
-    // Final summary
-    const summary = buildPostSummary(scenarios, payoutIndex, betItems, remaining, budget, setPrice)
+    // Final summary — pass original totals because income & commission don't change when we transfer
+    const originalIncome = betItems.reduce((s, b) => s + b.net_amount, 0)
+    const originalCommission = betItems.reduce((s, b) => s + b.net_commission, 0)
+    const summary = buildPostSummary(scenarios, payoutIndex, betItems, remaining, budget, setPrice, originalIncome, originalCommission)
 
     return { recommendations, summary }
 }
 
 /**
  * Build post-transfer summary using fast recalc
+ * 
+ * IMPORTANT: originalIncome and originalCommission are the ORIGINAL totals
+ * before any transfers. These don't change when we transfer bets because:
+ *   - Income = money received from customers (already collected, doesn't change)
+ *   - Commission = money paid to customers (already owed, doesn't change)
+ * Only the payout liability changes (we no longer pay out on transferred bets).
+ * 
+ * Formula: net = originalIncome - originalCommission - worstCasePayout(remaining)
  */
-function buildPostSummary(scenarios, payoutIndex, betItems, remaining, budget, setPrice) {
+function buildPostSummary(scenarios, payoutIndex, betItems, remaining, budget, setPrice, originalIncome, originalCommission) {
     const payouts = fastRecalcPayouts(scenarios, payoutIndex, remaining, setPrice)
 
-    let postIncome = 0
-    let postCommission = 0
+    // Calculate remaining amounts for display purposes
+    let postRetained = 0
     betItems.forEach(b => {
         const key = `${b.bet_type}|${b.numbers}`
-        const rem = remaining[key] || 0
-        const ratio = b.net_amount > 0 ? rem / b.net_amount : 0
-        postIncome += rem
-        postCommission += b.net_commission * ratio
+        postRetained += remaining[key] || 0
     })
 
     let worstIdx = 0, bestIdx = 0
@@ -981,15 +988,29 @@ function buildPostSummary(scenarios, payoutIndex, betItems, remaining, budget, s
         if (payouts[i] > budget) overBudgetCount++
     }
 
+    // Net profit formula after transfers:
+    //   net = originalIncome - originalCommission - transferredOut - payout(remaining)
+    // where transferredOut = originalIncome - postRetained
+    // simplifies to: net = postRetained - originalCommission - payout(remaining)
+    //
+    // Explanation:
+    //   - originalIncome: total received from customers (doesn't change)
+    //   - originalCommission: total commission owed to customers (doesn't change)
+    //   - transferredOut: money we physically send to upstream dealer
+    //   - payout(remaining): what we must pay if someone wins (only on bets we still hold)
+    const transferredOut = originalIncome - postRetained
+
     return {
-        post_income: postIncome,
-        post_commission: postCommission,
+        post_income: originalIncome,
+        post_commission: originalCommission,
+        post_retained: postRetained,
+        transferred_out: transferredOut,
         worst_case_payout: worstPayout,
         worst_case_number: worstNumber,
-        worst_case_net: postIncome - postCommission - worstPayout,
+        worst_case_net: postRetained - originalCommission - worstPayout,
         best_case_payout: bestPayout,
         best_case_number: bestNumber,
-        best_case_net: postIncome - postCommission - bestPayout,
+        best_case_net: postRetained - originalCommission - bestPayout,
         scenarios_over_budget: overBudgetCount,
         total_scenarios: payouts.length
     }
