@@ -515,6 +515,7 @@
     animation: modalSlideIn 0.3s ease;
 }
 
+[data-theme="light"] .modal,
 [data-theme="light"] .modal-content {
     background: #ffffff;
     border: 1px solid rgba(0, 0, 0, 0.15);
@@ -4293,12 +4294,14 @@ html.theme-light .expand-icon {
 .action-buttons-left {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: 0.5rem;
 }
 
 .icon-btn-sm {
-    padding: 0.35rem;
+    padding: 0.45rem;
     border-radius: 6px;
+    min-width: 32px;
+    min-height: 32px;
     border: none;
     background: transparent;
     color: var(--color-text-muted);

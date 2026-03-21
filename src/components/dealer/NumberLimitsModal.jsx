@@ -308,11 +308,11 @@ export default function NumberLimitsModal({ round, onClose }) {
     }, [filteredLimits])
 
     const sectionStyle = {
-        background: 'var(--card-bg, #f8f9fa)',
+        background: 'var(--color-surface-light)',
         borderRadius: '10px',
         padding: '0.6rem',
         marginBottom: '0.75rem',
-        border: '1px solid var(--border-color, #dee2e6)'
+        border: '1px solid var(--color-border)'
     }
 
     const labelStyle = {
@@ -320,16 +320,16 @@ export default function NumberLimitsModal({ round, onClose }) {
         fontWeight: '600',
         marginBottom: '0.3rem',
         display: 'block',
-        color: 'var(--text-color, #333)'
+        color: 'var(--color-text)'
     }
 
     const inputStyle = {
         width: '100%',
         padding: '0.5rem 0.6rem',
         borderRadius: '6px',
-        border: '1px solid var(--border-color, #ced4da)',
-        background: 'var(--input-bg, #fff)',
-        color: 'var(--text-color, #333)',
+        border: '1px solid var(--color-border)',
+        background: 'var(--color-card)',
+        color: 'var(--color-text)',
         fontSize: '0.85rem'
     }
 
@@ -342,9 +342,9 @@ export default function NumberLimitsModal({ round, onClose }) {
         fontSize: '0.75rem',
         fontWeight: '500',
         cursor: 'pointer',
-        border: active ? '1.5px solid var(--color-primary)' : '1px solid var(--border-color, #ced4da)',
-        background: active ? 'rgba(102, 126, 234, 0.2)' : 'var(--card-bg, #f8f9fa)',
-        color: active ? 'var(--color-primary)' : 'var(--text-color, #333)',
+        border: active ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+        background: active ? 'rgba(102, 126, 234, 0.2)' : 'var(--color-surface-light)',
+        color: active ? 'var(--color-primary)' : 'var(--color-text)',
         opacity: active ? 1 : 0.7,
         transition: 'all 0.15s'
     })
@@ -441,7 +441,7 @@ export default function NumberLimitsModal({ round, onClose }) {
 
                         {/* Show reversed preview */}
                         {newLimit.include_reversed && newLimit.numbers && newLimit.numbers.length >= 2 && (
-                            <div style={{ fontSize: '0.75rem', opacity: 0.7, marginBottom: '0.5rem', padding: '0.3rem 0.5rem', background: 'var(--hover-bg, rgba(0,0,0,0.04))', borderRadius: '6px' }}>
+                            <div style={{ fontSize: '0.75rem', opacity: 0.7, marginBottom: '0.5rem', padding: '0.3rem 0.5rem', background: 'var(--bg-card-hover)', borderRadius: '6px' }}>
                                 เลขกลับ: {generateReversedNumbers(newLimit.numbers).join(', ') || 'ไม่มี'}
                             </div>
                         )}
@@ -538,7 +538,7 @@ export default function NumberLimitsModal({ round, onClose }) {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                 {groupedLimits.map(group => (
                                     <div key={group.numbers} style={{
-                                        border: '1px solid var(--border-color, #dee2e6)',
+                                        border: '1px solid var(--color-border)',
                                         borderRadius: '8px',
                                         overflow: 'hidden'
                                     }}>
@@ -548,8 +548,8 @@ export default function NumberLimitsModal({ round, onClose }) {
                                             alignItems: 'center',
                                             justifyContent: 'space-between',
                                             padding: '0.4rem 0.5rem',
-                                            background: 'var(--hover-bg, rgba(0,0,0,0.03))',
-                                            borderBottom: '1px solid var(--border-color, #dee2e6)'
+                                            background: 'var(--bg-card-hover)',
+                                            borderBottom: '1px solid var(--color-border)'
                                         }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                 <span style={{ fontSize: '1.1rem', fontWeight: '700', fontFamily: 'monospace' }}>
@@ -581,7 +581,7 @@ export default function NumberLimitsModal({ round, onClose }) {
                                                 alignItems: 'center',
                                                 justifyContent: 'space-between',
                                                 padding: '0.3rem 0.5rem',
-                                                borderBottom: '1px solid var(--border-color, #eee)',
+                                                borderBottom: '1px solid var(--color-border)',
                                                 opacity: limit.is_active ? 1 : 0.4,
                                                 fontSize: '0.82rem'
                                             }}>
