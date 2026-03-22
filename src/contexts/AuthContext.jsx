@@ -57,6 +57,7 @@ export function AuthProvider({ children }) {
     const fetchingRef = useRef(false)
     const loadingTimerRef = useRef(null)
     const sessionCleanupRef = useRef(null)
+    const skipAuthEventRef = useRef(false)
 
     // Safety: ensure loading NEVER stays true longer than 10 seconds
     useEffect(() => {
@@ -223,6 +224,11 @@ export function AuthProvider({ children }) {
                 if (event === 'INITIAL_SESSION') return
                 
                 if (event === 'SIGNED_IN') {
+                    // Skip auth events during member creation (signUp triggers SIGNED_IN for new user)
+                    if (skipAuthEventRef.current) {
+                        console.log('Auth event SIGNED_IN skipped (member creation in progress)')
+                        return
+                    }
                     // Reset fetchingRef to ensure profile fetch is NOT blocked
                     fetchingRef.current = false
                     setUser(session?.user ?? null)
@@ -232,6 +238,10 @@ export function AuthProvider({ children }) {
                         setLoading(false)
                     }
                 } else if (event === 'SIGNED_OUT') {
+                    if (skipAuthEventRef.current) {
+                        console.log('Auth event SIGNED_OUT skipped (member creation in progress)')
+                        return
+                    }
                     clearAllAuthState()
                     setLoading(false)
                 } else if (event === 'TOKEN_REFRESHED') {
@@ -500,7 +510,8 @@ export function AuthProvider({ children }) {
         forceLogoutReason,
         dismissForceLogout,
         pendingOtp,
-        setPendingOtp
+        setPendingOtp,
+        skipAuthEventRef
     }
 
     return (

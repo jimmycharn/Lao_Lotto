@@ -83,7 +83,7 @@ import BankAccountCard from '../components/BankAccountCard'
 import CopyButton from '../components/CopyButton'
 
 export default function Dealer() {
-    const { user, profile, loading: authLoading, isDealer, isSuperAdmin, isAccountSuspended } = useAuth()
+    const { user, profile, loading: authLoading, isDealer, isSuperAdmin, isAccountSuspended, skipAuthEventRef } = useAuth()
     const { toast } = useToast()
     const { setActiveDashboard, getTheme } = useTheme()
     const [searchParams] = useSearchParams()
@@ -1176,31 +1176,41 @@ export default function Dealer() {
             const { data: currentSession } = await supabase.auth.getSession()
             const dealerSession = currentSession?.session
 
-            // Create new user with signUp
-            const { data: authData, error: authError } = await supabase.auth.signUp({
-                email: addMemberForm.email,
-                password: defaultPassword,
-                options: {
-                    data: {
-                        full_name: addMemberForm.full_name || '',
-                        phone: addMemberForm.phone || '',
-                        role: 'user'
-                    }
-                }
-            })
+            // Suppress onAuthStateChange during signUp + session restore
+            // signUp auto-logs in as new user, triggering SIGNED_IN for the new user
+            // which would switch the dealer's UI to the new member's dashboard
+            skipAuthEventRef.current = true
 
-            if (authError) throw authError
+            let authData, authError
+            try {
+                const result = await supabase.auth.signUp({
+                    email: addMemberForm.email,
+                    password: defaultPassword,
+                    options: {
+                        data: {
+                            full_name: addMemberForm.full_name || '',
+                            phone: addMemberForm.phone || '',
+                            role: 'user'
+                        }
+                    }
+                })
+                authData = result.data
+                authError = result.error
+
+                if (authError) throw authError
+
+                // Immediately restore dealer session
+                if (dealerSession) {
+                    await supabase.auth.setSession({
+                        access_token: dealerSession.access_token,
+                        refresh_token: dealerSession.refresh_token
+                    })
+                }
+            } finally {
+                skipAuthEventRef.current = false
+            }
 
             const newUserId = authData.user?.id
-
-            // Immediately restore dealer session FIRST
-            // signUp auto-logs in as new user, we need to switch back to dealer
-            if (dealerSession) {
-                await supabase.auth.setSession({
-                    access_token: dealerSession.access_token,
-                    refresh_token: dealerSession.refresh_token
-                })
-            }
 
             if (newUserId) {
                 // For per_user_yearly: deduct credit
