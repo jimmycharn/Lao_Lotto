@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { supabase, ROLES } from '../lib/supabase'
-import { subscribeToSessionChanges, startSessionCheck, invalidateSession } from '../utils/deviceSession'
+import { subscribeToSessionChanges, startSessionCheck, invalidateSession, isSessionValid } from '../utils/deviceSession'
 
 const AuthContext = createContext({})
 
@@ -53,6 +53,7 @@ export function AuthProvider({ children }) {
     const [profile, setProfile] = useState(null)
     const [loading, setLoading] = useState(true)
     const [forceLogoutReason, setForceLogoutReason] = useState(null)
+    const [pendingOtp, setPendingOtp] = useState(false)
     const fetchingRef = useRef(false)
     const loadingTimerRef = useRef(null)
     const sessionCleanupRef = useRef(null)
@@ -131,6 +132,25 @@ export function AuthProvider({ children }) {
                     clearAllAuthState()
                     setLoading(false)
                     return
+                }
+
+                // ── Device session validity check ──
+                // Even though the Supabase JWT is valid, verify that this device's
+                // session hasn't been invalidated (e.g. another device logged in).
+                // This prevents refresh from bypassing force-logout.
+                try {
+                    const sessionCheck = await isSessionValid(session.user.id)
+                    if (!isMounted) return
+                    if (!sessionCheck.valid) {
+                        console.warn('Device session invalid on refresh:', sessionCheck.reason)
+                        clearAllAuthState()
+                        try { await supabase.auth.signOut({ scope: 'local' }) } catch (_) {}
+                        setLoading(false)
+                        return
+                    }
+                } catch (e) {
+                    // If check fails, allow access (graceful degradation)
+                    console.log('Device session check failed on refresh (allowing):', e.message)
                 }
 
                 // Check if the token is expired or about to expire
@@ -398,6 +418,10 @@ export function AuthProvider({ children }) {
         // Don't monitor superadmin sessions
         if (profile.role === ROLES.SUPERADMIN) return
 
+        // Don't monitor while OTP verification is in progress
+        // (new device doesn't have an active session yet until OTP is verified)
+        if (pendingOtp) return
+
         // Cleanup previous monitoring
         if (sessionCleanupRef.current) {
             sessionCleanupRef.current()
@@ -429,7 +453,31 @@ export function AuthProvider({ children }) {
                 sessionCleanupRef.current = null
             }
         }
-    }, [user?.id, profile?.role])
+    }, [user?.id, profile?.role, pendingOtp])
+
+    // When force-logout is triggered, immediately destroy the Supabase auth session
+    // so that refreshing the page cannot bypass the logout overlay.
+    useEffect(() => {
+        if (!forceLogoutReason) return
+
+        const destroySession = async () => {
+            console.warn('Force logout: destroying local Supabase session')
+            // Cleanup session monitoring first
+            if (sessionCleanupRef.current) {
+                sessionCleanupRef.current()
+                sessionCleanupRef.current = null
+            }
+            // Clear all auth state and tokens
+            clearAllAuthState()
+            // Sign out from Supabase locally (don't call invalidateSession — session is already invalid)
+            try {
+                await supabase?.auth.signOut({ scope: 'local' })
+            } catch (e) {
+                // Ignore — tokens are already cleared above
+            }
+        }
+        destroySession()
+    }, [forceLogoutReason])
 
     const dismissForceLogout = () => {
         setForceLogoutReason(null)
@@ -450,7 +498,9 @@ export function AuthProvider({ children }) {
         isDealerActive: profile?.role === ROLES.DEALER ? profile?.is_active !== false : true,
         isAccountSuspended: profile?.is_active === false,
         forceLogoutReason,
-        dismissForceLogout
+        dismissForceLogout,
+        pendingOtp,
+        setPendingOtp
     }
 
     return (

@@ -2,9 +2,9 @@ import { FiAlertTriangle, FiLogOut, FiSmartphone } from 'react-icons/fi'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function ForceLogoutOverlay() {
-    const { forceLogoutReason, signOut } = useAuth()
+    const { forceLogoutReason, signOut, pendingOtp } = useAuth()
 
-    if (!forceLogoutReason) return null
+    if (!forceLogoutReason || pendingOtp) return null
 
     const handleLogout = async () => {
         await signOut()

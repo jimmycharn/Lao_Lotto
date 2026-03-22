@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase'
 
 const DEVICE_TOKEN_KEY = 'lao_lotto_device_token'
-const SESSION_CHECK_INTERVAL = 60000 // Check every 60 seconds
+const SESSION_CHECK_INTERVAL = 15000 // Check every 15 seconds
 
 /**
  * Get or create a unique device token for this browser
@@ -103,6 +103,35 @@ export async function verifyDeviceOtp(otpRequestId, otpCode, userId) {
 }
 
 /**
+ * One-time check if current device session is still valid.
+ * Used on page refresh to prevent bypassing force-logout.
+ * Returns: { valid: boolean, reason?: string }
+ */
+export async function isSessionValid(userId) {
+    if (!supabase || !userId) return { valid: true }
+
+    const sessionToken = getDeviceToken()
+
+    try {
+        const { data, error } = await supabase.rpc('check_session_valid', {
+            p_user_id: userId,
+            p_session_token: sessionToken
+        })
+
+        if (error) {
+            // RPC error — don't block the user (graceful degradation)
+            console.log('isSessionValid RPC error (allowing):', error.message)
+            return { valid: true }
+        }
+
+        return data || { valid: true }
+    } catch (err) {
+        console.log('isSessionValid network error (allowing):', err.message)
+        return { valid: true }
+    }
+}
+
+/**
  * Invalidate current device session (on logout)
  */
 export async function invalidateSession(userId) {
@@ -169,7 +198,6 @@ export function startSessionCheck(userId, onInvalid) {
 
     const sessionToken = getDeviceToken()
     let intervalId = null
-    let consecutiveInvalid = 0
 
     const check = async () => {
         try {
@@ -182,33 +210,25 @@ export function startSessionCheck(userId, onInvalid) {
                 // RPC error (network issue, auth token refresh, timeout, etc.)
                 // Do NOT treat as invalid — just log and skip
                 console.log('Session check RPC error (ignoring):', error.message)
-                consecutiveInvalid = 0 // reset — errors are not invalid responses
                 return
             }
 
             if (data?.valid) {
-                // Session is still valid — reset counter
-                consecutiveInvalid = 0
                 return
             }
 
-            // Explicit invalid response from DB
-            consecutiveInvalid++
-            console.log(`Session check: invalid response #${consecutiveInvalid}`, data?.reason)
-
-            // Require 2 consecutive explicit "invalid" responses to confirm
-            // (guards against a single transient DB glitch)
-            if (consecutiveInvalid >= 2) {
-                console.warn('Session confirmed invalid after multiple checks')
-                onInvalid(data?.reason || 'session_invalidated')
-                if (intervalId) clearInterval(intervalId)
-            }
+            // Explicit invalid response from DB — force logout immediately
+            console.warn('Session invalid:', data?.reason)
+            onInvalid(data?.reason || 'session_invalidated')
+            if (intervalId) clearInterval(intervalId)
         } catch (err) {
             // Network-level exception — ignore, don't invalidate
             console.log('Session check network error (ignoring):', err.message)
         }
     }
 
+    // Run an initial check immediately, then periodically
+    check()
     intervalId = setInterval(check, SESSION_CHECK_INTERVAL)
 
     return () => {
