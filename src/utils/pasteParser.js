@@ -139,6 +139,19 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
         // IMPORTANT: Check inline context from ORIGINAL line first (before stripping noise)
         // because stripPrefixNoise removes Thai text like "ล่าง" which is a context keyword.
         let processLine = (stripped && stripped !== trimmed) ? stripped : trimmed
+
+        // Auto-reset context: when contextMode is 'bottom' and we encounter a 3+ digit number,
+        // reset to 'top' because 'bottom' context only applies to 1-2 digit numbers.
+        // This handles cases like: "ล่าง 25=20*20 / 45=20 / 78=50*50 / 123=10*10" where
+        // 123 should be treated as top (เต็งโต๊ด) not bottom.
+        if (contextMode === 'bottom') {
+            const numMatch = (processLine || '').match(/^(\d+)/)
+            if (numMatch && numMatch[1].length >= 3) {
+                console.log(`[pasteParser]   → auto-reset context from 'bottom' to 'top' (${numMatch[1].length}-digit number)`)
+                contextMode = 'top'
+            }
+        }
+
         let lineCtx = getLineEffectiveContext(processLine, contextMode)
         // If stripped version lost context, try extracting from original trimmed line
         if (lineCtx === contextMode && stripped && stripped !== trimmed) {
@@ -152,6 +165,20 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
                 }
             }
         }
+
+        // When a line has an explicit inline PREFIX context (e.g. "ล่าง 25=20*20", "บน 77=30"),
+        // update contextMode so subsequent lines inherit it.
+        // This makes "ล่าง 25=20*20 / 45=20 / 78=50*50" treat all as ล่าง until reset.
+        // Only update for prefix-style inline context (not suffix), detected by checking
+        // if the original trimmed line starts with a Thai context keyword.
+        if (lineCtx !== contextMode) {
+            const prefixCtxMatch = trimmed.match(/^(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล|วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด)\.?\s+\d/)
+            if (prefixCtxMatch) {
+                console.log(`[pasteParser]   → prefix context "${prefixCtxMatch[1]}" updates contextMode: ${contextMode} → ${lineCtx}`)
+                contextMode = lineCtx
+            }
+        }
+
         console.log(`[pasteParser]   → normal line: "${processLine}", lineCtx=${lineCtx}`)
         if (lineCtx === 'both') {
             const bothResults = emitBoth(processLine, isLaoOrHanoi, lotteryType)
@@ -408,6 +435,20 @@ function stripPrefixNoise(line) {
  */
 function parseContextLine(line) {
     const withPunct = line.trim()
+
+    // --- Bracketed/prefixed context: [2 ตัวล่าง], [3 ตัวบน], [2 ตัวบนล่าง] ---
+    // Also handles without brackets: "2ตัวล่าง", "2 ตัว ล่าง", "3ตัวบน"
+    const bracketCleaned = withPunct.replace(/[\[\](){}]/g, '').replace(/[\s.+\-]/g, '')
+    // "2ตัวบนล่าง", "3ตัวบนล่าง", "2ตัวลบ", "2ตัวบล" → both
+    if (/^\d*ตัว(บนล่าง|ล่างบน|บล|ลบ)$/.test(bracketCleaned)) return 'both'
+    // "2ตัวล่าง", "2ตัวล" → bottom
+    if (/^\d*ตัว(ล่าง|ล)$/.test(bracketCleaned)) return 'bottom'
+    // "3ตัวบน", "2ตัวบ" → top
+    if (/^\d*ตัว(บน|บ)$/.test(bracketCleaned)) return 'top'
+    // "2ตัววิ่งล่าง", "2ตัวลอยล่าง" → float_bottom
+    if (/^\d*ตัว(วิ่งล่าง|ลอยล่าง)$/.test(bracketCleaned)) return 'float_bottom'
+    // "2ตัววิ่งบน", "2ตัวลอยบน", "2ตัววิ่ง", "2ตัวลอย" → float_top
+    if (/^\d*ตัว(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|มี)$/.test(bracketCleaned)) return 'float_top'
 
     // Check for "วิ่ง/ลอย/โต๊ด/มี" float context FIRST (before บน/ล่าง checks)
     // These keywords indicate "ลอย" (float/run) bet type
