@@ -207,33 +207,54 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
             return betType
         }
 
-        // Group transfers by upstream_dealer_id
+        // Group transfers by upstream_dealer_id (linked) or target_dealer_name (external)
         const dealerTransfers = {}
         transfersData.forEach(t => {
-            const dealerId = t.upstream_dealer_id
-            if (!dealerId) return
-            if (!dealerTransfers[dealerId]) {
-                dealerTransfers[dealerId] = []
+            const groupKey = t.upstream_dealer_id || `external_${t.target_dealer_name || 'ไม่ระบุ'}`
+            if (!dealerTransfers[groupKey]) {
+                dealerTransfers[groupKey] = {
+                    isLinked: !!(t.upstream_dealer_id && t.is_linked),
+                    upstreamDealerId: t.upstream_dealer_id,
+                    transfers: []
+                }
             }
-            dealerTransfers[dealerId].push(t)
+            dealerTransfers[groupKey].transfers.push(t)
         })
 
         const commissions = {}
 
-        // For each upstream dealer, fetch their settings and calculate commission
-        for (const dealerId of Object.keys(dealerTransfers)) {
-            // Fetch user_settings: settings that upstream dealer set for us
-            const { data: settings } = await supabase
-                .from('user_settings')
-                .select('*')
-                .eq('user_id', user.id)
-                .eq('dealer_id', dealerId)
-                .maybeSingle()
+        // For each group, fetch settings and calculate commission
+        for (const groupKey of Object.keys(dealerTransfers)) {
+            const group = dealerTransfers[groupKey]
+            let settings = null
+
+            if (group.isLinked && group.upstreamDealerId) {
+                // Linked: fetch user_settings
+                const { data: settingsData } = await supabase
+                    .from('user_settings')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .eq('dealer_id', group.upstreamDealerId)
+                    .maybeSingle()
+                settings = settingsData
+            } else {
+                // External: fetch lottery_settings from dealer_upstream_connections
+                const dealerName = group.transfers[0]?.target_dealer_name
+                if (dealerName) {
+                    const { data: connData } = await supabase
+                        .from('dealer_upstream_connections')
+                        .select('lottery_settings')
+                        .eq('dealer_id', user.id)
+                        .eq('upstream_name', dealerName)
+                        .maybeSingle()
+                    if (connData?.lottery_settings) {
+                        settings = { lottery_settings: connData.lottery_settings }
+                    }
+                }
+            }
 
             let totalCommission = 0
-            const transfersList = dealerTransfers[dealerId]
-
-            transfersList.forEach(t => {
+            group.transfers.forEach(t => {
                 const settingsKey = getBetSettingsKey(t.bet_type, lotteryKey)
                 const betSettings = settings?.lottery_settings?.[lotteryKey]?.[settingsKey]
                 // 4_set: commission is fixed amount per set (บาท/ชุด), not percentage
@@ -250,10 +271,10 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
                 }
             })
 
-            commissions[dealerId] = {
+            commissions[groupKey] = {
                 totalCommission,
-                transferCount: transfersList.length,
-                totalAmount: transfersList.reduce((sum, t) => sum + (t.amount || 0), 0)
+                transferCount: group.transfers.length,
+                totalAmount: group.transfers.reduce((sum, t) => sum + (t.amount || 0), 0)
             }
         }
 

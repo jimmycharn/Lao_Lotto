@@ -510,15 +510,32 @@ export default function RoundAccordionItem({
                     dealer.isExternal = true
                     dealer.currencySymbol = round.currency_symbol
                     
-                    // Calculate commission using default rates (external = no upstream settings)
+                    // Fetch lottery_settings from dealer_upstream_connections for this external dealer
+                    let extSettings = null
+                    if (dealer.dealerName && dealer.dealerName !== 'ไม่ระบุชื่อ') {
+                        const { data: connData } = await supabase
+                            .from('dealer_upstream_connections')
+                            .select('lottery_settings')
+                            .eq('dealer_id', user.id)
+                            .eq('upstream_name', dealer.dealerName)
+                            .maybeSingle()
+                        extSettings = connData?.lottery_settings
+                    }
+                    
+                    // Calculate commission using upstream connection settings, fallback to defaults
                     dealer.transfers.forEach(t => {
+                        const settingsKey = getBetSettingsKey(t.bet_type, lotteryKey)
+                        const betSettings = extSettings?.[lotteryKey]?.[settingsKey]
                         // 4_set: commission is fixed amount per set (บาท/ชุด), not percentage
                         if (t.bet_type === '4_set') {
-                            const setPrice = round?.set_prices?.['4_top'] || 120
+                            const setPrice = betSettings?.setPrice || round?.set_prices?.['4_top'] || 120
                             const numSets = Math.floor((t.amount || 0) / setPrice)
-                            dealer.totalCommission += numSets * (DEFAULT_4_SET_SETTINGS.commission || 25)
+                            const commRate = betSettings?.commission !== undefined ? betSettings.commission : (DEFAULT_4_SET_SETTINGS.commission || 25)
+                            dealer.totalCommission += numSets * commRate
                         } else {
-                            const commissionRate = DEFAULT_COMMISSIONS[t.bet_type] || 15
+                            const commissionRate = betSettings?.commission !== undefined 
+                                ? betSettings.commission 
+                                : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
                             dealer.totalCommission += (t.amount || 0) * (commissionRate / 100)
                         }
                     })
@@ -747,6 +764,20 @@ export default function RoundAccordionItem({
                     .eq('dealer_id', group.upstreamDealerId)
                     .maybeSingle()
                 settings = settingsData
+            } else {
+                // External: fetch lottery_settings from dealer_upstream_connections
+                const dealerName = group.transfers[0]?.target_dealer_name
+                if (dealerName) {
+                    const { data: connData } = await supabase
+                        .from('dealer_upstream_connections')
+                        .select('lottery_settings')
+                        .eq('dealer_id', user.id)
+                        .eq('upstream_name', dealerName)
+                        .maybeSingle()
+                    if (connData?.lottery_settings) {
+                        settings = { lottery_settings: connData.lottery_settings }
+                    }
+                }
             }
 
             let totalCommission = 0

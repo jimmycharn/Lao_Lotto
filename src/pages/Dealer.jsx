@@ -2028,15 +2028,32 @@ export default function Dealer() {
                                 }
                             }
                         } else {
-                            // External: use default commission rates
+                            // External: fetch lottery_settings from dealer_upstream_connections
+                            let extSettings = null
+                            const extDealerName = group.transfers[0]?.target_dealer_name
+                            if (extDealerName) {
+                                const { data: connData } = await supabase
+                                    .from('dealer_upstream_connections')
+                                    .select('lottery_settings')
+                                    .eq('dealer_id', user.id)
+                                    .eq('upstream_name', extDealerName)
+                                    .maybeSingle()
+                                extSettings = connData?.lottery_settings
+                            }
+                            
                             for (const t of group.transfers) {
+                                const settingsKey = getSettingsKey(t.bet_type, lotteryKey)
+                                const betSettings = extSettings?.[lotteryKey]?.[settingsKey]
                                 // 4_set: commission is fixed amount per set (บาท/ชุด), not percentage
                                 if (t.bet_type === '4_set') {
-                                    const setPrice = roundData?.set_prices?.['4_top'] || 120
+                                    const setPrice = betSettings?.setPrice || roundData?.set_prices?.['4_top'] || 120
                                     const numSets = Math.floor((t.amount || 0) / setPrice)
-                                    upstreamCommission += numSets * (DEFAULT_4_SET_SETTINGS.commission || 25)
+                                    const commRate = betSettings?.commission !== undefined ? betSettings.commission : (DEFAULT_4_SET_SETTINGS.commission || 25)
+                                    upstreamCommission += numSets * commRate
                                 } else {
-                                    const commRate = DEFAULT_COMMISSIONS[t.bet_type] || 15
+                                    const commRate = betSettings?.commission !== undefined
+                                        ? betSettings.commission
+                                        : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
                                     upstreamCommission += (t.amount || 0) * (commRate / 100)
                                 }
                             }
