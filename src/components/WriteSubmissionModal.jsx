@@ -739,13 +739,13 @@ export default function WriteSubmissionModal({
                 }
             } else {
                 if (isTop) {
-                    buttons.push({ label: 'บน', value: 'บน', autoSubmit: true })
-                    buttons.push({ label: 'บนกลับ', value: 'บนกลับ', autoSubmit: true })
-                    buttons.push({ label: 'ลอย', value: 'ลอย', autoSubmit: true })
-                    buttons.push({ label: 'หน้าบน', value: 'หน้าบน', autoSubmit: true })
-                    buttons.push({ label: 'หน้ากลับ', value: 'หน้ากลับ', autoSubmit: true })
-                    buttons.push({ label: 'ถ่างบน', value: 'ถ่างบน', autoSubmit: true })
-                    buttons.push({ label: 'ถ่างกลับ', value: 'ถ่างกลับ', autoSubmit: true })
+                    buttons.push({ label: 'บน', value: 'บน', autoSubmit: true, row: 1 })
+                    buttons.push({ label: 'บนกลับ', value: 'บนกลับ', autoSubmit: true, row: 1 })
+                    buttons.push({ label: 'ลอย', value: 'ลอย', autoSubmit: true, row: 1 })
+                    buttons.push({ label: 'หน้าบน', value: 'หน้าบน', autoSubmit: true, row: 2 })
+                    buttons.push({ label: 'หน้ากลับ', value: 'หน้ากลับ', autoSubmit: true, row: 2 })
+                    buttons.push({ label: 'ถ่างบน', value: 'ถ่างบน', autoSubmit: true, row: 2 })
+                    buttons.push({ label: 'ถ่างกลับ', value: 'ถ่างกลับ', autoSubmit: true, row: 2 })
                 } else {
                     buttons.push({ label: 'ล่าง', value: 'ล่าง', autoSubmit: true })
                     buttons.push({ label: 'ล่างกลับ', value: 'ล่างกลับ', autoSubmit: true })
@@ -2085,13 +2085,13 @@ export default function WriteSubmissionModal({
                 }
             } else {
                 if (isTop) {
-                    buttons.push({ label: 'บน', value: 'บน', autoSubmit: true })
-                    buttons.push({ label: 'บนกลับ', value: 'บนกลับ', autoSubmit: true })
-                    buttons.push({ label: 'ลอย', value: 'ลอย', autoSubmit: true })
-                    buttons.push({ label: 'หน้าบน', value: 'หน้าบน', autoSubmit: true })
-                    buttons.push({ label: 'หน้ากลับ', value: 'หน้ากลับ', autoSubmit: true })
-                    buttons.push({ label: 'ถ่างบน', value: 'ถ่างบน', autoSubmit: true })
-                    buttons.push({ label: 'ถ่างกลับ', value: 'ถ่างกลับ', autoSubmit: true })
+                    buttons.push({ label: 'บน', value: 'บน', autoSubmit: true, row: 1 })
+                    buttons.push({ label: 'บนกลับ', value: 'บนกลับ', autoSubmit: true, row: 1 })
+                    buttons.push({ label: 'ลอย', value: 'ลอย', autoSubmit: true, row: 1 })
+                    buttons.push({ label: 'หน้าบน', value: 'หน้าบน', autoSubmit: true, row: 2 })
+                    buttons.push({ label: 'หน้ากลับ', value: 'หน้ากลับ', autoSubmit: true, row: 2 })
+                    buttons.push({ label: 'ถ่างบน', value: 'ถ่างบน', autoSubmit: true, row: 2 })
+                    buttons.push({ label: 'ถ่างกลับ', value: 'ถ่างกลับ', autoSubmit: true, row: 2 })
                 } else {
                     buttons.push({ label: 'ล่าง', value: 'ล่าง', autoSubmit: true })
                     buttons.push({ label: 'ล่างกลับ', value: 'ล่างกลับ', autoSubmit: true })
@@ -2266,13 +2266,13 @@ export default function WriteSubmissionModal({
             } else {
                 // ไม่มี * ในจำนวนเงิน
                 if (isTop) {
-                    buttons.push({ label: 'บน', value: 'บน', autoSubmit: true })
-                    buttons.push({ label: 'บนกลับ', value: 'บนกลับ', autoSubmit: true })
-                    buttons.push({ label: 'ลอย', value: 'ลอย', autoSubmit: true })
-                    buttons.push({ label: 'หน้าบน', value: 'หน้าบน', autoSubmit: true })
-                    buttons.push({ label: 'หน้ากลับ', value: 'หน้ากลับ', autoSubmit: true })
-                    buttons.push({ label: 'ถ่างบน', value: 'ถ่างบน', autoSubmit: true })
-                    buttons.push({ label: 'ถ่างกลับ', value: 'ถ่างกลับ', autoSubmit: true })
+                    buttons.push({ label: 'บน', value: 'บน', autoSubmit: true, row: 1 })
+                    buttons.push({ label: 'บนกลับ', value: 'บนกลับ', autoSubmit: true, row: 1 })
+                    buttons.push({ label: 'ลอย', value: 'ลอย', autoSubmit: true, row: 1 })
+                    buttons.push({ label: 'หน้าบน', value: 'หน้าบน', autoSubmit: true, row: 2 })
+                    buttons.push({ label: 'หน้ากลับ', value: 'หน้ากลับ', autoSubmit: true, row: 2 })
+                    buttons.push({ label: 'ถ่างบน', value: 'ถ่างบน', autoSubmit: true, row: 2 })
+                    buttons.push({ label: 'ถ่างกลับ', value: 'ถ่างกลับ', autoSubmit: true, row: 2 })
                 } else {
                     buttons.push({ label: 'ล่าง', value: 'ล่าง', autoSubmit: true })
                     buttons.push({ label: 'ล่างกลับ', value: 'ล่างกลับ', autoSubmit: true })
@@ -2675,8 +2675,9 @@ export default function WriteSubmissionModal({
                                         onTouchEnd={handleTypeButtonMouseUp}
                                         onFocus={() => setFocusedTypeIndex(index)}
                                         onBlur={() => setFocusedTypeIndex(-1)}
-                                        className={`type-btn ${btn.autoSubmit ? 'auto' : 'manual'} ${focusedTypeIndex === index ? 'focused' : ''} ${index === defaultIndex ? 'default-btn' : ''}`}
+                                        className={`type-btn ${btn.autoSubmit ? 'auto' : 'manual'} ${focusedTypeIndex === index ? 'focused' : ''} ${index === defaultIndex ? 'default-btn' : ''} ${btn.row === 1 ? 'row-1' : ''} ${btn.row === 2 ? 'row-2' : ''}`}
                                         data-type={btn.label}
+                                        data-row={btn.row || ''}
                                         title={`Ctrl+${index + 1}`}
                                     >
                                         <span className="btn-number">{index + 1}</span>{btn.label}

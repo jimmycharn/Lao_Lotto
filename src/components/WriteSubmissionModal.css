@@ -862,6 +862,17 @@
     align-self: center;
 }
 
+/* Row-based layout: force row-1 buttons to fill first row equally (3 buttons = 33.33% each) */
+.type-btn.row-1 {
+    flex: 1 1 calc(33.33% - 0.4rem);
+    max-width: calc(33.33% - 0.27rem);
+}
+
+/* Row-2 buttons: wrap to second line */
+.type-btn.row-2 {
+    flex: 1 1 auto;
+}
+
 /* Type Button in row - base style */
 .type-btn {
     flex: 1;
@@ -887,6 +898,13 @@
     opacity: 0.85;
     min-width: 0.9rem;
     text-align: center;
+}
+
+/* Hide shortcut number on mobile/tablet (only useful for desktop Ctrl+N shortcuts) */
+@media (max-width: 768px) {
+    .type-btn .btn-number {
+        display: none;
+    }
 }
 
 /* Mobile: First row buttons match height with tallest button */
