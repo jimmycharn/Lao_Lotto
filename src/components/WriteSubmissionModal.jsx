@@ -403,13 +403,16 @@ export default function WriteSubmissionModal({
     allMembers = [],
     selectedMember = null,
     onMemberChange = null,
-    isDealerMode = false
+    isDealerMode = false,
+    // Bonus settings: { bonusEnabled, betTypeBonus: { '3_top': 10, '2_top': 5, ... } }
+    bonusSettings = null
 }) {
     const [lines, setLines] = useState([])
     const [currentInput, setCurrentInput] = useState('')
     const [editingIndex, setEditingIndex] = useState(null)
     const [billNote, setBillNote] = useState('')
     const [isPaid, setIsPaid] = useState(false)
+    const [bonusActive, setBonusActive] = useState(bonusSettings?.bonusEnabled || false)
     const [error, setError] = useState('')
     const [success, setSuccess] = useState(false)
     const [submitting, setSubmitting] = useState(false)
@@ -451,6 +454,11 @@ export default function WriteSubmissionModal({
     const [showClearAllConfirm, setShowClearAllConfirm] = useState(false)
     const { dragState, handleDragStart, handleDragOver, handleDrop, handleDragEnd, handleTouchStart, handleTouchMove, handleTouchEnd, setRowRef, shouldAllowClick } = useDragReorder(lines, setLines)
     const isEditMode = !!editingData
+
+    // Sync bonusActive when bonusSettings changes (e.g., member switch in dealer mode)
+    useEffect(() => {
+        setBonusActive(bonusSettings?.bonusEnabled || false)
+    }, [bonusSettings?.bonusEnabled])
 
     // Save default types to localStorage when changed
     useEffect(() => {
@@ -1210,6 +1218,14 @@ export default function WriteSubmissionModal({
         }
     }, [lines, currentInput])
 
+    // Apply bonus to a single entry amount
+    const applyBonus = (amount, betType) => {
+        if (!bonusActive || !bonusSettings?.betTypeBonus || betType === '4_set') return amount
+        const bonusPct = bonusSettings.betTypeBonus[betType] || 0
+        if (bonusPct > 0) return Math.round(amount * (1 + bonusPct / 100))
+        return amount
+    }
+
     // Calculate total
     const calculateTotal = () => {
         let total = 0
@@ -1217,7 +1233,7 @@ export default function WriteSubmissionModal({
             const parsed = parseLine(line)
             if (parsed && !parsed.error) {
                 const entries = generateEntries(parsed, null, line, { setPrice, lotteryType })
-                entries.forEach(e => total += e.amount)
+                entries.forEach(e => total += applyBonus(e.amount, e.betType))
             }
         })
         return total
@@ -1982,6 +1998,20 @@ export default function WriteSubmissionModal({
                 }
             }
 
+            // Apply bonus % to amounts if bonus is active
+            if (bonusActive && bonusSettings?.betTypeBonus) {
+                for (const entry of allEntries) {
+                    const bt = entry.betType || entry.bet_type
+                    if (bt === '4_set') continue // 4 ตัวชุด ไม่แถม
+                    const bonusPct = bonusSettings.betTypeBonus[bt] || 0
+                    if (bonusPct > 0) {
+                        entry.amount = Math.round(entry.amount * (1 + bonusPct / 100))
+                        // Update displayAmount to reflect bonus
+                        entry.displayAmount = entry.amount
+                    }
+                }
+            }
+
             if (isEditMode && onEditSubmit) {
                 // Edit mode - call onEditSubmit with original bill data
                 await onEditSubmit({
@@ -2465,6 +2495,35 @@ export default function WriteSubmissionModal({
                             ฿
                         </span>
                     </label>
+                    {/* Bonus toggle button */}
+                    {bonusSettings && (
+                        <label
+                            title={bonusActive ? 'แถมเงินแทง (เปิดอยู่)' : 'แถมเงินแทง (ปิด)'}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                width: '36px',
+                                height: '36px',
+                                borderRadius: 'var(--radius-md)',
+                                border: `2px solid ${bonusActive ? '#22c55e' : 'var(--color-border)'}`,
+                                background: bonusActive ? 'rgba(34, 197, 94, 0.15)' : 'transparent',
+                                transition: 'all 0.2s ease',
+                                flexShrink: 0
+                            }}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={bonusActive}
+                                onChange={e => setBonusActive(e.target.checked)}
+                                style={{ display: 'none' }}
+                            />
+                            <span style={{ fontSize: '1.1rem', color: bonusActive ? '#22c55e' : 'var(--color-text-muted)' }}>
+                                🎁
+                            </span>
+                        </label>
+                    )}
                     {/* Save button for non-dealer mode (user dashboard) */}
                     {!isDealerMode && !success && (
                         <button 
@@ -2534,7 +2593,7 @@ export default function WriteSubmissionModal({
                         const parsed = parseLine(line)
                         const hasError = parsed && parsed.error
                         const entries = !hasError ? generateEntries(parsed, null, line, { setPrice, lotteryType }) : []
-                        const lineTotal = entries.reduce((sum, e) => sum + e.amount, 0)
+                        const lineTotal = entries.reduce((sum, e) => sum + applyBonus(e.amount, e.betType), 0)
 
                         return (
                             <div 

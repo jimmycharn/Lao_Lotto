@@ -342,6 +342,29 @@ export default function DealerWriteSubmissionWrapper({
         || round?.set_prices?.['4_top'] 
         || 120
 
+    // Build bonusSettings from userSettings for this lottery type
+    // Maps settings keys to submission bet types (e.g. 3_straight → 3_top for Lao/Hanoi)
+    const bonusSettings = (() => {
+        const tabSettings = userSettings?.lottery_settings?.[lotteryKey]
+        if (!tabSettings?.bonusEnabled) return null
+        const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryKey)
+        // Reverse map: settings key → submission bet type
+        const REVERSE_LAO_MAP = { '3_straight': '3_top', '3_tod_single': '3_tod' }
+        const betTypeBonus = {}
+        Object.entries(tabSettings).forEach(([key, val]) => {
+            if (key === 'bonusEnabled' || key === '4_set' || typeof val !== 'object') return
+            if (val.bonus && val.bonus > 0) {
+                betTypeBonus[key] = val.bonus
+                // Also map to submission bet type key for Lao/Hanoi
+                if (isLaoOrHanoi && REVERSE_LAO_MAP[key]) {
+                    betTypeBonus[REVERSE_LAO_MAP[key]] = val.bonus
+                }
+            }
+        })
+        if (Object.keys(betTypeBonus).length === 0) return null
+        return { bonusEnabled: true, betTypeBonus }
+    })()
+
     return (
         <WriteSubmissionModal
             isOpen={true}
@@ -359,6 +382,7 @@ export default function DealerWriteSubmissionWrapper({
             selectedMember={targetUser}
             onMemberChange={onMemberChange}
             isDealerMode={true}
+            bonusSettings={bonusSettings}
         />
     )
 }

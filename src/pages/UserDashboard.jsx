@@ -4232,6 +4232,25 @@ export default function UserDashboard() {
                 onEditSubmit={handleEditBillSubmit}
                 lotteryType={selectedRound?.lottery_type}
                 setPrice={userSettings?.lottery_settings?.[selectedRound?.lottery_type]?.['4_set']?.setPrice || selectedRound?.set_prices?.['4_top'] || 120}
+                bonusSettings={(() => {
+                    const lk = selectedRound?.lottery_type
+                    const tabSettings = userSettings?.lottery_settings?.[lk]
+                    if (!tabSettings?.bonusEnabled) return null
+                    const isLaoOrHanoi = ['lao', 'hanoi'].includes(lk)
+                    const REVERSE_LAO_MAP = { '3_straight': '3_top', '3_tod_single': '3_tod' }
+                    const betTypeBonus = {}
+                    Object.entries(tabSettings).forEach(([key, val]) => {
+                        if (key === 'bonusEnabled' || key === '4_set' || typeof val !== 'object') return
+                        if (val.bonus && val.bonus > 0) {
+                            betTypeBonus[key] = val.bonus
+                            if (isLaoOrHanoi && REVERSE_LAO_MAP[key]) {
+                                betTypeBonus[REVERSE_LAO_MAP[key]] = val.bonus
+                            }
+                        }
+                    })
+                    if (Object.keys(betTypeBonus).length === 0) return null
+                    return { bonusEnabled: true, betTypeBonus }
+                })()}
             />
 
             {/* QR Scanner Modal */}

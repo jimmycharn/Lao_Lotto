@@ -8,7 +8,8 @@ import {
     FiDollarSign,
     FiCheck,
     FiCreditCard,
-    FiStar
+    FiStar,
+    FiGift
 } from 'react-icons/fi'
 import BankAccountCard from '../BankAccountCard'
 
@@ -21,6 +22,7 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
     const [loading, setLoading] = useState(true)
     const [subTab, setSubTab] = useState(isOwnDealer ? 'rounds' : 'profile') // Different default tabs
     const [ratesTab, setRatesTab] = useState('thai') // lottery type tab for rates
+    const [savingBonus, setSavingBonus] = useState(false)
 
     // User's own bank accounts
     const [userBankAccounts, setUserBankAccounts] = useState([])
@@ -137,22 +139,24 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
     // Default settings and labels for rates display
     const getDefaultSettings = () => ({
         thai: {
-            'run_top': { commission: 15, payout: 3 },
-            'run_bottom': { commission: 15, payout: 4 },
-            'pak_top': { commission: 15, payout: 8 },
-            'pak_bottom': { commission: 15, payout: 6 },
-            '2_top': { commission: 15, payout: 65 },
-            '2_front': { commission: 15, payout: 65 },
-            '2_center': { commission: 15, payout: 65 },
-            '2_run': { commission: 15, payout: 10 },
-            '2_bottom': { commission: 15, payout: 65 },
-            '3_top': { commission: 30, payout: 550 },
-            '3_tod': { commission: 15, payout: 100 },
-            '3_bottom': { commission: 15, payout: 135 },
-            '4_float': { commission: 15, payout: 20 },
-            '5_float': { commission: 15, payout: 10 }
+            bonusEnabled: false,
+            'run_top': { commission: 15, payout: 3, bonus: 0 },
+            'run_bottom': { commission: 15, payout: 4, bonus: 0 },
+            'pak_top': { commission: 15, payout: 8, bonus: 0 },
+            'pak_bottom': { commission: 15, payout: 6, bonus: 0 },
+            '2_top': { commission: 15, payout: 65, bonus: 0 },
+            '2_front': { commission: 15, payout: 65, bonus: 0 },
+            '2_center': { commission: 15, payout: 65, bonus: 0 },
+            '2_run': { commission: 15, payout: 10, bonus: 0 },
+            '2_bottom': { commission: 15, payout: 65, bonus: 0 },
+            '3_top': { commission: 30, payout: 550, bonus: 0 },
+            '3_tod': { commission: 15, payout: 100, bonus: 0 },
+            '3_bottom': { commission: 15, payout: 135, bonus: 0 },
+            '4_float': { commission: 15, payout: 20, bonus: 0 },
+            '5_float': { commission: 15, payout: 10, bonus: 0 }
         },
         lao: {
+            bonusEnabled: false,
             '4_set': {
                 commission: 25,
                 setPrice: 120,
@@ -166,21 +170,22 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
                     '2_back_set': 1000
                 }
             },
-            'run_top': { commission: 15, payout: 3 },
-            'run_bottom': { commission: 15, payout: 4 },
-            'pak_top': { commission: 15, payout: 8 },
-            'pak_bottom': { commission: 15, payout: 6 },
-            '2_top': { commission: 15, payout: 65 },
-            '2_front': { commission: 15, payout: 65 },
-            '2_center': { commission: 15, payout: 65 },
-            '2_run': { commission: 15, payout: 10 },
-            '2_bottom': { commission: 15, payout: 65 },
-            '3_straight': { commission: 30, payout: 550 },
-            '3_tod_single': { commission: 15, payout: 100 },
-            '4_float': { commission: 15, payout: 20 },
-            '5_float': { commission: 15, payout: 10 }
+            'run_top': { commission: 15, payout: 3, bonus: 0 },
+            'run_bottom': { commission: 15, payout: 4, bonus: 0 },
+            'pak_top': { commission: 15, payout: 8, bonus: 0 },
+            'pak_bottom': { commission: 15, payout: 6, bonus: 0 },
+            '2_top': { commission: 15, payout: 65, bonus: 0 },
+            '2_front': { commission: 15, payout: 65, bonus: 0 },
+            '2_center': { commission: 15, payout: 65, bonus: 0 },
+            '2_run': { commission: 15, payout: 10, bonus: 0 },
+            '2_bottom': { commission: 15, payout: 65, bonus: 0 },
+            '3_straight': { commission: 30, payout: 550, bonus: 0 },
+            '3_tod_single': { commission: 15, payout: 100, bonus: 0 },
+            '4_float': { commission: 15, payout: 20, bonus: 0 },
+            '5_float': { commission: 15, payout: 10, bonus: 0 }
         },
         hanoi: {
+            bonusEnabled: false,
             '4_set': {
                 commission: 25,
                 setPrice: 120,
@@ -194,23 +199,24 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
                     '2_back_set': 1000
                 }
             },
-            'run_top': { commission: 15, payout: 3 },
-            'run_bottom': { commission: 15, payout: 4 },
-            'pak_top': { commission: 15, payout: 8 },
-            'pak_bottom': { commission: 15, payout: 6 },
-            '2_top': { commission: 15, payout: 65 },
-            '2_front': { commission: 15, payout: 65 },
-            '2_center': { commission: 15, payout: 65 },
-            '2_run': { commission: 15, payout: 10 },
-            '2_bottom': { commission: 15, payout: 65 },
-            '3_straight': { commission: 30, payout: 550 },
-            '3_tod_single': { commission: 15, payout: 100 },
-            '4_float': { commission: 15, payout: 20 },
-            '5_float': { commission: 15, payout: 10 }
+            'run_top': { commission: 15, payout: 3, bonus: 0 },
+            'run_bottom': { commission: 15, payout: 4, bonus: 0 },
+            'pak_top': { commission: 15, payout: 8, bonus: 0 },
+            'pak_bottom': { commission: 15, payout: 6, bonus: 0 },
+            '2_top': { commission: 15, payout: 65, bonus: 0 },
+            '2_front': { commission: 15, payout: 65, bonus: 0 },
+            '2_center': { commission: 15, payout: 65, bonus: 0 },
+            '2_run': { commission: 15, payout: 10, bonus: 0 },
+            '2_bottom': { commission: 15, payout: 65, bonus: 0 },
+            '3_straight': { commission: 30, payout: 550, bonus: 0 },
+            '3_tod_single': { commission: 15, payout: 100, bonus: 0 },
+            '4_float': { commission: 15, payout: 20, bonus: 0 },
+            '5_float': { commission: 15, payout: 10, bonus: 0 }
         },
         stock: {
-            '2_top': { commission: 15, payout: 65 },
-            '2_bottom': { commission: 15, payout: 65 }
+            bonusEnabled: false,
+            '2_top': { commission: 15, payout: 65, bonus: 0 },
+            '2_bottom': { commission: 15, payout: 65, bonus: 0 }
         }
     })
 
@@ -292,8 +298,13 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
 
         const merged = { ...defaults }
         Object.keys(userSettings.lottery_settings).forEach(tab => {
+            if (tab === '_blocked_lottery_types') return
             if (merged[tab]) {
+                if (userSettings.lottery_settings[tab].bonusEnabled !== undefined) {
+                    merged[tab].bonusEnabled = userSettings.lottery_settings[tab].bonusEnabled
+                }
                 Object.keys(userSettings.lottery_settings[tab]).forEach(key => {
+                    if (key === 'bonusEnabled') return
                     if (merged[tab][key]) {
                         merged[tab][key] = { ...merged[tab][key], ...userSettings.lottery_settings[tab][key] }
                     }
@@ -304,6 +315,38 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
     }
 
     const settings = getMergedSettings()
+
+    // Save bonus settings (bonusEnabled + bonus %) to user_settings
+    async function handleSaveBonusSettings(lotteryKey, bonusEnabled, bonusUpdates) {
+        setSavingBonus(true)
+        try {
+            // Build updated lottery_settings preserving existing data
+            const existingSettings = userSettings?.lottery_settings || {}
+            const updatedTab = { ...existingSettings[lotteryKey], bonusEnabled }
+            // Apply bonus % updates
+            for (const [betKey, bonusVal] of Object.entries(bonusUpdates)) {
+                if (updatedTab[betKey]) {
+                    updatedTab[betKey] = { ...updatedTab[betKey], bonus: bonusVal }
+                }
+            }
+            const newLotterySettings = { ...existingSettings, [lotteryKey]: updatedTab }
+
+            const { error } = await supabase
+                .from('user_settings')
+                .upsert({
+                    user_id: user.id,
+                    dealer_id: dealer.id,
+                    lottery_settings: newLotterySettings,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'user_id, dealer_id' })
+
+            if (error) throw error
+        } catch (error) {
+            console.error('Error saving bonus settings:', error)
+        } finally {
+            setSavingBonus(false)
+        }
+    }
 
     return (
         <div className="dealer-info-section">
@@ -507,6 +550,40 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
                             </div>
                         )}
 
+                        {/* Bonus Settings Toggle */}
+                        <label
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                margin: '0.75rem 0 0.75rem',
+                                cursor: 'pointer',
+                                fontSize: '0.95rem',
+                                color: settings[ratesTab]?.bonusEnabled ? '#22c55e' : 'var(--color-text)'
+                            }}
+                            onClick={async (e) => {
+                                const newEnabled = !settings[ratesTab]?.bonusEnabled
+                                // Collect current bonus values
+                                const bonusUpdates = {}
+                                Object.entries(settings[ratesTab] || {}).forEach(([key, val]) => {
+                                    if (key !== '4_set' && key !== 'bonusEnabled' && typeof val === 'object') {
+                                        bonusUpdates[key] = val.bonus || 0
+                                    }
+                                })
+                                await handleSaveBonusSettings(ratesTab, newEnabled, bonusUpdates)
+                            }}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={settings[ratesTab]?.bonusEnabled || false}
+                                readOnly
+                                style={{ width: '18px', height: '18px', accentColor: '#22c55e', cursor: 'pointer' }}
+                            />
+                            <FiGift style={{ color: settings[ratesTab]?.bonusEnabled ? '#22c55e' : 'var(--color-text-muted)' }} />
+                            <span style={{ fontWeight: 500 }}>เปิดแถมเงินแทง</span>
+                            {savingBonus && <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>กำลังบันทึก...</span>}
+                        </label>
+
                         {/* Regular Rates Table */}
                         <div className="rates-table-container">
                             <table className="rates-table">
@@ -515,11 +592,12 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
                                         <th>ประเภทเลข</th>
                                         <th>ค่าคอม</th>
                                         <th>อัตราจ่าย</th>
+                                        {settings[ratesTab]?.bonusEnabled && <th>แถม</th>}
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {Object.entries(settings[ratesTab] || {})
-                                        .filter(([key]) => key !== '4_set')
+                                        .filter(([key]) => key !== '4_set' && key !== 'bonusEnabled')
                                         .map(([key, value]) => (
                                             <tr key={key}>
                                                 <td className="type-cell">{BET_LABELS[ratesTab]?.[key] || key}</td>
@@ -531,6 +609,36 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
                                                     <span className="rate-value">{value.payout?.toLocaleString()}</span>
                                                     <span className="rate-unit">เท่า</span>
                                                 </td>
+                                                {settings[ratesTab]?.bonusEnabled && (
+                                                    <td className="rate-cell">
+                                                        <input
+                                                            type="number"
+                                                            value={value.bonus || 0}
+                                                            onChange={async (e) => {
+                                                                const newBonus = parseFloat(e.target.value) || 0
+                                                                const bonusUpdates = {}
+                                                                Object.entries(settings[ratesTab] || {}).forEach(([k, v]) => {
+                                                                    if (k !== '4_set' && k !== 'bonusEnabled' && typeof v === 'object') {
+                                                                        bonusUpdates[k] = k === key ? newBonus : (v.bonus || 0)
+                                                                    }
+                                                                })
+                                                                await handleSaveBonusSettings(ratesTab, true, bonusUpdates)
+                                                            }}
+                                                            onFocus={(e) => e.target.select()}
+                                                            style={{
+                                                                width: '50px',
+                                                                padding: '0.25rem 0.35rem',
+                                                                textAlign: 'center',
+                                                                border: '1px solid var(--color-border)',
+                                                                borderRadius: '4px',
+                                                                background: 'var(--color-surface)',
+                                                                color: 'var(--color-text)',
+                                                                fontSize: '0.85rem'
+                                                            }}
+                                                        />
+                                                        <span className="rate-unit">%</span>
+                                                    </td>
+                                                )}
                                             </tr>
                                         ))}
                                 </tbody>

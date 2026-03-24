@@ -6,7 +6,8 @@ import {
     FiSettings,
     FiPackage,
     FiCheck,
-    FiX
+    FiX,
+    FiGift
 } from 'react-icons/fi'
 import '../../pages/Dealer.css'
 import '../../pages/SettingsTabs.css'
@@ -23,22 +24,24 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
     // Default settings structure with commission and payout rates
     const getDefaultSettings = () => ({
         thai: {
-            'run_top': { commission: 15, payout: 3 },
-            'run_bottom': { commission: 15, payout: 4 },
-            'pak_top': { commission: 15, payout: 8 },
-            'pak_bottom': { commission: 15, payout: 6 },
-            '2_top': { commission: 15, payout: 65 },
-            '2_front': { commission: 15, payout: 65 },
-            '2_center': { commission: 15, payout: 65 },
-            '2_run': { commission: 15, payout: 10 },
-            '2_bottom': { commission: 15, payout: 65 },
-            '3_top': { commission: 30, payout: 550 },
-            '3_tod': { commission: 15, payout: 100 },
-            '3_bottom': { commission: 15, payout: 135 },
-            '4_float': { commission: 15, payout: 20 },
-            '5_float': { commission: 15, payout: 10 }
+            bonusEnabled: false,
+            'run_top': { commission: 15, payout: 3, bonus: 0 },
+            'run_bottom': { commission: 15, payout: 4, bonus: 0 },
+            'pak_top': { commission: 15, payout: 8, bonus: 0 },
+            'pak_bottom': { commission: 15, payout: 6, bonus: 0 },
+            '2_top': { commission: 15, payout: 65, bonus: 0 },
+            '2_front': { commission: 15, payout: 65, bonus: 0 },
+            '2_center': { commission: 15, payout: 65, bonus: 0 },
+            '2_run': { commission: 15, payout: 10, bonus: 0 },
+            '2_bottom': { commission: 15, payout: 65, bonus: 0 },
+            '3_top': { commission: 30, payout: 550, bonus: 0 },
+            '3_tod': { commission: 15, payout: 100, bonus: 0 },
+            '3_bottom': { commission: 15, payout: 135, bonus: 0 },
+            '4_float': { commission: 15, payout: 20, bonus: 0 },
+            '5_float': { commission: 15, payout: 10, bonus: 0 }
         },
         lao: {
+            bonusEnabled: false,
             '4_set': {
                 commission: 25,
                 setPrice: 120,
@@ -52,21 +55,22 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                     '2_back_set': 1000
                 }
             },
-            'run_top': { commission: 15, payout: 3 },
-            'run_bottom': { commission: 15, payout: 4 },
-            'pak_top': { commission: 15, payout: 8 },
-            'pak_bottom': { commission: 15, payout: 6 },
-            '2_top': { commission: 15, payout: 65 },
-            '2_front': { commission: 15, payout: 65 },
-            '2_center': { commission: 15, payout: 65 },
-            '2_run': { commission: 15, payout: 10 },
-            '2_bottom': { commission: 15, payout: 65 },
-            '3_straight': { commission: 30, payout: 550 },
-            '3_tod_single': { commission: 15, payout: 100 },
-            '4_float': { commission: 15, payout: 20 },
-            '5_float': { commission: 15, payout: 10 }
+            'run_top': { commission: 15, payout: 3, bonus: 0 },
+            'run_bottom': { commission: 15, payout: 4, bonus: 0 },
+            'pak_top': { commission: 15, payout: 8, bonus: 0 },
+            'pak_bottom': { commission: 15, payout: 6, bonus: 0 },
+            '2_top': { commission: 15, payout: 65, bonus: 0 },
+            '2_front': { commission: 15, payout: 65, bonus: 0 },
+            '2_center': { commission: 15, payout: 65, bonus: 0 },
+            '2_run': { commission: 15, payout: 10, bonus: 0 },
+            '2_bottom': { commission: 15, payout: 65, bonus: 0 },
+            '3_straight': { commission: 30, payout: 550, bonus: 0 },
+            '3_tod_single': { commission: 15, payout: 100, bonus: 0 },
+            '4_float': { commission: 15, payout: 20, bonus: 0 },
+            '5_float': { commission: 15, payout: 10, bonus: 0 }
         },
         hanoi: {
+            bonusEnabled: false,
             '4_set': {
                 commission: 25,
                 setPrice: 120,
@@ -80,23 +84,24 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                     '2_back_set': 1000
                 }
             },
-            'run_top': { commission: 15, payout: 3 },
-            'run_bottom': { commission: 15, payout: 4 },
-            'pak_top': { commission: 15, payout: 8 },
-            'pak_bottom': { commission: 15, payout: 6 },
-            '2_top': { commission: 15, payout: 65 },
-            '2_front': { commission: 15, payout: 65 },
-            '2_center': { commission: 15, payout: 65 },
-            '2_run': { commission: 15, payout: 10 },
-            '2_bottom': { commission: 15, payout: 65 },
-            '3_straight': { commission: 30, payout: 550 },
-            '3_tod_single': { commission: 15, payout: 100 },
-            '4_float': { commission: 15, payout: 20 },
-            '5_float': { commission: 15, payout: 10 }
+            'run_top': { commission: 15, payout: 3, bonus: 0 },
+            'run_bottom': { commission: 15, payout: 4, bonus: 0 },
+            'pak_top': { commission: 15, payout: 8, bonus: 0 },
+            'pak_bottom': { commission: 15, payout: 6, bonus: 0 },
+            '2_top': { commission: 15, payout: 65, bonus: 0 },
+            '2_front': { commission: 15, payout: 65, bonus: 0 },
+            '2_center': { commission: 15, payout: 65, bonus: 0 },
+            '2_run': { commission: 15, payout: 10, bonus: 0 },
+            '2_bottom': { commission: 15, payout: 65, bonus: 0 },
+            '3_straight': { commission: 30, payout: 550, bonus: 0 },
+            '3_tod_single': { commission: 15, payout: 100, bonus: 0 },
+            '4_float': { commission: 15, payout: 20, bonus: 0 },
+            '5_float': { commission: 15, payout: 10, bonus: 0 }
         },
         stock: {
-            '2_top': { commission: 15, payout: 65 },
-            '2_bottom': { commission: 15, payout: 65 }
+            bonusEnabled: false,
+            '2_top': { commission: 15, payout: 65, bonus: 0 },
+            '2_bottom': { commission: 15, payout: 65, bonus: 0 }
         }
     })
 
@@ -187,7 +192,12 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                 Object.keys(data.lottery_settings).forEach(tab => {
                     if (tab === '_blocked_lottery_types') return
                     if (merged[tab]) {
+                        // Merge bonusEnabled flag
+                        if (data.lottery_settings[tab].bonusEnabled !== undefined) {
+                            merged[tab].bonusEnabled = data.lottery_settings[tab].bonusEnabled
+                        }
                         Object.keys(data.lottery_settings[tab]).forEach(key => {
+                            if (key === 'bonusEnabled') return
                             if (merged[tab][key]) {
                                 // Handle 4_set with nested prizes structure
                                 if (key === '4_set' && data.lottery_settings[tab][key].prizes) {
@@ -322,6 +332,36 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                             ))}
                         </div>
 
+                        {/* เปิดแถม Checkbox */}
+                        <label
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                margin: '0.75rem 0 0.5rem',
+                                cursor: 'pointer',
+                                fontSize: '0.95rem',
+                                color: settings[activeTab]?.bonusEnabled ? '#22c55e' : 'var(--color-text)'
+                            }}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={settings[activeTab]?.bonusEnabled || false}
+                                onChange={(e) => {
+                                    setSettings(prev => ({
+                                        ...prev,
+                                        [activeTab]: {
+                                            ...prev[activeTab],
+                                            bonusEnabled: e.target.checked
+                                        }
+                                    }))
+                                }}
+                                style={{ width: '18px', height: '18px', accentColor: '#22c55e', cursor: 'pointer' }}
+                            />
+                            <FiGift style={{ color: settings[activeTab]?.bonusEnabled ? '#22c55e' : 'var(--color-text-muted)' }} />
+                            <span style={{ fontWeight: 500 }}>เปิดแถมเงินแทง</span>
+                        </label>
+
                         {/* ไม่อนุญาตส่งโพย Checkbox */}
                         <label
                             style={{
@@ -441,11 +481,12 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                                         <th>ประเภท</th>
                                         <th>ค่าคอม</th>
                                         <th>อัตราจ่าย</th>
+                                        {settings[activeTab]?.bonusEnabled && <th>แถม</th>}
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {Object.entries(settings[activeTab] || {})
-                                        .filter(([key]) => key !== '4_set')
+                                        .filter(([key]) => key !== '4_set' && key !== 'bonusEnabled')
                                         .map(([key, value]) => (
                                             <tr key={key}>
                                                 <td className="type-cell">
@@ -477,6 +518,21 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                                                         <span className="input-suffix">เท่า</span>
                                                     </div>
                                                 </td>
+                                                {settings[activeTab]?.bonusEnabled && (
+                                                    <td>
+                                                        <div className="input-group">
+                                                            <input
+                                                                type="number"
+                                                                className="form-input small"
+                                                                value={value.bonus || 0}
+                                                                onChange={e => updateSetting(activeTab, key, 'bonus', e.target.value)}
+                                                                onKeyDown={handleSettingsInputKeyDown}
+                                                                onFocus={handleSettingsInputFocus}
+                                                            />
+                                                            <span className="input-suffix">%</span>
+                                                        </div>
+                                                    </td>
+                                                )}
                                             </tr>
                                         ))}
                                 </tbody>
