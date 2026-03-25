@@ -27,8 +27,10 @@ function normalizeUnicode(str) {
         .replace(/[\u200B\u200C\u200D\uFEFF\u00AD\u2060\u200E\u200F]/g, '')
         // Dashes: en-dash (–), em-dash (—), minus sign (−), figure dash (‒), horizontal bar (―) → hyphen-minus (-)
         .replace(/[\u2013\u2014\u2212\u2012\u2015]/g, '-')
-        // Multiplication: × (U+00D7), ✕ (U+2715), ✖ (U+2716), ⨉ (U+2A09), ﹡ (U+FE61), ・ (U+30FB) → *
-        .replace(/[\u00D7\u2715\u2716\u2A09\uFE61\u30FB]/g, '*')
+        // Multiplication/asterisk variants: × (U+00D7), ✕ (U+2715), ✖ (U+2716), ⨉ (U+2A09),
+        // ﹡ (U+FE61), ・ (U+30FB), ∗ (U+2217), ⁎ (U+204E), ✱ (U+2731), ✲ (U+2732),
+        // ✳ (U+2733), ٭ (U+066D), ＊ (U+FF0A), ⋆ (U+22C6), ★ (U+2605), ☆ (U+2606) → *
+        .replace(/[\u00D7\u2715\u2716\u2A09\uFE61\u30FB\u2217\u204E\u2731\u2732\u2733\u066D\uFF0A\u22C6]/g, '*')
         // Solidus variants: ∕ (U+2215), ⁄ (U+2044) → /
         .replace(/[\u2215\u2044]/g, '/')
         // Full-width digits → ASCII digits
@@ -129,18 +131,19 @@ function expandLines(rawLines) {
         }
         if (didExpand) continue
 
-        // --- Step 4: Handle "num/amt/amt" format without = (e.g., "741/20/20") ---
-        // This is a single number with amounts separated by /
-        // Only when no = and the pattern is digits/digits/digits
+        // --- Step 4: Handle various separator formats without = sign ---
         if (!line.includes('=')) {
+            // Strip trailing dot/period after number: "579. 11-10" → "579 11-10"
+            line = line.replace(/^(\d{1,5})\.\s/, '$1 ')
+
+            // "741/20/20" → "741=20*20" (num/amt/amt triple)
             const slashTriple = line.match(/^(\d{1,5})\s*\/\s*(\d+)\s*\/\s*(\d+)$/)
             if (slashTriple) {
                 line = `${slashTriple[1]}=${slashTriple[2]}*${slashTriple[3]}`
             } else {
-                // "52 20/20" needs / → * in the amount part
-                line = line.replace(/^(\d{1,5}\s+\d+)\s*\/\s*(\d+)/, '$1*$2')
-                // Also normalize + between amounts in space-separated format
-                line = line.replace(/^(\d{1,5}\s+\d+)\s*[+]\s*(\d+)/, '$1*$2')
+                // Normalize -, /, + between amounts in space-separated format:
+                // "736 11-10" → "736 11*10", "52 20/20" → "52 20*20", "87 20+20" → "87 20*20"
+                line = line.replace(/^(\d{1,5}\.?\s+\d+)\s*[\-/+]\s*(\d+)/, '$1*$2')
             }
         }
 
@@ -968,6 +971,7 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
     const permCount = numLen >= 2 ? getPermutationCount(numbers) : 1
 
     // Determine bet type and format based on digit count, amounts, context
+    console.log(`[parseNumberLine] FINAL: numbers=${numbers}, amt1=${amount1}, amt2=${amount2}, amt3=${amount3}, hasChud=${hasChud}, permCount=${permCount}, ctx=${parseContext}, normalized="${normalized}"`)
     return determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, parseContext, isLaoOrHanoi, lotteryType, line)
 }
 
@@ -1149,8 +1153,38 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
         }
 
         if (amount2 !== null || hasChud) {
+            // 2 amounts for 3-digit number: determine เต็งโต๊ด or คูณชุด
+            const effectiveAmount2 = hasChud ? permCount : amount2
+
+            if (effectiveAmount2 === permCount) {
+                // amount2 matches permutation count → คูณชุด (multiply by permutations)
+                const typeLabel = 'คูณชุด'
+                results.push({
+                    numbers,
+                    amount: amount1,
+                    amount2: effectiveAmount2,
+                    betType: '3_top',
+                    specialType: `set${permCount}`,
+                    typeLabel,
+                    rawLine,
+                    formattedLine: `${numbers}=${amount1}*${effectiveAmount2} ${typeLabel}`
+                })
+            } else {
+                // amount2 does NOT match permutation count → เต็งโต๊ด (straight + tod)
+                const typeLabel = 'เต็งโต๊ด'
+                results.push({
+                    numbers,
+                    amount: amount1,
+                    amount2: effectiveAmount2,
+                    betType: '3_top',
+                    specialType: 'tengTod',
+                    typeLabel,
+                    rawLine,
+                    formattedLine: `${numbers}=${amount1}*${effectiveAmount2} ${typeLabel}`
+                })
+            }
+        } else {
             // Single amount → ตรง/บน (for lao/hanoi → ตรง, for thai → บน)
-            // If context is ล่าง and 3 digits → treat as บน (per user's spec)
             const betType = '3_top'
             const typeLabel = isLaoOrHanoi ? 'ตรง' : 'บน'
             results.push({
