@@ -17,11 +17,145 @@ import { getPermutations } from '../constants/lotteryTypes'
  */
 export { get3DigitPermCount }
 
+/**
+ * Normalize Unicode characters commonly found in LINE chat / social media pastes.
+ * Converts various dash, multiplication, and full-width variants to standard ASCII.
+ */
+function normalizeUnicode(str) {
+    return str
+        // Remove zero-width and invisible characters that break regex matching
+        .replace(/[\u200B\u200C\u200D\uFEFF\u00AD\u2060\u200E\u200F]/g, '')
+        // Dashes: en-dash (–), em-dash (—), minus sign (−), figure dash (‒), horizontal bar (―) → hyphen-minus (-)
+        .replace(/[\u2013\u2014\u2212\u2012\u2015]/g, '-')
+        // Multiplication: × (U+00D7), ✕ (U+2715), ✖ (U+2716), ⨉ (U+2A09), ﹡ (U+FE61), ・ (U+30FB) → *
+        .replace(/[\u00D7\u2715\u2716\u2A09\uFE61\u30FB]/g, '*')
+        // Solidus variants: ∕ (U+2215), ⁄ (U+2044) → /
+        .replace(/[\u2215\u2044]/g, '/')
+        // Full-width digits → ASCII digits
+        .replace(/[\uFF10-\uFF19]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFF10 + 0x30))
+        // Full-width letters → ASCII letters (for x, X, t, T etc.)
+        .replace(/[\uFF21-\uFF3A]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFF21 + 0x41))
+        .replace(/[\uFF41-\uFF5A]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFF41 + 0x61))
+        // Full-width symbols: ＝ → =, ＊ → *, ＋ → +, ／ → /, ，→ ,, ．→ .
+        .replace(/\uFF1D/g, '=')
+        .replace(/\uFF0A/g, '*')
+        .replace(/\uFF0B/g, '+')
+        .replace(/\uFF0F/g, '/')
+        .replace(/\uFF0C/g, ',')
+        .replace(/\uFF0E/g, '.')
+        // Non-breaking space → regular space
+        .replace(/\u00A0/g, ' ')
+        // Smart quotes and other noise
+        .replace(/[\u201C\u201D\u201E]/g, '"')
+        .replace(/[\u2018\u2019\u201A]/g, "'")
+}
+
+/**
+ * Pre-process lines: expand comma/slash-separated numbers and normalize formatted amounts.
+ * 
+ * Rules:
+ * 1. Comma/slash BEFORE = means multiple numbers sharing the same amount:
+ *    "123,456,712=10*ชุด" → ["123=10*ชุด", "456=10*ชุด", "712=10*ชุด"]
+ *    "145/237/201/308=20*20" → ["145=20*20", "237=20*20", "201=20*20", "308=20*20"]
+ * 2. Comma AFTER = means formatted amount (strip commas):
+ *    "123=1,000" → "123=1000"
+ *    "12=25,000" → "12=25000"
+ * 3. "ต" or "t" between two amounts → "*" (เต็งโต๊ด separator):
+ *    "123=50 ต 50" → "123=50*50"
+ *    "456=20t20" → "456=20*20"
+ */
+function expandLines(rawLines) {
+    const expanded = []
+    for (const rawLine of rawLines) {
+        const trimmed = normalizeUnicode(rawLine.trim())
+        if (!trimmed) { expanded.push(trimmed); continue }
+
+        // --- Step 1: Normalize "ต" / "t" between amounts to "*" ---
+        // "123=50 ต 50" → "123=50*50", "456=20t20" → "456=20*20"
+        let line = trimmed.replace(/(\d)\s*[tTตt]\s*(\d)/g, '$1*$2')
+
+        // --- Step 2: Normalize "/" and "+" between amounts to "*" ---
+        // Only AFTER = sign: "789=50/50" → "789=50*50", "587=20+20" → "587=20*20"
+        // Also handle space-separated: "174 10-10" → handled later in parseNumberLine
+        if (line.includes('=')) {
+            const eqIdx = line.indexOf('=')
+            const beforeEq = line.substring(0, eqIdx)
+            let afterEq = line.substring(eqIdx + 1)
+            // Strip commas in amounts after = (formatted numbers like 1,000)
+            afterEq = afterEq.replace(/(\d),(\d{3})/g, '$1$2')
+            // Normalize / and + between digit groups in amount part to *
+            afterEq = afterEq.replace(/(\d)\s*[/+]\s*(\d)/g, '$1*$2')
+            line = beforeEq + '=' + afterEq
+        }
+
+        // --- Step 3: Check for comma/slash-separated numbers BEFORE = or space+amount ---
+        // "123,456,712=10*ชุด" → ["123=10*ชุด", "456=10*ชุด", "712=10*ชุด"]
+        // "145/237/201/308=20*20" → ["145=20*20", "237=20*20", ...]
+        // "123, 456 20*20" → ["123=20*20", "456=20*20"]
+        // Strategy: find the numbers portion (before = or before space+amount),
+        // check if it contains comma or slash separating multiple digit groups.
+        let didExpand = false
+        if (line.includes('=')) {
+            const eqIdx = line.indexOf('=')
+            const numsPart = line.substring(0, eqIdx).trim()
+            const amtPart = line.substring(eqIdx + 1).trim()
+            // Check if numsPart has comma or slash separating digit groups
+            if (/[,/]/.test(numsPart)) {
+                const numTokens = numsPart.split(/[,/]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s))
+                if (numTokens.length >= 2) {
+                    for (const num of numTokens) {
+                        expanded.push(`${num}=${amtPart}`)
+                    }
+                    didExpand = true
+                }
+            }
+        } else {
+            // No = sign: check for "nums space amount" pattern
+            // e.g., "123,456 20*20" or "123/456 20*20"
+            const spaceAmtMatch = line.match(/^([\d,/\s]+?)\s+(\d+[*]\d+.*)$/)
+            if (spaceAmtMatch) {
+                const numsPart = spaceAmtMatch[1].trim()
+                const amtPart = spaceAmtMatch[2].trim()
+                if (/[,/]/.test(numsPart)) {
+                    const numTokens = numsPart.split(/[,/]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s))
+                    if (numTokens.length >= 2) {
+                        for (const num of numTokens) {
+                            expanded.push(`${num}=${amtPart}`)
+                        }
+                        didExpand = true
+                    }
+                }
+            }
+        }
+        if (didExpand) continue
+
+        // --- Step 4: Handle "num/amt/amt" format without = (e.g., "741/20/20") ---
+        // This is a single number with amounts separated by /
+        // Only when no = and the pattern is digits/digits/digits
+        if (!line.includes('=')) {
+            const slashTriple = line.match(/^(\d{1,5})\s*\/\s*(\d+)\s*\/\s*(\d+)$/)
+            if (slashTriple) {
+                line = `${slashTriple[1]}=${slashTriple[2]}*${slashTriple[3]}`
+            } else {
+                // "52 20/20" needs / → * in the amount part
+                line = line.replace(/^(\d{1,5}\s+\d+)\s*\/\s*(\d+)/, '$1*$2')
+                // Also normalize + between amounts in space-separated format
+                line = line.replace(/^(\d{1,5}\s+\d+)\s*[+]\s*(\d+)/, '$1*$2')
+            }
+        }
+
+        expanded.push(line)
+    }
+    return expanded
+}
+
 export function parseMultiLinePaste(text, lotteryType = 'lao') {
     if (!text || !text.trim()) return []
 
     const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
-    const lines = text.split('\n')
+    const rawLines = text.split('\n')
+    // Pre-process: expand lines with comma/slash-separated numbers and normalize amounts
+    const lines = expandLines(rawLines)
     const results = []
     let contextMode = 'top' // default: บน
     let bareNumberBuffer = [] // accumulate bare numbers waiting for a trailing amount line
@@ -65,7 +199,7 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
     }
 
     for (let i = 0; i < lines.length; i++) {
-        const trimmed = lines[i].trim()
+        const trimmed = normalizeUnicode(lines[i].trim())
         if (!trimmed) continue
 
         console.log(`[pasteParser] Line ${i}: "${trimmed}" | buffer=[${bareNumberBuffer.join(',')}] | contextMode=${contextMode}`)
@@ -140,14 +274,14 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
         // because stripPrefixNoise removes Thai text like "ล่าง" which is a context keyword.
         let processLine = (stripped && stripped !== trimmed) ? stripped : trimmed
 
-        // Auto-reset context: when contextMode is 'bottom' and we encounter a 3+ digit number,
-        // reset to 'top' because 'bottom' context only applies to 1-2 digit numbers.
-        // This handles cases like: "ล่าง 25=20*20 / 45=20 / 78=50*50 / 123=10*10" where
-        // 123 should be treated as top (เต็งโต๊ด) not bottom.
-        if (contextMode === 'bottom') {
+        // Auto-reset context: when contextMode is 'bottom' or 'both' and we encounter a 3+ digit number,
+        // reset to 'top' because 'bottom'/'both' context only applies to 1-2 digit numbers.
+        // This handles cases like: "ล่าง 25=20*20 / 36=10*10 / 123=10*6 / 48=20" where
+        // 123 and 48 should be treated as top (คูณชุด / บน) not bottom.
+        if (contextMode === 'bottom' || contextMode === 'both') {
             const numMatch = (processLine || '').match(/^(\d+)/)
             if (numMatch && numMatch[1].length >= 3) {
-                console.log(`[pasteParser]   → auto-reset context from 'bottom' to 'top' (${numMatch[1].length}-digit number)`)
+                console.log(`[pasteParser]   → auto-reset context from '${contextMode}' to 'top' (${numMatch[1].length}-digit number)`)
                 contextMode = 'top'
             }
         }
@@ -166,17 +300,13 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
             }
         }
 
-        // When a line has an explicit inline PREFIX context (e.g. "ล่าง 25=20*20", "บน 77=30"),
-        // update contextMode so subsequent lines inherit it.
-        // This makes "ล่าง 25=20*20 / 45=20 / 78=50*50" treat all as ล่าง until reset.
-        // Only update for prefix-style inline context (not suffix), detected by checking
-        // if the original trimmed line starts with a Thai context keyword.
+        // When a line has an explicit inline context (anywhere in the line — prefix, suffix,
+        // middle, attached to number/amount), update contextMode so subsequent lines inherit it.
+        // This makes "ล่าง 25=20*20" or "25=20*20 ล่าง" or "25 ล่าง 20*20" etc.
+        // all set contextMode to 'bottom' for following 1-2 digit lines.
         if (lineCtx !== contextMode) {
-            const prefixCtxMatch = trimmed.match(/^(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล|วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด)\.?\s+\d/)
-            if (prefixCtxMatch) {
-                console.log(`[pasteParser]   → prefix context "${prefixCtxMatch[1]}" updates contextMode: ${contextMode} → ${lineCtx}`)
-                contextMode = lineCtx
-            }
+            console.log(`[pasteParser]   → inline context updates contextMode: ${contextMode} → ${lineCtx}`)
+            contextMode = lineCtx
         }
 
         console.log(`[pasteParser]   → normal line: "${processLine}", lineCtx=${lineCtx}`)
@@ -222,11 +352,18 @@ function isBareNumberLine(line) {
  *   "39=บล10*10"     → { amountStr: "10*10", mode: "both", number: "39" }
  */
 function extractAmountFromLine(line) {
-    let s = line.trim()
+    let s = normalizeUnicode(line.trim())
     console.log(`[extractAmount] input: "${s}" | charCodes: [${[...s].map(c => c.charCodeAt(0)).join(',')}]`)
 
     // --- Normalize ชุด variants: "20ชุด", "20 ชุด", "20-ชุด", "20+ชุด" → "20*ชุด" ---
     s = s.replace(/(\d+)\s*[*×xX\-+]?\s*ชุด/g, '$1*ชุด')
+
+    // --- Normalize "ต" / "t" between amounts to "*": "50 ต 50" → "50*50", "20t20" → "20*20" ---
+    s = s.replace(/(\d)\s*[tTต]\s*(\d)/g, '$1*$2')
+    // --- Normalize "/" and "+" between amounts to "*": "50/50" → "50*50", "20+20" → "20*20" ---
+    s = s.replace(/(\d)\s*[/+]\s*(\d)/g, '$1*$2')
+    // --- Strip commas in formatted amounts: "1,000" → "1000" ---
+    s = s.replace(/(\d),(\d{3})/g, '$1$2')
 
     // --- Extract trailing context suffix (วิ่ง/ลอย/โต๊ด/บนล่าง/ลบ/ล่างบน/บน/ล่าง etc.) ---
     let mode = null
@@ -357,8 +494,9 @@ function isAmountPattern(s) {
     //   50*50, 20×20, 10x10, 10+10, 10-10
     //   15*ชุด, 20ชุด, 20 ชุด, 20-ชุด, 20+ชุด
     //   50*50*ชุด
-    return /^\d+[*×xX\-+](\d+|ชุด)$/.test(t) ||  // "50*50" or "15*ชุด"
-           /^\d+[*×xX\-+]\d+[*×xX\-+]ชุด$/.test(t) ||  // "50*50*ชุด"
+    return /^\d+[*×xX\-+/](\d+|ชุด)$/.test(t) ||  // "50*50", "50/50", "15*ชุด"
+           /^\d+[*×xX\-+/]\d+[*×xX\-+/]ชุด$/.test(t) ||  // "50*50*ชุด"
+           /^\d+\s*[tTต]\s*\d+$/.test(t) ||  // "50 ต 50", "20t20"
            /^\d+\s*ชุด$/.test(t)  // "20ชุด" or "20 ชุด"
 }
 
@@ -430,6 +568,29 @@ function stripPrefixNoise(line) {
 }
 
 /**
+ * Check if a string contains BOTH a บน-variant and a ล่าง-variant,
+ * indicating "บนล่าง" (top+bottom) context regardless of separators between them.
+ * Examples: "บน-ล่าง", "บ/ล", "บน----ล่าง", "บนและล่าง", "บน กับ ล่าง", 
+ *           "ล่าง*บน", "บ.ล", "บ-ล", "บล.", "บล", "บ+ล"
+ * Must NOT contain digits (to avoid matching "บน 77=30" as context line).
+ */
+function isBothContext(line) {
+    const s = line.trim()
+    // Quick check: must not contain digits (context-only line)
+    if (/\d/.test(s)) return false
+    // Remove all non-Thai characters to get just Thai letters
+    const thaiOnly = s.replace(/[^ก-๛]/g, '')
+    // Check known combined patterns: บล, ลบ, บนล่าง, ล่างบน
+    if (/^(บนล่าง|ล่างบน|บล|ลบ)$/.test(thaiOnly)) return true
+    // Check if the string contains both a บน-variant and a ล่าง-variant somewhere
+    const hasTop = /(บน|บ)/.test(thaiOnly)
+    const hasBottom = /(ล่าง|ล)/.test(thaiOnly)
+    // Must contain both, and the Thai content should be short (context line, not a sentence)
+    if (hasTop && hasBottom && thaiOnly.length <= 10) return true
+    return false
+}
+
+/**
  * Check if a line is a context-setting line (บน/ล่าง/บนล่าง)
  * Returns 'top', 'bottom', 'both', or null if not a context line
  */
@@ -463,10 +624,9 @@ function parseContextLine(line) {
     if (/^2ตัว(มี|วิ่ง|ลอย|โต๊ด)$/.test(cleanedFloat)) return 'float_top'
 
     // Check for "บนล่าง" / "ล่างบน" variants first (must come before single checks)
-    // Matches: "บนล่าง", "ล่างบน", "บน ล่าง", "ล่าง บน", "บน-ล่าง", "ล่าง-บน",
-    //          "บล", "ลบ", "บล.", "ลบ.", "บ+ล", "ล+บ", "บ-ล", "ล-บ", "บ+ล.", "ล+บ."
-    const cleanedBoth = withPunct.replace(/[\s.+\-]/g, '')
-    if (/^(บนล่าง|ล่างบน|บล|ลบ)$/.test(cleanedBoth)) return 'both'
+    // If a line contains BOTH a บน-variant AND a ล่าง-variant (in any order, with any separators),
+    // treat it as 'both'. E.g. "บน-ล่าง", "บ/ล", "บน----ล่าง", "บนและล่าง", "บน กับ ล่าง", "ล่าง*บน"
+    if (isBothContext(withPunct)) return 'both'
 
     // Match standalone "บ", "บ.", "บน"
     // Match standalone "ล", "ล.", "ล่าง"
@@ -631,6 +791,30 @@ function extractInlineContext(line) {
     if (eqInline) {
         return { cleaned: `${eqInline[1]}${eqInline[3]}`.trim(), mode: 'both' }
     }
+    // --- Inline "both" context after = with space: "25= บล 20*20" ---
+    const eqBothSpace = s.match(/^(\d+)\s*=\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s+(\d.+)$/)
+    if (eqBothSpace) {
+        return { cleaned: `${eqBothSpace[1]}=${eqBothSpace[3].trim()}`, mode: 'both' }
+    }
+    // --- Inline single context after = with space: "25= ล่าง 20*20", "25=บน20*20" ---
+    const eqSingleInline = s.match(/^(\d+)\s*=\s*(บน|บ|ล่าง|ล)\.?\s*(\d.+)$/)
+    if (eqSingleInline) {
+        const modeStr = eqSingleInline[2]
+        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
+        return { cleaned: `${eqSingleInline[1]}=${eqSingleInline[3].trim()}`, mode }
+    }
+
+    // --- "num context=amt" pattern: "25 ล่าง=20*20", "25 ล่าง =20*20", "25ล่าง=20*20" ---
+    const numCtxEqBoth = s.match(/^(\d+)\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*=\s*(.+)$/)
+    if (numCtxEqBoth) {
+        return { cleaned: `${numCtxEqBoth[1]}=${numCtxEqBoth[3].trim()}`, mode: 'both' }
+    }
+    const numCtxEqSingle = s.match(/^(\d+)\s*(บน|บ|ล่าง|ล)\.?\s*=\s*(.+)$/)
+    if (numCtxEqSingle) {
+        const modeStr = numCtxEqSingle[2]
+        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
+        return { cleaned: `${numCtxEqSingle[1]}=${numCtxEqSingle[3].trim()}`, mode }
+    }
 
     return { cleaned: s, mode: null }
 }
@@ -640,7 +824,7 @@ function extractInlineContext(line) {
  */
 function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
     // Extract inline context
-    const preClean = line.trim()
+    const preClean = normalizeUnicode(line.trim())
     let inlineCtx = extractInlineContext(preClean)
     let normalized
     if (inlineCtx.mode) {
@@ -681,8 +865,23 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
     // Replace 'x' or 'X' only when between digits: "11x10" → "11*10"
     normalized = normalized.replace(/(\d)[xX](\d)/g, '$1*$2')
 
-    // === KEY NORMALIZATION: Convert -/* separated formats to = format ===
-    // If no = sign present, and the line has 2-3 digit groups separated by - or *,
+    // Normalize "ต" / "t" between digit amounts to * (เต็งโต๊ด separator)
+    // e.g., "123=50 ต 50" → "123=50*50", "456=20t20" → "456=20*20"
+    normalized = normalized.replace(/(\d)\s*[tTต]\s*(\d)/g, '$1*$2')
+
+    // Normalize / and + between digit amounts to * (after = sign)
+    // e.g., "789=50/50" → "789=50*50", "587=20+20" → "587=20*20"
+    if (normalized.includes('=')) {
+        const eqIdx = normalized.indexOf('=')
+        let afterEq = normalized.substring(eqIdx + 1)
+        // Strip commas in formatted amounts: "1,000" → "1000"
+        afterEq = afterEq.replace(/(\d),(\d{3})/g, '$1$2')
+        afterEq = afterEq.replace(/(\d)\s*[/+]\s*(\d)/g, '$1*$2')
+        normalized = normalized.substring(0, eqIdx + 1) + afterEq
+    }
+
+    // === KEY NORMALIZATION: Convert -/*/+// separated formats to = format ===
+    // If no = sign present, and the line has 2-3 digit groups separated by -, *, /, +
     // convert the FIRST separator to = so it becomes "number=amount" or "number=amount*amount".
     //
     // Examples:
@@ -693,17 +892,18 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
     //   220-50*ชุด     → 220=50*ชุด  (ชุด)
     //   23*10*10       → 23=10*10    (บนกลับ)
     //   45*20-20       → 45=20*20    (กลับ — normalize remaining - to *)
+    //   741/20/20      → 741=20*20   (เต็งโต๊ด)
+    //   87+20+20       → 87=20*20    (บนกลับ)
     //
     // ONLY apply when there's no = already and the first group is 1-5 digit number
     if (!normalized.includes('=')) {
-        // Match: digits{1-5} followed by - or * followed by more content containing digits
-        const sepMatch = normalized.match(/^(\d{1,5})\s*[\-*]\s*(\d.*)$/)
+        // Match: digits{1-5} followed by -, *, /, or + followed by more content containing digits
+        const sepMatch = normalized.match(/^(\d{1,5})\s*[\-*/+]\s*(\d.*)$/)
         if (sepMatch) {
             const numPart = sepMatch[1]
             let amtPart = sepMatch[2]
-            // Normalize remaining - between digit groups in amount part to *
-            // e.g., "20-20" → "20*20", but keep "50*ชุด" as is
-            amtPart = amtPart.replace(/(\d)\s*\-\s*(\d)/g, '$1*$2')
+            // Normalize remaining -, /, + between digit groups in amount part to *
+            amtPart = amtPart.replace(/(\d)\s*[\-/+]\s*(\d)/g, '$1*$2')
             normalized = `${numPart}=${amtPart}`
         }
     }
@@ -728,6 +928,7 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
     let numbers = null
     let amount1 = null
     let amount2 = null
+    let amount3 = null
     let hasChud = false // "ชุด" keyword present
 
     // Try format with = first
@@ -738,6 +939,7 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
         const parsed = parseAmountPart(amountPart)
         amount1 = parsed.amount1
         amount2 = parsed.amount2
+        amount3 = parsed.amount3
         hasChud = parsed.hasChud
     } else {
         // Try format with space: "123 20*20" or "123 20"
@@ -748,6 +950,7 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
             const parsed = parseAmountPart(amountPart)
             amount1 = parsed.amount1
             amount2 = parsed.amount2
+            amount3 = parsed.amount3
             hasChud = parsed.hasChud
         } else {
             // Bare number (no amount): e.g., "1234" for 4_set
@@ -765,16 +968,18 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
     const permCount = numLen >= 2 ? getPermutationCount(numbers) : 1
 
     // Determine bet type and format based on digit count, amounts, context
-    return determineBetType(numbers, numLen, amount1, amount2, hasChud, permCount, parseContext, isLaoOrHanoi, lotteryType, line)
+    return determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, parseContext, isLaoOrHanoi, lotteryType, line)
 }
 
 /**
  * Parse the amount part of a line (after = or space)
- * Returns { amount1, amount2, hasChud }
+ * Returns { amount1, amount2, amount3, hasChud }
  */
 function parseAmountPart(str) {
     let hasChud = false
-    let cleaned = str.trim()
+    let cleaned = normalizeUnicode(str.trim())
+    // Normalize x/X between digits to *: "220x5x44" → "220*5*44"
+    cleaned = cleaned.replace(/(\d)[xX](\d)/g, '$1*$2')
 
     // Check for "ชุด" keyword
     if (cleaned.includes('ชุด')) {
@@ -782,20 +987,31 @@ function parseAmountPart(str) {
         cleaned = cleaned.replace(/\*?ชุด/g, '').trim()
     }
 
-    // Split by * or - or + (amount separators)
-    const parts = cleaned.split(/[*\-+]/).map(s => s.trim()).filter(s => s)
+    // Strip commas in formatted amounts: "1,000" → "1000"
+    cleaned = cleaned.replace(/(\d),(\d{3})/g, '$1$2')
+    // Normalize /, +, t/ต between digit amounts to *
+    cleaned = cleaned.replace(/(\d)\s*[/+tTต]\s*(\d)/g, '$1*$2')
+
+    // Split by * or - (amount separators)
+    const parts = cleaned.split(/[*\-]/).map(s => s.trim()).filter(s => s)
 
     const amount1 = parts[0] ? parseInt(parts[0]) : null
     const amount2 = parts[1] ? parseInt(parts[1]) : null
+    const amount3 = parts[2] ? parseInt(parts[2]) : null
 
     // If hasChud but no amount2, amount2 will be calculated as permutation count later
-    return { amount1: (amount1 && amount1 > 0) ? amount1 : null, amount2: (amount2 && amount2 > 0) ? amount2 : null, hasChud }
+    return {
+        amount1: (amount1 && amount1 > 0) ? amount1 : null,
+        amount2: (amount2 && amount2 > 0) ? amount2 : null,
+        amount3: (amount3 && amount3 > 0) ? amount3 : null,
+        hasChud
+    }
 }
 
 /**
  * Determine bet type and return formatted entries
  */
-function determineBetType(numbers, numLen, amount1, amount2, hasChud, permCount, contextMode, isLaoOrHanoi, lotteryType, rawLine) {
+function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, contextMode, isLaoOrHanoi, lotteryType, rawLine) {
     const isFloat = contextMode === 'float_top' || contextMode === 'float_bottom'
     const isTop = contextMode === 'top' || contextMode === 'float_top'
     const results = []
@@ -870,39 +1086,69 @@ function determineBetType(numbers, numLen, amount1, amount2, hasChud, permCount,
     if (numLen === 3) {
         if (amount1 === null) return null
 
-        if (amount2 !== null || hasChud) {
-            // Has second amount or "ชุด" keyword
-            // Determine: เต็งโต๊ด vs คูณชุด
-            const effectiveAmount2 = hasChud ? permCount : amount2
+        // --- 4-group pattern: num=A*B*C (3-digit number with 3 amount parts) ---
+        // One of amt2/amt3 is a permutation indicator (permCount or permCount-1).
+        // The OTHER non-indicator value is the reverse bet amount (otherAmt).
+        //
+        // perm-1 indicator: keep amt1, use otherAmt as amt2 → กลับ
+        //   e.g. 123=30*20*5 → 123=30*20 กลับ  (perm=6, indicator=5=perm-1)
+        //   e.g. 334=50*2*10 → 334=50*10 กลับ  (perm=3, indicator=2=perm-1)
+        //
+        // perm indicator: amt1 += otherAmt, use otherAmt as amt2 → กลับ
+        //   e.g. 123=30*20*6 → 123=50*20 กลับ  (perm=6, indicator=6=perm, 30+20=50)
+        //   e.g. 122=100*20*3 → 122=120*20 กลับ (perm=3, indicator=3=perm, 100+20=120)
+        if (amount3 !== null && amount1 !== null && amount2 !== null) {
+            // 4-group: num=amt1*amt2*amt3
+            // Check if amt2 or amt3 is a permutation indicator
+            const isAmt2PermMinusOne = (amount2 === permCount - 1)
+            const isAmt2Perm = (amount2 === permCount)
+            const isAmt3PermMinusOne = (amount3 === permCount - 1)
+            const isAmt3Perm = (amount3 === permCount)
 
-            if (effectiveAmount2 === permCount) {
-                // amount2 matches permutation count → คูณชุด
-                const typeLabel = 'คูณชุด'
-                results.push({
-                    numbers,
-                    amount: amount1,
-                    amount2: permCount,
-                    betType: '3_top',
-                    specialType: permCount === 3 ? 'set3' : (permCount === 6 ? 'set6' : 'set' + permCount),
-                    typeLabel,
-                    rawLine,
-                    formattedLine: `${numbers}=${amount1}*${permCount} ${typeLabel}`
-                })
-            } else {
-                // amount2 doesn't match permutation count → เต็งโต๊ด
-                const typeLabel = 'เต็งโต๊ด'
-                results.push({
-                    numbers,
-                    amount: amount1,
-                    amount2: effectiveAmount2,
-                    betType: '3_top',
-                    specialType: 'tengTod',
-                    typeLabel,
-                    rawLine,
-                    formattedLine: `${numbers}=${amount1}*${effectiveAmount2} ${typeLabel}`
-                })
+            let finalAmt1 = null
+            let finalAmt2 = null
+            let matched = false
+
+            if (isAmt2PermMinusOne) {
+                // amt2 is perm-1 indicator, amt3 is the reverse amount
+                finalAmt1 = amount1
+                finalAmt2 = amount3
+                matched = true
+            } else if (isAmt2Perm) {
+                // amt2 is perm indicator, amt3 is the reverse amount, add to amt1
+                finalAmt1 = amount1 + amount3
+                finalAmt2 = amount3
+                matched = true
+            } else if (isAmt3PermMinusOne) {
+                // amt3 is perm-1 indicator, amt2 is the reverse amount
+                finalAmt1 = amount1
+                finalAmt2 = amount2
+                matched = true
+            } else if (isAmt3Perm) {
+                // amt3 is perm indicator, amt2 is the reverse amount, add to amt1
+                finalAmt1 = amount1 + amount2
+                finalAmt2 = amount2
+                matched = true
             }
-        } else {
+
+            if (matched) {
+                const typeLabel = 'กลับ'
+                results.push({
+                    numbers,
+                    amount: finalAmt1,
+                    amount2: finalAmt2,
+                    betType: '3_top',
+                    specialType: 'reverse',
+                    typeLabel,
+                    rawLine,
+                    formattedLine: `${numbers}=${finalAmt1}*${finalAmt2} ${typeLabel}`
+                })
+                return results
+            }
+            // If no perm indicator matched, fall through to normal 2-amount handling
+        }
+
+        if (amount2 !== null || hasChud) {
             // Single amount → ตรง/บน (for lao/hanoi → ตรง, for thai → บน)
             // If context is ล่าง and 3 digits → treat as บน (per user's spec)
             const betType = '3_top'
