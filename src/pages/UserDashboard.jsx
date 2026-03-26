@@ -1476,7 +1476,7 @@ export default function UserDashboard() {
         // Group entries by lineIndex to share entry_id and display_text
         const submissionsToInsert = entries.map((entry, index) => {
             const commInfo = getCommissionForBetType(entry.betType, userSettings)
-            const commissionAmount = Math.round(entry.amount * commInfo.rate / 100)
+            const commissionAmount = calculateCommissionAmount(entry.amount, entry.betType, selectedRound, userSettings)
 
             // Add milliseconds offset to preserve order (each entry gets +1ms)
             const entryTimestamp = new Date(baseTimestamp.getTime() + index).toISOString()
@@ -2622,7 +2622,8 @@ export default function UserDashboard() {
     // Calculate commission for a submission - use recorded commission_amount, fallback to settings
     const getCalculatedCommission = useCallback((sub, round) => {
         // Use commission_amount from DB first
-        if (sub.commission_amount !== undefined && sub.commission_amount !== null) {
+        // (Bypass for 4_set due to a previous bug that saved percentage instead of fixed rate)
+        if (sub.commission_amount !== undefined && sub.commission_amount !== null && sub.bet_type !== '4_set' && sub.bet_type !== '4_top') {
             return sub.commission_amount
         }
         // Fallback to calculation from user settings (for old submissions without commission_amount)

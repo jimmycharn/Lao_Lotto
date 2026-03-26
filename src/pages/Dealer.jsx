@@ -1888,8 +1888,9 @@ export default function Dealer() {
 
                 // Helper: calculate commission for a submission
                 // Use commission_amount from DB first for consistency with user dashboard
+                // (Bypass for 4_set due to a previous bug that saved percentage instead of fixed rate)
                 const calcCommission = (sub) => {
-                    if (sub.commission_amount !== undefined && sub.commission_amount !== null) {
+                    if (sub.commission_amount !== undefined && sub.commission_amount !== null && sub.bet_type !== '4_set' && sub.bet_type !== '4_top') {
                         return sub.commission_amount
                     }
                     // Fallback to calculation if commission_amount not recorded (old submissions)
