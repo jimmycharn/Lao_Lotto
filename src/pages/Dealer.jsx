@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
@@ -265,39 +265,25 @@ export default function Dealer() {
         }, 15000)
 
         try {
-            // Fetch rounds
-            const { data: roundsData, error: roundsError } = await supabase
+            // Fetch ALL rounds with type_limits in a single query (no inner join)
+            // Then count submissions separately to know which rounds have active submissions
+            const { data: allRoundsData, error: roundsError } = await supabase
                 .from('lottery_rounds')
                 .select(`
                     *,
                     type_limits (*),
-                    submissions!inner (id)
+                    submissions (id)
                 `)
                 .eq('dealer_id', user.id)
                 .eq('submissions.is_deleted', false)
                 .order('round_date', { ascending: false })
                 .limit(20)
 
-            // For rounds without any submissions, fetch separately
-            const { data: allRoundsData } = await supabase
-                .from('lottery_rounds')
-                .select(`
-                    *,
-                    type_limits (*)
-                `)
-                .eq('dealer_id', user.id)
-                .order('round_date', { ascending: false })
-                .limit(20)
-
-
-            // Merge the submission counts - this ensures rounds with 0 submissions are included
-            const mergedRounds = (allRoundsData || []).map(round => {
-                const roundWithSubs = roundsData?.find(r => r.id === round.id)
-                return {
-                    ...round,
-                    submissions: roundWithSubs?.submissions || []
-                }
-            })
+            // Filter out deleted submissions from the result (LEFT JOIN returns nulls)
+            const mergedRounds = (allRoundsData || []).map(round => ({
+                ...round,
+                submissions: (round.submissions || []).filter(s => s && s.id)
+            }))
 
             if (!roundsError) {
                 setRounds(mergedRounds)
@@ -400,9 +386,10 @@ export default function Dealer() {
                 connection_id: m.membership_id
             }))
 
-            // Fetch subscription (if table exists)
-            try {
-                const { data: subData, error: subError } = await supabase
+            // Parallelize independent queries with Promise.all()
+            const [subscriptionResult, bankAccountsResult, dealerSettingsResult, downstreamResult] = await Promise.allSettled([
+                // 1. Fetch subscription
+                supabase
                     .from('dealer_subscriptions')
                     .select(`
                         *,
@@ -423,44 +410,24 @@ export default function Dealer() {
                     .eq('dealer_id', user.id)
                     .order('created_at', { ascending: false })
                     .limit(1)
-                    .maybeSingle()
+                    .maybeSingle(),
 
-                if (!subError) {
-                    setSubscription(subData)
-                }
-            } catch (subError) {
-                // Table might not exist yet
-                console.log('Subscription table not available')
-                setSubscription(null)
-            }
+                // 2. Fetch dealer bank accounts
+                supabase
+                    .from('dealer_bank_accounts')
+                    .select('*')
+                    .eq('dealer_id', user.id)
+                    .order('is_default', { ascending: false }),
 
-            // Fetch dealer bank accounts for member assignment
-            const { data: bankAccountsData } = await supabase
-                .from('dealer_bank_accounts')
-                .select('*')
-                .eq('dealer_id', user.id)
-                .order('is_default', { ascending: false })
-
-            setDealerBankAccounts(bankAccountsData || [])
-
-            // Fetch dealer settings (allowed_lottery_types from profiles)
-            try {
-                const { data: dealerSettings, error: settingsError } = await supabase
+                // 3. Fetch dealer settings
+                supabase
                     .from('profiles')
                     .select('allowed_lottery_types')
                     .eq('id', user.id)
-                    .maybeSingle()
+                    .maybeSingle(),
 
-                if (!settingsError && dealerSettings) {
-                    setAllowedLotteryTypes(dealerSettings.allowed_lottery_types)
-                }
-            } catch (e) {
-                console.log('Could not fetch dealer settings:', e)
-            }
-
-            // Fetch downstream dealers (dealers who send bets TO us via dealer_upstream_connections)
-            try {
-                const { data: downstreamData, error: downstreamError } = await supabase
+                // 4. Fetch downstream dealers
+                supabase
                     .from('dealer_upstream_connections')
                     .select(`
                         *,
@@ -470,44 +437,64 @@ export default function Dealer() {
                     `)
                     .eq('upstream_dealer_id', user.id)
                     .order('created_at', { ascending: false })
+            ])
 
-                let allDownstreamDealers = []
+            // Process subscription result
+            if (subscriptionResult.status === 'fulfilled' && !subscriptionResult.value.error) {
+                setSubscription(subscriptionResult.value.data)
+            } else {
+                setSubscription(null)
+            }
 
-                if (!downstreamError && downstreamData) {
-                    console.log('Raw downstream data:', downstreamData)
+            // Process bank accounts result
+            if (bankAccountsResult.status === 'fulfilled') {
+                setDealerBankAccounts(bankAccountsResult.value.data || [])
+            }
 
-                    // Fetch dealer bank accounts for downstream dealers
+            // Process dealer settings result
+            if (dealerSettingsResult.status === 'fulfilled' && !dealerSettingsResult.value.error && dealerSettingsResult.value.data) {
+                setAllowedLotteryTypes(dealerSettingsResult.value.data.allowed_lottery_types)
+            }
+
+            // Process downstream dealers
+            let allDownstreamDealers = []
+            try {
+                const downstreamData = downstreamResult.status === 'fulfilled' && !downstreamResult.value.error
+                    ? downstreamResult.value.data
+                    : null
+
+                if (downstreamData && downstreamData.length > 0) {
+                    // Fetch downstream dealer bank accounts & memberships in parallel
                     const downstreamDealerIds = downstreamData.map(d => d.dealer_id).filter(Boolean)
                     let downstreamBankMap = {}
-                    if (downstreamDealerIds.length > 0) {
-                        const { data: downstreamBanks } = await supabase
-                            .from('dealer_bank_accounts')
-                            .select('*')
-                            .in('dealer_id', downstreamDealerIds)
-                            .order('is_default', { ascending: false })
+                    let downstreamMembershipMap = {}
 
-                        if (downstreamBanks) {
-                            downstreamBanks.forEach(bank => {
+                    if (downstreamDealerIds.length > 0) {
+                        const [banksRes, membershipsRes] = await Promise.all([
+                            supabase
+                                .from('dealer_bank_accounts')
+                                .select('*')
+                                .in('dealer_id', downstreamDealerIds)
+                                .order('is_default', { ascending: false }),
+                            supabase
+                                .from('user_dealer_memberships')
+                                .select('id, user_id, member_bank_account_id, assigned_bank_account_id')
+                                .in('user_id', downstreamDealerIds)
+                                .eq('dealer_id', user.id)
+                                .eq('status', 'active')
+                        ])
+
+                        if (banksRes.data) {
+                            banksRes.data.forEach(bank => {
                                 if (!downstreamBankMap[bank.dealer_id]) {
                                     downstreamBankMap[bank.dealer_id] = []
                                 }
                                 downstreamBankMap[bank.dealer_id].push(bank)
                             })
                         }
-                    }
 
-                    // Also check memberships for assigned_bank_account_id, member_bank_account_id, and real membership id
-                    let downstreamMembershipMap = {}
-                    if (downstreamDealerIds.length > 0) {
-                        const { data: downstreamMemberships } = await supabase
-                            .from('user_dealer_memberships')
-                            .select('id, user_id, member_bank_account_id, assigned_bank_account_id')
-                            .in('user_id', downstreamDealerIds)
-                            .eq('dealer_id', user.id)
-                            .eq('status', 'active')
-
-                        if (downstreamMemberships) {
-                            downstreamMemberships.forEach(m => {
+                        if (membershipsRes.data) {
+                            membershipsRes.data.forEach(m => {
                                 downstreamMembershipMap[m.user_id] = {
                                     real_membership_id: m.id,
                                     member_bank_account_id: m.member_bank_account_id,
@@ -519,11 +506,7 @@ export default function Dealer() {
 
                     // Transform to match member structure
                     const transformedDownstream = downstreamData.map(d => {
-                        // Get membership data for this downstream dealer (may not exist for QR-connected dealers)
                         const membershipData = downstreamMembershipMap[d.dealer_id] || {}
-
-                        // Resolve the downstream dealer's bank account that WE see (member_bank)
-                        // Priority: my_bank_account_id on connection > member_bank_account_id on membership > default
                         const dealerBanks = downstreamBankMap[d.dealer_id] || []
                         const userBanks = memberBankAccountsMap[d.dealer_id] || []
                         const allBanks = [...dealerBanks, ...userBanks]
@@ -531,9 +514,6 @@ export default function Dealer() {
                         const memberBank = memberBankAccountId
                             ? allBanks.find(b => b.id === memberBankAccountId)
                             : (allBanks.find(b => b.is_default) || allBanks[0])
-
-                        // assigned_bank_account_id: OUR bank that the downstream dealer sees
-                        // Priority: connection.assigned_bank_account_id > membership.assigned_bank_account_id
                         const assignedBankId = d.assigned_bank_account_id || membershipData.assigned_bank_account_id || null
 
                         return {
@@ -556,16 +536,14 @@ export default function Dealer() {
                     allDownstreamDealers = [...transformedDownstream]
                 }
 
-                // Merge with dealer members from memberships (users who became dealers)
-                // Avoid duplicates by checking if already exists in connections
+                // Merge with dealer members from memberships
                 const existingIds = allDownstreamDealers.map(d => d.id).filter(Boolean)
                 const newDealerMembers = dealerMembersTransformed.filter(d => !existingIds.includes(d.id))
                 allDownstreamDealers = [...allDownstreamDealers, ...newDealerMembers]
 
                 setDownstreamDealers(allDownstreamDealers)
             } catch (downstreamErr) {
-                console.log('Downstream dealers fetch error:', downstreamErr)
-                // Still set dealer members even if connections fetch fails
+                console.log('Downstream dealers processing error:', downstreamErr)
                 setDownstreamDealers(dealerMembersTransformed)
             }
 

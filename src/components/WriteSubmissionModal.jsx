@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { FiX, FiTrash2, FiEdit2, FiPlus, FiCheck, FiRefreshCw, FiVolume2, FiVolumeX } from 'react-icons/fi'
 import { getPermutations } from '../constants/lotteryTypes'
 import { parseMultiLinePaste, get3DigitPermCount } from '../utils/pasteParser'
@@ -479,9 +479,10 @@ export default function WriteSubmissionModal({
         }
     }, [soundEnabled])
 
-    // Check a parsed line against number limits (fetches fresh data every time)
+    // Check a parsed line against number limits
+    // Accepts optional pre-fetched cachedLimits/cachedTotals to avoid redundant DB queries in batch operations
     // Returns: { allowed: boolean, blocked: string[], limitedInfo: string[] }
-    const checkLineAgainstLimits = useCallback(async (lineStr) => {
+    const checkLineAgainstLimits = useCallback(async (lineStr, cachedLimits = null, cachedTotals = null) => {
         if (!roundInfo?.id) return { allowed: true, blocked: [], limitedInfo: [] }
 
         const parsed = parseLine(lineStr)
@@ -491,10 +492,9 @@ export default function WriteSubmissionModal({
         if (entries.length === 0) return { allowed: true, blocked: [], limitedInfo: [] }
 
         try {
-            const [limits, totals] = await Promise.all([
-                fetchNumberLimits(roundInfo.id),
-                fetchCurrentTotals(roundInfo.id)
-            ])
+            // Use cached data if provided (batch mode), otherwise fetch fresh
+            const limits = cachedLimits ?? await fetchNumberLimits(roundInfo.id)
+            const totals = cachedTotals ?? await fetchCurrentTotals(roundInfo.id)
 
             if (!limits || limits.length === 0) return { allowed: true, blocked: [], limitedInfo: [] }
 
@@ -907,7 +907,7 @@ export default function WriteSubmissionModal({
             if (document.activeElement === noteInputRef.current) return
             
             // Get current type buttons
-            const currentTypeButtons = getAvailableTypeButtons()
+            const currentTypeButtons = typeButtons
             const hasTypeButtons = currentTypeButtons.length > 0
             
             // Arrow keys for type button navigation (desktop only)
@@ -1024,7 +1024,7 @@ export default function WriteSubmissionModal({
             if ((e.ctrlKey || e.metaKey) && digitMatch) {
                 e.preventDefault()
                 const buttonIndex = parseInt(digitMatch[2]) - 1
-                const currentTypeButtons = getAvailableTypeButtons()
+                const currentTypeButtons = typeButtons
                 if (buttonIndex < currentTypeButtons.length) {
                     const btn = currentTypeButtons[buttonIndex]
                     const digitCount = getCurrentDigitCount()
@@ -1072,7 +1072,7 @@ export default function WriteSubmissionModal({
                 
                 if (isCtrlActive && (ctrlEnterPattern.test(input) || ctrlEnterWithAsteriskPattern.test(input))) {
                     // Ctrl+Enter with "number=amount" or "number=amount*" - save draft with default type button
-                    const currentTypeButtons = getAvailableTypeButtons()
+                    const currentTypeButtons = typeButtons
                     if (currentTypeButtons.length > 0) {
                         const defaultIndex = getDefaultButtonIndex(currentTypeButtons)
                         handleTypeClick(currentTypeButtons[defaultIndex].value, currentTypeButtons[defaultIndex].autoSubmit)
@@ -1219,15 +1219,15 @@ export default function WriteSubmissionModal({
     }, [lines, currentInput])
 
     // Apply bonus to a single entry amount
-    const applyBonus = (amount, betType) => {
+    const applyBonus = useCallback((amount, betType) => {
         if (!bonusActive || !bonusSettings?.betTypeBonus || betType === '4_set') return amount
         const bonusPct = bonusSettings.betTypeBonus[betType] || 0
         if (bonusPct > 0) return Math.round(amount * (1 + bonusPct / 100))
         return amount
-    }
+    }, [bonusActive, bonusSettings?.betTypeBonus])
 
-    // Calculate total
-    const calculateTotal = () => {
+    // Calculate total - memoized to avoid re-parsing all lines on every render
+    const calculatedTotal = useMemo(() => {
         let total = 0
         lines.forEach(line => {
             const parsed = parseLine(line)
@@ -1237,11 +1237,15 @@ export default function WriteSubmissionModal({
             }
         })
         return total
-    }
+    }, [lines, setPrice, lotteryType, applyBonus])
+
+    // Ref to track latest currentInput for use in memoized callbacks
+    const currentInputRef = useRef(currentInput)
+    currentInputRef.current = currentInput
 
     // Handle number pad click
-    const handleNumberClick = (num) => {
-        const input = currentInput.trim()
+    const handleNumberClick = useCallback((num) => {
+        const input = currentInputRef.current.trim()
         
         // ป้องกันไม่ให้ป้อนอะไรหลังข้อความประเภท
         const typeSuffixes = ['เต็งโต๊ด', 'บนกลับ', 'ล่างกลับ', 'หน้ากลับ', 'ถ่างกลับ', 'คูณชุด', 'ตรง', 'โต๊ด', 'บน', 'ล่าง', 'กลับ']
@@ -1272,10 +1276,10 @@ export default function WriteSubmissionModal({
         setCurrentInput(prev => prev + num)
         setError('')
         setLimitInfo('')
-    }
+    }, [])
 
     // Handle backspace
-    const handleBackspace = () => {
+    const handleBackspace = useCallback(() => {
         playSound('click')
         setCurrentInput(prev => {
             // Check if input ends with a type suffix (after space)
@@ -1295,16 +1299,16 @@ export default function WriteSubmissionModal({
         })
         setError('')
         setLimitInfo('')
-    }
+    }, [])
 
     // Handle clear - clears input AND exits editing mode
-    const handleClear = () => {
+    const handleClear = useCallback(() => {
         playSound('click')
         setCurrentInput('')
         setError('')
         setLimitInfo('')
         setEditingIndex(null) // Exit editing mode
-    }
+    }, [])
 
     // Handle lock toggle - toggle lock/unlock amount
     const handleLockToggle = () => {
@@ -1354,17 +1358,17 @@ export default function WriteSubmissionModal({
     }
     
     // Handle clear input only - clears input but stays in editing mode
-    const handleClearInputOnly = () => {
+    const handleClearInputOnly = useCallback(() => {
         playSound('click')
         setCurrentInput('')
         setError('')
         setLimitInfo('')
         // Keep editingIndex unchanged - stay in editing mode
-    }
+    }, [])
 
     // Handle amount shortcut
-    const handleAmountClick = (amount) => {
-        const parts = currentInput.trim().split(/\s+/)
+    const handleAmountClick = useCallback((amount) => {
+        const parts = currentInputRef.current.trim().split(/\s+/)
         if (parts.length === 1 && /^\d+$/.test(parts[0])) {
             setCurrentInput(prev => prev.trim() + ' ' + amount)
         } else if (parts.length >= 2) {
@@ -1374,7 +1378,7 @@ export default function WriteSubmissionModal({
             setCurrentInput(prev => prev + amount)
         }
         setError('')
-    }
+    }, [])
 
     // Handle type button click - format: 123=50 ล่าง or 123=50*30 บนกลับ
     // inputOverride: optional parameter to override currentInput (used when state hasn't updated yet)
@@ -1689,7 +1693,7 @@ export default function WriteSubmissionModal({
             if (/^\d+$/.test(numbers) && isValidAmount && afterEq.length > 0) {
                 // ถ้า afterEq มี * ให้ไปที่ handleTypeClick โดยตรง
                 if (afterEq.includes('*')) {
-                    const currentTypeButtons = getAvailableTypeButtons()
+                    const currentTypeButtons = typeButtons
                     if (currentTypeButtons.length > 0) {
                         const defaultIndex = getDefaultButtonIndex(currentTypeButtons)
                         handleTypeClick(currentTypeButtons[defaultIndex].value, currentTypeButtons[defaultIndex].autoSubmit)
@@ -1698,7 +1702,7 @@ export default function WriteSubmissionModal({
                 }
                 // เลข 1, 4, 5 ตัว - ไม่รองรับ 2 จำนวนเงิน ให้บันทึก draft ด้วย default type ทันที
                 if (numLen === 1 || numLen === 4 || numLen === 5) {
-                    const currentTypeButtons = getAvailableTypeButtons()
+                    const currentTypeButtons = typeButtons
                     if (currentTypeButtons.length > 0) {
                         const defaultIndex = getDefaultButtonIndex(currentTypeButtons)
                         handleTypeClick(currentTypeButtons[defaultIndex].value, currentTypeButtons[defaultIndex].autoSubmit)
@@ -1837,7 +1841,7 @@ export default function WriteSubmissionModal({
             if (!hasType && /^\d+$/.test(numbers)) {
                 // No type specified, use the default button from available type buttons
                 // This ensures we use the same default as shown in the UI
-                const currentTypeButtons = getAvailableTypeButtons()
+                const currentTypeButtons = typeButtons
                 if (currentTypeButtons.length > 0) {
                     const defaultIndex = getDefaultButtonIndex(currentTypeButtons)
                     const defaultType = currentTypeButtons[defaultIndex].value
@@ -1937,12 +1941,26 @@ export default function WriteSubmissionModal({
         // Convert parsed entries to formatted line strings (compatible with parseLine)
         const newLines = parsed.map(p => p.formattedLine)
 
-        // Check number limits for all parsed lines
+        // Fetch limits & totals ONCE before processing all lines (batch optimization)
+        let cachedLimits = null
+        let cachedTotals = null
+        if (roundInfo?.id) {
+            try {
+                ;[cachedLimits, cachedTotals] = await Promise.all([
+                    fetchNumberLimits(roundInfo.id),
+                    fetchCurrentTotals(roundInfo.id)
+                ])
+            } catch (err) {
+                console.error('[WriteModal] Error pre-fetching limits for paste:', err)
+            }
+        }
+
+        // Check number limits for all parsed lines using cached data
         const allowedLines = []
         const blockedNums = []
         const limitedInfoAll = []
         for (const nl of newLines) {
-            const { allowed, blocked, limitedInfo } = await checkLineAgainstLimits(nl)
+            const { allowed, blocked, limitedInfo } = await checkLineAgainstLimits(nl, cachedLimits, cachedTotals)
             if (allowed) {
                 allowedLines.push(nl)
                 limitedInfoAll.push(...limitedInfo)
@@ -2185,7 +2203,8 @@ export default function WriteSubmissionModal({
     }
 
     // Get available type buttons based on current input and toggle state
-    const getAvailableTypeButtons = () => {
+    // Memoized to avoid rebuilding on every render (used ~10 times per render cycle)
+    const typeButtons = useMemo(() => {
         // Parse input: format is "123=50" or "123=50*30" or "123=50 ล่าง"
         let input = currentInput.trim()
         let eqIndex = input.indexOf('=')
@@ -2414,12 +2433,11 @@ export default function WriteSubmissionModal({
         }
 
         return buttons
-    }
+    }, [currentInput, topBottomToggle, isLocked, lockedAmount, lotteryType])
 
     if (!isOpen) return null
 
-    const total = calculateTotal()
-    const typeButtons = getAvailableTypeButtons()
+    const total = calculatedTotal
 
     return (
         <div className="write-modal-overlay" onClick={handleClose}>
@@ -2855,7 +2873,7 @@ export default function WriteSubmissionModal({
                                         
                                         if (ctrlEnterPattern.test(input) || ctrlEnterWithAsteriskPattern.test(input)) {
                                             // Ctrl+Enter with "number=amount" or "number=amount*" - save draft with default type button
-                                            const currentTypeButtons = getAvailableTypeButtons()
+                                            const currentTypeButtons = typeButtons
                                             if (currentTypeButtons.length > 0) {
                                                 const defaultIndex = getDefaultButtonIndex(currentTypeButtons)
                                                 handleTypeClick(currentTypeButtons[defaultIndex].value, currentTypeButtons[defaultIndex].autoSubmit)
@@ -2966,11 +2984,24 @@ export default function WriteSubmissionModal({
                                                 }
                                                 const newLines = parsed.map(p => p.formattedLine)
                                                 ;(async () => {
+                                                    // Fetch limits & totals ONCE for all lines (batch optimization)
+                                                    let cachedLimits = null
+                                                    let cachedTotals = null
+                                                    if (roundInfo?.id) {
+                                                        try {
+                                                            ;[cachedLimits, cachedTotals] = await Promise.all([
+                                                                fetchNumberLimits(roundInfo.id),
+                                                                fetchCurrentTotals(roundInfo.id)
+                                                            ])
+                                                        } catch (err) {
+                                                            console.error('[WriteModal] Error pre-fetching limits for auto-paste:', err)
+                                                        }
+                                                    }
                                                     const allowedLines = []
                                                     const blockedNums = []
                                                     const limitedInfoAll = []
                                                     for (const nl of newLines) {
-                                                        const { allowed, blocked, limitedInfo } = await checkLineAgainstLimits(nl)
+                                                        const { allowed, blocked, limitedInfo } = await checkLineAgainstLimits(nl, cachedLimits, cachedTotals)
                                                         if (allowed) {
                                                             allowedLines.push(nl)
                                                             limitedInfoAll.push(...limitedInfo)

@@ -1,5 +1,8 @@
 import { getPermutations } from '../constants/lotteryTypes'
 
+// Debug flag for paste parser — set to true only when troubleshooting paste issues
+const DEBUG_PASTE = false
+
 /**
  * Parse multi-line pasted text into bet entries.
  * 
@@ -186,12 +189,12 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
      */
     function applyAmountToBuffer(amountStr, mode) {
         const ctx = mode || contextMode
-        console.log(`[applyAmountToBuffer] amountStr="${amountStr}" mode=${mode} ctx=${ctx} buffer=[${bareNumberBuffer.join(',')}]`)
+        if (DEBUG_PASTE) console.log(`[applyAmountToBuffer] amountStr="${amountStr}" mode=${mode} ctx=${ctx} buffer=[${bareNumberBuffer.join(',')}]`)
         for (const bareNum of bareNumberBuffer) {
             const synthLine = `${bareNum}=${amountStr}`
             if (ctx === 'both') {
                 const bothEntries = emitBoth(synthLine, isLaoOrHanoi, lotteryType)
-                console.log(`[applyAmountToBuffer] emitBoth("${synthLine}") → ${bothEntries.length} entries:`, bothEntries.map(e => e.formattedLine))
+                if (DEBUG_PASTE) console.log(`[applyAmountToBuffer] emitBoth("${synthLine}") → ${bothEntries.length} entries:`, bothEntries.map(e => e.formattedLine))
                 results.push(...bothEntries)
             } else {
                 const parsed = parseNumberLine(synthLine, ctx, isLaoOrHanoi, lotteryType)
@@ -205,12 +208,12 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
         const trimmed = normalizeUnicode(lines[i].trim())
         if (!trimmed) continue
 
-        console.log(`[pasteParser] Line ${i}: "${trimmed}" | buffer=[${bareNumberBuffer.join(',')}] | contextMode=${contextMode}`)
+        if (DEBUG_PASTE) console.log(`[pasteParser] Line ${i}: "${trimmed}" | buffer=[${bareNumberBuffer.join(',')}] | contextMode=${contextMode}`)
 
         // Check if this line is a context-setting line (บน/ล่าง/บนล่าง)
         const modeResult = parseContextLine(trimmed)
         if (modeResult !== null) {
-            console.log(`[pasteParser]   → context line: ${modeResult}`)
+            if (DEBUG_PASTE) console.log(`[pasteParser]   → context line: ${modeResult}`)
             // Flush pending bare numbers before switching context
             if (bareNumberBuffer.length > 0) flushBareBuffer()
             contextMode = modeResult
@@ -219,7 +222,7 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
 
         // Check if this is a bare number line (digits only, 1-5 digits)
         if (isBareNumberLine(trimmed)) {
-            console.log(`[pasteParser]   → bare number, added to buffer`)
+            if (DEBUG_PASTE) console.log(`[pasteParser]   → bare number, added to buffer`)
             bareNumberBuffer.push(trimmed)
             continue
         }
@@ -227,13 +230,13 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
         // Strip prefix noise (timestamps, Thai names, etc.) and re-check
         const stripped = stripPrefixNoise(trimmed)
         const lineToProcess = stripped || trimmed
-        console.log(`[pasteParser]   → stripped: "${stripped}" from "${trimmed}"`)
+        if (DEBUG_PASTE) console.log(`[pasteParser]   → stripped: "${stripped}" from "${trimmed}"`)
 
         // After stripping noise, re-check if the result is a context line
         // e.g. "12:48 ไอซ์(ร้านตัดผม) ล่าง" → stripped still has noise but ends with "ล่าง"
         const strippedMode = parseContextLine(stripped)
         if (strippedMode !== null) {
-            console.log(`[pasteParser]   → stripped to context line: ${strippedMode}`)
+            if (DEBUG_PASTE) console.log(`[pasteParser]   → stripped to context line: ${strippedMode}`)
             if (bareNumberBuffer.length > 0) flushBareBuffer()
             contextMode = strippedMode
             continue
@@ -241,7 +244,7 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
         // Also check if the original line ends with a trailing context keyword (after noise)
         const trailingCtx = extractTrailingContext(trimmed)
         if (trailingCtx !== null) {
-            console.log(`[pasteParser]   → trailing context detected: ${trailingCtx}`)
+            if (DEBUG_PASTE) console.log(`[pasteParser]   → trailing context detected: ${trailingCtx}`)
             if (bareNumberBuffer.length > 0) flushBareBuffer()
             contextMode = trailingCtx
             continue
@@ -249,7 +252,7 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
 
         // After stripping noise, the cleaned line might be a bare number
         if (stripped && isBareNumberLine(stripped)) {
-            console.log(`[pasteParser]   → stripped to bare number, added to buffer`)
+            if (DEBUG_PASTE) console.log(`[pasteParser]   → stripped to bare number, added to buffer`)
             bareNumberBuffer.push(stripped)
             continue
         }
@@ -258,7 +261,7 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
         if (bareNumberBuffer.length > 0) {
             // Try to extract amount info from this line (try ORIGINAL first to preserve context like บล, fallback to stripped)
             const amountInfo = extractAmountFromLine(trimmed) || extractAmountFromLine(lineToProcess)
-            console.log(`[pasteParser]   → extractAmountFromLine:`, JSON.stringify(amountInfo))
+            if (DEBUG_PASTE) console.log(`[pasteParser]   → extractAmountFromLine:`, JSON.stringify(amountInfo))
             if (amountInfo) {
                 // If this line also has its own number, add it to the buffer first
                 if (amountInfo.number) {
@@ -268,7 +271,7 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
                 continue
             }
             // This line is not an amount line — flush buffer individually first
-            console.log(`[pasteParser]   → flushing buffer (no amount found)`)
+            if (DEBUG_PASTE) console.log(`[pasteParser]   → flushing buffer (no amount found)`)
             flushBareBuffer()
         }
 
@@ -284,7 +287,7 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
         if (contextMode === 'bottom' || contextMode === 'both') {
             const numMatch = (processLine || '').match(/^(\d+)/)
             if (numMatch && numMatch[1].length >= 3) {
-                console.log(`[pasteParser]   → auto-reset context from '${contextMode}' to 'top' (${numMatch[1].length}-digit number)`)
+                if (DEBUG_PASTE) console.log(`[pasteParser]   → auto-reset context from '${contextMode}' to 'top' (${numMatch[1].length}-digit number)`)
                 contextMode = 'top'
             }
         }
@@ -308,18 +311,18 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
         // This makes "ล่าง 25=20*20" or "25=20*20 ล่าง" or "25 ล่าง 20*20" etc.
         // all set contextMode to 'bottom' for following 1-2 digit lines.
         if (lineCtx !== contextMode) {
-            console.log(`[pasteParser]   → inline context updates contextMode: ${contextMode} → ${lineCtx}`)
+            if (DEBUG_PASTE) console.log(`[pasteParser]   → inline context updates contextMode: ${contextMode} → ${lineCtx}`)
             contextMode = lineCtx
         }
 
-        console.log(`[pasteParser]   → normal line: "${processLine}", lineCtx=${lineCtx}`)
+        if (DEBUG_PASTE) console.log(`[pasteParser]   → normal line: "${processLine}", lineCtx=${lineCtx}`)
         if (lineCtx === 'both') {
             const bothResults = emitBoth(processLine, isLaoOrHanoi, lotteryType)
-            console.log(`[pasteParser]   → emitBoth produced ${bothResults.length} entries`)
+            if (DEBUG_PASTE) console.log(`[pasteParser]   → emitBoth produced ${bothResults.length} entries`)
             results.push(...bothResults)
         } else {
             const parsed = parseNumberLine(processLine, lineCtx, isLaoOrHanoi, lotteryType)
-            console.log(`[pasteParser]   → parseNumberLine produced ${parsed ? parsed.length : 0} entries`)
+            if (DEBUG_PASTE) console.log(`[pasteParser]   → parseNumberLine produced ${parsed ? parsed.length : 0} entries`)
             if (parsed) results.push(...parsed)
         }
     }
@@ -356,7 +359,7 @@ function isBareNumberLine(line) {
  */
 function extractAmountFromLine(line) {
     let s = normalizeUnicode(line.trim())
-    console.log(`[extractAmount] input: "${s}" | charCodes: [${[...s].map(c => c.charCodeAt(0)).join(',')}]`)
+    if (DEBUG_PASTE) console.log(`[extractAmount] input: "${s}" | charCodes: [${[...s].map(c => c.charCodeAt(0)).join(',')}]`)
 
     // --- Normalize ชุด variants: "20ชุด", "20 ชุด", "20-ชุด", "20+ชุด" → "20*ชุด" ---
     s = s.replace(/(\d+)\s*[*×xX\-+]?\s*ชุด/g, '$1*ชุด')
@@ -530,7 +533,7 @@ function emitBoth(rawLine, isLaoOrHanoi, lotteryType) {
     // Also strip "บล/ลบ" from after = sign
     const eqCtx = cleanLine.match(/^(\d{1,5}\s*=\s*)(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(.+)$/)
     const finalLine = eqCtx ? `${eqCtx[1]}${eqCtx[3]}` : cleanLine
-    console.log(`[emitBoth] rawLine="${rawLine}" cleanLine="${cleanLine}" finalLine="${finalLine}"`)
+    if (DEBUG_PASTE) console.log(`[emitBoth] rawLine="${rawLine}" cleanLine="${cleanLine}" finalLine="${finalLine}"`)
     const topParsed = parseNumberLine(finalLine, 'top', isLaoOrHanoi, lotteryType)
     if (topParsed) results.push(...topParsed)
 
@@ -540,11 +543,11 @@ function emitBoth(rawLine, isLaoOrHanoi, lotteryType) {
     const numDigits = topParsed && topParsed.length > 0 ? topParsed[0].numbers.length : 0
     if (numDigits <= 2) {
         const botParsed = parseNumberLine(finalLine, 'bottom', isLaoOrHanoi, lotteryType)
-        console.log(`[emitBoth] topParsed=${topParsed ? topParsed.length : 'null'} botParsed=${botParsed ? botParsed.length : 'null'}`)
-        if (botParsed) console.log(`[emitBoth] botParsed:`, JSON.stringify(botParsed.map(e => e.formattedLine || e.rawLine)))
+        if (DEBUG_PASTE) console.log(`[emitBoth] topParsed=${topParsed ? topParsed.length : 'null'} botParsed=${botParsed ? botParsed.length : 'null'}`)
+        if (DEBUG_PASTE && botParsed) console.log(`[emitBoth] botParsed:`, JSON.stringify(botParsed.map(e => e.formattedLine || e.rawLine)))
         if (botParsed) results.push(...botParsed)
     } else {
-        console.log(`[emitBoth] ${numDigits}-digit number, skipping bottom (no top/bottom distinction for 3+ digits)`)
+        if (DEBUG_PASTE) console.log(`[emitBoth] ${numDigits}-digit number, skipping bottom (no top/bottom distinction for 3+ digits)`)
     }
     return results
 }
@@ -971,7 +974,7 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
     const permCount = numLen >= 2 ? getPermutationCount(numbers) : 1
 
     // Determine bet type and format based on digit count, amounts, context
-    console.log(`[parseNumberLine] FINAL: numbers=${numbers}, amt1=${amount1}, amt2=${amount2}, amt3=${amount3}, hasChud=${hasChud}, permCount=${permCount}, ctx=${parseContext}, normalized="${normalized}"`)
+    if (DEBUG_PASTE) console.log(`[parseNumberLine] FINAL: numbers=${numbers}, amt1=${amount1}, amt2=${amount2}, amt3=${amount3}, hasChud=${hasChud}, permCount=${permCount}, ctx=${parseContext}, normalized="${normalized}"`)
     return determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, parseContext, isLaoOrHanoi, lotteryType, line)
 }
 

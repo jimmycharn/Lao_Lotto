@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useTheme, DASHBOARDS } from '../contexts/ThemeContext'
@@ -392,6 +392,15 @@ export default function UserDashboard() {
     }, [selectedDealer])
 
     // Realtime subscription: auto-refresh rounds when dealer changes is_active or status
+    // Debounced to prevent rapid-fire fetches when multiple changes arrive quickly
+    const realtimeDebounceRef = useRef(null)
+    const debouncedFetchRounds = useCallback(() => {
+        if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current)
+        realtimeDebounceRef.current = setTimeout(() => {
+            fetchRounds()
+        }, 500)
+    }, [])
+
     useEffect(() => {
         if (!selectedDealer) return
 
@@ -403,11 +412,12 @@ export default function UserDashboard() {
                 table: 'lottery_rounds',
                 filter: `dealer_id=eq.${selectedDealer.id}`
             }, () => {
-                fetchRounds()
+                debouncedFetchRounds()
             })
             .subscribe()
 
         return () => {
+            if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current)
             supabase.removeChannel(channel)
         }
     }, [selectedDealer])
@@ -426,7 +436,6 @@ export default function UserDashboard() {
             }, (payload) => {
                 // Only update if the change is for the current dealer
                 if (payload.new && payload.new.dealer_id === selectedDealer.id) {
-                    console.log('[UserDashboard] Realtime user_settings update:', payload.new)
                     setUserSettings(payload.new)
                 } else {
                     // Fallback: re-fetch to be safe
@@ -565,109 +574,124 @@ export default function UserDashboard() {
             if (!error && data) {
                 setResultsRounds(data)
 
-                // Fetch submissions for each round to calculate summaries
-                const summaries = {}
-                for (const round of data) {
-                    const { data: subs } = await fetchAllRows(
+                // Batch fetch: get ALL submissions for all result rounds in ONE query
+                const roundIds = data.map(r => r.id)
+                const roundMap = {}
+                data.forEach(r => { roundMap[r.id] = r })
+
+                let allSubs = []
+                if (roundIds.length > 0) {
+                    const { data: batchSubs } = await fetchAllRows(
                         (from, to) => supabase
                             .from('submissions')
                             .select('*')
-                            .eq('round_id', round.id)
+                            .in('round_id', roundIds)
                             .eq('user_id', user.id)
                             .eq('is_deleted', false)
                             .range(from, to)
                     )
+                    allSubs = batchSubs || []
+                }
 
-                    if (subs && subs.length > 0) {
-                        const totalAmount = subs.reduce((sum, s) => sum + (s.amount || 0), 0)
-                        const winCount = subs.filter(s => s.is_winner).length
-                        console.log(`[USER-RESULTS] round=${round.id} user=${user.id} subs=${subs.length} totalAmount=${totalAmount} totalCommission=${subs.reduce((sum, s) => sum + (s.commission_amount || 0), 0)}`)
-                        console.log(`[USER-RESULTS] submissions:`, subs.map(s => ({ id: s.id, amount: s.amount, commission_amount: s.commission_amount, bet_type: s.bet_type, numbers: s.numbers, is_deleted: s.is_deleted })))
+                // Group submissions by round_id client-side
+                const subsByRound = {}
+                allSubs.forEach(s => {
+                    if (!subsByRound[s.round_id]) subsByRound[s.round_id] = []
+                    subsByRound[s.round_id].push(s)
+                })
 
-                        // Calculate total prize and commission using same logic as getCalculatedPrize/getCalculatedCommission
-                        const lotteryKey = (() => {
-                            if (round.lottery_type === 'thai') return 'thai'
-                            if (round.lottery_type === 'lao' || round.lottery_type === 'hanoi') return 'lao'
-                            if (round.lottery_type === 'stock') return 'stock'
-                            return 'thai'
-                        })()
+                // Calculate summaries per round using grouped data
+                const summaries = {}
+                for (const round of data) {
+                    const subs = subsByRound[round.id]
+                    if (!subs || subs.length === 0) continue
 
-                        // Use commission_amount from DB, fallback to calculation for old submissions
-                        const calcCommissionFallback = (s) => {
-                            if (s.commission_amount !== undefined && s.commission_amount !== null) {
-                                return s.commission_amount
-                            }
-                            // Fallback: calculate from user settings
-                            const POSITION_MAP_C = {
-                                'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
-                                'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
-                            }
-                            let settingsKeyC = POSITION_MAP_C[s.bet_type] || s.bet_type
-                            if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
-                                const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
-                                settingsKeyC = LAO_MAP[settingsKeyC] || settingsKeyC
-                            }
-                            const settingsC = userSettings?.lottery_settings?.[lotteryKey]?.[settingsKeyC]
-                            if (s.bet_type === '4_set' || s.bet_type === '4_top') {
-                                if (settingsC?.isSet && settingsC?.commission !== undefined) {
-                                    const setPrice = settingsC.setPrice || round?.set_prices?.['4_top'] || 120
-                                    return Math.floor((s.amount || 0) / setPrice) * settingsC.commission
-                                }
-                                const defaultSetPrice = round?.set_prices?.['4_top'] || 120
-                                return Math.floor((s.amount || 0) / defaultSetPrice) * 25
-                            }
-                            if (settingsC?.commission !== undefined) {
-                                return settingsC.isFixed ? settingsC.commission : (s.amount || 0) * (settingsC.commission / 100)
-                            }
-                            const defRate = DEFAULT_COMMISSIONS[s.bet_type] || 15
-                            return (s.amount || 0) * (defRate / 100)
+                    const totalAmount = subs.reduce((sum, s) => sum + (s.amount || 0), 0)
+                    const winCount = subs.filter(s => s.is_winner).length
+
+                    // Calculate total prize and commission using same logic as getCalculatedPrize/getCalculatedCommission
+                    const lotteryKey = (() => {
+                        if (round.lottery_type === 'thai') return 'thai'
+                        if (round.lottery_type === 'lao' || round.lottery_type === 'hanoi') return 'lao'
+                        if (round.lottery_type === 'stock') return 'stock'
+                        return 'thai'
+                    })()
+
+                    // Use commission_amount from DB, fallback to calculation for old submissions
+                    const calcCommissionFallback = (s) => {
+                        if (s.commission_amount !== undefined && s.commission_amount !== null) {
+                            return s.commission_amount
                         }
-                        const totalCommission = subs.reduce((sum, s) => sum + calcCommissionFallback(s), 0)
-
-                        const totalPrize = subs.reduce((sum, s) => {
-                            if (!s.is_winner) return sum
-                            // For 4_set, use prize_amount from database (FIXED amount)
-                            if (s.bet_type === '4_set') {
-                                return sum + (s.prize_amount || 0)
-                            }
-                            // Map position bet types to pak_top/pak_bottom settings
-                            const POSITION_MAP_P = {
-                                'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
-                                'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
-                            }
-                            let settingsKey = POSITION_MAP_P[s.bet_type] || s.bet_type
-                            if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
-                                const LAO_BET_TYPE_MAP = {
-                                    '3_top': '3_straight',
-                                    '3_tod': '3_tod_single'
-                                }
-                                settingsKey = LAO_BET_TYPE_MAP[settingsKey] || settingsKey
-                            }
-                            const settings = userSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
-                            if (settings?.payout !== undefined) {
-                                return sum + (s.amount * settings.payout)
-                            }
-                            const defaultPayouts = {
-                                'run_top': 3, 'run_bottom': 4, 'pak_top': 8, 'pak_bottom': 6,
-                                'front_top_1': 8, 'middle_top_1': 8, 'back_top_1': 8,
-                                'front_bottom_1': 6, 'back_bottom_1': 6,
-                                '2_top': 65, '2_front': 65, '2_center': 65, '2_spread': 65, '2_run': 10, '2_bottom': 65,
-                                '3_top': 550, '3_tod': 100, '3_bottom': 135, '3_front': 100, '3_back': 135,
-                                '4_float': 20, '4_tod': 100, '5_float': 10, '6_top': 1000000
-                            }
-                            return sum + (s.amount * (defaultPayouts[s.bet_type] || 1))
-                        }, 0)
-
-                        const netResult = totalCommission + totalPrize - totalAmount
-
-                        summaries[round.id] = {
-                            totalAmount,
-                            totalCommission,
-                            totalPrize,
-                            netResult,
-                            winCount,
-                            ticketCount: subs.length
+                        // Fallback: calculate from user settings
+                        const POSITION_MAP_C = {
+                            'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
+                            'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
                         }
+                        let settingsKeyC = POSITION_MAP_C[s.bet_type] || s.bet_type
+                        if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+                            const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
+                            settingsKeyC = LAO_MAP[settingsKeyC] || settingsKeyC
+                        }
+                        const settingsC = userSettings?.lottery_settings?.[lotteryKey]?.[settingsKeyC]
+                        if (s.bet_type === '4_set' || s.bet_type === '4_top') {
+                            if (settingsC?.isSet && settingsC?.commission !== undefined) {
+                                const setPrice = settingsC.setPrice || round?.set_prices?.['4_top'] || 120
+                                return Math.floor((s.amount || 0) / setPrice) * settingsC.commission
+                            }
+                            const defaultSetPrice = round?.set_prices?.['4_top'] || 120
+                            return Math.floor((s.amount || 0) / defaultSetPrice) * 25
+                        }
+                        if (settingsC?.commission !== undefined) {
+                            return settingsC.isFixed ? settingsC.commission : (s.amount || 0) * (settingsC.commission / 100)
+                        }
+                        const defRate = DEFAULT_COMMISSIONS[s.bet_type] || 15
+                        return (s.amount || 0) * (defRate / 100)
+                    }
+                    const totalCommission = subs.reduce((sum, s) => sum + calcCommissionFallback(s), 0)
+
+                    const totalPrize = subs.reduce((sum, s) => {
+                        if (!s.is_winner) return sum
+                        // For 4_set, use prize_amount from database (FIXED amount)
+                        if (s.bet_type === '4_set') {
+                            return sum + (s.prize_amount || 0)
+                        }
+                        // Map position bet types to pak_top/pak_bottom settings
+                        const POSITION_MAP_P = {
+                            'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
+                            'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
+                        }
+                        let settingsKey = POSITION_MAP_P[s.bet_type] || s.bet_type
+                        if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+                            const LAO_BET_TYPE_MAP = {
+                                '3_top': '3_straight',
+                                '3_tod': '3_tod_single'
+                            }
+                            settingsKey = LAO_BET_TYPE_MAP[settingsKey] || settingsKey
+                        }
+                        const settings = userSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
+                        if (settings?.payout !== undefined) {
+                            return sum + (s.amount * settings.payout)
+                        }
+                        const defaultPayouts = {
+                            'run_top': 3, 'run_bottom': 4, 'pak_top': 8, 'pak_bottom': 6,
+                            'front_top_1': 8, 'middle_top_1': 8, 'back_top_1': 8,
+                            'front_bottom_1': 6, 'back_bottom_1': 6,
+                            '2_top': 65, '2_front': 65, '2_center': 65, '2_spread': 65, '2_run': 10, '2_bottom': 65,
+                            '3_top': 550, '3_tod': 100, '3_bottom': 135, '3_front': 100, '3_back': 135,
+                            '4_float': 20, '4_tod': 100, '5_float': 10, '6_top': 1000000
+                        }
+                        return sum + (s.amount * (defaultPayouts[s.bet_type] || 1))
+                    }, 0)
+
+                    const netResult = totalCommission + totalPrize - totalAmount
+
+                    summaries[round.id] = {
+                        totalAmount,
+                        totalCommission,
+                        totalPrize,
+                        netResult,
+                        winCount,
+                        ticketCount: subs.length
                     }
                 }
                 setResultsSummaries(summaries)
@@ -2552,15 +2576,15 @@ export default function UserDashboard() {
     }
 
     // Get lottery type category for settings lookup
-    const getLotteryTypeKey = (lotteryType) => {
+    const getLotteryTypeKey = useCallback((lotteryType) => {
         if (lotteryType === 'thai') return 'thai'
         if (lotteryType === 'lao' || lotteryType === 'hanoi') return 'lao'
         if (lotteryType === 'stock') return 'stock'
         return 'thai'
-    }
+    }, [])
 
     // Calculate expected payout for a submission based on user settings
-    const getCalculatedPrize = (sub, round) => {
+    const getCalculatedPrize = useCallback((sub, round) => {
         if (!sub.is_winner) return 0
 
         // For 4_set (4 ตัวชุด), use prize_amount from database (FIXED amount, not multiplied)
@@ -2593,10 +2617,10 @@ export default function UserDashboard() {
         // Use default payout rate for this bet type
         const defaultRate = DEFAULT_PAYOUTS[sub.bet_type] || 1
         return sub.amount * defaultRate
-    }
+    }, [userSettings, getLotteryTypeKey])
 
     // Calculate commission for a submission - use recorded commission_amount, fallback to settings
-    const getCalculatedCommission = (sub, round) => {
+    const getCalculatedCommission = useCallback((sub, round) => {
         // Use commission_amount from DB first
         if (sub.commission_amount !== undefined && sub.commission_amount !== null) {
             return sub.commission_amount
@@ -2628,7 +2652,7 @@ export default function UserDashboard() {
         }
         const defaultRate = DEFAULT_COMMISSIONS[sub.bet_type] || 15
         return (sub.amount || 0) * (defaultRate / 100)
-    }
+    }, [userSettings, getLotteryTypeKey])
 
     // Loading dealers
     if (dealersLoading) {

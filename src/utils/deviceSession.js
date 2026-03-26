@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase'
 
 const DEVICE_TOKEN_KEY = 'lao_lotto_device_token'
-const SESSION_CHECK_INTERVAL = 15000 // Check every 15 seconds
+const SESSION_CHECK_INTERVAL = 60000 // Check every 60 seconds (Realtime handles instant invalidation)
 
 /**
  * Get or create a unique device token for this browser

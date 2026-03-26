@@ -18,7 +18,6 @@ export async function fetchNumberLimits(roundId) {
 
     // Filter: only active limits (if is_active column exists, respect it; otherwise treat all as active)
     const activeLimits = (data || []).filter(nl => nl.is_active === undefined || nl.is_active === true)
-    console.log('[NumberLimits] fetchNumberLimits: total from DB:', data?.length, ', active:', activeLimits.length, activeLimits.map(nl => ({ id: nl.id, bet_type: nl.bet_type, numbers: nl.numbers, max_amount: nl.max_amount, limit_type: nl.limit_type, is_active: nl.is_active })))
     return activeLimits
 }
 
@@ -105,7 +104,7 @@ export function getEffectivePayoutPercent(limit) {
  */
 export function checkSingleSubmission(numberLimits, currentTotals, betType, numbers, amount) {
     const limit = findMatchingLimit(numberLimits, betType, numbers)
-    console.log(`[NumberLimits] checkSingle: betType=${betType} numbers=${numbers} amount=${amount} => matchedLimit:`, limit ? { id: limit.id, bet_type: limit.bet_type, numbers: limit.numbers, max_amount: limit.max_amount, limit_type: limit.limit_type } : 'NONE')
+
 
     if (!limit) {
         return {
