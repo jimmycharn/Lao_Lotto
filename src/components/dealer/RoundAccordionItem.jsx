@@ -149,11 +149,11 @@ export default function RoundAccordionItem({
         return now <= closeTime
     })()
 
-    // Fetch summary data on mount for all rounds (announced, open, or closed)
+    // Fetch summary data on mount or when results change
     useEffect(() => {
         // Always fetch summary data to show stats in header
         fetchSummaryData()
-    }, [round.id])
+    }, [round.id, round.is_result_announced, JSON.stringify(round.winning_numbers)])
 
     // Fetch all member settings (for blocked lottery types)
     useEffect(() => {
@@ -200,10 +200,10 @@ export default function RoundAccordionItem({
 
     // Fetch upstream summaries for closed/announced rounds (needed for header stats and outgoing tab)
     useEffect(() => {
-        if ((isClosed || isAnnounced) && upstreamSummaries.dealers.length === 0 && !upstreamSummaries.loading) {
+        if (isClosed || isAnnounced) {
             fetchUpstreamSummaries()
         }
-    }, [isClosed, isAnnounced])
+    }, [isClosed, isAnnounced, round.is_result_announced, JSON.stringify(round.winning_numbers)])
 
     async function fetchUpstreamDealers() {
         try {
@@ -311,6 +311,12 @@ export default function RoundAccordionItem({
             }))
         }
     }
+
+    useEffect(() => {
+        if (inlineSubmissions.length > 0) {
+            fetchInlineSubmissions(true)
+        }
+    }, [round.is_result_announced, JSON.stringify(round.winning_numbers)])
 
     async function fetchSummaryData() {
         // fetchSummaryData called

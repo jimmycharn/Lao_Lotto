@@ -149,37 +149,39 @@ export default function ResultsModal({ round, onClose }) {
 
             // Check dealer's billing model to decide credit deduction method
             let creditMessage = ''
-            try {
-                const { data: dealerSubs } = await supabase
-                    .from('dealer_subscriptions')
-                    .select('billing_model, subscription_packages(billing_model, profit_percentage_rate)')
-                    .eq('dealer_id', round.dealer_id)
-                    .in('status', ['active', 'trial'])
-                    .order('created_at', { ascending: false })
-                    .limit(1)
-                
-                const dealerSub = dealerSubs?.[0]
-                const billingModel = dealerSub?.subscription_packages?.billing_model || dealerSub?.billing_model
+            if (!isEditing) {
+                try {
+                    const { data: dealerSubs } = await supabase
+                        .from('dealer_subscriptions')
+                        .select('billing_model, subscription_packages(billing_model, profit_percentage_rate)')
+                        .eq('dealer_id', round.dealer_id)
+                        .in('status', ['active', 'trial'])
+                        .order('created_at', { ascending: false })
+                        .limit(1)
+                    
+                    const dealerSub = dealerSubs?.[0]
+                    const billingModel = dealerSub?.subscription_packages?.billing_model || dealerSub?.billing_model
 
-                if (billingModel === 'profit_percentage') {
-                    // For profit_percentage: refund pending + calculate profit-based deduction
-                    const previousPending = round.charged_credit_amount || 0
-                    const profitResult = await deductProfitBasedCredit(round.dealer_id, round.id, previousPending)
-                    if (profitResult.amountDeducted > 0) {
-                        creditMessage = ` (${profitResult.message})`
-                    } else if (profitResult.profitAmount <= 0) {
-                        creditMessage = ' (ไม่มีกำไร ไม่ตัดเครดิต)'
+                    if (billingModel === 'profit_percentage') {
+                        // For profit_percentage: refund pending + calculate profit-based deduction
+                        const previousPending = round.charged_credit_amount || 0
+                        const profitResult = await deductProfitBasedCredit(round.dealer_id, round.id, previousPending)
+                        if (profitResult.amountDeducted > 0) {
+                            creditMessage = ` (${profitResult.message})`
+                        } else if (profitResult.profitAmount <= 0) {
+                            creditMessage = ' (ไม่มีกำไร ไม่ตัดเครดิต)'
+                        }
+                    } else {
+                        // For regular percentage: deduct additional credit if needed
+                        const previouslyCharged = round.charged_credit_amount || 0
+                        const creditResult = await deductAdditionalCreditForRound(round.dealer_id, round.id, previouslyCharged)
+                        if (creditResult.amountDeducted > 0) {
+                            creditMessage = ` (${creditResult.message})`
+                        }
                     }
-                } else {
-                    // For regular percentage: deduct additional credit if needed
-                    const previouslyCharged = round.charged_credit_amount || 0
-                    const creditResult = await deductAdditionalCreditForRound(round.dealer_id, round.id, previouslyCharged)
-                    if (creditResult.amountDeducted > 0) {
-                        creditMessage = ` (${creditResult.message})`
-                    }
+                } catch (creditErr) {
+                    console.log('Credit deduction check skipped:', creditErr)
                 }
-            } catch (creditErr) {
-                console.log('Credit deduction check skipped:', creditErr)
             }
 
             const message = isEditing
