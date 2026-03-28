@@ -91,6 +91,7 @@ export default function UserDashboard() {
     const [allResultSubmissions, setAllResultSubmissions] = useState([]) // All submissions for summary calculations
     const [resultsLoading, setResultsLoading] = useState(false)
     const [resultViewMode, setResultViewMode] = useState('winners') // 'all' or 'winners'
+    const [resultsCount, setResultsCount] = useState(0) // Count for the tab
 
     // History tab state
     const [userHistory, setUserHistory] = useState([])
@@ -391,13 +392,27 @@ export default function UserDashboard() {
         }
     }, [selectedDealer])
 
+    // Keep track of the latest fetch functions to avoid stale closures in debounced realtime callback
+    const realtimeActionRef = useRef()
+    useEffect(() => {
+        realtimeActionRef.current = () => {
+            fetchRounds()
+            if (activeTab === 'results') {
+                fetchResultsRounds()
+            }
+            fetchTabCounts()
+        }
+    })
+
     // Realtime subscription: auto-refresh rounds when dealer changes is_active or status
     // Debounced to prevent rapid-fire fetches when multiple changes arrive quickly
     const realtimeDebounceRef = useRef(null)
     const debouncedFetchRounds = useCallback(() => {
         if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current)
         realtimeDebounceRef.current = setTimeout(() => {
-            fetchRounds()
+            if (realtimeActionRef.current) {
+                realtimeActionRef.current()
+            }
         }, 500)
     }, [])
 
@@ -488,6 +503,27 @@ export default function UserDashboard() {
             fetchResultsRounds()
         }
     }, [activeTab, selectedDealer])
+
+    // Fetch tab counts
+    useEffect(() => {
+        if (selectedDealer) {
+            fetchTabCounts()
+        }
+    }, [selectedDealer])
+
+    async function fetchTabCounts() {
+        if (!selectedDealer) return
+        try {
+            const { count } = await supabase
+                .from('lottery_rounds')
+                .select('*', { count: 'exact', head: true })
+                .eq('dealer_id', selectedDealer.id)
+                .eq('is_result_announced', true)
+            setResultsCount(count || 0)
+        } catch (error) {
+            console.error('Error fetching tab counts:', error)
+        }
+    }
 
     // Fetch submissions when selecting a result round or changing view mode
     useEffect(() => {
@@ -2775,38 +2811,47 @@ export default function UserDashboard() {
                 )}
 
                 {/* Tabs */}
-                <div className="user-tabs">
-                    <button
-                        className={`tab-btn ${activeTab === 'rounds' ? 'active' : ''}`}
-                        onClick={() => {
-                            setActiveTab('rounds')
-                            // Always fetch rounds to get latest data when clicking this tab
-                            if (selectedDealer) {
-                                fetchRounds()
-                            }
-                        }}
-                    >
-                        <FiCalendar /> งวดที่เปิด
-                    </button>
-                    <button
-                        className={`tab-btn ${activeTab === 'results' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('results')}
-                    >
-                        <FiAward /> ผลรางวัล
-                    </button>
-                    <button
-                        className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`}
-                        onClick={() => { setActiveTab('history'); fetchUserHistory(); }}
-                    >
-                        <FiClock /> ประวัติ
-                    </button>
-                    <button
-                        className={`tab-btn ${activeTab === 'dealer' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('dealer')}
-                    >
-                        <FiUser /> เจ้ามือ
-                    </button>
-                </div>
+                {(() => {
+                    const openRoundsCount = rounds.filter(r => {
+                        const blocked = userSettings?.lottery_settings?._blocked_lottery_types || []
+                        return !blocked.includes(r.lottery_type)
+                    }).length;
+                    
+                    return (
+                        <div className="user-tabs">
+                            <button
+                                className={`tab-btn ${activeTab === 'rounds' ? 'active' : ''}`}
+                                onClick={() => {
+                                    setActiveTab('rounds')
+                                    // Always fetch rounds to get latest data when clicking this tab
+                                    if (selectedDealer) {
+                                        fetchRounds()
+                                    }
+                                }}
+                            >
+                                <FiCalendar /> งวดที่เปิด{openRoundsCount > 0 ? `(${openRoundsCount})` : ''}
+                            </button>
+                            <button
+                                className={`tab-btn ${activeTab === 'results' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('results')}
+                            >
+                                <FiAward /> ผลรางวัล{resultsCount > 0 ? `(${resultsCount})` : ''}
+                            </button>
+                            <button
+                                className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`}
+                                onClick={() => { setActiveTab('history'); fetchUserHistory(); }}
+                            >
+                                <FiClock /> ประวัติ
+                            </button>
+                            <button
+                                className={`tab-btn ${activeTab === 'dealer' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('dealer')}
+                            >
+                                <FiUser /> เจ้ามือ
+                            </button>
+                        </div>
+                    );
+                })()}
 
                 <div className="dashboard-content">
                     {activeTab === 'rounds' && (
@@ -2881,9 +2926,18 @@ export default function UserDashboard() {
                                                 <div className="round-accordion-content">
                                                     {/* Submissions Summary */}
                                                     <div className="submissions-summary">
-                                                        <div className="summary-card">
-                                                            <span className="summary-value">{submissions.length}</span>
-                                                            <span className="summary-label">รายการ</span>
+                                                        <div className="summary-card" style={{ display: 'flex', flexDirection: 'column' }}>
+                                                            {(() => {
+                                                                const uniqueBills = new Set(submissions.map(s => s.bill_id).filter(Boolean)).size;
+                                                                return (
+                                                                    <>
+                                                                        <span className="summary-value" style={{ fontSize: '1.2rem', lineHeight: '1.2' }}>
+                                                                            {uniqueBills > 0 ? `${uniqueBills} ใบโพย` : ''} {submissions.length} รายการ
+                                                                        </span>
+                                                                        <span className="summary-label">จำนวนที่ป้อน</span>
+                                                                    </>
+                                                                );
+                                                            })()}
                                                         </div>
                                                         <div className="summary-card">
                                                             <span className="summary-value">
@@ -3807,7 +3861,7 @@ export default function UserDashboard() {
 
                                                     {/* Item Count */}
                                                     <div className="result-item-count">
-                                                        {resultSubmissions.length} รายการ
+                                                        {Object.keys(billGroups).length > 0 ? `${Object.keys(billGroups).length} ใบโพย ` : ''}{resultSubmissions.length} รายการ
                                                     </div>
 
                                                     {/* Items List */}
