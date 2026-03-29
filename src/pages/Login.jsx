@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link, useNavigate, Navigate } from 'react-router-dom'
+import { useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { FiMail, FiLock, FiUser, FiEye, FiEyeOff, FiGift } from 'react-icons/fi'
 import { checkDeviceSession } from '../utils/deviceSession'
@@ -234,12 +234,6 @@ export default function Login() {
                     </button>
                 </form>
 
-                <div className="auth-footer">
-                    <p>
-                        ยังไม่มีบัญชี?{' '}
-                        <Link to="/register">สมัครสมาชิก</Link>
-                    </p>
-                </div>
             </div>
 
             {/* OTP Verification Modal */}
