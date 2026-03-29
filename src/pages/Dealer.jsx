@@ -1887,13 +1887,9 @@ export default function Dealer() {
                 }
 
                 // Helper: calculate commission for a submission
-                // Use commission_amount from DB first for consistency with user dashboard
-                // (Bypass for 4_set due to a previous bug that saved percentage instead of fixed rate)
+                // Always recalculate from current user_settings so that updated rates
+                // apply to all entries (old and new) — matching user dashboard behaviour.
                 const calcCommission = (sub) => {
-                    if (sub.commission_amount !== undefined && sub.commission_amount !== null && sub.bet_type !== '4_set' && sub.bet_type !== '4_top') {
-                        return sub.commission_amount
-                    }
-                    // Fallback to calculation if commission_amount not recorded (old submissions)
                     const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
                     const settings = allUserSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
                     if (sub.bet_type === '4_set' || sub.bet_type === '4_top') {

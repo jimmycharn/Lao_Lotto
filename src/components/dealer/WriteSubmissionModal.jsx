@@ -229,7 +229,35 @@ export default function WriteSubmissionModal({
         }
         // Focus on number input when modal opens
         setTimeout(() => numberInputRef.current?.focus(), 100)
+
+        // Subscribe to realtime changes on user_settings so commission updates propagate immediately
+        if (targetUser?.id && dealerId) {
+            const channel = supabase
+                .channel(`user_settings_${targetUser.id}_${dealerId}`)
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'user_settings',
+                    filter: `user_id=eq.${targetUser.id}`
+                }, (payload) => {
+                    console.log('[WriteModal] user_settings changed, refetching...')
+                    fetchUserSettings()
+                })
+                .subscribe()
+            return () => { supabase.removeChannel(channel) }
+        }
     }, [targetUser?.id, dealerId])
+
+    // Recalculate commission for all existing drafts when userSettings changes
+    useEffect(() => {
+        if (!userSettings || drafts.length === 0) return
+        setDrafts(prev => prev.map(d => {
+            const commInfo = getCommissionForBetType(d.bet_type, userSettings)
+            const newCommAmount = commInfo.isFixed ? commInfo.rate : (d.amount * commInfo.rate) / 100
+            if (d.commission_rate === commInfo.rate && d.commission_amount === newCommAmount) return d
+            return { ...d, commission_rate: commInfo.rate, commission_amount: newCommAmount }
+        }))
+    }, [userSettings])
 
     // Handle keyboard shortcuts for desktop
     useEffect(() => {

@@ -653,12 +653,9 @@ export default function UserDashboard() {
                         return 'thai'
                     })()
 
-                    // Use commission_amount from DB, fallback to calculation for old submissions
+                    // Always recalculate commission from current user_settings so that
+                    // when commission rates change, all entries reflect the updated rate
                     const calcCommissionFallback = (s) => {
-                        if (s.commission_amount !== undefined && s.commission_amount !== null) {
-                            return s.commission_amount
-                        }
-                        // Fallback: calculate from user settings
                         const POSITION_MAP_C = {
                             'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
                             'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
@@ -1705,7 +1702,7 @@ export default function UserDashboard() {
 
             // Calculate totals
             const totalAmount = submissions.reduce((sum, s) => sum + (s.amount || 0), 0)
-            const totalCommission = submissions.reduce((sum, s) => sum + (s.commission_amount || 0), 0)
+            const totalCommission = submissions.reduce((sum, s) => sum + calculateCommissionAmount(s.amount || 0, s.bet_type, selectedRound), 0)
             const netAmount = totalAmount - totalCommission
             const currencySymbol = selectedRound?.currency_symbol || '฿'
 
@@ -2655,14 +2652,9 @@ export default function UserDashboard() {
         return sub.amount * defaultRate
     }, [userSettings, getLotteryTypeKey])
 
-    // Calculate commission for a submission - use recorded commission_amount, fallback to settings
+    // Calculate commission for a submission - always recalculate from current user_settings
+    // so that when commission rates change, all entries reflect the updated rate
     const getCalculatedCommission = useCallback((sub, round) => {
-        // Use commission_amount from DB first
-        // (Bypass for 4_set due to a previous bug that saved percentage instead of fixed rate)
-        if (sub.commission_amount !== undefined && sub.commission_amount !== null && sub.bet_type !== '4_set' && sub.bet_type !== '4_top') {
-            return sub.commission_amount
-        }
-        // Fallback to calculation from user settings (for old submissions without commission_amount)
         const lotteryKey = getLotteryTypeKey(round?.lottery_type)
         const POSITION_MAP = {
             'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',

@@ -62,12 +62,9 @@ export default function SummaryModal({ round, onClose }) {
     }
 
     const getCommission = (sub) => {
-        // Use commission_amount that was recorded when submission was made
-        // This ensures consistency between dealer and user dashboards
-        if (sub.commission_amount !== undefined && sub.commission_amount !== null) {
-            return sub.commission_amount
-        }
-        // Fallback to calculation if commission_amount not recorded
+        // Always recalculate commission from current user_settings so that
+        // when the dealer changes commission rates, all entries (old and new)
+        // reflect the updated rate — matching user dashboard behaviour.
         const lotteryKey = getLotteryTypeKey(round.lottery_type)
         const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
         const settings = userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
