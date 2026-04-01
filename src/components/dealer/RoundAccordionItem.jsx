@@ -4279,7 +4279,7 @@ export default function RoundAccordionItem({
                                                                 <span className="value text-warning">
                                                                     {filteredExcessItems.some(i => i.isSetBased)
                                                                         ? `${filteredExcessItems.reduce((sum, i) => sum + (i.isSetBased ? i.excess : 0), 0)} ชุด`
-                                                                        : `${round.currency_symbol}${filteredExcessItems.reduce((sum, i) => sum + i.excess, 0).toLocaleString()}`}
+                                                                        : `${round.currency_symbol}${filteredExcessItems.reduce((sum, i) => sum + (i.excess || 0), 0).toLocaleString()}`}
                                                                 </span>
                                                             </div>
                                                             <button
@@ -4366,12 +4366,15 @@ export default function RoundAccordionItem({
                                                                             <div>
                                                                                 <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>{BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}</span>
                                                                                 <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                    ยอด: {round.currency_symbol}{item.total.toLocaleString()}{item.isSetBased && ` (${item.setCount} ชุด)`} • {item.limitType === 'blocked' ? '🔴 ปิด' : 'อั้น'}: {item.isSetBased ? `${item.limit} ชุด` : `${round.currency_symbol}${item.limit.toLocaleString()}`}{item.isNumberLimit && item.payoutPercent < 100 ? ` • จ่าย ${item.payoutPercent}%` : ''}
+                                                                                    {item.isAIRecommended && item.limitType === 'ai'
+                                                                                        ? <>ยอดปัจจุบัน: {round.currency_symbol}{(item.total || 0).toLocaleString()} → เก็บไว้: {round.currency_symbol}{(item.limit || 0).toLocaleString()}</>
+                                                                                        : <>ยอด: {round.currency_symbol}{(item.total || 0).toLocaleString()}{item.isSetBased && ` (${item.setCount} ชุด)`} • {item.limitType === 'blocked' ? '🔴 ปิด' : 'อั้น'}: {item.isSetBased ? `${item.limit || 0} ชุด` : `${round.currency_symbol}${(item.limit || 0).toLocaleString()}`}{item.isNumberLimit && item.payoutPercent < 100 ? ` • จ่าย ${item.payoutPercent}%` : ''}</>}
                                                                                 </div>
                                                                             </div>
                                                                         </div>
                                                                         <div style={{ textAlign: 'right', color: 'var(--color-warning)', fontWeight: 600 }}>
-                                                                            {round.currency_symbol}{excessAmount.toLocaleString()}
+                                                                            {item.isAIRecommended && <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginBottom: '0.1rem' }}>ตีออก</div>}
+                                                                            {round.currency_symbol}{(excessAmount || 0).toLocaleString()}
                                                                             {item.isSetBased && <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>({item.excess} ชุด)</div>}
                                                                         </div>
                                                                     </div>
@@ -4744,14 +4747,20 @@ export default function RoundAccordionItem({
                         const isSet = isSetBased && (rec.bet_type === '4_set' || rec.bet_type === '4_top')
                         const transferAmt = rec.transfer_amount || 0
                         const numSets = isSet ? Math.ceil(transferAmt / currentSetPrice) : 0
+                        const keepAmount = rec.keep_amount || 0
                         return {
                             bet_type: rec.bet_type,
                             numbers: rec.numbers,
+                            displayNumbers: rec.numbers,
                             total: rec.current_amount || transferAmt,
                             setCount: isSet ? (rec.num_sets || numSets) : 0,
                             excess: isSet ? numSets : transferAmt,
                             isSetBased: isSet,
                             excessType: rec.bet_type,
+                            limit: isSet ? 0 : keepAmount,
+                            limitType: 'ai',
+                            isNumberLimit: false,
+                            payoutPercent: 100,
                             isAIRecommended: true,
                             reason: rec.reason || 'AI แนะนำ',
                             submissions: []
