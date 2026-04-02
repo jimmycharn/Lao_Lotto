@@ -2939,7 +2939,7 @@ export default function UserDashboard() {
                                                         </div>
                                                         <div className="summary-card highlight">
                                                             <span className="summary-value">
-                                                                {round.currency_symbol}{totalCommission.toLocaleString()}
+                                                                {round.currency_symbol}{Math.round(totalCommission).toLocaleString()}
                                                             </span>
                                                             <span className="summary-label">ค่าคอม</span>
                                                         </div>
@@ -3373,7 +3373,7 @@ export default function UserDashboard() {
                                                                                                         {round.currency_symbol}{billTotal.toLocaleString()}
                                                                                                     </span>
                                                                                                     <span style={{ fontSize: '0.8rem', color: 'var(--color-warning)' }}>
-                                                                                                        คอม {round.currency_symbol}{billCommission.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                                                                                                        คอม {round.currency_symbol}{Math.round(billCommission).toLocaleString()}
                                                                                                     </span>
                                                                                                     <button
                                                                                                         className="bill-copy-btn"
@@ -3416,7 +3416,7 @@ export default function UserDashboard() {
                                                                                                                         {sub.display_numbers}
                                                                                                                     </span>
                                                                                                                     <span className="bill-item-commission" style={{ color: 'var(--color-warning)', fontSize: '0.8rem', width: '60px', textAlign: 'right', flexShrink: 0 }}>
-                                                                                                                        {round.currency_symbol}{(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                                                                                                                        {round.currency_symbol}{Math.round(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)).toLocaleString()}
                                                                                                                     </span>
                                                                                                                     <span className="bill-item-amount" style={{ width: '60px', textAlign: 'right', flexShrink: 0 }}>
                                                                                                                         {round.currency_symbol}{sub.display_amount || sub.amount?.toLocaleString()}
@@ -3433,7 +3433,7 @@ export default function UserDashboard() {
                                                                                                                         </span>
                                                                                                                     </div>
                                                                                                                     <span className="bill-item-commission" style={{ color: 'var(--color-warning)', fontSize: '0.8rem', width: '60px', textAlign: 'right', flexShrink: 0 }}>
-                                                                                                                        {round.currency_symbol}{calculateCommissionAmount(sub.amount || 0, sub.bet_type, round).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                                                                                                                        {round.currency_symbol}{Math.round(calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)).toLocaleString()}
                                                                                                                     </span>
                                                                                                                     <span className="bill-item-amount" style={{ width: '60px', textAlign: 'right', flexShrink: 0 }}>
                                                                                                                         {round.currency_symbol}{sub.amount?.toLocaleString()}
@@ -3570,7 +3570,7 @@ export default function UserDashboard() {
                                                                                                 )}
                                                                                             </td>
                                                                                             <td className="commission-cell" style={{ color: 'var(--color-warning)' }}>
-                                                                                                {round.currency_symbol}{(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                                                                                                {round.currency_symbol}{Math.round(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)).toLocaleString()}
                                                                                             </td>
                                                                                             <td>{round.currency_symbol}{displayMode === 'summary'
                                                                                                 ? (typeof sub.display_amount === 'string' ? sub.display_amount : sub.amount?.toLocaleString())
@@ -3717,25 +3717,25 @@ export default function UserDashboard() {
                                                             <span className="summary-item">
                                                                 <span className="label">ยอดส่งรวม</span>
                                                                 <span style={{ color: 'var(--color-danger)', fontWeight: 600 }}>
-                                                                    -{round.currency_symbol || '฿'}{Math.abs(summary.totalAmount || 0).toLocaleString()}
+                                                                    -{round.currency_symbol || '฿'}{Math.abs(Math.round(summary.totalAmount || 0)).toLocaleString()}
                                                                 </span>
                                                             </span>
                                                             <span className="summary-item">
                                                                 <span className="label">ค่าคอม</span>
                                                                 <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>
-                                                                    +{round.currency_symbol || '฿'}{Math.abs(summary.totalCommission || 0).toLocaleString()}
+                                                                    +{round.currency_symbol || '฿'}{Math.abs(Math.round(summary.totalCommission || 0)).toLocaleString()}
                                                                 </span>
                                                             </span>
                                                             <span className="summary-item">
                                                                 <span className="label">รางวัลที่ได้</span>
                                                                 <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>
-                                                                    +{round.currency_symbol || '฿'}{Math.abs(summary.totalPrize || 0).toLocaleString()}
+                                                                    +{round.currency_symbol || '฿'}{Math.abs(Math.round(summary.totalPrize || 0)).toLocaleString()}
                                                                 </span>
                                                             </span>
                                                             <span className={`summary-item profit ${(summary.netResult || 0) >= 0 ? 'positive' : 'negative'}`}>
                                                                 <span className="label">ผลกำไร/ขาดทุน</span>
                                                                 <span style={{ fontWeight: 700 }}>
-                                                                    {(summary.netResult || 0) >= 0 ? '+' : '-'}{round.currency_symbol || '฿'}{Math.abs(summary.netResult || 0).toLocaleString()}
+                                                                    {(summary.netResult || 0) >= 0 ? '+' : '-'}{round.currency_symbol || '฿'}{Math.abs(Math.round(summary.netResult || 0)).toLocaleString()}
                                                                 </span>
                                                             </span>
                                                         </div>
@@ -3808,25 +3808,25 @@ export default function UserDashboard() {
                                                         <div className="submissions-summary results-summary">
                                                             <div className="summary-card">
                                                                 <span className="summary-value" style={{ color: 'var(--color-danger)' }}>
-                                                                    -{round.currency_symbol || '฿'}{Math.abs(summary.totalAmount || 0).toLocaleString()}
+                                                                    -{round.currency_symbol || '฿'}{Math.abs(Math.round(summary.totalAmount || 0)).toLocaleString()}
                                                                 </span>
                                                                 <span className="summary-label">ยอดส่งรวม</span>
                                                             </div>
                                                             <div className="summary-card">
                                                                 <span className="summary-value" style={{ color: 'var(--color-success)' }}>
-                                                                    +{round.currency_symbol || '฿'}{Math.abs(summary.totalCommission || 0).toLocaleString()}
+                                                                    +{round.currency_symbol || '฿'}{Math.abs(Math.round(summary.totalCommission || 0)).toLocaleString()}
                                                                 </span>
                                                                 <span className="summary-label">ค่าคอม</span>
                                                             </div>
                                                             <div className="summary-card">
                                                                 <span className="summary-value" style={{ color: 'var(--color-success)' }}>
-                                                                    +{round.currency_symbol || '฿'}{Math.abs(summary.totalPrize || 0).toLocaleString()}
+                                                                    +{round.currency_symbol || '฿'}{Math.abs(Math.round(summary.totalPrize || 0)).toLocaleString()}
                                                                 </span>
                                                                 <span className="summary-label">รางวัลที่ได้</span>
                                                             </div>
                                                             <div className={`summary-card ${(summary.netResult || 0) >= 0 ? 'profit' : 'loss'}`}>
                                                                 <span className="summary-value" style={{ color: (summary.netResult || 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                                                                    {(summary.netResult || 0) >= 0 ? '+' : '-'}{round.currency_symbol || '฿'}{Math.abs(summary.netResult || 0).toLocaleString()}
+                                                                    {(summary.netResult || 0) >= 0 ? '+' : '-'}{round.currency_symbol || '฿'}{Math.abs(Math.round(summary.netResult || 0)).toLocaleString()}
                                                                 </span>
                                                                 <span className="summary-label">ผลกำไร/ขาดทุน</span>
                                                             </div>
@@ -4040,25 +4040,25 @@ export default function UserDashboard() {
                                                     <span className="summary-item">
                                                         <span className="label">ยอดส่ง</span>
                                                         <span style={{ color: 'var(--color-danger)', fontWeight: 600 }}>
-                                                            -฿{Math.abs(item.total_amount || 0).toLocaleString()}
+                                                            -฿{Math.abs(Math.round(item.total_amount || 0)).toLocaleString()}
                                                         </span>
                                                     </span>
                                                     <span className="summary-item">
                                                         <span className="label">ค่าคอม</span>
                                                         <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>
-                                                            +฿{Math.abs(item.total_commission || 0).toLocaleString()}
+                                                            +฿{Math.abs(Math.round(item.total_commission || 0)).toLocaleString()}
                                                         </span>
                                                     </span>
                                                     <span className="summary-item">
                                                         <span className="label">รางวัล</span>
                                                         <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>
-                                                            +฿{Math.abs(item.total_winnings || 0).toLocaleString()}
+                                                            +฿{Math.abs(Math.round(item.total_winnings || 0)).toLocaleString()}
                                                         </span>
                                                     </span>
                                                     <span className={`summary-item profit ${(item.profit_loss || 0) >= 0 ? 'positive' : 'negative'}`}>
                                                         <span className="label">กำไร/ขาดทุน</span>
                                                         <span style={{ fontWeight: 700 }}>
-                                                            {(item.profit_loss || 0) >= 0 ? '+' : '-'}฿{Math.abs(item.profit_loss || 0).toLocaleString()}
+                                                            {(item.profit_loss || 0) >= 0 ? '+' : '-'}฿{Math.abs(Math.round(item.profit_loss || 0)).toLocaleString()}
                                                         </span>
                                                     </span>
                                                 </div>

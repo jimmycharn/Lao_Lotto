@@ -2470,7 +2470,7 @@ export default function RoundAccordionItem({
                                         <div className="stats-items">
                                             <span className="stat-box">
                                                 <span className="stat-label">ยอดรวม</span>
-                                                <span className="stat-value success">+{round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
+                                                <span className="stat-value success">+{round.currency_symbol}{Math.round(grandTotalBet).toLocaleString()}</span>
                                             </span>
                                             <span className="stat-box">
                                                 <span className="stat-label">ค่าคอม</span>
@@ -2480,7 +2480,7 @@ export default function RoundAccordionItem({
                                                 <>
                                                     <span className="stat-box">
                                                         <span className="stat-label">จ่าย</span>
-                                                        <span className={`stat-value ${grandTotalWin > 0 ? 'danger' : ''}`}>{grandTotalWin > 0 ? '-' : ''}{round.currency_symbol}{grandTotalWin.toLocaleString()}</span>
+                                                        <span className={`stat-value ${grandTotalWin > 0 ? 'danger' : ''}`}>{grandTotalWin > 0 ? '-' : ''}{round.currency_symbol}{Math.round(grandTotalWin).toLocaleString()}</span>
                                                     </span>
                                                     <span className="stat-box">
                                                         <span className="stat-label">กำไร</span>
@@ -2502,7 +2502,7 @@ export default function RoundAccordionItem({
                                             <div className="stats-items">
                                                 <span className="stat-box">
                                                     <span className="stat-label">ยอดรวม</span>
-                                                    <span className="stat-value danger">-{round.currency_symbol}{outgoingTotalBet.toLocaleString()}</span>
+                                                    <span className="stat-value danger">-{round.currency_symbol}{Math.round(outgoingTotalBet).toLocaleString()}</span>
                                                 </span>
                                                 <span className="stat-box">
                                                     <span className="stat-label">ค่าคอม</span>
@@ -2510,7 +2510,7 @@ export default function RoundAccordionItem({
                                                 </span>
                                                 <span className="stat-box">
                                                     <span className="stat-label">รับ</span>
-                                                    <span className={`stat-value ${outgoingTotalWin > 0 ? 'success' : ''}`}>{outgoingTotalWin > 0 ? '+' : ''}{round.currency_symbol}{outgoingTotalWin.toLocaleString()}</span>
+                                                    <span className={`stat-value ${outgoingTotalWin > 0 ? 'success' : ''}`}>{outgoingTotalWin > 0 ? '+' : ''}{round.currency_symbol}{Math.round(outgoingTotalWin).toLocaleString()}</span>
                                                 </span>
                                                 <span className="stat-box">
                                                     <span className="stat-label">กำไร</span>
@@ -2619,7 +2619,7 @@ export default function RoundAccordionItem({
                                             <div className="stats-block-items">
                                                 <span className="stat-item">
                                                     <span className="stat-label">ยอดรวม</span>
-                                                    <span className="stat-value success">+{round.currency_symbol}{grandTotalBet.toLocaleString()}</span>
+                                                    <span className="stat-value success">+{round.currency_symbol}{Math.round(grandTotalBet).toLocaleString()}</span>
                                                 </span>
                                                 <span className="stat-item">
                                                     <span className="stat-label">ค่าคอม</span>
@@ -2646,7 +2646,7 @@ export default function RoundAccordionItem({
                                             <div className="stats-block-items">
                                                 <span className="stat-item">
                                                     <span className="stat-label">ยอดรวม</span>
-                                                    <span className="stat-value danger">-{round.currency_symbol}{outgoingTotalBet.toLocaleString()}</span>
+                                                    <span className="stat-value danger">-{round.currency_symbol}{Math.round(outgoingTotalBet).toLocaleString()}</span>
                                                 </span>
                                                 <span className="stat-item">
                                                     <span className="stat-label">ค่าคอม</span>
@@ -2843,18 +2843,18 @@ export default function RoundAccordionItem({
                                                                             <span className="user-email">{usr.email}</span>
                                                                         </div>
                                                                         <div className={`net-amount ${dealerNet < 0 ? 'negative' : dealerNet > 0 ? 'positive' : ''}`}>
-                                                                            {dealerNet > 0 ? '+' : dealerNet < 0 ? '-' : ''}{round.currency_symbol}{Math.abs(dealerNet).toLocaleString()}
+                                                                            {dealerNet > 0 ? '+' : dealerNet < 0 ? '-' : ''}{round.currency_symbol}{Math.abs(Math.round(dealerNet)).toLocaleString()}
                                                                         </div>
                                                                     </div>
                                                                     <div className="user-summary-details">
                                                                         <div className="detail-item"><span className="detail-label">แทง</span><span className="detail-value">({usr.ticketCount})</span></div>
-                                                                        <div className="detail-item"><span className="detail-label">ยอดแทง</span><span className="detail-value">{round.currency_symbol}{usr.totalBet.toLocaleString()}</span></div>
-                                                                        <div className="detail-item"><span className="detail-label">ค่าคอม</span><span className="detail-value" style={{ color: 'var(--color-warning)' }}>{round.currency_symbol}{usr.totalCommission.toLocaleString()}</span></div>
-                                                                        <div className="detail-item"><span className="detail-label">ถูก/ยอดได้</span><span className={`detail-value ${usr.totalWin > 0 ? 'text-success' : ''}`}>{usr.winCount > 0 ? `${usr.winCount}/${round.currency_symbol}${usr.totalWin.toLocaleString()}` : '-'}</span></div>
+                                                                        <div className="detail-item"><span className="detail-label">ยอดแทง</span><span className="detail-value">{round.currency_symbol}{Math.round(usr.totalBet).toLocaleString()}</span></div>
+                                                                        <div className="detail-item"><span className="detail-label">ค่าคอม</span><span className="detail-value" style={{ color: 'var(--color-warning)' }}>{round.currency_symbol}{Math.round(usr.totalCommission).toLocaleString()}</span></div>
+                                                                        <div className="detail-item"><span className="detail-label">ถูก/ยอดได้</span><span className={`detail-value ${usr.totalWin > 0 ? 'text-success' : ''}`}>{usr.winCount > 0 ? `${usr.winCount}/${round.currency_symbol}${Math.round(usr.totalWin).toLocaleString()}` : '-'}</span></div>
                                                                     </div>
                                                                     <div className="user-summary-footer">
-                                                                        {dealerNet < 0 ? <span className="status-badge lost">ต้องจ่าย {round.currency_symbol}{Math.abs(dealerNet).toLocaleString()}</span>
-                                                                            : dealerNet > 0 ? <span className="status-badge won">ต้องเก็บ {round.currency_symbol}{dealerNet.toLocaleString()}</span>
+                                                                        {dealerNet < 0 ? <span className="status-badge lost">ต้องจ่าย {round.currency_symbol}{Math.abs(Math.round(dealerNet)).toLocaleString()}</span>
+                                                                            : dealerNet > 0 ? <span className="status-badge won">ต้องเก็บ {round.currency_symbol}{Math.round(dealerNet).toLocaleString()}</span>
                                                                                 : <span className="status-badge pending">เสมอ</span>}
                                                                     </div>
                                                                 </div>
@@ -2885,14 +2885,14 @@ export default function RoundAccordionItem({
                                                                             <span className="user-email">{dealer.dealerContact}</span>
                                                                         </div>
                                                                         <div className={`net-amount ${ourNet > 0 ? 'positive' : ourNet < 0 ? 'negative' : ''}`}>
-                                                                            {ourNet > 0 ? '+' : ourNet < 0 ? '-' : ''}{dealer.currencySymbol}{Math.abs(ourNet).toLocaleString()}
+                                                                            {ourNet > 0 ? '+' : ourNet < 0 ? '-' : ''}{dealer.currencySymbol}{Math.abs(Math.round(ourNet)).toLocaleString()}
                                                                         </div>
                                                                     </div>
                                                                     <div className="user-summary-details">
                                                                         <div className="detail-item"><span className="detail-label">แทง</span><span className="detail-value">({dealer.ticketCount})</span></div>
-                                                                        <div className="detail-item"><span className="detail-label">ยอดแทง</span><span className="detail-value">{dealer.currencySymbol}{dealer.totalBet.toLocaleString()}</span></div>
+                                                                        <div className="detail-item"><span className="detail-label">ยอดแทง</span><span className="detail-value">{dealer.currencySymbol}{Math.round(dealer.totalBet).toLocaleString()}</span></div>
                                                                         <div className="detail-item"><span className="detail-label">ค่าคอม</span><span className="detail-value" style={{ color: 'var(--color-warning)' }}>{dealer.currencySymbol}{Math.round(dealer.totalCommission).toLocaleString()}</span></div>
-                                                                        <div className="detail-item"><span className="detail-label">ถูก/ยอดได้</span><span className={`detail-value ${dealer.totalWin > 0 ? 'text-success' : ''}`}>{dealer.winCount > 0 ? `${dealer.winCount}/${dealer.currencySymbol}${dealer.totalWin.toLocaleString()}` : '-'}</span></div>
+                                                                        <div className="detail-item"><span className="detail-label">ถูก/ยอดได้</span><span className={`detail-value ${dealer.totalWin > 0 ? 'text-success' : ''}`}>{dealer.winCount > 0 ? `${dealer.winCount}/${dealer.currencySymbol}${Math.round(dealer.totalWin).toLocaleString()}` : '-'}</span></div>
                                                                     </div>
                                                                     <div className="user-summary-footer">
                                                                         {dealer.isExternal && !dealer.isAnnounced ? (
@@ -2900,9 +2900,9 @@ export default function RoundAccordionItem({
                                                                         ) : !dealer.isAnnounced ? (
                                                                             <span className="status-badge pending">รอประกาศผล</span>
                                                                         ) : ourNet > 0 ? (
-                                                                            <span className="status-badge won">ต้องเก็บ {dealer.currencySymbol}{ourNet.toLocaleString()}</span>
+                                                                            <span className="status-badge won">ต้องเก็บ {dealer.currencySymbol}{Math.round(ourNet).toLocaleString()}</span>
                                                                         ) : ourNet < 0 ? (
-                                                                            <span className="status-badge lost">ต้องจ่าย {dealer.currencySymbol}{Math.abs(ourNet).toLocaleString()}</span>
+                                                                            <span className="status-badge lost">ต้องจ่าย {dealer.currencySymbol}{Math.abs(Math.round(ourNet)).toLocaleString()}</span>
                                                                         ) : (
                                                                             <span className="status-badge pending">เสมอ</span>
                                                                         )}
@@ -3460,13 +3460,13 @@ export default function RoundAccordionItem({
                                                     if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
                                                     return true
                                                 }).reduce((sum, s) => sum + s.amount, 0).toLocaleString()}</span>
-                                                <span style={{ fontWeight: '600', fontSize: '0.9rem', color: 'var(--color-warning)' }}>{round.currency_symbol}{inlineSubmissions.filter(s => {
+                                                <span style={{ fontWeight: '600', fontSize: '0.9rem', color: 'var(--color-warning)' }}>{round.currency_symbol}{Math.round(inlineSubmissions.filter(s => {
                                                     const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
                                                     if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
                                                     if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
                                                     if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
                                                     return true
-                                                }).reduce((sum, s) => sum + getCommission(s), 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+                                                }).reduce((sum, s) => sum + getCommission(s), 0)).toLocaleString()}</span>
                                                 <span style={{ fontWeight: '600', fontSize: '0.9rem', color: 'var(--color-success)', textAlign: 'right' }}>{(() => {
                                                     const filtered = inlineSubmissions.filter(s => {
                                                         const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
@@ -3477,7 +3477,7 @@ export default function RoundAccordionItem({
                                                     })
                                                     const totalAmount = filtered.reduce((sum, s) => sum + s.amount, 0)
                                                     const totalCommission = filtered.reduce((sum, s) => sum + getCommission(s), 0)
-                                                    return `${round.currency_symbol}${(totalAmount - totalCommission).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                                                    return `${round.currency_symbol}${Math.round(totalAmount - totalCommission).toLocaleString()}`
                                                 })()}</span>
                                             </div>
 
@@ -3857,7 +3857,7 @@ export default function RoundAccordionItem({
                                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                                                             <span>{round.currency_symbol}{(inlineBetTypeFilter === 'all' ? userGroup.total : filteredTotal).toLocaleString()}</span>
                                                                             <span style={{ fontSize: '0.8rem', fontWeight: '400', opacity: 0.8 }}>
-                                                                                คอม {round.currency_symbol}{(inlineBetTypeFilter === 'all' ? userGroup.totalCommission : filteredCommission).toLocaleString()}
+                                                                                คอม {round.currency_symbol}{Math.round(inlineBetTypeFilter === 'all' ? userGroup.totalCommission : filteredCommission).toLocaleString()}
                                                                             </span>
                                                                         </div>
                                                                         {/* Allow delete for: 1) open rounds, or 2) closed/announced rounds if user hasn't changed password */}
@@ -3947,8 +3947,8 @@ export default function RoundAccordionItem({
                                                                                             </span>
                                                                                             <span style={{ fontSize: '0.8rem', color: 'var(--color-warning)' }}>
                                                                                                 คอม {round.currency_symbol}{(() => {
-                                                                                                    if (inlineBetTypeFilter === 'all') return bill.items.reduce((sum, item) => sum + getCommission(item), 0).toLocaleString(undefined, { maximumFractionDigits: 1 })
-                                                                                                    return bill.items.filter(item => item.bet_type === inlineBetTypeFilter).reduce((sum, item) => sum + getCommission(item), 0).toLocaleString(undefined, { maximumFractionDigits: 1 })
+                                                                                                    if (inlineBetTypeFilter === 'all') return Math.round(bill.items.reduce((sum, item) => sum + getCommission(item), 0)).toLocaleString()
+                                                                                                    return Math.round(bill.items.filter(item => item.bet_type === inlineBetTypeFilter).reduce((sum, item) => sum + getCommission(item), 0)).toLocaleString()
                                                                                                 })()}
                                                                                             </span>
                                                                                         </div>
@@ -4532,7 +4532,7 @@ export default function RoundAccordionItem({
                                                             <div className="inline-summary" style={{ marginBottom: '1rem' }}>
                                                                 <div className="summary-item"><span className="label">จำนวนครั้ง</span><span className="value">{batchList.length} ครั้ง</span></div>
                                                                 <div className="summary-item"><span className="label">รวมทั้งหมด</span><span className="value">{round.currency_symbol}{grandTotal.toLocaleString()}</span></div>
-                                                                <div className="summary-item"><span className="label">ค่าคอมรวม</span><span className="value" style={{ color: 'var(--color-success)' }}>+{round.currency_symbol}{totalCommission.toLocaleString()}</span></div>
+                                                                <div className="summary-item"><span className="label">ค่าคอมรวม</span><span className="value" style={{ color: 'var(--color-success)' }}>+{round.currency_symbol}{Math.round(totalCommission).toLocaleString()}</span></div>
                                                             </div>
 
                                                             {revertableBatches.length > 0 && (
