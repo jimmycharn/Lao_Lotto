@@ -23,6 +23,33 @@ import {
 import { parseMultiLinePaste } from '../../utils/pasteParser'
 import { useDragReorder } from '../../utils/useDragReorder'
 
+// Classify bet type as 'top' or 'bottom' for color-coding
+const getBetPosition = (betType) => {
+    if (!betType) return ''
+    const BOTTOM_TYPES = ['2_bottom', '2_bottom_rev', 'run_bottom', 'front_bottom_1', 'back_bottom_1', '3_bottom', '2_spread', '2_spread_rev', '2_tang']
+    if (BOTTOM_TYPES.includes(betType)) return 'bottom'
+    const TOP_TYPES = ['2_top', '2_top_rev', '3_top', '3_tod', 'run_top', 'front_top_1', 'middle_top_1', 'back_top_1', '2_front', '2_front_rev', '4_set', '4_top', '4_float', '5_float', '3_straight', '3_tod_single']
+    if (TOP_TYPES.includes(betType)) return 'top'
+    return ''
+}
+
+// Color styles for top/bottom bet types
+const BET_POSITION_STYLES = {
+    top: {
+        borderLeft: '3px solid #38bdf8',
+        background: 'rgba(56, 189, 248, 0.08)'
+    },
+    bottom: {
+        borderLeft: '3px solid #fb923c',
+        background: 'rgba(251, 146, 60, 0.08)'
+    }
+}
+
+const BET_TYPE_COLORS = {
+    top: '#38bdf8',
+    bottom: '#fb923c'
+}
+
 export default function WriteSubmissionModal({ 
     round, 
     targetUser, // The user we're writing bets for
@@ -109,6 +136,7 @@ export default function WriteSubmissionModal({
                 seen.add(d.entry_id)
                 groups.push({
                     entry_id: d.entry_id,
+                    bet_type: d.bet_type,
                     display_numbers: d.display_numbers || d.numbers,
                     display_bet_type: d.display_bet_type || BET_TYPES[d.bet_type]?.label,
                     display_amount: d.display_amount || d.amount.toString(),
@@ -1506,7 +1534,11 @@ export default function WriteSubmissionModal({
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {getDraftGroups().map((group, idx) => (
+                                        {getDraftGroups().map((group, idx) => {
+                                            const pos = getBetPosition(group.bet_type)
+                                            const posStyle = pos ? BET_POSITION_STYLES[pos] : {}
+                                            const posColor = pos ? BET_TYPE_COLORS[pos] : null
+                                            return (
                                             <tr 
                                                 key={group.entry_id} 
                                                 ref={(el) => { dealerRowRefs.current[idx] = el }}
@@ -1523,14 +1555,15 @@ export default function WriteSubmissionModal({
                                                     cursor: 'grab',
                                                     opacity: dealerDrag.dragging && dealerDrag.fromIndex === idx ? 0.4 : 1,
                                                     borderTop: dealerDrag.dragging && dealerDrag.overIndex === idx && dealerDrag.fromIndex !== idx ? '2px solid var(--color-primary, #d4af37)' : undefined,
-                                                    background: dealerDrag.dragging && dealerDrag.overIndex === idx && dealerDrag.fromIndex !== idx ? 'rgba(212, 175, 55, 0.12)' : undefined,
+                                                    background: (dealerDrag.dragging && dealerDrag.overIndex === idx && dealerDrag.fromIndex !== idx) ? 'rgba(212, 175, 55, 0.12)' : (posStyle.background || undefined),
+                                                    borderLeft: posStyle.borderLeft || undefined,
                                                 }}
                                             >
                                                 <td style={{ padding: '0.5rem', fontWeight: 600, color: 'var(--color-primary)' }}>
                                                     {group.display_numbers}
                                                 </td>
-                                                <td style={{ padding: '0.5rem' }}>{group.display_bet_type}</td>
-                                                <td style={{ padding: '0.5rem', textAlign: 'right' }}>
+                                                <td style={{ padding: '0.5rem', color: posColor || undefined, fontWeight: posColor ? 600 : undefined }}>{group.display_bet_type}</td>
+                                                <td style={{ padding: '0.5rem', textAlign: 'right', color: posColor || undefined }}>
                                                     {round.currency_symbol}{group.totalAmount.toLocaleString()}
                                                 </td>
                                                 <td style={{ padding: '0.5rem' }}>
@@ -1543,7 +1576,7 @@ export default function WriteSubmissionModal({
                                                     </button>
                                                 </td>
                                             </tr>
-                                        ))}
+                                        )})}
                                     </tbody>
                                 </table>
                             </div>

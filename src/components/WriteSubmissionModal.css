@@ -499,6 +499,39 @@
     opacity: 0.85;
 }
 
+/* ===== Top/Bottom (บน/ล่าง) Color Coding ===== */
+/* Top (บน) - Blue/Cyan accent */
+.line-item.bet-top {
+    border-left: 3px solid #38bdf8;
+    background: rgba(56, 189, 248, 0.08);
+}
+
+.line-item.bet-top .type-suffix {
+    color: #7dd3fc !important;
+    opacity: 1 !important;
+    font-weight: 600 !important;
+}
+
+.line-item.bet-top .line-total {
+    color: #38bdf8 !important;
+}
+
+/* Bottom (ล่าง) - Orange/Amber accent */
+.line-item.bet-bottom {
+    border-left: 3px solid #fb923c;
+    background: rgba(251, 146, 60, 0.08);
+}
+
+.line-item.bet-bottom .type-suffix {
+    color: #fdba74 !important;
+    opacity: 1 !important;
+    font-weight: 600 !important;
+}
+
+.line-item.bet-bottom .line-total {
+    color: #fb923c !important;
+}
+
 .line-expand {
     color: rgba(255, 255, 255, 0.5);
     font-size: 0.75rem;
@@ -1486,6 +1519,39 @@ html.theme-light .empty-lines .hint {
 [data-theme="light"] .line-item,
 html.theme-light .line-item {
     background: rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Light theme: Top/Bottom color coding */
+[data-theme="light"] .line-item.bet-top,
+html.theme-light .line-item.bet-top {
+    border-left: 3px solid #0284c7 !important;
+    background: rgba(2, 132, 199, 0.07) !important;
+}
+
+[data-theme="light"] .line-item.bet-top .type-suffix,
+html.theme-light .line-item.bet-top .type-suffix {
+    color: #0369a1 !important;
+}
+
+[data-theme="light"] .line-item.bet-top .line-total,
+html.theme-light .line-item.bet-top .line-total {
+    color: #0284c7 !important;
+}
+
+[data-theme="light"] .line-item.bet-bottom,
+html.theme-light .line-item.bet-bottom {
+    border-left: 3px solid #ea580c !important;
+    background: rgba(234, 88, 12, 0.07) !important;
+}
+
+[data-theme="light"] .line-item.bet-bottom .type-suffix,
+html.theme-light .line-item.bet-bottom .type-suffix {
+    color: #c2410c !important;
+}
+
+[data-theme="light"] .line-item.bet-bottom .line-total,
+html.theme-light .line-item.bet-bottom .line-total {
+    color: #ea580c !important;
 }
 
 [data-theme="light"] .line-number,

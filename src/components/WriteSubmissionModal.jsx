@@ -263,6 +263,16 @@ const get3DigitCombinations = (numbers) => {
     return Array.from(combinations)
 }
 
+// Classify bet type as 'top' or 'bottom' for color-coding
+const getBetPosition = (betType) => {
+    if (!betType) return ''
+    const BOTTOM_TYPES = ['2_bottom', '2_bottom_rev', 'run_bottom', 'front_bottom_1', 'back_bottom_1', '3_bottom', '2_spread', '2_spread_rev', '2_tang']
+    if (BOTTOM_TYPES.includes(betType)) return 'bottom'
+    const TOP_TYPES = ['2_top', '2_top_rev', '3_top', '3_tod', 'run_top', 'front_top_1', 'middle_top_1', 'back_top_1', '2_front', '2_front_rev', '4_set', '4_top', '4_float', '5_float', '3_straight', '3_tod_single']
+    if (TOP_TYPES.includes(betType)) return 'top'
+    return ''
+}
+
 // Generate entries from parsed line with display info for grouped view
 // options: { setPrice, lotteryType } for 4ตัวชุด handling
 const generateEntries = (parsed, entryId, rawLine, options = {}) => {
@@ -2612,12 +2622,13 @@ export default function WriteSubmissionModal({
                         const hasError = parsed && parsed.error
                         const entries = !hasError ? generateEntries(parsed, null, line, { setPrice, lotteryType }) : []
                         const lineTotal = entries.reduce((sum, e) => sum + applyBonus(e.amount, e.betType), 0)
+                        const betPos = entries.length > 0 ? getBetPosition(entries[0].betType) : ''
 
                         return (
                             <div 
                                 key={index} 
                                 ref={(el) => setRowRef(index, el)}
-                                className={`line-item ${editingIndex === index ? 'editing' : ''} ${hasError ? 'has-error' : ''} ${dragState.dragging && dragState.fromIndex === index ? 'dragging' : ''} ${dragState.dragging && dragState.overIndex === index && dragState.fromIndex !== index ? 'drag-over' : ''}`}
+                                className={`line-item ${betPos ? `bet-${betPos}` : ''} ${editingIndex === index ? 'editing' : ''} ${hasError ? 'has-error' : ''} ${dragState.dragging && dragState.fromIndex === index ? 'dragging' : ''} ${dragState.dragging && dragState.overIndex === index && dragState.fromIndex !== index ? 'drag-over' : ''}`}
                                 onClick={() => { if (shouldAllowClick()) handleEditLine(index) }}
                                 draggable
                                 onDragStart={(e) => handleDragStart(e, index)}
