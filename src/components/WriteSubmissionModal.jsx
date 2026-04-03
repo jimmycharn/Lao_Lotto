@@ -4,6 +4,7 @@ import { getPermutations } from '../constants/lotteryTypes'
 import { parseMultiLinePaste, get3DigitPermCount } from '../utils/pasteParser'
 import { useDragReorder } from '../utils/useDragReorder'
 import { fetchNumberLimits, fetchCurrentTotals, findMatchingLimit, getEffectivePayoutPercent } from '../utils/numberLimits'
+import { useModalBackButton } from '../utils/useModalBackButton'
 import './WriteSubmissionModal.css'
 
 // Shared AudioContext for low-latency sound playback
@@ -464,6 +465,9 @@ export default function WriteSubmissionModal({
     const [showClearAllConfirm, setShowClearAllConfirm] = useState(false)
     const { dragState, handleDragStart, handleDragOver, handleDrop, handleDragEnd, handleTouchStart, handleTouchMove, handleTouchEnd, setRowRef, shouldAllowClick } = useDragReorder(lines, setLines)
     const isEditMode = !!editingData
+
+    // Use custom hook for mobile back button to close modal
+    useModalBackButton(isOpen, onClose)
 
     // Sync bonusActive when bonusSettings changes (e.g., member switch in dealer mode)
     useEffect(() => {

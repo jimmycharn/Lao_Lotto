@@ -22,6 +22,7 @@ import {
 } from '../../constants/lotteryTypes'
 import { parseMultiLinePaste } from '../../utils/pasteParser'
 import { useDragReorder } from '../../utils/useDragReorder'
+import { useModalBackButton } from '../../utils/useModalBackButton'
 
 // Classify bet type as 'top' or 'bottom' for color-coding
 const getBetPosition = (betType) => {
@@ -92,6 +93,9 @@ export default function WriteSubmissionModal({
             return true
         }
     })
+
+    // Use custom hook for mobile back button to close modal
+    useModalBackButton(true, onClose)
 
     // Toggle sound on/off
     const toggleSound = () => {

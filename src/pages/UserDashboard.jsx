@@ -4191,7 +4191,7 @@ export default function UserDashboard() {
                                 </p>
                             </div>
                         </div>
-                        <div className="modal-footer" style={{ justifyContent: 'center', gap: '1rem' }}>
+                        <div className="modal-footer">
                             <button className="btn btn-secondary" onClick={() => setShowDealerConfirmModal(false)}>
                                 ยกเลิก
                             </button>
