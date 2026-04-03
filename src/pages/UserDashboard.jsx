@@ -97,6 +97,9 @@ export default function UserDashboard() {
     const [userHistory, setUserHistory] = useState([])
     const [historyLoading, setHistoryLoading] = useState(false)
 
+    // Per-round summaries for collapsed headers (lightweight stats)
+    const [roundSummaries, setRoundSummaries] = useState({}) // { roundId: { count, totalAmount, totalCommission } }
+
     // Submit form state
     const [showSubmitModal, setShowSubmitModal] = useState(false)
     const [submitForm, setSubmitForm] = useState({
@@ -561,11 +564,44 @@ export default function UserDashboard() {
                 // Don't auto-select round - let user click to expand
                 // Reset selectedRound when switching tabs or dealers
                 setSelectedRound(null)
+                // Fetch lightweight per-round summaries for collapsed headers
+                fetchRoundSummaries(data || [])
             }
         } catch (error) {
             console.error('Error:', error)
         } finally {
             setLoading(false)
+        }
+    }
+
+    // Fetch lightweight per-round submission summaries for collapsed header stats
+    async function fetchRoundSummaries(roundsList) {
+        if (!roundsList.length || !user) return
+        try {
+            const roundIds = roundsList.map(r => r.id)
+            const { data, error } = await supabase
+                .from('submissions')
+                .select('round_id, amount, commission_amount')
+                .eq('user_id', user.id)
+                .eq('is_deleted', false)
+                .in('round_id', roundIds)
+
+            if (!error && data) {
+                const summaries = {}
+                for (const roundId of roundIds) {
+                    const subs = data.filter(s => s.round_id === roundId)
+                    const totalAmount = subs.reduce((sum, s) => sum + (s.amount || 0), 0)
+                    const totalCommission = subs.reduce((sum, s) => sum + (s.commission_amount || 0), 0)
+                    summaries[roundId] = {
+                        count: subs.length,
+                        totalAmount,
+                        totalCommission
+                    }
+                }
+                setRoundSummaries(summaries)
+            }
+        } catch (error) {
+            console.error('Error fetching round summaries:', error)
         }
     }
 
@@ -587,6 +623,14 @@ export default function UserDashboard() {
                 console.log(`[USER-ROUNDS] round=${selectedRound.id} user=${user.id} subs=${(data||[]).length} totalAmount=${(data||[]).reduce((s,x)=>s+(x.amount||0),0)}`)
                 console.log(`[USER-ROUNDS] IDs:`, (data||[]).map(s => s.id).sort())
                 console.log(`[USER-ROUNDS] bills:`, [...new Set((data||[]).map(s => s.bill_id))])
+                // Update round summary for collapsed header
+                const subs = data || []
+                const totalAmount = subs.reduce((sum, s) => sum + (s.amount || 0), 0)
+                const totalCommission = subs.reduce((sum, s) => sum + calculateCommissionAmount(s.amount || 0, s.bet_type, selectedRound), 0)
+                setRoundSummaries(prev => ({
+                    ...prev,
+                    [selectedRound.id]: { count: subs.length, totalAmount, totalCommission }
+                }))
             }
         } catch (error) {
             console.error('Error:', error)
@@ -799,9 +843,15 @@ export default function UserDashboard() {
     // Check if can still submit (before close time)
     function canSubmit() {
         if (!selectedRound) return false
-        if (selectedRound.status !== 'open') return false
+        return canSubmitRound(selectedRound)
+    }
+
+    // Check if a specific round can accept submissions (works without selectedRound)
+    function canSubmitRound(round) {
+        if (!round) return false
+        if (round.status !== 'open') return false
         if (isMembershipExpired()) return false
-        return new Date() < new Date(selectedRound.close_time)
+        return new Date() < new Date(round.close_time)
     }
 
     // Check if can delete (must satisfy BOTH conditions)
@@ -2897,11 +2947,12 @@ export default function UserDashboard() {
                                                     {/* Row 3: Write button (left) + Chevron (right) */}
                                                     <div className="user-round-actions-row">
                                                         <div className="round-actions">
-                                                            {canSubmit() && (
+                                                            {canSubmitRound(round) && (
                                                                 <button
                                                                     className="btn btn-write-poy btn-sm"
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
+                                                                        if (!isExpanded) setSelectedRound(round)
                                                                         setShowWriteModal(true)
                                                                     }}
                                                                 >
@@ -2911,6 +2962,40 @@ export default function UserDashboard() {
                                                         </div>
                                                         {isExpanded ? <FiChevronUp /> : <FiChevronDown />}
                                                     </div>
+
+                                                    {/* Row 4: Summary stats (always visible) */}
+                                                    {(() => {
+                                                        const summary = roundSummaries[round.id]
+                                                        if (!summary || summary.count === 0) return null
+                                                        const userProfit = summary.totalCommission - summary.totalAmount
+                                                        return (
+                                                            <div className="user-round-stats-row">
+                                                                <div className="stats-block incoming" style={{ width: '100%' }}>
+                                                                    <div className="stats-block-header">ยอดส่ง {summary.count} รายการ</div>
+                                                                    <div className="stats-block-items">
+                                                                        <div className="stat-item">
+                                                                            <span className="stat-label">ยอดรวม</span>
+                                                                            <span className="stat-value danger">-{round.currency_symbol}{Math.round(summary.totalAmount).toLocaleString()}</span>
+                                                                        </div>
+                                                                        <div className="stat-item">
+                                                                            <span className="stat-label">ค่าคอม</span>
+                                                                            <span className="stat-value success">+{round.currency_symbol}{Math.round(summary.totalCommission).toLocaleString()}</span>
+                                                                        </div>
+                                                                        <div className="stat-item">
+                                                                            <span className="stat-label">รับ</span>
+                                                                            <span className="stat-value">{round.currency_symbol}0</span>
+                                                                        </div>
+                                                                        <div className="stat-item">
+                                                                            <span className="stat-label">กำไร</span>
+                                                                            <span className={`stat-value ${userProfit >= 0 ? 'success' : 'danger'}`}>
+                                                                                {userProfit >= 0 ? '+' : ''}{round.currency_symbol}{Math.round(userProfit).toLocaleString()}
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )
+                                                    })()}
                                                 </div>
                                             </div>
 
