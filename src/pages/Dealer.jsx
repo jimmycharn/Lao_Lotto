@@ -175,15 +175,14 @@ export default function Dealer() {
         }
     }, [searchParams])
 
-    // Helper to check if a round is still open (between open_time and close_time)
+    // Helper to check if a round is still open (not yet past close_time)
     const isRoundOpen = (round) => {
         // If status is announced, it's definitely closed
         if (round.status === 'announced') return false
-        // Check time-based open status (ignore 'closed' status, use time instead)
+        // A round is "open" if close_time hasn't passed yet (including rounds waiting to open)
         const now = new Date()
-        const openTime = new Date(round.open_time)
         const closeTime = new Date(round.close_time)
-        return now >= openTime && now <= closeTime
+        return now <= closeTime
     }
 
     // Form state for creating round
