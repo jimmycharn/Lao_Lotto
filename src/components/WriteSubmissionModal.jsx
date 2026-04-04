@@ -2030,18 +2030,25 @@ export default function WriteSubmissionModal({
                 }
             }
 
-            // Apply bonus % to amounts if bonus is active
-            if (bonusActive && bonusSettings?.betTypeBonus) {
-                for (const entry of allEntries) {
-                    const bt = entry.betType || entry.bet_type
-                    if (bt === '4_set') continue // 4 ตัวชุด ไม่แถม
+            // Tag displayAmount with invisible characters so copyFormat.js knows definitively if bonus was applied
+            for (const entry of allEntries) {
+                const bt = entry.betType || entry.bet_type
+                if (bt === '4_set') continue // 4 ตัวชุด ไม่แถม
+                
+                let appliedBonus = false
+                if (bonusActive && bonusSettings?.betTypeBonus) {
                     const bonusPct = bonusSettings.betTypeBonus[bt] || 0
                     if (bonusPct > 0) {
                         entry.amount = Math.round(entry.amount * (1 + bonusPct / 100))
-                        // Update displayAmount to reflect bonus and tag it with invisible \u200B character
-                        // This allows copyFormat.js to definitively know the bonus was actively applied
+                        // Update displayAmount to reflect bonus and tag it with invisible \u200B character (Bonus ON)
                         entry.displayAmount = entry.amount.toString() + '\u200B'
+                        appliedBonus = true
                     }
+                }
+
+                if (!appliedBonus) {
+                    // Tag with invisible \u200C character (Bonus OFF)
+                    entry.displayAmount = (entry.displayAmount || entry.amount).toString() + '\u200C'
                 }
             }
 
