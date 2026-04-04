@@ -13,6 +13,27 @@ class ErrorBoundary extends Component {
 
     componentDidCatch(error, errorInfo) {
         console.error('ErrorBoundary caught:', error, errorInfo)
+
+        // Prevent infinite reload loops by checking session storage
+        const RELOAD_KEY = 'chunk_load_error_reloaded'
+        
+        // Auto-reload to fetch new chunks if the app was recently updated
+        const isChunkLoadFailed = error?.message?.match(/Failed to fetch dynamically imported module/i) || 
+                                 error?.name === 'ChunkLoadError' ||
+                                 error?.message?.match(/Importing a module script failed/i)
+                                 
+        if (isChunkLoadFailed) {
+            const hasReloaded = sessionStorage.getItem(RELOAD_KEY)
+            if (!hasReloaded) {
+                console.log('App update detected (Chunk Load Error). Automatically reloading to fetch new files...')
+                sessionStorage.setItem(RELOAD_KEY, 'true')
+                window.location.reload(true)
+                return
+            }
+        } else {
+            // Clear the flag to allow future reloads if a different error occurs and is dismissed
+            sessionStorage.removeItem(RELOAD_KEY)
+        }
     }
 
     handleReload = () => {
