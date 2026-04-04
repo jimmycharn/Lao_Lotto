@@ -1665,7 +1665,9 @@ export default function UserDashboard() {
         }
 
         // Insert new submissions with same bill_id
-        const baseTimestamp = new Date()
+        // Use original created_at so editing doesn't extend the delete/edit deadline or change the bill's display time
+        const originalCreatedAt = originalItems?.[0]?.created_at
+        const baseTimestamp = originalCreatedAt ? new Date(originalCreatedAt) : new Date()
         const submissionsToInsert = entries.map((entry, index) => {
             const commInfo = getCommissionForBetType(entry.betType, userSettings)
             const commissionAmount = Math.round(entry.amount * commInfo.rate / 100)
