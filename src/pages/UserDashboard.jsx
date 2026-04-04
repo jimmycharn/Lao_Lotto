@@ -3504,7 +3504,7 @@ export default function UserDashboard() {
                                                                                                                         {round.currency_symbol}{Math.round(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)).toLocaleString()}
                                                                                                                     </span>
                                                                                                                     <span className="bill-item-amount" style={{ width: '60px', textAlign: 'right', flexShrink: 0 }}>
-                                                                                                                        {round.currency_symbol}{sub.display_amount || sub.amount?.toLocaleString()}
+                                                                                                                        {round.currency_symbol}{sub.amount?.toLocaleString()}
                                                                                                                     </span>
                                                                                                                 </>
                                                                                                             ) : (
@@ -3657,9 +3657,7 @@ export default function UserDashboard() {
                                                                                             <td className="commission-cell" style={{ color: 'var(--color-warning)' }}>
                                                                                                 {round.currency_symbol}{Math.round(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)).toLocaleString()}
                                                                                             </td>
-                                                                                            <td>{round.currency_symbol}{displayMode === 'summary'
-                                                                                                ? (typeof sub.display_amount === 'string' ? sub.display_amount : sub.amount?.toLocaleString())
-                                                                                                : sub.amount?.toLocaleString()}</td>
+                                                                                            <td>{round.currency_symbol}{sub.amount?.toLocaleString()}</td>
                                                                                             {displayMode === 'detailed' && (
                                                                                                 <td style={{ fontSize: '0.8rem', color: 'var(--color-danger)' }}>
                                                                                                     {sub.actual_payout_percent != null && sub.actual_payout_percent < 100 ? `${sub.actual_payout_percent}%` : ''}

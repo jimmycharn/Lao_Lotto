@@ -159,8 +159,38 @@ export function formatCopyText({ submissions, round, userName, billName }) {
         return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB)
     })
 
-    // Calculate total from all submissions
+    // Calculate total actual amount from all submissions
     const totalAmount = submissions.reduce((sum, s) => sum + s.amount, 0)
+
+    /**
+     * Calculate base amount (before bonus) from display_amount.
+     * display_amount stores the raw user input e.g. "20*20", "100", "20"
+     * Sum all numeric parts separated by "*"
+     */
+    const parseBaseAmount = (sub) => {
+        const displayAmt = sub.display_amount
+        if (!displayAmt) return sub.amount // fallback
+        // display_amount can be "20*20", "100", or something like "120 บาท (1 ชุด)" 
+        const str = typeof displayAmt === 'string' ? displayAmt : String(displayAmt)
+        // Extract only the leading "number*number*..." part
+        const match = str.match(/^[\d.*]+/)
+        if (!match) return sub.amount
+        const parts = match[0].split('*').map(p => parseFloat(p) || 0)
+        return parts.reduce((s, v) => s + v, 0)
+    }
+
+    const entryIdsSeen = new Set()
+    let baseAmount = 0
+    submissions.forEach(sub => {
+        // Use entry_id for grouped submissions (like teng_tod), fallback to id
+        const key = sub.entry_id || sub.id
+        if (!entryIdsSeen.has(key)) {
+            entryIdsSeen.add(key)
+            baseAmount += parseBaseAmount(sub)
+        }
+    })
+    
+    const bonusAmount = totalAmount - baseAmount
 
     // Format close time (date only, no time)
     const closeTime = round.close_time ? new Date(round.close_time) : null
@@ -174,9 +204,14 @@ export function formatCopyText({ submissions, round, userName, billName }) {
         text += `🎫 ใบโพย: ${billName}\n`
     }
     text += `📅 งวดวันที่: ${closeDateStr}\n`
-    text += `👤 ผู้ส่ง: ${userName || '-'}\n`
+    text += `👤 ผู้ขาย: ${userName || '-'}\n`
     text += `📊 ทั้งหมด (${submissions.length} รายการ)\n`
-    text += `💰 ยอดรวม: ${currencySymbol}${totalAmount.toLocaleString()}\n`
+    if (bonusAmount > 0) {
+        text += `💰 ยอดแทง: ${currencySymbol}${baseAmount.toLocaleString()}\n`
+        text += `🎁 ยอดแถม: ${currencySymbol}${bonusAmount.toLocaleString()}\n`
+    } else {
+        text += `💰 ยอดรวม: ${currencySymbol}${totalAmount.toLocaleString()}\n`
+    }
     text += `━━━━━━━━━━━━━━━━\n`
 
     // Build body grouped by bet type — each submission is its own line
