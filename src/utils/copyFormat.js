@@ -164,11 +164,17 @@ export function formatCopyText({ submissions, round, userName, billName, bonusSe
 
     /**
      * Reconstruct base amount (before bonus) mathematically using the exact bonus settings.
-     * This avoids all issues with display_amount string parsing for grouped combinations.
+     * We ONLY reverse-calculate if the invisible \u200B tag is present in the display_amount,
+     * which explicitly confirms the bonus was actively applied when the bill was created.
      */
     const getBaseAmountForSub = (sub) => {
         let base = sub.amount
-        if (bonusSettings && bonusSettings.bonusEnabled && bonusSettings.betTypeBonus) {
+        
+        // Ensure display_amount is a string to check for the \u200B tag
+        const displayAmtStr = typeof sub.display_amount === 'string' ? sub.display_amount : String(sub.display_amount || '')
+        const hasBonusTag = displayAmtStr.includes('\u200B')
+        
+        if (hasBonusTag && bonusSettings && bonusSettings.bonusEnabled && bonusSettings.betTypeBonus) {
             const bt = sub.bet_type
             if (bt !== '4_set') {
                 const bonusPct = bonusSettings.betTypeBonus[bt] || 0

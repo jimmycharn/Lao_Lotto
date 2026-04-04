@@ -2038,8 +2038,9 @@ export default function WriteSubmissionModal({
                     const bonusPct = bonusSettings.betTypeBonus[bt] || 0
                     if (bonusPct > 0) {
                         entry.amount = Math.round(entry.amount * (1 + bonusPct / 100))
-                        // Update displayAmount to reflect bonus
-                        entry.displayAmount = entry.amount
+                        // Update displayAmount to reflect bonus and tag it with invisible \u200B character
+                        // This allows copyFormat.js to definitively know the bonus was actively applied
+                        entry.displayAmount = entry.amount.toString() + '\u200B'
                     }
                 }
             }
