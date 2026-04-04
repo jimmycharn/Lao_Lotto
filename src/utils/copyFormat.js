@@ -182,11 +182,20 @@ export function formatCopyText({ submissions, round, userName, billName }) {
     const entryIdsSeen = new Set()
     let baseAmount = 0
     submissions.forEach(sub => {
-        // Use entry_id for grouped submissions (like teng_tod), fallback to id
-        const key = sub.entry_id || sub.id
-        if (!entryIdsSeen.has(key)) {
-            entryIdsSeen.add(key)
-            baseAmount += parseBaseAmount(sub)
+        const parsed = parseBaseAmount(sub)
+        const displayAmtStr = typeof sub.display_amount === 'string' ? sub.display_amount : String(sub.display_amount || '')
+        
+        // If display_amount contains '*', it represents multiple bets in one string (e.g. "20*20" for teng_tod)
+        // We only add it ONCE per entry_id to avoid double counting.
+        if (displayAmtStr.includes('*')) {
+            const key = sub.entry_id || sub.id
+            if (!entryIdsSeen.has(key)) {
+                entryIdsSeen.add(key)
+                baseAmount += parsed
+            }
+        } else {
+            // For normal amounts without '*', each item contributes its own parsed base amount
+            baseAmount += parsed
         }
     })
     
