@@ -2666,6 +2666,31 @@ export default function UserDashboard() {
         return 'thai'
     }, [])
 
+    // Get calculated bonus settings for a specific round
+    const getBonusSettingsForRound = useCallback((roundObj) => {
+        if (!roundObj || !userSettings?.lottery_settings) return null
+        const lk = getLotteryTypeKey(roundObj.lottery_type)
+        const tabSettings = userSettings.lottery_settings[lk]
+        if (!tabSettings?.bonusEnabled) return null
+        
+        const isLaoOrHanoi = ['lao', 'hanoi'].includes(lk)
+        const REVERSE_LAO_MAP = { '3_straight': '3_top', '3_tod_single': '3_tod' }
+        const betTypeBonus = {}
+        
+        Object.entries(tabSettings).forEach(([key, val]) => {
+            if (key === 'bonusEnabled' || key === '4_set' || typeof val !== 'object') return
+            if (val.bonus && val.bonus > 0) {
+                betTypeBonus[key] = val.bonus
+                if (isLaoOrHanoi && REVERSE_LAO_MAP[key]) {
+                    betTypeBonus[REVERSE_LAO_MAP[key]] = val.bonus
+                }
+            }
+        })
+        
+        if (Object.keys(betTypeBonus).length === 0) return null
+        return { bonusEnabled: true, betTypeBonus }
+    }, [userSettings, getLotteryTypeKey])
+
     // Calculate expected payout for a submission based on user settings
     const getCalculatedPrize = useCallback((sub, round) => {
         if (!sub.is_winner) return 0
@@ -3287,7 +3312,8 @@ export default function UserDashboard() {
                                                                         const text = formatCopyText({
                                                                             submissions,
                                                                             round,
-                                                                            userName: profile?.full_name || profile?.email || '-'
+                                                                            userName: profile?.full_name || profile?.email || '-',
+                                                                            bonusSettings: getBonusSettingsForRound(round)
                                                                         })
                                                                         await copyToClipboard(text)
                                                                         toast.success('คัดลอกแล้ว!')
@@ -3425,7 +3451,8 @@ export default function UserDashboard() {
                                                                                             submissions: billItems,
                                                                                             round,
                                                                                             userName: profile?.full_name || profile?.email || '-',
-                                                                                            billName: billItems[0]?.bill_note || billId
+                                                                                            billName: billItems[0]?.bill_note || billId,
+                                                                                            bonusSettings: getBonusSettingsForRound(round)
                                                                                         })
                                                                                         await copyToClipboard(text)
                                                                                         toast.success('คัดลอกแล้ว!')
@@ -4386,25 +4413,7 @@ export default function UserDashboard() {
                 onEditSubmit={handleEditBillSubmit}
                 lotteryType={selectedRound?.lottery_type}
                 setPrice={userSettings?.lottery_settings?.[selectedRound?.lottery_type]?.['4_set']?.setPrice || selectedRound?.set_prices?.['4_top'] || 120}
-                bonusSettings={(() => {
-                    const lk = selectedRound?.lottery_type
-                    const tabSettings = userSettings?.lottery_settings?.[lk]
-                    if (!tabSettings?.bonusEnabled) return null
-                    const isLaoOrHanoi = ['lao', 'hanoi'].includes(lk)
-                    const REVERSE_LAO_MAP = { '3_straight': '3_top', '3_tod_single': '3_tod' }
-                    const betTypeBonus = {}
-                    Object.entries(tabSettings).forEach(([key, val]) => {
-                        if (key === 'bonusEnabled' || key === '4_set' || typeof val !== 'object') return
-                        if (val.bonus && val.bonus > 0) {
-                            betTypeBonus[key] = val.bonus
-                            if (isLaoOrHanoi && REVERSE_LAO_MAP[key]) {
-                                betTypeBonus[REVERSE_LAO_MAP[key]] = val.bonus
-                            }
-                        }
-                    })
-                    if (Object.keys(betTypeBonus).length === 0) return null
-                    return { bonusEnabled: true, betTypeBonus }
-                })()}
+                bonusSettings={getBonusSettingsForRound(selectedRound)}
             />
 
             {/* QR Scanner Modal */}

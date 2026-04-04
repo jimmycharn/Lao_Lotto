@@ -138,7 +138,7 @@ function buildCopyEntries(submissions) {
  * @param {string} [options.billName] - Optional bill name/note for per-bill copy
  * @returns {string} Formatted text for clipboard
  */
-export function formatCopyText({ submissions, round, userName, billName }) {
+export function formatCopyText({ submissions, round, userName, billName, bonusSettings }) {
     if (!submissions || submissions.length === 0) return ''
 
     const lotteryType = round.lottery_type
@@ -163,42 +163,24 @@ export function formatCopyText({ submissions, round, userName, billName }) {
     const totalAmount = submissions.reduce((sum, s) => sum + s.amount, 0)
 
     /**
-     * Calculate base amount (before bonus) from display_amount.
-     * display_amount stores the raw user input e.g. "20*20", "100", "20"
-     * Sum all numeric parts separated by "*"
+     * Reconstruct base amount (before bonus) mathematically using the exact bonus settings.
+     * This avoids all issues with display_amount string parsing for grouped combinations.
      */
-    const parseBaseAmount = (sub) => {
-        const displayAmt = sub.display_amount
-        if (!displayAmt) return sub.amount // fallback
-        // display_amount can be "20*20", "100", or something like "120 บาท (1 ชุด)" 
-        const str = typeof displayAmt === 'string' ? displayAmt : String(displayAmt)
-        // Extract only the leading "number*number*..." part
-        const match = str.match(/^[\d.*]+/)
-        if (!match) return sub.amount
-        const parts = match[0].split('*').map(p => parseFloat(p) || 0)
-        return parts.reduce((s, v) => s + v, 0)
+    const getBaseAmountForSub = (sub) => {
+        let base = sub.amount
+        if (bonusSettings && bonusSettings.bonusEnabled && bonusSettings.betTypeBonus) {
+            const bt = sub.bet_type
+            if (bt !== '4_set') {
+                const bonusPct = bonusSettings.betTypeBonus[bt] || 0
+                if (bonusPct > 0) {
+                    base = Math.round(sub.amount / (1 + bonusPct / 100))
+                }
+            }
+        }
+        return base
     }
 
-    const entryIdsSeen = new Set()
-    let baseAmount = 0
-    submissions.forEach(sub => {
-        const parsed = parseBaseAmount(sub)
-        const displayAmtStr = typeof sub.display_amount === 'string' ? sub.display_amount : String(sub.display_amount || '')
-        
-        // If display_amount contains '*', it represents multiple bets in one string (e.g. "20*20" for teng_tod)
-        // We only add it ONCE per entry_id to avoid double counting.
-        if (displayAmtStr.includes('*')) {
-            const key = sub.entry_id || sub.id
-            if (!entryIdsSeen.has(key)) {
-                entryIdsSeen.add(key)
-                baseAmount += parsed
-            }
-        } else {
-            // For normal amounts without '*', each item contributes its own parsed base amount
-            baseAmount += parsed
-        }
-    })
-    
+    const baseAmount = submissions.reduce((sum, s) => sum + getBaseAmountForSub(s), 0)
     const bonusAmount = totalAmount - baseAmount
 
     // Format close time (date only, no time)
