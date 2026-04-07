@@ -126,6 +126,13 @@ export default function SuperAdmin() {
     const [showAssignBankModal, setShowAssignBankModal] = useState(false)
     const [assignBankForm, setAssignBankForm] = useState({ dealer_id: '', bank_account_id: '' })
 
+    // Selection mode states for bulk delete (long-press to activate)
+    const [topupSelectMode, setTopupSelectMode] = useState(false)
+    const [topupSelectedIds, setTopupSelectedIds] = useState(new Set())
+    const [txSelectMode, setTxSelectMode] = useState(false)
+    const [txSelectedIds, setTxSelectedIds] = useState(new Set())
+    const [bulkDeleting, setBulkDeleting] = useState(false)
+
     // Form States
     const [packageForm, setPackageForm] = useState({
         name: '',
@@ -752,6 +759,171 @@ export default function SuperAdmin() {
             toast.error('เกิดข้อผิดพลาดในการเติมเครดิต: ' + (error.message || 'Unknown error'))
         } finally {
             setTopupLoading(false)
+        }
+    }
+
+    // === Long-press selection handlers for bulk delete ===
+    // Long-press (600ms hold without moving) activates checkbox mode.
+    // Once in checkbox mode, selection is ONLY done via checkbox inputs, NOT row clicks/taps.
+    // This prevents accidental selection while scrolling on mobile.
+    const longPressRef = { timer: null, moved: false }
+    const SCROLL_THRESHOLD = 10
+
+    // -- Topup table --
+    const topupLongPressStart = (id, e) => {
+        longPressRef.moved = false
+        if (e.touches) {
+            longPressRef.startX = e.touches[0].clientX
+            longPressRef.startY = e.touches[0].clientY
+        }
+        longPressRef.timer = setTimeout(() => {
+            if (!longPressRef.moved) {
+                setTopupSelectMode(true)
+                setTopupSelectedIds(new Set([id]))
+            }
+        }, 600)
+    }
+    const topupLongPressMove = (e) => {
+        if (longPressRef.timer && e.touches) {
+            const dx = Math.abs(e.touches[0].clientX - (longPressRef.startX || 0))
+            const dy = Math.abs(e.touches[0].clientY - (longPressRef.startY || 0))
+            if (dx > SCROLL_THRESHOLD || dy > SCROLL_THRESHOLD) {
+                longPressRef.moved = true
+                clearTimeout(longPressRef.timer)
+                longPressRef.timer = null
+            }
+        }
+    }
+    const topupLongPressEnd = () => {
+        if (longPressRef.timer) {
+            clearTimeout(longPressRef.timer)
+            longPressRef.timer = null
+        }
+    }
+    const toggleTopupSelect = (id) => {
+        setTopupSelectedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
+    }
+    const toggleTopupSelectAll = (ids) => {
+        if (topupSelectedIds.size === ids.length) {
+            setTopupSelectedIds(new Set())
+        } else {
+            setTopupSelectedIds(new Set(ids))
+        }
+    }
+    const cancelTopupSelect = () => {
+        setTopupSelectMode(false)
+        setTopupSelectedIds(new Set())
+    }
+
+    // -- Transactions table --
+    const txLongPressStart = (id, e) => {
+        longPressRef.moved = false
+        if (e.touches) {
+            longPressRef.startX = e.touches[0].clientX
+            longPressRef.startY = e.touches[0].clientY
+        }
+        longPressRef.timer = setTimeout(() => {
+            if (!longPressRef.moved) {
+                setTxSelectMode(true)
+                setTxSelectedIds(new Set([id]))
+            }
+        }, 600)
+    }
+    const txLongPressMove = (e) => {
+        if (longPressRef.timer && e.touches) {
+            const dx = Math.abs(e.touches[0].clientX - (longPressRef.startX || 0))
+            const dy = Math.abs(e.touches[0].clientY - (longPressRef.startY || 0))
+            if (dx > SCROLL_THRESHOLD || dy > SCROLL_THRESHOLD) {
+                longPressRef.moved = true
+                clearTimeout(longPressRef.timer)
+                longPressRef.timer = null
+            }
+        }
+    }
+    const txLongPressEnd = () => {
+        if (longPressRef.timer) {
+            clearTimeout(longPressRef.timer)
+            longPressRef.timer = null
+        }
+    }
+    const toggleTxSelect = (id) => {
+        setTxSelectedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
+    }
+    const toggleTxSelectAll = (ids) => {
+        if (txSelectedIds.size === ids.length) {
+            setTxSelectedIds(new Set())
+        } else {
+            setTxSelectedIds(new Set(ids))
+        }
+    }
+    const cancelTxSelect = () => {
+        setTxSelectMode(false)
+        setTxSelectedIds(new Set())
+    }
+
+    const handleBulkDeleteTopupRequests = async () => {
+        if (topupSelectedIds.size === 0) return
+        if (!confirm(`ต้องการลบคำขอเติมเครดิตที่เลือก ${topupSelectedIds.size} รายการ?`)) return
+        setBulkDeleting(true)
+        try {
+            const ids = [...topupSelectedIds]
+            const { data, error } = await supabase
+                .from('credit_topup_requests')
+                .delete()
+                .in('id', ids)
+                .select('id')
+            if (error) throw error
+            const deletedCount = data?.length || 0
+            if (deletedCount === 0) {
+                toast.error('ไม่สามารถลบได้ — อาจถูกจำกัดสิทธิ์โดย RLS policy กรุณาตรวจสอบสิทธิ์ในฐานข้อมูล')
+            } else {
+                toast.success(`ลบคำขอเติมเครดิต ${deletedCount} รายการสำเร็จ`)
+            }
+            cancelTopupSelect()
+            fetchTopupRequests()
+        } catch (error) {
+            console.error('Bulk delete topup error:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setBulkDeleting(false)
+        }
+    }
+
+    const handleBulkDeleteTransactions = async () => {
+        if (txSelectedIds.size === 0) return
+        if (!confirm(`ต้องการลบประวัติการทำรายการ ${txSelectedIds.size} รายการ?\n\nหมายเหตุ: การลบจะไม่กระทบยอดเครดิตที่ดำเนินการไปแล้ว`)) return
+        setBulkDeleting(true)
+        try {
+            const ids = [...txSelectedIds]
+            const { data, error } = await supabase
+                .from('credit_transactions')
+                .delete()
+                .in('id', ids)
+                .select('id')
+            if (error) throw error
+            const deletedCount = data?.length || 0
+            if (deletedCount === 0) {
+                toast.error('ไม่สามารถลบได้ — อาจถูกจำกัดสิทธิ์โดย RLS policy กรุณาตรวจสอบสิทธิ์ในฐานข้อมูล')
+            } else {
+                toast.success(`ลบประวัติการทำรายการ ${deletedCount} รายการสำเร็จ`)
+            }
+            cancelTxSelect()
+            fetchDealerCredits()
+        } catch (error) {
+            console.error('Bulk delete transactions error:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setBulkDeleting(false)
         }
     }
 
@@ -2726,6 +2898,15 @@ export default function SuperAdmin() {
                         <table className="data-table">
                             <thead>
                                 <tr>
+                                    {topupSelectMode && (
+                                        <th style={{ width: '40px', textAlign: 'center' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={topupSelectedIds.size === topupRequests.filter(r => r.status !== 'pending').slice(0, 20).length && topupSelectedIds.size > 0}
+                                                onChange={() => toggleTopupSelectAll(topupRequests.filter(r => r.status !== 'pending').slice(0, 20).map(r => r.id))}
+                                            />
+                                        </th>
+                                    )}
                                     <th>วันที่ขอ</th>
                                     <th>Dealer</th>
                                     <th>จำนวนเงิน</th>
@@ -2737,7 +2918,25 @@ export default function SuperAdmin() {
                             </thead>
                             <tbody>
                                 {topupRequests.filter(r => r.status !== 'pending').slice(0, 20).map(request => (
-                                    <tr key={request.id}>
+                                    <tr
+                                        key={request.id}
+                                        onTouchStart={(e) => topupLongPressStart(request.id, e)}
+                                        onTouchMove={topupLongPressMove}
+                                        onTouchEnd={topupLongPressEnd}
+                                        onMouseDown={() => !topupSelectMode && topupLongPressStart(request.id, { touches: null })}
+                                        onMouseUp={topupLongPressEnd}
+                                        onMouseLeave={topupLongPressEnd}
+                                        className={topupSelectedIds.has(request.id) ? 'row-selected' : ''}
+                                    >
+                                        {topupSelectMode && (
+                                            <td style={{ textAlign: 'center' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={topupSelectedIds.has(request.id)}
+                                                    onChange={() => toggleTopupSelect(request.id)}
+                                                />
+                                            </td>
+                                        )}
                                         <td style={{ fontSize: '0.85rem' }}>
                                             {new Date(request.created_at).toLocaleString('th-TH')}
                                         </td>
@@ -2796,6 +2995,15 @@ export default function SuperAdmin() {
                     <table className="data-table">
                         <thead>
                             <tr>
+                                {txSelectMode && (
+                                    <th style={{ width: '40px', textAlign: 'center' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={txSelectedIds.size === creditTransactions.length && txSelectedIds.size > 0}
+                                            onChange={() => toggleTxSelectAll(creditTransactions.map(t => t.id))}
+                                        />
+                                    </th>
+                                )}
                                 <th>วันที่</th>
                                 <th>เจ้ามือ</th>
                                 <th>ประเภท</th>
@@ -2808,13 +3016,31 @@ export default function SuperAdmin() {
                         <tbody>
                             {creditTransactions.length === 0 ? (
                                 <tr>
-                                    <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
+                                    <td colSpan={txSelectMode ? 8 : 7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
                                         ยังไม่มีประวัติการทำรายการ
                                     </td>
                                 </tr>
                             ) : (
                                 creditTransactions.map(trans => (
-                                    <tr key={trans.id}>
+                                    <tr
+                                        key={trans.id}
+                                        onTouchStart={(e) => txLongPressStart(trans.id, e)}
+                                        onTouchMove={txLongPressMove}
+                                        onTouchEnd={txLongPressEnd}
+                                        onMouseDown={() => !txSelectMode && txLongPressStart(trans.id, { touches: null })}
+                                        onMouseUp={txLongPressEnd}
+                                        onMouseLeave={txLongPressEnd}
+                                        className={txSelectedIds.has(trans.id) ? 'row-selected' : ''}
+                                    >
+                                        {txSelectMode && (
+                                            <td style={{ textAlign: 'center' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={txSelectedIds.has(trans.id)}
+                                                    onChange={() => toggleTxSelect(trans.id)}
+                                                />
+                                            </td>
+                                        )}
                                         <td style={{ fontSize: '0.85rem' }}>
                                             {new Date(trans.created_at).toLocaleString('th-TH')}
                                         </td>
@@ -2852,6 +3078,28 @@ export default function SuperAdmin() {
                     </table>
                 </div>
             </div>
+
+            {/* Floating bottom action bar for bulk selection */}
+            {(topupSelectMode || txSelectMode) && (
+                <div className="bulk-select-floating-bar">
+                    <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={topupSelectMode ? cancelTopupSelect : cancelTxSelect}
+                    >
+                        <FiX /> ยกเลิก
+                    </button>
+                    <span className="bulk-select-count">
+                        เลือก {topupSelectMode ? topupSelectedIds.size : txSelectedIds.size} รายการ
+                    </span>
+                    <button
+                        className="btn btn-sm btn-danger"
+                        onClick={topupSelectMode ? handleBulkDeleteTopupRequests : handleBulkDeleteTransactions}
+                        disabled={(topupSelectMode ? topupSelectedIds.size === 0 : txSelectedIds.size === 0) || bulkDeleting}
+                    >
+                        <FiTrash2 /> {bulkDeleting ? 'กำลังลบ...' : 'ลบ'}
+                    </button>
+                </div>
+            )}
         </div>
     )
 
@@ -2867,7 +3115,7 @@ export default function SuperAdmin() {
                             <input
                                 type="number"
                                 value={settings.default_trial_days || 30}
-                                onChange={(e) => setSettings({ ...settings, default_trial_days: parseInt(e.target.value) })}
+                                onChange={(e) => setSettings({ ...settings, defatlt_trial_days: parseInt(e.target.value) })}
                             />
                             <span className="unit">วัน</span>
                             <button

@@ -875,6 +875,81 @@
 }
 
 /* =============================================
+   Row Selection (bulk delete)
+   ============================================= */
+
+.data-table tbody tr.row-selected {
+    background: rgba(212, 175, 55, 0.15) !important;
+}
+
+.data-table tbody tr.row-selected td {
+    background: transparent !important;
+}
+
+.data-table th input[type="checkbox"],
+.data-table td input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--color-primary, #d4af37);
+}
+
+[data-theme="light"] .data-table tbody tr.row-selected,
+html.theme-light .data-table tbody tr.row-selected {
+    background: rgba(184, 150, 12, 0.12) !important;
+}
+
+/* Floating bottom action bar for bulk select */
+.bulk-select-floating-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 0.75rem 1.5rem;
+    background: rgba(20, 20, 35, 0.95);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid rgba(212, 175, 55, 0.3);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+    animation: slideUpBar 0.25s ease-out;
+}
+
+@keyframes slideUpBar {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.bulk-select-floating-bar .bulk-select-count {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-primary, #d4af37);
+}
+
+.bulk-select-floating-bar .btn {
+    min-width: 80px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    justify-content: center;
+}
+
+[data-theme="light"] .bulk-select-floating-bar,
+html.theme-light .bulk-select-floating-bar {
+    background: rgba(255, 255, 255, 0.95);
+    border-top: 1px solid rgba(0, 0, 0, 0.12);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .bulk-select-floating-bar .bulk-select-count,
+html.theme-light .bulk-select-floating-bar .bulk-select-count {
+    color: var(--color-primary, #b8960c);
+}
+
+/* =============================================
    Modal
    ============================================= */
 
@@ -893,14 +968,16 @@
     padding: 0.5rem;
 }
 
-.modal-content {
+.modal-content,
+.modal-overlay > .modal {
     background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 16px;
     width: 100%;
     max-width: 600px;
     max-height: 90vh;
     overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
 .modal-header {
@@ -1601,9 +1678,12 @@ html.theme-light .text-muted {
 }
 
 [data-theme="light"] .modal-content,
-html.theme-light .modal-content {
+[data-theme="light"] .modal-overlay > .modal,
+html.theme-light .modal-content,
+html.theme-light .modal-overlay > .modal {
     background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
-    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+    border: 1px solid rgba(0, 0, 0, 0.15) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15) !important;
 }
 
 [data-theme="light"] .modal-header,
