@@ -81,6 +81,7 @@ export default function SuperAdmin() {
     const [isLoading, setIsLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState('')
     const [filterStatus, setFilterStatus] = useState('all')
+    const [paymentDealerSearch, setPaymentDealerSearch] = useState('')
     const [showPasswordModal, setShowPasswordModal] = useState(false)
 
     // Modal States
@@ -131,6 +132,10 @@ export default function SuperAdmin() {
     const [topupSelectedIds, setTopupSelectedIds] = useState(new Set())
     const [txSelectMode, setTxSelectMode] = useState(false)
     const [txSelectedIds, setTxSelectedIds] = useState(new Set())
+    const [deductSelectMode, setDeductSelectMode] = useState(false)
+    const [deductSelectedIds, setDeductSelectedIds] = useState(new Set())
+    const [paySelectMode, setPaySelectMode] = useState(false)
+    const [paySelectedIds, setPaySelectedIds] = useState(new Set())
     const [bulkDeleting, setBulkDeleting] = useState(false)
 
     // Form States
@@ -921,6 +926,142 @@ export default function SuperAdmin() {
             fetchDealerCredits()
         } catch (error) {
             console.error('Bulk delete transactions error:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setBulkDeleting(false)
+        }
+    }
+
+    // -- Credit Deductions table (Payments tab) --
+    const deductLongPressStart = (id, e) => {
+        longPressRef.moved = false
+        if (e.touches) {
+            longPressRef.startX = e.touches[0].clientX
+            longPressRef.startY = e.touches[0].clientY
+        }
+        longPressRef.timer = setTimeout(() => {
+            if (!longPressRef.moved) {
+                setDeductSelectMode(true)
+                setDeductSelectedIds(new Set([id]))
+            }
+        }, 600)
+    }
+    const deductLongPressMove = (e) => {
+        if (longPressRef.timer && e.touches) {
+            const dx = Math.abs(e.touches[0].clientX - (longPressRef.startX || 0))
+            const dy = Math.abs(e.touches[0].clientY - (longPressRef.startY || 0))
+            if (dx > SCROLL_THRESHOLD || dy > SCROLL_THRESHOLD) {
+                longPressRef.moved = true
+                clearTimeout(longPressRef.timer)
+                longPressRef.timer = null
+            }
+        }
+    }
+    const deductLongPressEnd = () => {
+        if (longPressRef.timer) { clearTimeout(longPressRef.timer); longPressRef.timer = null }
+    }
+    const toggleDeductSelect = (id) => {
+        setDeductSelectedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id); else next.add(id)
+            return next
+        })
+    }
+    const toggleDeductSelectAll = (ids) => {
+        setDeductSelectedIds(deductSelectedIds.size === ids.length ? new Set() : new Set(ids))
+    }
+    const cancelDeductSelect = () => { setDeductSelectMode(false); setDeductSelectedIds(new Set()) }
+
+    const handleBulkDeleteDeductions = async () => {
+        if (deductSelectedIds.size === 0) return
+        if (!confirm(`ต้องการลบรายการตัดเครดิต ${deductSelectedIds.size} รายการ?`)) return
+        setBulkDeleting(true)
+        try {
+            const ids = [...deductSelectedIds]
+            const { data, error } = await supabase
+                .from('credit_transactions')
+                .delete()
+                .in('id', ids)
+                .select('id')
+            if (error) throw error
+            const deletedCount = data?.length || 0
+            if (deletedCount === 0) {
+                toast.error('ไม่สามารถลบได้ — อาจถูกจำกัดสิทธิ์โดย RLS policy')
+            } else {
+                toast.success(`ลบรายการตัดเครดิต ${deletedCount} รายการสำเร็จ`)
+            }
+            cancelDeductSelect()
+            fetchCreditDeductions()
+        } catch (error) {
+            console.error('Bulk delete deductions error:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setBulkDeleting(false)
+        }
+    }
+
+    // -- Manual Payments table (Payments tab) --
+    const payLongPressStart = (id, e) => {
+        longPressRef.moved = false
+        if (e.touches) {
+            longPressRef.startX = e.touches[0].clientX
+            longPressRef.startY = e.touches[0].clientY
+        }
+        longPressRef.timer = setTimeout(() => {
+            if (!longPressRef.moved) {
+                setPaySelectMode(true)
+                setPaySelectedIds(new Set([id]))
+            }
+        }, 600)
+    }
+    const payLongPressMove = (e) => {
+        if (longPressRef.timer && e.touches) {
+            const dx = Math.abs(e.touches[0].clientX - (longPressRef.startX || 0))
+            const dy = Math.abs(e.touches[0].clientY - (longPressRef.startY || 0))
+            if (dx > SCROLL_THRESHOLD || dy > SCROLL_THRESHOLD) {
+                longPressRef.moved = true
+                clearTimeout(longPressRef.timer)
+                longPressRef.timer = null
+            }
+        }
+    }
+    const payLongPressEnd = () => {
+        if (longPressRef.timer) { clearTimeout(longPressRef.timer); longPressRef.timer = null }
+    }
+    const togglePaySelect = (id) => {
+        setPaySelectedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id); else next.add(id)
+            return next
+        })
+    }
+    const togglePaySelectAll = (ids) => {
+        setPaySelectedIds(paySelectedIds.size === ids.length ? new Set() : new Set(ids))
+    }
+    const cancelPaySelect = () => { setPaySelectMode(false); setPaySelectedIds(new Set()) }
+
+    const handleBulkDeletePayments = async () => {
+        if (paySelectedIds.size === 0) return
+        if (!confirm(`ต้องการลบรายการชำระเงิน ${paySelectedIds.size} รายการ?`)) return
+        setBulkDeleting(true)
+        try {
+            const ids = [...paySelectedIds]
+            const { data, error } = await supabase
+                .from('payments')
+                .delete()
+                .in('id', ids)
+                .select('id')
+            if (error) throw error
+            const deletedCount = data?.length || 0
+            if (deletedCount === 0) {
+                toast.error('ไม่สามารถลบได้ — อาจถูกจำกัดสิทธิ์โดย RLS policy')
+            } else {
+                toast.success(`ลบรายการชำระเงิน ${deletedCount} รายการสำเร็จ`)
+            }
+            cancelPaySelect()
+            fetchPayments()
+        } catch (error) {
+            console.error('Bulk delete payments error:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
         } finally {
             setBulkDeleting(false)
@@ -2190,9 +2331,24 @@ export default function SuperAdmin() {
     )
 
     const renderPayments = () => {
-        // Calculate total revenue from credit deductions
-        const totalCreditRevenue = creditDeductions.reduce((sum, d) => sum + Math.abs(d.amount || 0), 0)
-        const thisMonthDeductions = creditDeductions.filter(d => {
+        // Filter by dealer search
+        const searchLower = paymentDealerSearch.toLowerCase().trim()
+        const filteredDeductions = searchLower
+            ? creditDeductions.filter(d => 
+                (d.dealer?.full_name || '').toLowerCase().includes(searchLower) ||
+                (d.dealer?.email || '').toLowerCase().includes(searchLower)
+            )
+            : creditDeductions
+        const filteredPayments = searchLower
+            ? payments.filter(p => 
+                (p.profiles?.full_name || '').toLowerCase().includes(searchLower) ||
+                (p.profiles?.email || '').toLowerCase().includes(searchLower)
+            )
+            : payments
+
+        // Calculate total revenue from filtered credit deductions
+        const totalCreditRevenue = filteredDeductions.reduce((sum, d) => sum + Math.abs(d.amount || 0), 0)
+        const thisMonthDeductions = filteredDeductions.filter(d => {
             const date = new Date(d.created_at)
             const now = new Date()
             return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
@@ -2201,6 +2357,50 @@ export default function SuperAdmin() {
         
         return (
         <div className="payments-tab">
+            {/* Dealer Search */}
+            <div className="payment-dealer-search" style={{ marginBottom: '1.5rem' }}>
+                <div style={{ position: 'relative' }}>
+                    <FiSearch style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', fontSize: '1.1rem' }} />
+                    <input
+                        type="text"
+                        placeholder="ค้นชื่อเจ้ามือ หรือ email..."
+                        value={paymentDealerSearch}
+                        onChange={(e) => setPaymentDealerSearch(e.target.value)}
+                        style={{
+                            width: '100%',
+                            padding: '0.7rem 0.75rem 0.7rem 2.5rem',
+                            borderRadius: 'var(--radius-sm, 8px)',
+                            border: '1px solid var(--color-border, rgba(255,255,255,0.1))',
+                            background: 'var(--color-bg-secondary, rgba(255,255,255,0.05))',
+                            color: 'var(--color-text, #fff)',
+                            fontSize: '0.95rem',
+                            outline: 'none',
+                            transition: 'border-color 0.2s'
+                        }}
+                        onFocus={(e) => e.target.style.borderColor = 'var(--color-primary, #d4af37)'}
+                        onBlur={(e) => e.target.style.borderColor = 'var(--color-border, rgba(255,255,255,0.1))'}
+                    />
+                    {paymentDealerSearch && (
+                        <button
+                            onClick={() => setPaymentDealerSearch('')}
+                            style={{
+                                position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)',
+                                background: 'none', border: 'none', color: 'var(--color-text-muted)',
+                                cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center'
+                            }}
+                        >
+                            <FiX />
+                        </button>
+                    )}
+                </div>
+                {searchLower && (
+                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
+                        พบ {filteredDeductions.length} รายการตัดเครดิต, {filteredPayments.length} รายการชำระเงิน
+                        {' '}สำหรับ "<strong style={{ color: 'var(--color-primary)' }}>{paymentDealerSearch}</strong>"
+                    </div>
+                )}
+            </div>
+
             {/* Revenue Summary Cards */}
             <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
                 <div className="stat-card">
@@ -2231,7 +2431,7 @@ export default function SuperAdmin() {
                     </div>
                     <div className="stat-info">
                         <span className="stat-label">จำนวนรายการตัดเครดิต</span>
-                        <span className="stat-value">{creditDeductions.length}</span>
+                        <span className="stat-value">{filteredDeductions.length}</span>
                     </div>
                 </div>
             </div>
@@ -2242,6 +2442,15 @@ export default function SuperAdmin() {
                 <table className="data-table">
                     <thead>
                         <tr>
+                            {deductSelectMode && (
+                                <th style={{ width: '40px', textAlign: 'center' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={deductSelectedIds.size === filteredDeductions.length && deductSelectedIds.size > 0}
+                                        onChange={() => toggleDeductSelectAll(filteredDeductions.map(d => d.id))}
+                                    />
+                                </th>
+                            )}
                             <th>เจ้ามือ</th>
                             <th>รายละเอียด</th>
                             <th>ยอดเงิน</th>
@@ -2250,8 +2459,26 @@ export default function SuperAdmin() {
                         </tr>
                     </thead>
                     <tbody>
-                        {creditDeductions.map(deduction => (
-                            <tr key={deduction.id}>
+                        {filteredDeductions.map(deduction => (
+                            <tr
+                                key={deduction.id}
+                                onTouchStart={(e) => deductLongPressStart(deduction.id, e)}
+                                onTouchMove={deductLongPressMove}
+                                onTouchEnd={deductLongPressEnd}
+                                onMouseDown={() => !deductSelectMode && deductLongPressStart(deduction.id, { touches: null })}
+                                onMouseUp={deductLongPressEnd}
+                                onMouseLeave={deductLongPressEnd}
+                                className={deductSelectedIds.has(deduction.id) ? 'row-selected' : ''}
+                            >
+                                {deductSelectMode && (
+                                    <td style={{ textAlign: 'center' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={deductSelectedIds.has(deduction.id)}
+                                            onChange={() => toggleDeductSelect(deduction.id)}
+                                        />
+                                    </td>
+                                )}
                                 <td>
                                     <div>{deduction.dealer?.full_name || 'ไม่ทราบชื่อ'}</div>
                                     <small className="text-muted">{deduction.dealer?.email}</small>
@@ -2264,8 +2491,8 @@ export default function SuperAdmin() {
                         ))}
                     </tbody>
                 </table>
-                {creditDeductions.length === 0 && (
-                    <div className="empty-state">ยังไม่มีรายการตัดเครดิต</div>
+                {filteredDeductions.length === 0 && (
+                    <div className="empty-state">{searchLower ? 'ไม่พบรายการตัดเครดิตสำหรับเจ้ามือนี้' : 'ยังไม่มีรายการตัดเครดิต'}</div>
                 )}
             </div>
 
@@ -2296,6 +2523,15 @@ export default function SuperAdmin() {
                 <table className="data-table">
                     <thead>
                         <tr>
+                            {paySelectMode && (
+                                <th style={{ width: '40px', textAlign: 'center' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={paySelectedIds.size === filteredPayments.filter(p => filterStatus === 'all' || p.status === filterStatus).length && paySelectedIds.size > 0}
+                                        onChange={() => togglePaySelectAll(filteredPayments.filter(p => filterStatus === 'all' || p.status === filterStatus).map(p => p.id))}
+                                    />
+                                </th>
+                            )}
                             <th>เจ้ามือ</th>
                             <th>ใบแจ้งหนี้</th>
                             <th>ยอดเงิน</th>
@@ -2306,10 +2542,28 @@ export default function SuperAdmin() {
                         </tr>
                     </thead>
                     <tbody>
-                        {payments
+                        {filteredPayments
                             .filter(p => filterStatus === 'all' || p.status === filterStatus)
                             .map(payment => (
-                                <tr key={payment.id}>
+                                <tr
+                                    key={payment.id}
+                                    onTouchStart={(e) => payLongPressStart(payment.id, e)}
+                                    onTouchMove={payLongPressMove}
+                                    onTouchEnd={payLongPressEnd}
+                                    onMouseDown={() => !paySelectMode && payLongPressStart(payment.id, { touches: null })}
+                                    onMouseUp={payLongPressEnd}
+                                    onMouseLeave={payLongPressEnd}
+                                    className={paySelectedIds.has(payment.id) ? 'row-selected' : ''}
+                                >
+                                    {paySelectMode && (
+                                        <td style={{ textAlign: 'center' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={paySelectedIds.has(payment.id)}
+                                                onChange={() => togglePaySelect(payment.id)}
+                                            />
+                                        </td>
+                                    )}
                                     <td>
                                         <div>{payment.profiles?.full_name || 'ไม่ทราบชื่อ'}</div>
                                         <small className="text-muted">{payment.profiles?.email}</small>
@@ -2357,10 +2611,32 @@ export default function SuperAdmin() {
                             ))}
                     </tbody>
                 </table>
-                {payments.length === 0 && (
-                    <div className="empty-state">ยังไม่มีการชำระเงินด้วยตนเอง</div>
+                {filteredPayments.filter(p => filterStatus === 'all' || p.status === filterStatus).length === 0 && (
+                    <div className="empty-state">{searchLower ? 'ไม่พบรายการชำระเงินสำหรับเจ้ามือนี้' : 'ยังไม่มีการชำระเงินด้วยตนเอง'}</div>
                 )}
             </div>
+
+            {/* Floating bottom action bar for payments bulk selection */}
+            {(deductSelectMode || paySelectMode) && (
+                <div className="bulk-select-floating-bar">
+                    <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={deductSelectMode ? cancelDeductSelect : cancelPaySelect}
+                    >
+                        <FiX /> ยกเลิก
+                    </button>
+                    <span className="bulk-select-count">
+                        เลือก {deductSelectMode ? deductSelectedIds.size : paySelectedIds.size} รายการ
+                    </span>
+                    <button
+                        className="btn btn-sm btn-danger"
+                        onClick={deductSelectMode ? handleBulkDeleteDeductions : handleBulkDeletePayments}
+                        disabled={(deductSelectMode ? deductSelectedIds.size === 0 : paySelectedIds.size === 0) || bulkDeleting}
+                    >
+                        <FiTrash2 /> {bulkDeleting ? 'กำลังลบ...' : 'ลบ'}
+                    </button>
+                </div>
+            )}
         </div>
     )}
 
