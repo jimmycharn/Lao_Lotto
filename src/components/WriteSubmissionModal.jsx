@@ -2004,10 +2004,14 @@ export default function WriteSubmissionModal({
         }
 
         // Check if round is still open (time validation)
+        const now = new Date()
+        if (roundInfo?.open_time && now < new Date(roundInfo.open_time)) {
+            setError('ยังไม่ถึงเวลาเปิดรับ ไม่สามารถส่งเลขได้')
+            playSound('error')
+            return
+        }
         if (roundInfo?.close_time) {
-            const closeTime = new Date(roundInfo.close_time)
-            const now = new Date()
-            if (now >= closeTime) {
+            if (now >= new Date(roundInfo.close_time)) {
                 setError('หมดเวลาส่งเลขแล้ว งวดนี้ปิดรับแล้ว')
                 playSound('error')
                 return

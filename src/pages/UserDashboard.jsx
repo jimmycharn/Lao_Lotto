@@ -851,7 +851,9 @@ export default function UserDashboard() {
         if (!round) return false
         if (round.status !== 'open') return false
         if (isMembershipExpired()) return false
-        return new Date() < new Date(round.close_time)
+        const now = new Date()
+        if (round.open_time && now < new Date(round.open_time)) return false
+        return now < new Date(round.close_time)
     }
 
     // Check if can delete (must satisfy BOTH conditions)
