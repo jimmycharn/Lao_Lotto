@@ -267,9 +267,9 @@ const get3DigitCombinations = (numbers) => {
 // Classify bet type as 'top' or 'bottom' for color-coding
 const getBetPosition = (betType) => {
     if (!betType) return ''
-    const BOTTOM_TYPES = ['2_bottom', '2_bottom_rev', 'run_bottom', 'front_bottom_1', 'back_bottom_1', '3_bottom', '2_spread', '2_spread_rev', '2_tang']
+    const BOTTOM_TYPES = ['2_bottom', '2_bottom_rev', 'run_bottom', 'front_bottom_1', 'back_bottom_1', '3_bottom']
     if (BOTTOM_TYPES.includes(betType)) return 'bottom'
-    const TOP_TYPES = ['2_top', '2_top_rev', '3_top', '3_tod', 'run_top', 'front_top_1', 'middle_top_1', 'back_top_1', '2_front', '2_front_rev', '4_set', '4_top', '4_float', '5_float', '3_straight', '3_tod_single']
+    const TOP_TYPES = ['2_top', '2_top_rev', '3_top', '3_tod', 'run_top', 'front_top_1', 'middle_top_1', 'back_top_1', '2_front', '2_front_rev', '2_tang', '2_spread', '2_spread_rev', '4_set', '4_top', '4_float', '5_float', '3_straight', '3_tod_single']
     if (TOP_TYPES.includes(betType)) return 'top'
     return ''
 }
@@ -1798,16 +1798,20 @@ export default function WriteSubmissionModal({
                 }
                 
                 // Build the line with locked amount and default type
-                // Special handling for คูณชุด - need to add *permutation only if lockedAmount doesn't have *
+                // Special handling for types that require 2 amounts (amount1*amount2)
+                const isGlabType = defaultType === 'บนกลับ' || defaultType === 'ล่างกลับ' || defaultType === 'หน้ากลับ' || defaultType === 'ถ่างกลับ'
+                const isTengTod = defaultType === 'เต็งโต๊ด' && numLen === 3
+                
                 if (defaultType === 'คูณชุด') {
                     const permCount = trimmed.length >= 4 ? get3DigitPermCount(trimmed) : getPermutationCount(trimmed)
                     if (lockedHasSecondAmount) {
-                        // lockedAmount already has * (e.g., "20*20"), just use it as is
                         trimmed = `${trimmed}=${lockedAmount} ${defaultType}`
                     } else {
-                        // lockedAmount is single amount, add *permCount
                         trimmed = `${trimmed}=${lockedAmount}*${permCount} ${defaultType}`
                     }
+                } else if ((isGlabType || isTengTod) && !lockedHasSecondAmount) {
+                    // กลับ/เต็งโต๊ด types need amount1*amount2 - duplicate the locked amount
+                    trimmed = `${trimmed}=${lockedAmount}*${lockedAmount} ${defaultType}`
                 } else {
                     trimmed = `${trimmed}=${lockedAmount} ${defaultType}`
                 }
