@@ -635,6 +635,26 @@ export default function Dealer() {
         }
     }
 
+    // Delete a history record
+    async function handleDeleteHistory(historyId, e) {
+        e.stopPropagation()
+        if (!window.confirm('ต้องการลบประวัติงวดหวยนี้หรือไม่?')) return
+        try {
+            const { error } = await supabase
+                .from('round_history')
+                .delete()
+                .eq('id', historyId)
+                .eq('dealer_id', user.id)
+            if (error) throw error
+            setRoundHistory(prev => prev.filter(h => h.id !== historyId))
+            if (expandedHistoryId === historyId) setExpandedHistoryId(null)
+            toast('ลบประวัติงวดหวยสำเร็จ', 'success')
+        } catch (err) {
+            console.error('Error deleting history:', err)
+            toast('ลบประวัติไม่สำเร็จ: ' + (err.message || 'Unknown error'), 'error')
+        }
+    }
+
     // Generate month options for history filter
     const historyMonthOptions = (() => {
         if (roundHistory.length === 0) return []
@@ -2994,6 +3014,13 @@ export default function Dealer() {
                                                                         {LOTTERY_TYPES[history.lottery_type] || history.lottery_type}
                                                                     </span>
                                                                     <span className="round-name">{history.lottery_name || LOTTERY_TYPES[history.lottery_type]}</span>
+                                                                    <button
+                                                                        className="history-delete-btn"
+                                                                        title="ลบประวัติงวดนี้"
+                                                                        onClick={(e) => handleDeleteHistory(history.id, e)}
+                                                                    >
+                                                                        <FiTrash2 />
+                                                                    </button>
                                                                 </div>
                                                                 <FiChevronDown style={{ 
                                                                     transition: 'transform 0.2s', 
