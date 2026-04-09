@@ -101,18 +101,8 @@ function HomeRedirect() {
     if (profile) setProfileTimeout(false)
   }, [user, profile, loading])
 
-  // Only show loading if we don't have user info yet
-  if (loading && !user) {
-    return (
-      <div className="loading-screen">
-        <div className="spinner"></div>
-        <p>กำลังโหลด...</p>
-      </div>
-    )
-  }
-
-  // If we have user but waiting for profile to determine role, show loading briefly
-  if (user && !profile && loading) {
+  // Show loading if auth is still loading OR we have user but no profile yet (waiting for role)
+  if (loading || (user && !profile && !profileTimeout)) {
     return (
       <div className="loading-screen">
         <div className="spinner"></div>

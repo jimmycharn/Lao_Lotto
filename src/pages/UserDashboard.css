@@ -152,7 +152,6 @@
     border-radius: var(--radius-lg);
     overflow: hidden;
     transition: box-shadow 0.3s ease;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     border: none;
 }
 
@@ -163,26 +162,22 @@
     padding: 1.5rem 2rem;
     margin-bottom: 0;
     background: var(--color-card);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: none;
     border-radius: var(--radius-lg);
-    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
     position: relative;
     transform: translateZ(0);
     -webkit-transform: translateZ(0);
 }
 
 .round-accordion-header:hover {
-    border-color: var(--color-primary);
     background: rgba(212, 175, 55, 0.05);
-    box-shadow: 0 4px 12px rgba(212, 175, 55, 0.15);
 }
 
 .round-accordion-item.expanded .round-accordion-header {
     background: rgba(212, 175, 55, 0.08);
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
-    border-color: rgba(212, 175, 55, 0.2);
-    border-bottom-color: transparent;
 }
 
 .round-header-info {
@@ -296,9 +291,8 @@
 }
 
 .lottery-badge.thai {
-    background: linear-gradient(135deg, #ed1c24, #fff);
-    background-size: 200% 200%;
-    color: #ed1c24;
+    background: linear-gradient(135deg, #ed1c24, #b71c1c);
+    color: #fff;
     border: 1px solid #ed1c24;
 }
 
@@ -2381,27 +2375,27 @@
     color: #ed1c24;
 }
 
-/* Lao Lottery - Blue Theme */
+/* Lao Lottery - Neon Blue Theme */
 .round-accordion-item.lao .round-accordion-header {
-    border: 2px solid #002868;
-    border-top: 5px solid #002868;
-    background: linear-gradient(180deg, rgba(0, 40, 104, 0.15) 0%, var(--color-card) 30%);
+    border: 2px solid #4a90ff;
+    border-top: 5px solid #4a90ff;
+    background: linear-gradient(180deg, rgba(74, 144, 255, 0.12) 0%, var(--color-card) 30%);
 }
 
 .round-accordion-item.lao:hover .round-accordion-header,
 .round-accordion-item.lao.expanded .round-accordion-header {
-    border-color: #002868;
-    background: linear-gradient(180deg, rgba(0, 40, 104, 0.25) 0%, rgba(0, 40, 104, 0.08) 50%);
-    box-shadow: 0 0 20px rgba(0, 40, 104, 0.2);
+    border-color: #4a90ff;
+    background: linear-gradient(180deg, rgba(74, 144, 255, 0.2) 0%, rgba(74, 144, 255, 0.06) 50%);
+    box-shadow: 0 0 20px rgba(74, 144, 255, 0.25);
 }
 
 .round-accordion-item.lao .round-accordion-content {
-    border: 2px solid #002868;
+    border: 2px solid #4a90ff;
     border-top: none;
 }
 
 .round-accordion-item.lao.expanded .round-header-status svg {
-    color: #4a90d9;
+    color: #4a90ff;
 }
 
 /* Hanoi Lottery - Yellow Theme */
@@ -4516,14 +4510,14 @@ html.theme-light .time-remaining {
 
 /* Lao - wrapper approach */
 .round-accordion-item.lao.expanded {
-    border: 2px solid #002868;
+    border: 2px solid #4a90ff;
     border-top-width: 5px;
 }
 
 .round-accordion-item.lao.expanded .round-accordion-header {
     border: none;
     border-radius: 0;
-    border-bottom: 1px solid rgba(0, 40, 104, 0.3);
+    border-bottom: 1px solid rgba(74, 144, 255, 0.3);
 }
 
 .round-accordion-item.lao.expanded .round-accordion-content {
