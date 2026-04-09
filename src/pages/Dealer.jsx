@@ -126,6 +126,8 @@ export default function Dealer() {
     const [downstreamDealers, setDownstreamDealers] = useState([]) // Dealers who send bets TO us
     const [memberTypeFilter, setMemberTypeFilter] = useState('all') // 'all' | 'member' | 'dealer'
     const [allowedLotteryTypes, setAllowedLotteryTypes] = useState(null) // Lottery types allowed for this dealer
+    const [historyMonthFilter, setHistoryMonthFilter] = useState('all') // 'all' | 'YYYY-MM' format
+    const [historyLotteryFilter, setHistoryLotteryFilter] = useState('all') // 'all' | lottery type key
 
     // Add member modal states
     const [showAddMemberModal, setShowAddMemberModal] = useState(false)
@@ -568,7 +570,6 @@ export default function Dealer() {
                 .select('*')
                 .eq('dealer_id', user.id)
                 .order('deleted_at', { ascending: false })
-                .limit(50)
 
             if (!error && data) {
                 setRoundHistory(data)
@@ -633,6 +634,87 @@ export default function Dealer() {
             fetchHistoryUserDetails(historyItem)
         }
     }
+
+    // Generate month options for history filter
+    const historyMonthOptions = (() => {
+        if (roundHistory.length === 0) return []
+        const now = new Date()
+        // Find the earliest date in history
+        let earliest = now
+        roundHistory.forEach(h => {
+            const d = new Date(h.close_time || h.open_time || h.round_date)
+            if (d < earliest) earliest = d
+        })
+        const options = []
+        const current = new Date(now.getFullYear(), now.getMonth(), 1)
+        const start = new Date(earliest.getFullYear(), earliest.getMonth(), 1)
+        while (current >= start) {
+            const yyyy = current.getFullYear()
+            const mm = current.getMonth()
+            const thaiYear = yyyy + 543
+            const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+            const key = `${yyyy}-${String(mm + 1).padStart(2, '0')}`
+            // Date range: 1st of month to last day of month (or today if current month)
+            const firstDay = new Date(yyyy, mm, 1)
+            const isCurrentMonth = yyyy === now.getFullYear() && mm === now.getMonth()
+            const lastDay = isCurrentMonth ? now : new Date(yyyy, mm + 1, 0)
+            const label = `${firstDay.getDate()} ${thaiMonths[mm]} ${thaiYear} - ${lastDay.getDate()} ${thaiMonths[lastDay.getMonth()]} ${lastDay.getFullYear() + 543}`
+            options.push({ key, label })
+            current.setMonth(current.getMonth() - 1)
+        }
+        return options
+    })()
+
+    // Filter history by month and lottery type
+    const filteredHistory = roundHistory.filter(h => {
+        // Month filter
+        if (historyMonthFilter !== 'all') {
+            const [filterYear, filterMonth] = historyMonthFilter.split('-').map(Number)
+            const hDate = new Date(h.close_time || h.open_time || h.round_date)
+            if (hDate.getFullYear() !== filterYear || (hDate.getMonth() + 1) !== filterMonth) return false
+        }
+        // Lottery type filter
+        if (historyLotteryFilter !== 'all') {
+            if (h.lottery_type !== historyLotteryFilter) return false
+        }
+        return true
+    })
+
+    // Aggregate summary for filtered history
+    const historySummary = (() => {
+        let totalAmount = 0, totalCommission = 0, totalPayout = 0
+        let totalTransferred = 0, totalUpstreamComm = 0, totalUpstreamWin = 0
+        let totalEntries = 0
+        filteredHistory.forEach(h => {
+            totalEntries += (h.total_entries || 0)
+            totalAmount += (h.total_amount || 0)
+            totalCommission += (h.total_commission || 0)
+            totalPayout += (h.total_payout || 0)
+            totalTransferred += (h.transferred_amount || 0)
+            totalUpstreamComm += (h.upstream_commission || 0)
+            totalUpstreamWin += (h.upstream_winnings || 0)
+        })
+        const incomingProfit = totalAmount - totalCommission - totalPayout
+        const outgoingProfit = totalUpstreamWin + totalUpstreamComm - totalTransferred
+        const totalProfit = incomingProfit + outgoingProfit
+        return {
+            totalEntries, totalAmount, totalCommission, totalPayout,
+            totalTransferred, totalUpstreamComm, totalUpstreamWin,
+            incomingProfit, outgoingProfit, totalProfit,
+            hasOutgoing: totalTransferred > 0
+        }
+    })()
+
+    // Get unique lottery types present in history for the filter dropdown
+    const historyLotteryOptions = (() => {
+        const types = new Set()
+        roundHistory.forEach(h => { if (h.lottery_type) types.add(h.lottery_type) })
+        // Filter to only allowed lottery types
+        const allowed = allowedLotteryTypes
+            ? [...types].filter(t => allowedLotteryTypes.includes(t))
+            : [...types]
+        return allowed.map(t => ({ key: t, label: LOTTERY_TYPES[t] || t }))
+    })()
 
     // Fetch dealer credit balance
     async function fetchDealerCredit() {
@@ -2785,8 +2867,116 @@ export default function Dealer() {
                                             <p>ประวัติจะแสดงเมื่อคุณลบงวดหวยที่ปิดแล้ว</p>
                                         </div>
                                     ) : (
+                                        <>
+                                        {/* History Filters */}
+                                        <div className="history-filter-bar">
+                                            <div className="history-filter-item">
+                                                <label className="history-filter-label"><FiCalendar /> ช่วงเวลา</label>
+                                                <select
+                                                    className="history-filter-select"
+                                                    value={historyMonthFilter}
+                                                    onChange={e => setHistoryMonthFilter(e.target.value)}
+                                                >
+                                                    <option value="all">ทั้งหมด</option>
+                                                    {historyMonthOptions.map(opt => (
+                                                        <option key={opt.key} value={opt.key}>{opt.label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="history-filter-item">
+                                                <label className="history-filter-label"><FiGrid /> ประเภทหวย</label>
+                                                <select
+                                                    className="history-filter-select"
+                                                    value={historyLotteryFilter}
+                                                    onChange={e => setHistoryLotteryFilter(e.target.value)}
+                                                >
+                                                    <option value="all">ทั้งหมด</option>
+                                                    {historyLotteryOptions.map(opt => (
+                                                        <option key={opt.key} value={opt.key}>{opt.label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {/* History Aggregate Summary */}
+                                        {filteredHistory.length > 0 && (
+                                            <div className="history-summary-card">
+                                                <h4 className="history-summary-title">
+                                                    <FiFileText /> สรุปรวม ({filteredHistory.length} งวด)
+                                                </h4>
+                                                <div className="history-summary-body">
+                                                    <div className="history-summary-section">
+                                                        <div className="history-summary-section-title">ยอดรับ ({historySummary.totalEntries.toLocaleString()})</div>
+                                                        <div className="history-summary-stats">
+                                                            <div className="history-summary-stat">
+                                                                <span className="stat-label">ยอดรวม</span>
+                                                                <span className="stat-value success">+฿{historySummary.totalAmount.toLocaleString()}</span>
+                                                            </div>
+                                                            <div className="history-summary-stat">
+                                                                <span className="stat-label">ค่าคอม</span>
+                                                                <span className="stat-value danger">-฿{historySummary.totalCommission.toLocaleString()}</span>
+                                                            </div>
+                                                            <div className="history-summary-stat">
+                                                                <span className="stat-label">จ่าย</span>
+                                                                <span className={`stat-value ${historySummary.totalPayout > 0 ? 'danger' : ''}`}>
+                                                                    {historySummary.totalPayout > 0 ? '-' : ''}฿{historySummary.totalPayout.toLocaleString()}
+                                                                </span>
+                                                            </div>
+                                                            <div className="history-summary-stat">
+                                                                <span className="stat-label">กำไร</span>
+                                                                <span className={`stat-value ${historySummary.incomingProfit >= 0 ? 'success' : 'danger'}`}>
+                                                                    {historySummary.incomingProfit >= 0 ? '+' : ''}฿{historySummary.incomingProfit.toLocaleString()}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {historySummary.hasOutgoing && (
+                                                        <div className="history-summary-section">
+                                                            <div className="history-summary-section-title">ยอดส่ง</div>
+                                                            <div className="history-summary-stats">
+                                                                <div className="history-summary-stat">
+                                                                    <span className="stat-label">ยอดรวม</span>
+                                                                    <span className="stat-value danger">-฿{historySummary.totalTransferred.toLocaleString()}</span>
+                                                                </div>
+                                                                <div className="history-summary-stat">
+                                                                    <span className="stat-label">ค่าคอม</span>
+                                                                    <span className="stat-value success">+฿{historySummary.totalUpstreamComm.toLocaleString()}</span>
+                                                                </div>
+                                                                <div className="history-summary-stat">
+                                                                    <span className="stat-label">รับ</span>
+                                                                    <span className={`stat-value ${historySummary.totalUpstreamWin > 0 ? 'success' : ''}`}>
+                                                                        ฿{historySummary.totalUpstreamWin.toLocaleString()}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="history-summary-stat">
+                                                                    <span className="stat-label">กำไร</span>
+                                                                    <span className={`stat-value ${historySummary.outgoingProfit >= 0 ? 'success' : 'danger'}`}>
+                                                                        {historySummary.outgoingProfit >= 0 ? '+' : ''}฿{historySummary.outgoingProfit.toLocaleString()}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    <div className="history-summary-total">
+                                                        <span>กำไรรวม</span>
+                                                        <span className={`stat-value ${historySummary.totalProfit >= 0 ? 'success' : 'danger'}`}>
+                                                            {historySummary.totalProfit >= 0 ? '+' : ''}฿{historySummary.totalProfit.toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* History List */}
+                                        {filteredHistory.length === 0 ? (
+                                            <div className="empty-state card">
+                                                <FiCalendar className="empty-icon" />
+                                                <h3>ไม่พบประวัติที่ตรงกับตัวกรอง</h3>
+                                                <p>ลองเปลี่ยนช่วงเวลาหรือประเภทหวย</p>
+                                            </div>
+                                        ) : (
                                         <div className="history-list">
-                                            {roundHistory.map(history => {
+                                            {filteredHistory.map(history => {
                                                 const isExpanded = expandedHistoryId === history.id
                                                 const userDetails = historyUserDetails[history.round_id] || []
                                                 return (
@@ -2961,6 +3151,8 @@ export default function Dealer() {
                                                 )
                                             })}
                                         </div>
+                                        )}
+                                        </>
                                     )
                                 ) : (
                                     // Open/Closed Rounds Content
