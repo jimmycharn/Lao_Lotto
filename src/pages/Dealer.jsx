@@ -2934,7 +2934,7 @@ export default function Dealer() {
                                                             </div>
                                                             <div className="history-summary-stat">
                                                                 <span className="stat-label">ค่าคอม</span>
-                                                                <span className="stat-value danger">-฿{historySummary.totalCommission.toLocaleString()}</span>
+                                                                <span className="stat-value danger">-฿{Math.round(historySummary.totalCommission).toLocaleString()}</span>
                                                             </div>
                                                             <div className="history-summary-stat">
                                                                 <span className="stat-label">จ่าย</span>
@@ -2945,7 +2945,7 @@ export default function Dealer() {
                                                             <div className="history-summary-stat">
                                                                 <span className="stat-label">กำไร</span>
                                                                 <span className={`stat-value ${historySummary.incomingProfit >= 0 ? 'success' : 'danger'}`}>
-                                                                    {historySummary.incomingProfit >= 0 ? '+' : ''}฿{historySummary.incomingProfit.toLocaleString()}
+                                                                    {historySummary.incomingProfit >= 0 ? '+' : ''}฿{Math.round(historySummary.incomingProfit).toLocaleString()}
                                                                 </span>
                                                             </div>
                                                         </div>
@@ -2960,7 +2960,7 @@ export default function Dealer() {
                                                                 </div>
                                                                 <div className="history-summary-stat">
                                                                     <span className="stat-label">ค่าคอม</span>
-                                                                    <span className="stat-value success">+฿{historySummary.totalUpstreamComm.toLocaleString()}</span>
+                                                                    <span className="stat-value success">+฿{Math.round(historySummary.totalUpstreamComm).toLocaleString()}</span>
                                                                 </div>
                                                                 <div className="history-summary-stat">
                                                                     <span className="stat-label">รับ</span>
@@ -2971,7 +2971,7 @@ export default function Dealer() {
                                                                 <div className="history-summary-stat">
                                                                     <span className="stat-label">กำไร</span>
                                                                     <span className={`stat-value ${historySummary.outgoingProfit >= 0 ? 'success' : 'danger'}`}>
-                                                                        {historySummary.outgoingProfit >= 0 ? '+' : ''}฿{historySummary.outgoingProfit.toLocaleString()}
+                                                                        {historySummary.outgoingProfit >= 0 ? '+' : ''}฿{Math.round(historySummary.outgoingProfit).toLocaleString()}
                                                                     </span>
                                                                 </div>
                                                             </div>
@@ -2980,7 +2980,7 @@ export default function Dealer() {
                                                     <div className="history-summary-total">
                                                         <span>กำไรรวม</span>
                                                         <span className={`stat-value ${historySummary.totalProfit >= 0 ? 'success' : 'danger'}`}>
-                                                            {historySummary.totalProfit >= 0 ? '+' : ''}฿{historySummary.totalProfit.toLocaleString()}
+                                                            {historySummary.totalProfit >= 0 ? '+' : ''}฿{Math.round(historySummary.totalProfit).toLocaleString()}
                                                         </span>
                                                     </div>
                                                 </div>
