@@ -704,13 +704,14 @@ export default function Dealer() {
     const historySummary = (() => {
         let totalAmount = 0, totalCommission = 0, totalPayout = 0
         let totalTransferred = 0, totalUpstreamComm = 0, totalUpstreamWin = 0
-        let totalEntries = 0
+        let totalEntries = 0, totalTransferredEntries = 0
         filteredHistory.forEach(h => {
             totalEntries += (h.total_entries || 0)
             totalAmount += (h.total_amount || 0)
             totalCommission += (h.total_commission || 0)
             totalPayout += (h.total_payout || 0)
             totalTransferred += (h.transferred_amount || 0)
+            totalTransferredEntries += (h.transferred_entries || 0)
             totalUpstreamComm += (h.upstream_commission || 0)
             totalUpstreamWin += (h.upstream_winnings || 0)
         })
@@ -719,7 +720,7 @@ export default function Dealer() {
         const totalProfit = incomingProfit + outgoingProfit
         return {
             totalEntries, totalAmount, totalCommission, totalPayout,
-            totalTransferred, totalUpstreamComm, totalUpstreamWin,
+            totalTransferred, totalTransferredEntries, totalUpstreamComm, totalUpstreamWin,
             incomingProfit, outgoingProfit, totalProfit,
             hasOutgoing: totalTransferred > 0
         }
@@ -2206,6 +2207,7 @@ export default function Dealer() {
                         total_commission: totalCommission,
                         total_payout: totalPayout,
                         transferred_amount: transferredAmount,
+                        transferred_entries: (transfers || []).length,
                         upstream_commission: upstreamCommission,
                         upstream_winnings: upstreamWinnings,
                         profit: profit
@@ -2952,7 +2954,7 @@ export default function Dealer() {
                                                     </div>
                                                     {historySummary.hasOutgoing && (
                                                         <div className="history-summary-section">
-                                                            <div className="history-summary-section-title">ยอดส่ง</div>
+                                                            <div className="history-summary-section-title">ยอดส่ง ({historySummary.totalTransferredEntries.toLocaleString()})</div>
                                                             <div className="history-summary-stats">
                                                                 <div className="history-summary-stat">
                                                                     <span className="stat-label">ยอดรวม</span>
@@ -3073,7 +3075,7 @@ export default function Dealer() {
                                                                 {/* ยอดส่ง (ตีออก) — only show if there are outgoing transfers */}
                                                                 {hasOutgoing && (
                                                                 <div className="stats-block outgoing">
-                                                                    <div className="stats-block-header">ยอดส่ง</div>
+                                                                    <div className="stats-block-header">ยอดส่ง ({history.transferred_entries || 0})</div>
                                                                     <div className="stats-block-items">
                                                                         <div className="stat-item">
                                                                             <span className="stat-label">ยอดรวม</span>
