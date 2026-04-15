@@ -254,6 +254,7 @@ a:hover {
   cursor: pointer;
   transition: all var(--transition-normal);
   text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .btn-primary {
@@ -276,11 +277,13 @@ a:hover {
 }
 
 .btn-primary:disabled {
-  background: #666;
-  color: #999;
+  background: rgba(212, 175, 55, 0.15) !important;
+  color: rgba(212, 175, 55, 0.5) !important;
+  border: 1px solid rgba(212, 175, 55, 0.25) !important;
   cursor: not-allowed;
-  box-shadow: none;
+  box-shadow: none !important;
   transform: none;
+  opacity: 1 !important;
 }
 
 .btn-secondary {
