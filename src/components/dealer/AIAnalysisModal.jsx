@@ -18,9 +18,11 @@ const RISK_LABELS = {
     critical: 'วิกฤต'
 }
 
-function getRiskLevel(worstPayout, budget) {
-    if (worstPayout <= 0) return 'low'
-    const ratio = worstPayout / budget
+function getRiskLevel(worstNetLoss, budget) {
+    // worstNetLoss is negative when dealer loses money
+    const loss = Math.max(0, -worstNetLoss) // convert to positive loss amount
+    if (loss <= 0) return 'low'
+    const ratio = loss / budget
     if (ratio <= 0.5) return 'low'
     if (ratio <= 1.0) return 'medium'
     if (ratio <= 2.0) return 'high'
@@ -71,7 +73,7 @@ export default function AIAnalysisModal({
                 return
             }
             const pre = res.pre_transfer
-            const risk = getRiskLevel(pre.worst_case_payout, budgetNum)
+            const risk = getRiskLevel(pre.worst_case_net, budgetNum)
             setResult({
                 source: 'formula',
                 data: {

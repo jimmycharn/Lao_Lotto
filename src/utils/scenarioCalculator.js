@@ -831,8 +831,15 @@ export function greedyRecommendations(scenarios, betItems, budget, setPrice = 12
         betItemMap[key] = b
     })
 
+    // Budget means max net LOSS the dealer can absorb.
+    // net = baseProfit - payout, so max acceptable payout = baseProfit + budget
+    // (baseProfit absorbs some payout before it becomes a loss)
+    const baseProfit = betItems.reduce((s, b) => s + b.net_amount, 0)
+        - betItems.reduce((s, b) => s + b.net_commission, 0)
+    const payoutThreshold = baseProfit + budget
+
     const recMap = {} // betKey → { ...recommendation }  (for merging)
-    const maxIterations = 300
+    const maxIterations = 1000
     let iterCount = 0
 
     while (iterCount++ < maxIterations) {
@@ -846,11 +853,13 @@ export function greedyRecommendations(scenarios, betItems, budget, setPrice = 12
             if (payouts[i] > worstPayout) { worstPayout = payouts[i]; worstIdx = i }
         }
 
-        if (worstPayout <= budget) break // All within budget
+        if (worstPayout <= payoutThreshold) break // All within budget (net loss ≤ budget)
 
-        const excess = worstPayout - budget // how much payout we need to reduce
+        const excess = worstPayout - payoutThreshold // how much payout we need to reduce
 
         // Score every bet that contributes to the worst scenario
+        // Weight by how much each scenario exceeds the budget, so massive
+        // over-budget scenarios get priority over barely-over ones.
         const worstScenario = scenarios[worstIdx]
         let bestKey = null
         let bestScore = -1
@@ -864,23 +873,25 @@ export function greedyRecommendations(scenarios, betItems, budget, setPrice = 12
             const entries = payoutIndex[key]
             if (!entries) continue
 
-            // Marginal reduction: how much total over-budget payout this bet reduces
-            // across ALL over-budget scenarios, per unit transferred
-            let totalReduction = 0
+            // Weighted marginal reduction: ppu × excess for each over-budget scenario
+            // This ensures a bet that reduces a 575k-over scenario by 550/unit scores
+            // far higher than a bet that reduces 200 scenarios by 3/unit each
+            let weightedReduction = 0
             for (const entry of entries) {
-                if (payouts[entry.si] > budget) {
-                    totalReduction += entry.ppu // reduction per unit
+                const scenarioExcess = payouts[entry.si] - payoutThreshold
+                if (scenarioExcess > 0) {
+                    weightedReduction += entry.ppu * scenarioExcess
                 }
             }
 
-            // Score = total risk reduction per unit of transfer
-            const score = totalReduction
+            // Score = weighted risk reduction per unit of transfer
+            const score = weightedReduction
             if (score > bestScore) {
                 bestScore = score
                 bestKey = key
                 // PPU in worst scenario specifically
                 const worstEntry = entries.find(e => e.si === worstIdx)
-                bestPPU = worstEntry ? worstEntry.ppu : score
+                bestPPU = worstEntry ? worstEntry.ppu : entries[0]?.ppu || 1
             }
         }
 
@@ -926,7 +937,7 @@ export function greedyRecommendations(scenarios, betItems, budget, setPrice = 12
         } else {
             // Count how many over-budget scenarios this bet appears in
             const entries = payoutIndex[bestKey] || []
-            const overBudgetCount = entries.filter(e => payouts[e.si] > budget).length
+            const overBudgetCount = entries.filter(e => payouts[e.si] > payoutThreshold).length
 
             recMap[bestKey] = {
                 bet_type: betItem?.bet_type || bestKey.split('|')[0],
@@ -946,7 +957,7 @@ export function greedyRecommendations(scenarios, betItems, budget, setPrice = 12
     // Final summary — pass original totals because income & commission don't change when we transfer
     const originalIncome = betItems.reduce((s, b) => s + b.net_amount, 0)
     const originalCommission = betItems.reduce((s, b) => s + b.net_commission, 0)
-    const summary = buildPostSummary(scenarios, payoutIndex, betItems, remaining, budget, setPrice, originalIncome, originalCommission)
+    const summary = buildPostSummary(scenarios, payoutIndex, betItems, remaining, payoutThreshold, setPrice, originalIncome, originalCommission)
 
     return { recommendations, summary }
 }
@@ -1072,7 +1083,7 @@ export function runScenarioAnalysis({ submissions, transfers, userSettingsMap, l
             best_case_payout: preBest.total_payout,
             best_case_number: preBest.winning_number,
             best_case_net: baseProfit - preBest.total_payout,
-            scenarios_over_budget: scenarios.filter(s => s.total_payout > budget).length,
+            scenarios_over_budget: scenarios.filter(s => s.total_payout > baseProfit + budget).length,
             total_scenarios: scenarios.length
         },
         post_transfer: summary,
