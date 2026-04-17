@@ -42,7 +42,7 @@ import {
  * 
  * Stock: primary = 2 digits
  */
-function deriveWinningNumbers(primaryNumber, lotteryType, bottomNumber = '') {
+export function deriveWinningNumbers(primaryNumber, lotteryType, bottomNumber = '') {
     const lt = lotteryType
     const result = {
         w6top: '',      // 6-digit (Thai first prize)
@@ -99,7 +99,7 @@ function deriveWinningNumbers(primaryNumber, lotteryType, bottomNumber = '') {
  * Check if a bet wins against derived winning numbers
  * Returns { wins: boolean, payout: number }
  */
-function checkBetWin(betType, betNumbers, winNums, payoutRate, amount, setPrice, setPrizes) {
+export function checkBetWin(betType, betNumbers, winNums, payoutRate, amount, setPrice, setPrizes) {
     const bt = betType
     const num = betNumbers
     const { w6top, w4set, w3top, w3topSorted, w2top, w2front, w2center, w2bottom } = winNums

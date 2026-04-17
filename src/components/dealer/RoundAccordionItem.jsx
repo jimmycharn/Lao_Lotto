@@ -37,6 +37,7 @@ import {
     calculate4SetPrizes
 } from '../../constants/lotteryTypes'
 import { findMatchingLimit, getEffectivePayoutPercent } from '../../utils/numberLimits'
+import { checkBetWin, deriveWinningNumbers } from '../../utils/scenarioCalculator'
 import DealerWriteSubmissionWrapper from './DealerWriteSubmissionWrapper'
 import AIAnalysisModal from './AIAnalysisModal'
 
@@ -2376,6 +2377,38 @@ export default function RoundAccordionItem({
         return sub.amount * (DEFAULT_PAYOUTS[sub.bet_type] || 1)
     }
 
+    // Check if a submission item is a winner and calculate payout
+    const getWinInfo = (sub) => {
+        if (!round.is_result_announced || !round.winning_numbers) return null
+        const wn = round.winning_numbers
+        const lt = round.lottery_type
+        // Derive primary number based on lottery type
+        let primaryNumber = ''
+        let bottomNumber = ''
+        if (lt === 'thai') {
+            primaryNumber = wn['6_top'] || wn['3_top'] || ''
+            bottomNumber = wn['2_bottom'] || ''
+        } else if (lt === 'lao' || lt === 'hanoi') {
+            primaryNumber = wn['4_set'] || ''
+        } else if (lt === 'stock') {
+            primaryNumber = wn['2_top'] || ''
+        }
+        if (!primaryNumber) return null
+        const winNums = deriveWinningNumbers(primaryNumber, lt, bottomNumber)
+        // Get payout rate from user settings if available
+        const lotteryKey = getLotteryTypeKey(lt)
+        const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
+        const settings = summaryData.userSettings?.[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
+        const payoutRate = settings?.payout !== undefined ? settings.payout : (DEFAULT_PAYOUTS[sub.bet_type] || 1)
+        const currentSetPrice = round?.set_prices?.['4_top'] || 120
+        const setPrizes = settings?.prizes || DEFAULT_4_SET_SETTINGS.prizes
+        const result = checkBetWin(sub.bet_type, sub.numbers, winNums, payoutRate, sub.amount, currentSetPrice, setPrizes)
+        if (result.wins) {
+            return { amount: sub.amount, payout: Math.round(result.payout) }
+        }
+        return null
+    }
+
     const userSummaries = !summaryData.loading && summaryData.submissions.length > 0 ? Object.values(
         summaryData.submissions.reduce((acc, sub) => {
             const userId = sub.user_id
@@ -3812,6 +3845,8 @@ export default function RoundAccordionItem({
                                                         return Object.values(billsByUser).map(userGroup => {
                                                             const userKey = userGroup.user_id || userGroup.user_name
                                                             const isUserExpanded = expandedUserGroups.includes(userKey)
+                                                            // Check if this user has any winning items
+                                                            const userHasWin = round.is_result_announced && round.winning_numbers && userGroup.bills.some(bill => bill.items.some(sub => getWinInfo(sub)))
                                                             // Calculate total items, bills count, total amount and commission based on billDisplayMode and filter
                                                             let filteredBillsCount = 0
                                                             let filteredTotal = 0
@@ -3846,7 +3881,7 @@ export default function RoundAccordionItem({
                                                                     onClick={() => toggleUserGroupExpand(userKey)}
                                                                     style={{ 
                                                                         padding: '0.5rem 0.6rem',
-                                                                        background: 'var(--color-primary)',
+                                                                        background: userHasWin ? 'var(--color-success)' : 'var(--color-primary)',
                                                                         color: '#000',
                                                                         borderRadius: isUserExpanded ? '8px 8px 0 0' : '8px',
                                                                         fontWeight: '600',
@@ -3900,10 +3935,12 @@ export default function RoundAccordionItem({
                                                                         const isExpanded = expandedBills.includes(billKey)
                                                                         const billDate = new Date(bill.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
                                                                         const billTime = new Date(bill.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+                                                                        // Check if this bill has any winning items
+                                                                        const billHasWin = round.is_result_announced && round.winning_numbers && bill.items.some(sub => getWinInfo(sub))
                                                                         
                                                                         return (
                                                                             <div key={bill.bill_id} className={`bill-card-new ${isExpanded ? 'expanded' : ''}`} style={{ 
-                                                                                border: '1px solid var(--color-border)',
+                                                                                border: billHasWin ? '2px solid var(--color-success)' : '1px solid var(--color-border)',
                                                                                 borderRadius: '8px',
                                                                                 background: 'var(--color-surface)',
                                                                                 overflow: 'hidden'
@@ -3913,7 +3950,9 @@ export default function RoundAccordionItem({
                                                                                     onClick={() => toggleBillExpand(billKey)}
                                                                                     style={{ 
                                                                                         padding: '0.6rem 0.75rem',
-                                                                                        background: isExpanded ? 'rgba(255,193,7,0.15)' : 'rgba(255,193,7,0.08)',
+                                                                                        background: billHasWin 
+                                                                                            ? (isExpanded ? 'rgba(0, 210, 106, 0.2)' : 'rgba(0, 210, 106, 0.12)') 
+                                                                                            : (isExpanded ? 'rgba(255,193,7,0.15)' : 'rgba(255,193,7,0.08)'),
                                                                                         cursor: 'pointer',
                                                                                         transition: 'background 0.2s ease'
                                                                                     }}
@@ -4080,56 +4119,86 @@ export default function RoundAccordionItem({
                                                                                                 }
                                                                                             })()
                                                                                             
-                                                                                            return sortedItems.map((item, itemIdx) => (
+                                                                                            return sortedItems.map((item, itemIdx) => {
+                                                                                                // Check if this item is a winner
+                                                                                                const winInfo = (() => {
+                                                                                                    if (!round.is_result_announced || !round.winning_numbers) return null
+                                                                                                    if (billDisplayMode === 'summary' && item.ids) {
+                                                                                                        // Summary mode: check original sub-items
+                                                                                                        const origItems = bill.items.filter(s => item.ids.includes(s.id))
+                                                                                                        let totalPayout = 0
+                                                                                                        let totalWinAmount = 0
+                                                                                                        for (const sub of origItems) {
+                                                                                                            const wi = getWinInfo(sub)
+                                                                                                            if (wi) { totalWinAmount += wi.amount; totalPayout += wi.payout }
+                                                                                                        }
+                                                                                                        return totalPayout > 0 ? { amount: totalWinAmount, payout: totalPayout } : null
+                                                                                                    }
+                                                                                                    return getWinInfo(item)
+                                                                                                })()
+                                                                                                return (
                                                                                                 <div key={item.id} style={{ 
-                                                                                                    display: 'flex', 
-                                                                                                    justifyContent: 'space-between', 
-                                                                                                    alignItems: 'center',
-                                                                                                    padding: '0.5rem 0.75rem',
-                                                                                                    borderBottom: itemIdx < displayItems.length - 1 ? '1px dashed var(--color-border)' : 'none',
-                                                                                                    background: 'var(--color-surface)'
+                                                                                                    borderBottom: itemIdx < sortedItems.length - 1 ? '1px dashed var(--color-border)' : 'none',
+                                                                                                    background: winInfo ? 'rgba(0, 210, 106, 0.08)' : 'var(--color-surface)'
                                                                                                 }}>
-                                                                                                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                                                                                        <span style={{ fontWeight: '600', fontSize: '0.95rem', minWidth: '60px', fontFamily: "'Monaco', 'Menlo', monospace", color: 'var(--color-primary)', letterSpacing: '0.1em' }}>
-                                                                                                            {item.numbers}
-                                                                                                        </span>
-                                                                                                        {billDisplayMode !== 'summary' && (
-                                                                                                            <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                                                                                                                {BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}
+                                                                                                    <div style={{ 
+                                                                                                        display: 'flex', 
+                                                                                                        justifyContent: 'space-between', 
+                                                                                                        alignItems: 'center',
+                                                                                                        padding: '0.5rem 0.75rem'
+                                                                                                    }}>
+                                                                                                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                                                                                            <span style={{ fontWeight: '600', fontSize: '0.95rem', minWidth: '60px', fontFamily: "'Monaco', 'Menlo', monospace", color: winInfo ? 'var(--color-success)' : 'var(--color-primary)', letterSpacing: '0.1em' }}>
+                                                                                                                {item.numbers}
                                                                                                             </span>
-                                                                                                        )}
-                                                                                                        {billDisplayMode === 'summary' && item.count > 1 && (
-                                                                                                            <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
-                                                                                                                ({item.count})
+                                                                                                            {billDisplayMode !== 'summary' && (
+                                                                                                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                                                                                    {BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}
+                                                                                                                </span>
+                                                                                                            )}
+                                                                                                            {billDisplayMode === 'summary' && item.count > 1 && (
+                                                                                                                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                                                                                                                    ({item.count})
+                                                                                                                </span>
+                                                                                                            )}
+                                                                                                        </div>
+                                                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                                                            <span style={{ fontWeight: '500' }}>
+                                                                                                                {round.currency_symbol}{item.amount.toLocaleString()}
                                                                                                             </span>
-                                                                                                        )}
+                                                                                                            {billDisplayMode === 'detailed' && (
+                                                                                                                <span style={{ width: '45px', textAlign: 'right', fontSize: '0.75rem', color: 'var(--color-danger)', flexShrink: 0 }}>
+                                                                                                                    {item.actual_payout_percent != null && item.actual_payout_percent < 100 ? `${item.actual_payout_percent}%` : ''}
+                                                                                                                </span>
+                                                                                                            )}
+                                                                                                            {/* Allow delete for: 1) open rounds, or 2) closed/announced rounds if user hasn't changed password */}
+                                                                                                            {(isOpen || canEditBillForUser(bill.user_id)) && billDisplayMode === 'summary' && (
+                                                                                                                <button 
+                                                                                                                    className="btn btn-icon btn-sm"
+                                                                                                                    onClick={(e) => {
+                                                                                                                        e.stopPropagation()
+                                                                                                                        handleDeleteSingleItem(item.ids || [item.id])
+                                                                                                                    }}
+                                                                                                                    title="ลบ"
+                                                                                                                    style={{ padding: '0.15rem', color: 'var(--color-danger)' }}
+                                                                                                                >
+                                                                                                                    <FiTrash2 size={12} />
+                                                                                                                </button>
+                                                                                                            )}
+                                                                                                        </div>
                                                                                                     </div>
-                                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                                                        <span style={{ fontWeight: '500' }}>
-                                                                                                            {round.currency_symbol}{item.amount.toLocaleString()}
-                                                                                                        </span>
-                                                                                                        {billDisplayMode === 'detailed' && (
-                                                                                                            <span style={{ width: '45px', textAlign: 'right', fontSize: '0.75rem', color: 'var(--color-danger)', flexShrink: 0 }}>
-                                                                                                                {item.actual_payout_percent != null && item.actual_payout_percent < 100 ? `${item.actual_payout_percent}%` : ''}
-                                                                                                            </span>
-                                                                                                        )}
-                                                                                                        {/* Allow delete for: 1) open rounds, or 2) closed/announced rounds if user hasn't changed password */}
-                                                                                                        {(isOpen || canEditBillForUser(bill.user_id)) && billDisplayMode === 'summary' && (
-                                                                                                            <button 
-                                                                                                                className="btn btn-icon btn-sm"
-                                                                                                                onClick={(e) => {
-                                                                                                                    e.stopPropagation()
-                                                                                                                    handleDeleteSingleItem(item.ids || [item.id])
-                                                                                                                }}
-                                                                                                                title="ลบ"
-                                                                                                                style={{ padding: '0.15rem', color: 'var(--color-danger)' }}
-                                                                                                            >
-                                                                                                                <FiTrash2 size={12} />
-                                                                                                            </button>
-                                                                                                        )}
-                                                                                                    </div>
+                                                                                                    {winInfo && (
+                                                                                                        <div style={{ 
+                                                                                                            padding: '0.15rem 0.75rem 0.4rem',
+                                                                                                            fontSize: '0.8rem',
+                                                                                                            fontWeight: '600',
+                                                                                                            color: 'var(--color-success)'
+                                                                                                        }}>
+                                                                                                            ถูก {round.currency_symbol}{winInfo.amount.toLocaleString()} → {round.currency_symbol}{winInfo.payout.toLocaleString()}
+                                                                                                        </div>
+                                                                                                    )}
                                                                                                 </div>
-                                                                                            ))
+                                                                                            )})
                                                                                         })()}
                                                                                     </div>
                                                                                 )}

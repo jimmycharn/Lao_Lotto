@@ -188,8 +188,16 @@ export default function DealerWriteSubmissionWrapper({
             }
         })
 
-        const { error } = await supabase.from('submissions').insert(inserts)
+        const { error, data: insertedData } = await supabase.from('submissions').insert(inserts).select()
         if (error) throw error
+
+        // Verify all entries were inserted
+        const expectedCount = inserts.length
+        const actualCount = insertedData?.length || 0
+        if (actualCount < expectedCount) {
+            console.error(`[PARTIAL INSERT] Expected ${expectedCount} rows but only ${actualCount} were inserted. Bill: ${billId}`)
+            toast.warning(`⚠️ บันทึกได้ ${actualCount}/${expectedCount} รายการ กรุณาตรวจสอบ`)
+        }
 
         // Update pending deduction in background
         if (dealerId) {
@@ -198,7 +206,7 @@ export default function DealerWriteSubmissionWrapper({
             })
         }
 
-        toast.success(`บันทึกโพยให้ ${targetUser.full_name || targetUser.email} สำเร็จ! (${entries.length} รายการ)`)
+        toast.success(`บันทึกโพยให้ ${targetUser.full_name || targetUser.email} สำเร็จ! (${actualCount} รายการ)`)
         
         if (onSuccess) onSuccess()
         // ไม่ปิด modal หลังบันทึก - ให้ผู้ใช้กดปิดเอง

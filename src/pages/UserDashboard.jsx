@@ -1602,13 +1602,24 @@ export default function UserDashboard() {
 
         if (error) throw error
 
+        // Verify all entries were inserted (detect partial insert failures)
+        const expectedCount = submissionsToInsert.length
+        const actualCount = insertedData?.length || 0
+        if (actualCount < expectedCount) {
+            console.error(`[PARTIAL INSERT] Expected ${expectedCount} rows but only ${actualCount} were inserted. Bill: ${billId}`)
+            console.error(`[PARTIAL INSERT] Missing bet_types:`, submissionsToInsert
+                .filter((s, i) => !insertedData?.some(d => d.bet_type === s.bet_type && d.numbers === s.numbers && d.amount === s.amount))
+                .map(s => `${s.bet_type}|${s.numbers}|${s.amount}`))
+            toast.warning(`⚠️ บันทึกได้ ${actualCount}/${expectedCount} รายการ กรุณาตรวจสอบ`)
+        }
+
         // Optimistic update - add new submissions to state immediately
         if (insertedData && insertedData.length > 0) {
             setSubmissions(prev => [...insertedData, ...prev])
         }
 
         // Show success immediately
-        toast.success(`บันทึกโพยสำเร็จ! (${entries.length} รายการ)`)
+        toast.success(`บันทึกโพยสำเร็จ! (${actualCount} รายการ)`)
 
         // Update pending deduction for dealer credit in background
         const dealerIdForCredit = isOwnDealer ? user.id : selectedDealer?.id
