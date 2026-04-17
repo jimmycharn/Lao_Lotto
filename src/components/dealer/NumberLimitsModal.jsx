@@ -137,7 +137,7 @@ export default function NumberLimitsModal({ round, onClose }) {
             toast.warning('กรุณากรอกเลข')
             return
         }
-        if (!newLimit.max_amount && newLimit.limit_type !== 'blocked') {
+        if ((newLimit.max_amount === '' || newLimit.max_amount === null || newLimit.max_amount === undefined) && newLimit.limit_type !== 'blocked') {
             toast.warning('กรุณากรอกวงเงินสูงสุด')
             return
         }
@@ -496,7 +496,7 @@ export default function NumberLimitsModal({ round, onClose }) {
                         <button
                             className="btn btn-primary full-width"
                             onClick={e => { e.target.blur(); handleAddLimit() }}
-                            disabled={saving || !newLimit.numbers || newLimit.selected_bet_types.length === 0 || (newLimit.limit_type !== 'blocked' && (newLimit.max_amount === '' || newLimit.max_amount === null || newLimit.max_amount === undefined))}
+                            disabled={saving || !newLimit.numbers || newLimit.selected_bet_types.length === 0 || (newLimit.limit_type !== 'blocked' && newLimit.max_amount !== 0 && (newLimit.max_amount === '' || newLimit.max_amount === null || newLimit.max_amount === undefined))}
                             style={{ marginTop: '0.3rem' }}
                         >
                             {saving ? 'กำลังบันทึก...' : (
