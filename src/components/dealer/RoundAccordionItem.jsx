@@ -1298,16 +1298,28 @@ export default function RoundAccordionItem({
     }
 
     const baseExcessItems = calculateExcessItems()
-    // Merge AI-recommended items that don't already exist in type-limit excess
+    // Merge AI-recommended items with type-limit excess items.
+    // If AI recommends a higher transfer amount for the same bet, use the AI amount.
     const excessItems = (() => {
         if (aiRecommendedItems.length === 0) return baseExcessItems
-        const existingKeys = new Set(baseExcessItems.map(item => `${item.bet_type}|${item.numbers}`))
-        const merged = [...baseExcessItems]
+        const aiMap = new Map()
         aiRecommendedItems.forEach(aiItem => {
-            if (!existingKeys.has(`${aiItem.bet_type}|${aiItem.numbers}`)) {
-                merged.push(aiItem)
-            }
+            aiMap.set(`${aiItem.bet_type}|${aiItem.numbers}`, aiItem)
         })
+        // Update existing items if AI recommends higher excess
+        const merged = baseExcessItems.map(item => {
+            const key = `${item.bet_type}|${item.numbers}`
+            const aiItem = aiMap.get(key)
+            if (aiItem && aiItem.excess > item.excess) {
+                // Use AI's higher transfer amount, keep base item's metadata
+                aiMap.delete(key) // mark as handled
+                return { ...item, excess: aiItem.excess, isAIRecommended: true, reason: aiItem.reason }
+            }
+            if (aiItem) aiMap.delete(key) // handled (base already >= AI)
+            return item
+        })
+        // Add AI items that don't exist in base at all
+        aiMap.forEach(aiItem => merged.push(aiItem))
         return merged
     })()
 
