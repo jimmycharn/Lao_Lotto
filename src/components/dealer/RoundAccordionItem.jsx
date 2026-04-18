@@ -3845,8 +3845,15 @@ export default function RoundAccordionItem({
                                                         return Object.values(billsByUser).map(userGroup => {
                                                             const userKey = userGroup.user_id || userGroup.user_name
                                                             const isUserExpanded = expandedUserGroups.includes(userKey)
-                                                            // Check if this user has any winning items
-                                                            const userHasWin = round.is_result_announced && round.winning_numbers && userGroup.bills.some(bill => bill.items.some(sub => getWinInfo(sub)))
+                                                            // Check if this user has any winning items and calculate total win payout
+                                                            let userTotalWinPayout = 0
+                                                            if (round.is_result_announced && round.winning_numbers) {
+                                                                userGroup.bills.forEach(bill => bill.items.forEach(sub => {
+                                                                    const wi = getWinInfo(sub)
+                                                                    if (wi) userTotalWinPayout += wi.payout
+                                                                }))
+                                                            }
+                                                            const userHasWin = userTotalWinPayout > 0
                                                             // Calculate total items, bills count, total amount and commission based on billDisplayMode and filter
                                                             let filteredBillsCount = 0
                                                             let filteredTotal = 0
@@ -3889,25 +3896,17 @@ export default function RoundAccordionItem({
                                                                         transition: 'all 0.2s ease'
                                                                     }}
                                                                 >
-                                                                    {/* Row 1: name + N ใบโพย (M) */}
-                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.15rem' }}>
-                                                                        <span style={{ transition: 'transform 0.2s', transform: isUserExpanded ? 'rotate(90deg)' : 'rotate(0deg)', flexShrink: 0 }}>
-                                                                            <FiChevronRight size={14} />
-                                                                        </span>
-                                                                        <span style={{ fontSize: '0.9rem' }}>👤 {userGroup.user_name}</span>
-                                                                        <span style={{ fontSize: '0.8rem', fontWeight: '400', opacity: 0.8 }}>
-                                                                            {filteredBillsCount} ใบโพย ({totalItems})
-                                                                        </span>
-                                                                    </div>
-                                                                    {/* Row 2: amount + commission + delete */}
-                                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: '1.3rem' }}>
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                                            <span>{round.currency_symbol}{(inlineBetTypeFilter === 'all' ? userGroup.total : filteredTotal).toLocaleString()}</span>
+                                                                    {/* Row 1: name + N ใบโพย (M) + delete button */}
+                                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.15rem' }}>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                                            <span style={{ transition: 'transform 0.2s', transform: isUserExpanded ? 'rotate(90deg)' : 'rotate(0deg)', flexShrink: 0 }}>
+                                                                                <FiChevronRight size={14} />
+                                                                            </span>
+                                                                            <span style={{ fontSize: '0.9rem' }}>👤 {userGroup.user_name}</span>
                                                                             <span style={{ fontSize: '0.8rem', fontWeight: '400', opacity: 0.8 }}>
-                                                                                คอม {round.currency_symbol}{Math.round(inlineBetTypeFilter === 'all' ? userGroup.totalCommission : filteredCommission).toLocaleString()}
+                                                                                {filteredBillsCount} ใบโพย ({totalItems})
                                                                             </span>
                                                                         </div>
-                                                                        {/* Allow delete for: 1) open rounds, or 2) closed/announced rounds if user hasn't changed password */}
                                                                         {(isOpen || canEditBillForUser(userGroup.user_id)) && (
                                                                             <button 
                                                                                 className="btn btn-icon btn-sm"
@@ -3925,6 +3924,20 @@ export default function RoundAccordionItem({
                                                                             </button>
                                                                         )}
                                                                     </div>
+                                                                    {/* Row 2: amount + commission + winning total */}
+                                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: '1.3rem' }}>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                                            <span>{round.currency_symbol}{(inlineBetTypeFilter === 'all' ? userGroup.total : filteredTotal).toLocaleString()}</span>
+                                                                            <span style={{ fontSize: '0.8rem', fontWeight: '400', opacity: 0.8 }}>
+                                                                                คอม {round.currency_symbol}{Math.round(inlineBetTypeFilter === 'all' ? userGroup.totalCommission : filteredCommission).toLocaleString()}
+                                                                            </span>
+                                                                        </div>
+                                                                        {userHasWin && (
+                                                                            <span style={{ fontSize: '0.9rem', fontWeight: '700' }}>
+                                                                                ถูก {round.currency_symbol}{userTotalWinPayout.toLocaleString()}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                                 
                                                                 {/* Bills for this user - Collapsible cards */}
@@ -3935,8 +3948,15 @@ export default function RoundAccordionItem({
                                                                         const isExpanded = expandedBills.includes(billKey)
                                                                         const billDate = new Date(bill.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
                                                                         const billTime = new Date(bill.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
-                                                                        // Check if this bill has any winning items
-                                                                        const billHasWin = round.is_result_announced && round.winning_numbers && bill.items.some(sub => getWinInfo(sub))
+                                                                        // Check if this bill has any winning items and calculate total win payout
+                                                                        let billTotalWinPayout = 0
+                                                                        if (round.is_result_announced && round.winning_numbers) {
+                                                                            bill.items.forEach(sub => {
+                                                                                const wi = getWinInfo(sub)
+                                                                                if (wi) billTotalWinPayout += wi.payout
+                                                                            })
+                                                                        }
+                                                                        const billHasWin = billTotalWinPayout > 0
                                                                         
                                                                         return (
                                                                             <div key={bill.bill_id} className={`bill-card-new ${isExpanded ? 'expanded' : ''}`} style={{ 
@@ -3957,54 +3977,38 @@ export default function RoundAccordionItem({
                                                                                         transition: 'background 0.2s ease'
                                                                                     }}
                                                                                 >
-                                                                                    {/* Line 1: [note] date time (N items) ฿✓ */}
-                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
-                                                                                        <span style={{ color: 'var(--color-text-muted)', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', flexShrink: 0 }}>
-                                                                                            <FiChevronRight size={14} />
-                                                                                        </span>
-                                                                                        {bill.bill_note && (
-                                                                                            <span style={{ fontWeight: '600', color: 'var(--color-text)' }}>{bill.bill_note}</span>
-                                                                                        )}
-                                                                                        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
-                                                                                            {billDate} {billTime}
-                                                                                        </span>
-                                                                                        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
-                                                                                            ({(() => {
-                                                                                                let filteredItems = bill.items
-                                                                                                if (inlineBetTypeFilter !== 'all') {
-                                                                                                    filteredItems = filteredItems.filter(item => item.bet_type === inlineBetTypeFilter)
-                                                                                                }
-                                                                                                if (billDisplayMode === 'summary') {
-                                                                                                    const byEntry = {}
-                                                                                                    filteredItems.forEach(item => {
-                                                                                                        const entryId = item.entry_id || item.id
-                                                                                                        if (!byEntry[entryId]) byEntry[entryId] = true
-                                                                                                    })
-                                                                                                    return Object.keys(byEntry).length
-                                                                                                }
-                                                                                                return filteredItems.length
-                                                                                            })()})
-                                                                                        </span>
-                                                                                        {bill.is_paid && <span title="ชำระเงินแล้ว" style={{ color: 'var(--color-success)', fontSize: '0.85rem', fontWeight: '700' }}>฿✓</span>}
-                                                                                    </div>
-                                                                                    {/* Line 2: amount, commission, edit, delete */}
-                                                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: '1.4rem' }}>
-                                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                                                                            <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>
-                                                                                                {round.currency_symbol}{(() => {
-                                                                                                    if (inlineBetTypeFilter === 'all') return bill.total.toLocaleString()
-                                                                                                    return bill.items.filter(item => item.bet_type === inlineBetTypeFilter).reduce((sum, item) => sum + item.amount, 0).toLocaleString()
-                                                                                                })()}
+                                                                                    {/* Line 1: [note] date time (N items) ฿✓ + edit/delete buttons */}
+                                                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
+                                                                                            <span style={{ color: billHasWin ? 'var(--color-success)' : 'var(--color-text-muted)', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', flexShrink: 0 }}>
+                                                                                                <FiChevronRight size={14} />
                                                                                             </span>
-                                                                                            <span style={{ fontSize: '0.8rem', color: 'var(--color-warning)' }}>
-                                                                                                คอม {round.currency_symbol}{(() => {
-                                                                                                    if (inlineBetTypeFilter === 'all') return Math.round(bill.items.reduce((sum, item) => sum + getCommission(item), 0)).toLocaleString()
-                                                                                                    return Math.round(bill.items.filter(item => item.bet_type === inlineBetTypeFilter).reduce((sum, item) => sum + getCommission(item), 0)).toLocaleString()
-                                                                                                })()}
+                                                                                            {bill.bill_note && (
+                                                                                                <span style={{ fontWeight: '600', color: 'var(--color-text)' }}>{bill.bill_note}</span>
+                                                                                            )}
+                                                                                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
+                                                                                                {billDate} {billTime}
                                                                                             </span>
+                                                                                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
+                                                                                                ({(() => {
+                                                                                                    let filteredItems = bill.items
+                                                                                                    if (inlineBetTypeFilter !== 'all') {
+                                                                                                        filteredItems = filteredItems.filter(item => item.bet_type === inlineBetTypeFilter)
+                                                                                                    }
+                                                                                                    if (billDisplayMode === 'summary') {
+                                                                                                        const byEntry = {}
+                                                                                                        filteredItems.forEach(item => {
+                                                                                                            const entryId = item.entry_id || item.id
+                                                                                                            if (!byEntry[entryId]) byEntry[entryId] = true
+                                                                                                        })
+                                                                                                        return Object.keys(byEntry).length
+                                                                                                    }
+                                                                                                    return filteredItems.length
+                                                                                                })()})
+                                                                                            </span>
+                                                                                            {bill.is_paid && <span title="ชำระเงินแล้ว" style={{ color: 'var(--color-success)', fontSize: '0.85rem', fontWeight: '700' }}>฿✓</span>}
                                                                                         </div>
                                                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                                                                                            {/* Allow edit/delete for: 1) open rounds, or 2) closed/announced rounds if user hasn't changed password */}
                                                                                             {(isOpen || canEditBillForUser(bill.user_id)) && (
                                                                                                 <>
                                                                                                     <button 
@@ -4032,6 +4036,28 @@ export default function RoundAccordionItem({
                                                                                                 </>
                                                                                             )}
                                                                                         </div>
+                                                                                    </div>
+                                                                                    {/* Line 2: amount, commission + winning total */}
+                                                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: '1.4rem' }}>
+                                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                                                            <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>
+                                                                                                {round.currency_symbol}{(() => {
+                                                                                                    if (inlineBetTypeFilter === 'all') return bill.total.toLocaleString()
+                                                                                                    return bill.items.filter(item => item.bet_type === inlineBetTypeFilter).reduce((sum, item) => sum + item.amount, 0).toLocaleString()
+                                                                                                })()}
+                                                                                            </span>
+                                                                                            <span style={{ fontSize: '0.8rem', color: 'var(--color-warning)' }}>
+                                                                                                คอม {round.currency_symbol}{(() => {
+                                                                                                    if (inlineBetTypeFilter === 'all') return Math.round(bill.items.reduce((sum, item) => sum + getCommission(item), 0)).toLocaleString()
+                                                                                                    return Math.round(bill.items.filter(item => item.bet_type === inlineBetTypeFilter).reduce((sum, item) => sum + getCommission(item), 0)).toLocaleString()
+                                                                                                })()}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        {billHasWin && (
+                                                                                            <span style={{ fontWeight: '700', color: 'var(--color-success)', fontSize: '0.9rem' }}>
+                                                                                                ถูก {round.currency_symbol}{billTotalWinPayout.toLocaleString()}
+                                                                                            </span>
+                                                                                        )}
                                                                                     </div>
                                                                                 </div>
                                                                                 
