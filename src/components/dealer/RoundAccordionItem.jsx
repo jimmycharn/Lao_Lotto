@@ -130,6 +130,9 @@ export default function RoundAccordionItem({
     // Inline revert transfer states
     const [selectedTransferBatches, setSelectedTransferBatches] = useState({})
     const [revertingTransfer, setRevertingTransfer] = useState(false)
+    // Transfer tab: dealer filter and collapsible batches
+    const [transferDealerFilter, setTransferDealerFilter] = useState('all')
+    const [expandedTransferBatches, setExpandedTransferBatches] = useState([])
     
     // Incoming transfer return states (for receiving dealer)
     const [selectedIncomingItems, setSelectedIncomingItems] = useState({})
@@ -2409,6 +2412,33 @@ export default function RoundAccordionItem({
         return null
     }
 
+    // Check if a transfer item is a winner (uses round's own winning numbers + DEFAULT_PAYOUTS)
+    const getTransferWinInfo = (item) => {
+        if (!round.is_result_announced || !round.winning_numbers) return null
+        const wn = round.winning_numbers
+        const lt = round.lottery_type
+        let primaryNumber = ''
+        let bottomNumber = ''
+        if (lt === 'thai') {
+            primaryNumber = wn['6_top'] || wn['3_top'] || ''
+            bottomNumber = wn['2_bottom'] || ''
+        } else if (lt === 'lao' || lt === 'hanoi') {
+            primaryNumber = wn['4_set'] || ''
+        } else if (lt === 'stock') {
+            primaryNumber = wn['2_top'] || ''
+        }
+        if (!primaryNumber) return null
+        const winNums = deriveWinningNumbers(primaryNumber, lt, bottomNumber)
+        const payoutRate = DEFAULT_PAYOUTS[item.bet_type] || 1
+        const currentSetPrice = round?.set_prices?.['4_top'] || 120
+        const setPrizes = DEFAULT_4_SET_SETTINGS.prizes
+        const result = checkBetWin(item.bet_type, item.numbers, winNums, payoutRate, item.amount, currentSetPrice, setPrizes)
+        if (result.wins) {
+            return { amount: item.amount, payout: Math.round(result.payout) }
+        }
+        return null
+    }
+
     const userSummaries = !summaryData.loading && summaryData.submissions.length > 0 ? Object.values(
         summaryData.submissions.reduce((acc, sub) => {
             const userId = sub.user_id
@@ -4595,11 +4625,32 @@ export default function RoundAccordionItem({
                                         const filteredTransfers = inlineTransfers.filter(t => {
                                             if (inlineBetTypeFilter !== 'all' && t.bet_type !== inlineBetTypeFilter) return false
                                             if (inlineSearch && !t.numbers.includes(inlineSearch)) return false
+                                            if (transferDealerFilter !== 'all' && t.target_dealer_name !== transferDealerFilter) return false
                                             return true
                                         })
 
+                                        // Get unique dealer names for dropdown
+                                        const dealerNames = [...new Set(inlineTransfers.map(t => t.target_dealer_name).filter(Boolean))]
+
                                         return (
                                             <div className="inline-tab-content">
+                                                {/* Dealer filter dropdown */}
+                                                {dealerNames.length > 0 && (
+                                                    <div style={{ marginBottom: '0.75rem' }}>
+                                                        <select
+                                                            value={transferDealerFilter}
+                                                            onChange={e => setTransferDealerFilter(e.target.value)}
+                                                            className="form-input"
+                                                            style={{ fontSize: '0.85rem', padding: '0.4rem 0.6rem' }}
+                                                        >
+                                                            <option value="all">เจ้ามือทั้งหมด ({dealerNames.length})</option>
+                                                            {dealerNames.map(name => (
+                                                                <option key={name} value={name}>{name}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                )}
+
                                                 {filteredTransfers.length === 0 ? (
                                                     <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
                                                         <p style={{ color: 'var(--color-text-muted)' }}>{inlineTransfers.length === 0 ? 'ยังไม่มียอดตีออก' : 'ไม่พบรายการที่ค้นหา'}</p>
@@ -4615,7 +4666,7 @@ export default function RoundAccordionItem({
                                                         // Track returned vs active items separately
                                                         if (itemStatus === 'returned') {
                                                             batches[batchId].returnedItems.push(t)
-                                                            batches[batchId].status = 'returned' // Mark batch as having returned items
+                                                            batches[batchId].status = 'returned'
                                                         } else {
                                                             batches[batchId].activeItems.push(t)
                                                         }
@@ -4627,7 +4678,7 @@ export default function RoundAccordionItem({
                                                     const revertableBatches = batchList.filter(b => !b.is_linked && b.status !== 'returned')
                                                     const revertableBatchIds = revertableBatches.map(b => b.id)
                                                     
-                                                    // Batches with returned items (use returnedItems array, not all items)
+                                                    // Batches with returned items
                                                     const batchesWithReturns = batchList.filter(b => (b.returnedItems?.length || 0) > 0)
                                                     const returnedItems = batchesWithReturns.flatMap(b => b.returnedItems || [])
 
@@ -4686,7 +4737,7 @@ export default function RoundAccordionItem({
                                                                 </div>
                                                             )}
 
-                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                                                 {batchList.map(batch => {
                                                                     const isSelected = selectedTransferBatches[batch.id]
                                                                     const returnedCount = batch.returnedItems?.length || 0
@@ -4695,68 +4746,133 @@ export default function RoundAccordionItem({
                                                                     const allReturned = activeCount === 0 && hasReturned
                                                                     const partialReturned = hasReturned && activeCount > 0
                                                                     const canRevert = !batch.is_linked && !allReturned
-                                                                    // Get commission for this batch's dealer
-                                                                    const batchDealerId = batch.items[0]?.upstream_dealer_id
-                                                                    const batchCommission = batchDealerId ? inlineTransferCommissions[batchDealerId]?.totalCommission || 0 : 0
+                                                                    const isBatchExpanded = expandedTransferBatches.includes(batch.id)
+                                                                    // Calculate per-batch commission from this batch's items
+                                                                    const batchDealerKey = batch.items[0]?.upstream_dealer_id || `external_${batch.target_dealer_name || 'ไม่ระบุ'}`
+                                                                    const dealerCommData = inlineTransferCommissions[batchDealerKey]
+                                                                    let batchCommission = 0
+                                                                    if (dealerCommData && dealerCommData.totalAmount > 0) {
+                                                                        // Calculate batch commission proportionally from batch items
+                                                                        const lotteryKey_c = getLotteryTypeKey(round.lottery_type)
+                                                                        batch.items.forEach(item => {
+                                                                            if (item.bet_type === '4_set') {
+                                                                                const setPrice_c = round?.set_prices?.['4_top'] || 120
+                                                                                const numSets_c = Math.floor((item.amount || 0) / setPrice_c)
+                                                                                const commRate_c = DEFAULT_4_SET_SETTINGS.commission || 25
+                                                                                batchCommission += numSets_c * commRate_c
+                                                                            } else {
+                                                                                const commRate_c = DEFAULT_COMMISSIONS[item.bet_type] || 15
+                                                                                batchCommission += (item.amount || 0) * (commRate_c / 100)
+                                                                            }
+                                                                        })
+                                                                        // Scale to match actual dealer commission (accounts for custom rates)
+                                                                        const defaultDealerTotal = dealerCommData.totalAmount > 0 ? (() => {
+                                                                            let defComm = 0
+                                                                            inlineTransfers.filter(t => (t.upstream_dealer_id || `external_${t.target_dealer_name || 'ไม่ระบุ'}`) === batchDealerKey).forEach(t => {
+                                                                                if (t.bet_type === '4_set') {
+                                                                                    const sp = round?.set_prices?.['4_top'] || 120
+                                                                                    defComm += Math.floor((t.amount || 0) / sp) * (DEFAULT_4_SET_SETTINGS.commission || 25)
+                                                                                } else {
+                                                                                    defComm += (t.amount || 0) * ((DEFAULT_COMMISSIONS[t.bet_type] || 15) / 100)
+                                                                                }
+                                                                            })
+                                                                            return defComm
+                                                                        })() : 0
+                                                                        if (defaultDealerTotal > 0) {
+                                                                            batchCommission = batchCommission * (dealerCommData.totalCommission / defaultDealerTotal)
+                                                                        }
+                                                                    }
+                                                                    // Calculate batch winning total
+                                                                    let batchWinPayout = 0
+                                                                    if (isAnnounced) {
+                                                                        batch.items.forEach(item => {
+                                                                            if ((item.status || 'active') !== 'returned') {
+                                                                                const wi = getTransferWinInfo(item)
+                                                                                if (wi) batchWinPayout += wi.payout
+                                                                            }
+                                                                        })
+                                                                    }
+                                                                    const batchHasWin = batchWinPayout > 0
+                                                                    // Header background color
+                                                                    const headerBg = allReturned ? 'rgba(239, 68, 68, 0.15)' 
+                                                                        : partialReturned ? 'rgba(255, 193, 7, 0.15)' 
+                                                                        : isSelected ? 'rgba(239, 68, 68, 0.15)' 
+                                                                        : batchHasWin ? (isBatchExpanded ? 'rgba(0, 210, 106, 0.2)' : 'rgba(0, 210, 106, 0.12)')
+                                                                        : batch.is_linked ? 'rgba(16, 185, 129, 0.1)' 
+                                                                        : 'rgba(255, 193, 7, 0.1)'
                                                                     return (
-                                                                        <div key={batch.id} onClick={() => canRevert && toggleTransferBatch(batch.id)} style={{ background: allReturned ? 'rgba(239, 68, 68, 0.05)' : isSelected ? 'rgba(239, 68, 68, 0.1)' : 'var(--color-surface)', border: allReturned ? '2px dashed var(--color-danger)' : partialReturned ? '2px solid var(--color-warning)' : isSelected ? '2px solid var(--color-danger)' : '1px solid var(--color-border)', borderRadius: '8px', overflow: 'hidden', cursor: canRevert ? 'pointer' : 'default', transition: 'all 0.2s ease', opacity: allReturned ? 0.7 : batch.is_linked ? 0.85 : 1 }}>
-                                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', background: allReturned ? 'rgba(239, 68, 68, 0.15)' : partialReturned ? 'rgba(255, 193, 7, 0.15)' : isSelected ? 'rgba(239, 68, 68, 0.15)' : batch.is_linked ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255, 193, 7, 0.1)', borderBottom: '1px solid var(--color-border)' }}>
-                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                                                    {allReturned ? (
-                                                                                        <FiRotateCcw style={{ color: 'var(--color-danger)', fontSize: '1.25rem' }} />
-                                                                                    ) : canRevert ? (
-                                                                                        <input type="checkbox" checked={isSelected || false} onChange={() => { }} style={{ width: '18px', height: '18px', accentColor: 'var(--color-danger)' }} />
-                                                                                    ) : (
-                                                                                        <FiCheck style={{ color: 'var(--color-success)', fontSize: '1.25rem' }} />
-                                                                                    )}
-                                                                                    <div>
-                                                                                        <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                        <div key={batch.id} style={{ 
+                                                                            background: allReturned ? 'rgba(239, 68, 68, 0.05)' : isSelected ? 'rgba(239, 68, 68, 0.1)' : 'var(--color-surface)', 
+                                                                            border: batchHasWin ? '2px solid var(--color-success)' : allReturned ? '2px dashed var(--color-danger)' : partialReturned ? '2px solid var(--color-warning)' : isSelected ? '2px solid var(--color-danger)' : '1px solid var(--color-border)', 
+                                                                            borderRadius: '8px', overflow: 'hidden', transition: 'all 0.2s ease', opacity: allReturned ? 0.7 : 1 
+                                                                        }}>
+                                                                            {/* Card header - clickable to expand/collapse */}
+                                                                            <div 
+                                                                                onClick={() => setExpandedTransferBatches(prev => prev.includes(batch.id) ? prev.filter(id => id !== batch.id) : [...prev, batch.id])}
+                                                                                style={{ padding: '0.6rem 0.75rem', background: headerBg, cursor: 'pointer', transition: 'background 0.2s ease' }}
+                                                                            >
+                                                                                {/* Row 1: name + datetime + (count) + copy button */}
+                                                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
+                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', flex: 1, minWidth: 0 }}>
+                                                                                        <span style={{ color: batchHasWin ? 'var(--color-success)' : 'var(--color-text-muted)', transition: 'transform 0.2s', transform: isBatchExpanded ? 'rotate(90deg)' : 'rotate(0deg)', flexShrink: 0 }}>
+                                                                                            <FiChevronRight size={14} />
+                                                                                        </span>
+                                                                                        {canRevert && (
+                                                                                            <input type="checkbox" checked={isSelected || false} onChange={(e) => { e.stopPropagation(); toggleTransferBatch(batch.id) }} style={{ width: '16px', height: '16px', accentColor: 'var(--color-danger)', flexShrink: 0 }} />
+                                                                                        )}
+                                                                                        <span style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                                                             {batch.target_dealer_name}
-                                                                                            {allReturned && <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.4rem', background: 'var(--color-danger)', color: 'white', borderRadius: '4px' }}>ถูกคืนทั้งหมด</span>}
-                                                                                            {partialReturned && <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.4rem', background: 'var(--color-warning)', color: 'black', borderRadius: '4px' }}>ถูกคืนบางส่วน ({batch.returnedItems.length}/{batch.items.length})</span>}
-                                                                                            {batch.is_linked && !hasReturned && <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.4rem', background: 'var(--color-success)', color: 'white', borderRadius: '4px' }}>ในระบบ</span>}
-                                                                                        </div>
-                                                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                        </span>
+                                                                                        {allReturned && <span style={{ fontSize: '0.6rem', padding: '0.1rem 0.3rem', background: 'var(--color-danger)', color: 'white', borderRadius: '4px', flexShrink: 0 }}>คืนแล้ว</span>}
+                                                                                        {partialReturned && <span style={{ fontSize: '0.6rem', padding: '0.1rem 0.3rem', background: 'var(--color-warning)', color: 'black', borderRadius: '4px', flexShrink: 0 }}>คืนบางส่วน</span>}
+                                                                                        {batch.is_linked && !hasReturned && <span style={{ fontSize: '0.6rem', padding: '0.1rem 0.3rem', background: 'var(--color-success)', color: 'white', borderRadius: '4px', flexShrink: 0 }}>ในระบบ</span>}
+                                                                                        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', flexShrink: 0 }}>
                                                                                             {new Date(batch.created_at).toLocaleString('th-TH', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                                                                                            {allReturned && <span style={{ marginLeft: '0.5rem', color: 'var(--color-danger)' }}>• เจ้ามือปลายทางคืนมาทั้งหมด</span>}
-                                                                                            {partialReturned && <span style={{ marginLeft: '0.5rem', color: 'var(--color-warning)' }}>• มีบางรายการถูกคืน</span>}
-                                                                                            {batch.is_linked && !hasReturned && <span style={{ marginLeft: '0.5rem', color: 'var(--color-success)' }}>• รอเจ้ามือปลายทางคืน</span>}
-                                                                                        </div>
+                                                                                        </span>
+                                                                                        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', flexShrink: 0 }}>({batch.items.length})</span>
                                                                                     </div>
+                                                                                    <button className="btn btn-sm btn-outline" onClick={(e) => { e.stopPropagation(); handleCopySingleBatch(batch); }} title="คัดลอกรายการนี้" style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem', flexShrink: 0 }}><FiCopy /></button>
                                                                                 </div>
-                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                                                    {batchCommission > 0 && (
-                                                                                        <div style={{ textAlign: 'right', padding: '0.25rem 0.5rem', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '4px' }}>
-                                                                                            <div style={{ fontWeight: 600, color: 'var(--color-success)', fontSize: '0.85rem' }}>+{round.currency_symbol}{batchCommission.toLocaleString()}</div>
-                                                                                            <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>ค่าคอม</div>
-                                                                                        </div>
-                                                                                    )}
-                                                                                    <div style={{ textAlign: 'right' }}>
-                                                                                        <div style={{ fontWeight: 600, color: allReturned ? 'var(--color-danger)' : 'var(--color-warning)' }}>{round.currency_symbol}{batch.totalAmount.toLocaleString()}</div>
-                                                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{batch.items.length} รายการ</div>
+                                                                                {/* Row 2: amount + commission + winning total */}
+                                                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: '1.4rem' }}>
+                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                                                        <span style={{ fontWeight: 600, fontSize: '0.95rem', color: allReturned ? 'var(--color-danger)' : 'var(--color-warning)' }}>
+                                                                                            {round.currency_symbol}{batch.totalAmount.toLocaleString()}
+                                                                                        </span>
+                                                                                        {batchCommission > 0 && (
+                                                                                            <span style={{ fontSize: '0.8rem', color: 'var(--color-success)' }}>
+                                                                                                คอม {round.currency_symbol}{Math.round(batchCommission).toLocaleString()}
+                                                                                            </span>
+                                                                                        )}
                                                                                     </div>
-                                                                                    {hasReturned ? (
+                                                                                    {batchHasWin && (
+                                                                                        <span style={{ fontWeight: 700, color: 'var(--color-success)', fontSize: '0.9rem' }}>
+                                                                                            ถูก {round.currency_symbol}{batchWinPayout.toLocaleString()}
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {hasReturned && !batchHasWin && (
                                                                                         <button 
                                                                                             className="btn btn-sm btn-success" 
                                                                                             onClick={(e) => { e.stopPropagation(); handleReclaimReturnedTransfers(batch.returnedItems || []); }} 
                                                                                             title="เอาคืนรายการที่ถูกคืน" 
-                                                                                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                                                                                            style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem' }}
                                                                                             disabled={revertingTransfer}
                                                                                         >
                                                                                             <FiRotateCcw /> เอาคืน ({returnedCount})
                                                                                         </button>
-                                                                                    ) : (
-                                                                                        <button className="btn btn-sm btn-outline" onClick={(e) => { e.stopPropagation(); handleCopySingleBatch(batch); }} title="คัดลอกรายการนี้" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}><FiCopy /></button>
                                                                                     )}
                                                                                 </div>
                                                                             </div>
-                                                                            <div style={{ padding: '0.5rem' }}>
+
+                                                                            {/* Collapsible items */}
+                                                                            {isBatchExpanded && (
+                                                                            <div style={{ borderTop: '1px solid var(--color-border)' }}>
                                                                                 {/* Table Header */}
                                                                                 <div style={{ 
                                                                                     display: 'flex', 
                                                                                     justifyContent: 'space-between', 
                                                                                     alignItems: 'center',
-                                                                                    padding: '0.4rem 0.5rem',
+                                                                                    padding: '0.4rem 0.75rem',
                                                                                     background: 'var(--color-surface-light)',
                                                                                     borderBottom: '1px solid var(--color-border)',
                                                                                     fontSize: '0.7rem',
@@ -4773,29 +4889,43 @@ export default function RoundAccordionItem({
                                                                                     const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
                                                                                     const setPrice = round?.set_prices?.['4_top'] || 120
 
-                                                                                    return batch.items.map(item => {
+                                                                                    return batch.items.map((item, itemIdx) => {
                                                                                         const itemReturned = (item.status || 'active') === 'returned'
                                                                                         const isSet4Digit = item.bet_type === '4_set' || item.bet_type === '4_top'
                                                                                         const setCount = isSetBasedLottery && isSet4Digit ? Math.ceil(item.amount / setPrice) : 0
+                                                                                        const itemWin = !itemReturned ? getTransferWinInfo(item) : null
 
                                                                                         return (
-                                                                                            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', borderBottom: '1px solid var(--color-border)', textDecoration: itemReturned ? 'line-through' : 'none', opacity: itemReturned ? 0.6 : 1, background: itemReturned ? 'rgba(239, 68, 68, 0.05)' : 'transparent' }}>
-                                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                                                                    <span style={{ fontWeight: 600, minWidth: '50px', fontFamily: "'Monaco', 'Menlo', monospace", color: itemReturned ? 'var(--color-danger)' : 'var(--color-primary)', letterSpacing: '0.05em' }}>{item.numbers}</span>
-                                                                                                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}</span>
-                                                                                                    {itemReturned && <span style={{ fontSize: '0.6rem', padding: '0.1rem 0.3rem', background: 'var(--color-danger)', color: 'white', borderRadius: '3px' }}>คืน</span>}
+                                                                                            <div key={item.id} style={{ 
+                                                                                                borderBottom: itemIdx < batch.items.length - 1 ? '1px solid var(--color-border)' : 'none', 
+                                                                                                textDecoration: itemReturned ? 'line-through' : 'none', 
+                                                                                                opacity: itemReturned ? 0.6 : 1, 
+                                                                                                background: itemWin ? 'rgba(0, 210, 106, 0.08)' : itemReturned ? 'rgba(239, 68, 68, 0.05)' : 'transparent' 
+                                                                                            }}>
+                                                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem' }}>
+                                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                                                                        <span style={{ fontWeight: 600, minWidth: '50px', fontFamily: "'Monaco', 'Menlo', monospace", color: itemWin ? 'var(--color-success)' : itemReturned ? 'var(--color-danger)' : 'var(--color-primary)', letterSpacing: '0.05em' }}>{item.numbers}</span>
+                                                                                                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}</span>
+                                                                                                        {itemReturned && <span style={{ fontSize: '0.6rem', padding: '0.1rem 0.3rem', background: 'var(--color-danger)', color: 'white', borderRadius: '3px' }}>คืน</span>}
+                                                                                                    </div>
+                                                                                                    <div style={{ textAlign: 'right' }}>
+                                                                                                        <span style={{ color: itemReturned ? 'var(--color-danger)' : 'inherit' }}>{round.currency_symbol}{item.amount?.toLocaleString()}</span>
+                                                                                                        {isSetBasedLottery && isSet4Digit && setCount > 0 && (
+                                                                                                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>({setCount} ชุด)</div>
+                                                                                                        )}
+                                                                                                    </div>
                                                                                                 </div>
-                                                                                                <div style={{ textAlign: 'right' }}>
-                                                                                                    <span style={{ color: itemReturned ? 'var(--color-danger)' : 'inherit' }}>{round.currency_symbol}{item.amount?.toLocaleString()}</span>
-                                                                                                    {isSetBasedLottery && isSet4Digit && setCount > 0 && (
-                                                                                                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>({setCount} ชุด)</div>
-                                                                                                    )}
-                                                                                                </div>
+                                                                                                {itemWin && (
+                                                                                                    <div style={{ padding: '0.15rem 0.75rem 0.4rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-success)' }}>
+                                                                                                        ถูก {round.currency_symbol}{itemWin.amount.toLocaleString()} → {round.currency_symbol}{itemWin.payout.toLocaleString()}
+                                                                                                    </div>
+                                                                                                )}
                                                                                             </div>
                                                                                         )
                                                                                     })
                                                                                 })()}
                                                                             </div>
+                                                                            )}
                                                                         </div>
                                                                     )
                                                                 })}
