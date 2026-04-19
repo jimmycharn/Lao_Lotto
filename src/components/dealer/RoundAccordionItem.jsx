@@ -3487,74 +3487,84 @@ export default function RoundAccordionItem({
                                             </div>
 
                                             {/* แสดงผลแบบตาราง 2 แถว: หัวข้อ + ค่า */}
-                                            <div style={{ 
-                                                display: 'grid', 
-                                                gridTemplateColumns: 'repeat(4, 1fr)', 
-                                                gap: '0.25rem 0.5rem',
-                                                background: 'rgba(255,255,255,0.03)',
-                                                borderRadius: 'var(--radius-md)',
-                                                padding: '0.5rem 0.75rem',
-                                                marginBottom: '0.5rem'
-                                            }}>
-                                                {/* แถวหัวข้อ */}
-                                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>รายการ</span>
-                                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ยอดรวม</span>
-                                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ค่าคอม</span>
-                                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', textAlign: 'right' }}>เหลือ</span>
-                                                {/* แถวค่า */}
-                                                <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>{(() => {
-                                                    let filtered = inlineSubmissions.filter(s => {
-                                                        const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
-                                                        if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
-                                                        if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
-                                                        if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
-                                                        return true
-                                                    })
-                                                    // Use billDisplayMode when in bills view, otherwise use displayMode
-                                                    const currentMode = totalViewMode === 'bills' ? billDisplayMode : displayMode
-                                                    if (currentMode === 'summary') {
-                                                        // Count unique entry_ids
-                                                        const entries = new Set()
-                                                        filtered.forEach(s => entries.add(s.entry_id || s.id))
-                                                        return entries.size
-                                                    } else if (currentMode === 'grouped') {
-                                                        const grouped = {}
-                                                        filtered.forEach(s => {
-                                                            const normalizedNumbers = normalizeNumber(s.numbers, s.bet_type)
-                                                            const key = `${normalizedNumbers}|${s.bet_type}`
-                                                            if (!grouped[key]) grouped[key] = true
-                                                        })
-                                                        return Object.keys(grouped).length
-                                                    }
-                                                    return filtered.length
-                                                })()}</span>
-                                                <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>{round.currency_symbol}{inlineSubmissions.filter(s => {
+                                            {(() => {
+                                                const filtered = inlineSubmissions.filter(s => {
                                                     const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
                                                     if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
                                                     if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
                                                     if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
                                                     return true
-                                                }).reduce((sum, s) => sum + s.amount, 0).toLocaleString()}</span>
-                                                <span style={{ fontWeight: '600', fontSize: '0.9rem', color: 'var(--color-warning)' }}>{round.currency_symbol}{Math.round(inlineSubmissions.filter(s => {
-                                                    const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
-                                                    if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
-                                                    if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
-                                                    if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
-                                                    return true
-                                                }).reduce((sum, s) => sum + getCommission(s), 0)).toLocaleString()}</span>
-                                                <span style={{ fontWeight: '600', fontSize: '0.9rem', color: 'var(--color-success)', textAlign: 'right' }}>{(() => {
-                                                    const filtered = inlineSubmissions.filter(s => {
-                                                        const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
-                                                        if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
-                                                        if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
-                                                        if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
-                                                        return true
+                                                })
+                                                const currentMode = totalViewMode === 'bills' ? billDisplayMode : displayMode
+                                                let itemCount = filtered.length
+                                                if (currentMode === 'summary') {
+                                                    const entries = new Set()
+                                                    filtered.forEach(s => entries.add(s.entry_id || s.id))
+                                                    itemCount = entries.size
+                                                } else if (currentMode === 'grouped') {
+                                                    const grouped = {}
+                                                    filtered.forEach(s => {
+                                                        const key = `${normalizeNumber(s.numbers, s.bet_type)}|${s.bet_type}`
+                                                        if (!grouped[key]) grouped[key] = true
                                                     })
-                                                    const totalAmount = filtered.reduce((sum, s) => sum + s.amount, 0)
-                                                    const totalCommission = filtered.reduce((sum, s) => sum + getCommission(s), 0)
-                                                    return `${round.currency_symbol}${Math.round(totalAmount - totalCommission).toLocaleString()}`
-                                                })()}</span>
-                                            </div>
+                                                    itemCount = Object.keys(grouped).length
+                                                }
+                                                const totalAmount = filtered.reduce((sum, s) => sum + s.amount, 0)
+                                                const totalCommission = filtered.reduce((sum, s) => sum + getCommission(s), 0)
+                                                let totalPayout = 0
+                                                if (isAnnounced) {
+                                                    filtered.forEach(s => {
+                                                        const wi = getWinInfo(s)
+                                                        if (wi) totalPayout += wi.payout
+                                                    })
+                                                }
+                                                const profit = totalAmount - totalCommission - totalPayout
+                                                const showPayoutCol = isAnnounced
+                                                const cellStyle = { display: 'flex', flexDirection: 'column', gap: '0.15rem', minWidth: 0 }
+                                                const lblStyle = { fontSize: '0.72rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
+                                                const valStyle = { fontSize: '0.95rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
+                                                return (
+                                                    <div style={{ 
+                                                        display: 'grid', 
+                                                        gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', 
+                                                        gap: '0.5rem 0.75rem',
+                                                        background: 'var(--color-surface)',
+                                                        border: '1px solid var(--color-border)',
+                                                        borderRadius: 'var(--radius-md)',
+                                                        padding: '0.75rem 1rem',
+                                                        marginBottom: '0.75rem'
+                                                    }}>
+                                                        <div style={cellStyle}>
+                                                            <span style={lblStyle}>รายการ</span>
+                                                            <span style={{ ...valStyle, color: 'var(--color-text)' }}>{itemCount}</span>
+                                                        </div>
+                                                        <div style={cellStyle}>
+                                                            <span style={lblStyle}>ยอดรวม</span>
+                                                            <span style={{ ...valStyle, color: 'var(--color-success)' }}>+{round.currency_symbol}{Math.round(totalAmount).toLocaleString()}</span>
+                                                        </div>
+                                                        <div style={cellStyle}>
+                                                            <span style={lblStyle}>ค่าคอม</span>
+                                                            <span style={{ ...valStyle, color: 'var(--color-danger)' }}>-{round.currency_symbol}{Math.round(totalCommission).toLocaleString()}</span>
+                                                        </div>
+                                                        <div style={cellStyle}>
+                                                            <span style={lblStyle}>เหลือรับ</span>
+                                                            <span style={{ ...valStyle, color: 'var(--color-success)' }}>+{round.currency_symbol}{Math.round(totalAmount - totalCommission).toLocaleString()}</span>
+                                                        </div>
+                                                        {showPayoutCol && (
+                                                            <div style={cellStyle}>
+                                                                <span style={lblStyle}>จ่าย</span>
+                                                                <span style={{ ...valStyle, color: 'var(--color-danger)' }}>-{round.currency_symbol}{Math.round(totalPayout).toLocaleString()}</span>
+                                                            </div>
+                                                        )}
+                                                        <div style={cellStyle}>
+                                                            <span style={lblStyle}>กำไร</span>
+                                                            <span style={{ ...valStyle, color: profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                                                {profit >= 0 ? '+' : '-'}{round.currency_symbol}{Math.round(Math.abs(profit)).toLocaleString()}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })()}
 
                                             {/* View Mode: ทั้งหมด (รวมเลข) */}
                                             {totalViewMode === 'all' && (
@@ -3918,7 +3928,7 @@ export default function RoundAccordionItem({
                                                                     onClick={() => toggleUserGroupExpand(userKey)}
                                                                     style={{ 
                                                                         padding: '0.5rem 0.6rem',
-                                                                        background: userHasWin ? 'var(--color-success)' : 'var(--color-primary)',
+                                                                        background: userHasWin ? '#a8c090' : 'var(--color-primary)',
                                                                         color: '#000',
                                                                         borderRadius: isUserExpanded ? '8px 8px 0 0' : '8px',
                                                                         fontWeight: '600',
@@ -3954,20 +3964,39 @@ export default function RoundAccordionItem({
                                                                             </button>
                                                                         )}
                                                                     </div>
-                                                                    {/* Row 2: amount + commission + winning total */}
-                                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: '1.3rem' }}>
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                                            <span>{round.currency_symbol}{(inlineBetTypeFilter === 'all' ? userGroup.total : filteredTotal).toLocaleString()}</span>
-                                                                            <span style={{ fontSize: '0.8rem', fontWeight: '400', opacity: 0.8 }}>
-                                                                                คอม {round.currency_symbol}{Math.round(inlineBetTypeFilter === 'all' ? userGroup.totalCommission : filteredCommission).toLocaleString()}
-                                                                            </span>
-                                                                        </div>
-                                                                        {userHasWin && (
-                                                                            <span style={{ fontSize: '0.9rem', fontWeight: '700' }}>
-                                                                                ถูก {round.currency_symbol}{userTotalWinPayout.toLocaleString()}
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
+                                                                    {/* Row 2: amount + commission + (leftover or winning total) */}
+                                                                    {(() => {
+                                                                        const userAmount = inlineBetTypeFilter === 'all' ? userGroup.total : filteredTotal
+                                                                        const userCom = inlineBetTypeFilter === 'all' ? userGroup.totalCommission : filteredCommission
+                                                                        const userLeftover = userAmount - userCom
+                                                                        const userProfit = userAmount - userCom - userTotalWinPayout
+                                                                        return (
+                                                                            <>
+                                                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: '1.3rem' }}>
+                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                                                        <span>{round.currency_symbol}{userAmount.toLocaleString()}</span>
+                                                                                        <span style={{ fontSize: '0.8rem', fontWeight: '400', opacity: 0.8 }}>
+                                                                                            คอม {round.currency_symbol}{Math.round(userCom).toLocaleString()}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <span style={{ fontSize: '0.85rem', fontWeight: '600' }}>
+                                                                                        เหลือ {round.currency_symbol}{Math.round(userLeftover).toLocaleString()}
+                                                                                    </span>
+                                                                                </div>
+                                                                                {/* Row 3: payout & profit for winning users */}
+                                                                                {userHasWin && (
+                                                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: '1.3rem', marginTop: '0.15rem' }}>
+                                                                                        <span style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--color-danger)' }}>
+                                                                                            จ่าย -{round.currency_symbol}{Math.round(userTotalWinPayout).toLocaleString()}
+                                                                                        </span>
+                                                                                        <span style={{ fontSize: '0.9rem', fontWeight: '700', color: userProfit >= 0 ? '#000' : 'var(--color-danger)' }}>
+                                                                                            กำไร {userProfit >= 0 ? '+' : '-'}{round.currency_symbol}{Math.round(Math.abs(userProfit)).toLocaleString()}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                )}
+                                                                            </>
+                                                                        )
+                                                                    })()}
                                                                 </div>
                                                                 
                                                                 {/* Bills for this user - Collapsible cards */}
@@ -4682,15 +4711,94 @@ export default function RoundAccordionItem({
                                                     const batchesWithReturns = batchList.filter(b => (b.returnedItems?.length || 0) > 0)
                                                     const returnedItems = batchesWithReturns.flatMap(b => b.returnedItems || [])
 
-                                                    // Calculate total commission
-                                                    const totalCommission = Object.values(inlineTransferCommissions).reduce((sum, c) => sum + (c.totalCommission || 0), 0)
+                                                    // Calculate total commission (only for filtered/active transfers)
+                                                    const totalCommission = filteredTransfers.reduce((sum, t) => {
+                                                        if ((t.status || 'active') === 'returned') return sum
+                                                        const key = t.upstream_dealer_id || `external_${t.target_dealer_name || 'ไม่ระบุ'}`
+                                                        const dealerData = inlineTransferCommissions[key]
+                                                        if (!dealerData || !dealerData.totalAmount) return sum
+                                                        // Proportional commission for this transfer
+                                                        return sum + (dealerData.totalCommission * ((t.amount || 0) / dealerData.totalAmount))
+                                                    }, 0)
+                                                    // Calculate net sent (sent - commission received back)
+                                                    const activeTotal = filteredTransfers
+                                                        .filter(t => (t.status || 'active') !== 'returned')
+                                                        .reduce((sum, t) => sum + (t.amount || 0), 0)
+                                                    const netSent = activeTotal - totalCommission
+                                                    // Calculate total winning payout (money we receive from upstream dealer)
+                                                    let totalWinPayout = 0
+                                                    if (isAnnounced) {
+                                                        filteredTransfers.forEach(t => {
+                                                            if ((t.status || 'active') === 'returned') return
+                                                            const wi = getTransferWinInfo(t)
+                                                            if (wi) totalWinPayout += wi.payout
+                                                        })
+                                                    }
+                                                    const transferProfit = totalWinPayout - netSent
+
+                                                    const summaryCellStyle = {
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: '0.15rem',
+                                                        minWidth: 0
+                                                    }
+                                                    const summaryLabelStyle = {
+                                                        fontSize: '0.72rem',
+                                                        color: 'var(--color-text-muted)',
+                                                        whiteSpace: 'nowrap',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis'
+                                                    }
+                                                    const summaryValueStyle = {
+                                                        fontSize: '0.95rem',
+                                                        fontWeight: 700,
+                                                        whiteSpace: 'nowrap',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis'
+                                                    }
 
                                                     return (
                                                         <>
-                                                            <div className="inline-summary" style={{ marginBottom: '1rem' }}>
-                                                                <div className="summary-item"><span className="label">จำนวนครั้ง</span><span className="value">{batchList.length} ครั้ง</span></div>
-                                                                <div className="summary-item"><span className="label">รวมทั้งหมด</span><span className="value">{round.currency_symbol}{grandTotal.toLocaleString()}</span></div>
-                                                                <div className="summary-item"><span className="label">ค่าคอมรวม</span><span className="value" style={{ color: 'var(--color-success)' }}>+{round.currency_symbol}{Math.round(totalCommission).toLocaleString()}</span></div>
+                                                            <div style={{
+                                                                display: 'grid',
+                                                                gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+                                                                gap: '0.5rem 0.75rem',
+                                                                padding: '0.75rem 1rem',
+                                                                background: 'var(--color-surface)',
+                                                                border: '1px solid var(--color-border)',
+                                                                borderRadius: 'var(--radius-md)',
+                                                                marginBottom: '1rem'
+                                                            }}>
+                                                                <div style={summaryCellStyle}>
+                                                                    <span style={summaryLabelStyle}>จำนวนครั้ง</span>
+                                                                    <span style={{ ...summaryValueStyle, color: 'var(--color-text)' }}>{batchList.length} ครั้ง</span>
+                                                                </div>
+                                                                <div style={summaryCellStyle}>
+                                                                    <span style={summaryLabelStyle}>ยอดส่ง</span>
+                                                                    <span style={{ ...summaryValueStyle, color: 'var(--color-danger)' }}>-{round.currency_symbol}{Math.round(activeTotal).toLocaleString()}</span>
+                                                                </div>
+                                                                <div style={summaryCellStyle}>
+                                                                    <span style={summaryLabelStyle}>ค่าคอม</span>
+                                                                    <span style={{ ...summaryValueStyle, color: 'var(--color-success)' }}>+{round.currency_symbol}{Math.round(totalCommission).toLocaleString()}</span>
+                                                                </div>
+                                                                <div style={summaryCellStyle}>
+                                                                    <span style={summaryLabelStyle}>เหลือส่ง</span>
+                                                                    <span style={{ ...summaryValueStyle, color: 'var(--color-danger)' }}>-{round.currency_symbol}{Math.round(netSent).toLocaleString()}</span>
+                                                                </div>
+                                                                {isAnnounced && (
+                                                                    <>
+                                                                        <div style={summaryCellStyle}>
+                                                                            <span style={summaryLabelStyle}>รับ</span>
+                                                                            <span style={{ ...summaryValueStyle, color: 'var(--color-success)' }}>+{round.currency_symbol}{Math.round(totalWinPayout).toLocaleString()}</span>
+                                                                        </div>
+                                                                        <div style={summaryCellStyle}>
+                                                                            <span style={summaryLabelStyle}>กำไร</span>
+                                                                            <span style={{ ...summaryValueStyle, color: transferProfit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                                                                {transferProfit >= 0 ? '+' : '-'}{round.currency_symbol}{Math.round(Math.abs(transferProfit)).toLocaleString()}
+                                                                            </span>
+                                                                        </div>
+                                                                    </>
+                                                                )}
                                                             </div>
 
                                                             {revertableBatches.length > 0 && (
