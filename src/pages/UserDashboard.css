@@ -2261,9 +2261,15 @@
 }
 
 .result-bill-group {
-    padding: 1rem;
+    padding: 0.5rem 0.6rem;
     background: rgba(212, 175, 55, 0.05);
-    border: 1px solid rgba(212, 175, 55, 0.15);
+    border: 2px solid rgba(212, 175, 55, 0.35);
+}
+
+@media (max-width: 576px) {
+    .result-bill-group {
+        padding: 0.35rem 0.4rem;
+    }
 }
 
 .result-bill-header {
@@ -2292,11 +2298,20 @@
 .result-bill-items {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.35rem;
     border-top: 1.5px solid rgba(128, 128, 128, 0.3);
-    padding-top: 0.5rem;
-    margin: 0 0.75rem;
-    padding-bottom: 0.5rem;
+    padding-top: 0.4rem;
+    margin: 0;
+    padding-bottom: 0.25rem;
+}
+
+@media (max-width: 576px) {
+    .result-bill-items {
+        gap: 0.25rem;
+    }
+    .result-item {
+        padding: 0.4rem 0.5rem;
+    }
 }
 
 .result-item {
@@ -2304,7 +2319,8 @@
     justify-content: space-between;
     align-items: center;
     padding: 0.5rem 0.75rem;
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(128, 128, 128, 0.06);
+    border: 1px solid rgba(128, 128, 128, 0.28);
     border-radius: var(--radius-sm);
 }
 
@@ -2315,10 +2331,10 @@
 }
 
 .result-number .number-value {
-    font-size: 1.1rem;
-    font-weight: 700;
+    font-size: 1rem;
+    font-weight: 500;
     color: var(--color-primary);
-    letter-spacing: 0.1em;
+    letter-spacing: 0.05em;
 }
 
 .result-number .bet-type {
@@ -2346,6 +2362,43 @@
     font-size: 1rem;
     font-weight: 600;
     color: var(--color-success);
+}
+
+/* Winning bill card - green success highlight */
+.result-bill-group.has-winner {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0.04) 100%);
+    border: 2px solid var(--color-success);
+    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.15) inset;
+}
+
+.result-bill-group.has-winner .result-bill-header {
+    border-bottom-color: rgba(16, 185, 129, 0.35);
+}
+
+.result-bill-group.has-winner .bill-label {
+    color: var(--color-success);
+}
+
+/* Winning item row inside expanded bill */
+.result-item.winner {
+    background: rgba(16, 185, 129, 0.18);
+    border: 1px solid rgba(16, 185, 129, 0.55);
+    border-left: 3px solid var(--color-success);
+}
+
+.result-item.winner .number-value {
+    color: var(--color-success);
+}
+
+.result-item.winner .bet-type {
+    color: var(--color-success);
+    font-weight: 600;
+}
+
+.result-amounts .prize-amount.winner {
+    color: var(--color-success);
+    font-weight: 700;
+    font-size: 1.05rem;
 }
 
 /* =============================================

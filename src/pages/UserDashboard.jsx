@@ -3959,7 +3959,7 @@ export default function UserDashboard() {
                                                     )}
 
                                                     {/* View Mode Toggle */}
-                                                    <div className="view-toggle-container">
+                                                    <div className="view-toggle-container" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                                                         <div className="view-toggle">
                                                             <button
                                                                 className={`toggle-btn ${resultViewMode === 'all' ? 'active' : ''}`}
@@ -3972,6 +3972,23 @@ export default function UserDashboard() {
                                                                 onClick={() => setResultViewMode('winners')}
                                                             >
                                                                 ถูกรางวัล
+                                                            </button>
+                                                        </div>
+                                                        {/* ย่อ/เต็ม toggle */}
+                                                        <div className="view-toggle">
+                                                            <button
+                                                                className={`toggle-btn ${displayMode === 'summary' ? 'active' : ''}`}
+                                                                onClick={() => setDisplayMode('summary')}
+                                                                title="แสดงแบบย่อ"
+                                                            >
+                                                                ย่อ
+                                                            </button>
+                                                            <button
+                                                                className={`toggle-btn ${displayMode === 'detailed' ? 'active' : ''}`}
+                                                                onClick={() => setDisplayMode('detailed')}
+                                                                title="แสดงแบบเต็ม"
+                                                            >
+                                                                เต็ม
                                                             </button>
                                                         </div>
                                                     </div>
@@ -3997,13 +4014,36 @@ export default function UserDashboard() {
 
                                                                 // For 'all' mode: collapsible bills, default collapsed
                                                                 // For 'winners' mode: always show items with note and time
+                                                                const billHasWinner = items.some(s => s.is_winner)
+                                                                // Process items based on displayMode: summary aggregates by entry_id
+                                                                const processedItems = (() => {
+                                                                    if (displayMode === 'detailed') return items
+                                                                    const sorted = [...items].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+                                                                    return sorted.reduce((acc, sub) => {
+                                                                        if (sub.entry_id) {
+                                                                            const existing = acc.find(a => a.entry_id === sub.entry_id)
+                                                                            if (existing) {
+                                                                                existing.amount += sub.amount
+                                                                                existing._prize = (existing._prize || 0) + (sub.is_winner ? getCalculatedPrize(sub, round) : 0)
+                                                                                existing.is_winner = existing.is_winner || sub.is_winner
+                                                                                return acc
+                                                                            }
+                                                                        }
+                                                                        const clone = { ...sub, _prize: sub.is_winner ? getCalculatedPrize(sub, round) : 0 }
+                                                                        acc.push(clone)
+                                                                        return acc
+                                                                    }, [])
+                                                                })()
                                                                 if (resultViewMode === 'all') {
                                                                     return (
-                                                                        <div key={billId} className={`result-bill-group card ${isResultBillExpanded ? 'expanded' : ''}`}>
+                                                                        <div
+                                                                            key={billId}
+                                                                            className={`result-bill-group card ${isResultBillExpanded ? 'expanded' : ''} ${billHasWinner ? 'has-winner' : ''}`}
+                                                                            onClick={() => toggleBill(`result-${billId}`)}
+                                                                            style={{ cursor: 'pointer' }}
+                                                                        >
                                                                             <div
                                                                                 className="result-bill-header clickable"
-                                                                                onClick={() => toggleBill(`result-${billId}`)}
-                                                                                style={{ cursor: 'pointer' }}
                                                                             >
                                                                                 <div className="bill-header-left">
                                                                                     <span className="bill-label">
@@ -4031,7 +4071,7 @@ export default function UserDashboard() {
                                                                                     </span>
                                                                                 )}
                                                                                 {billTotal > 0 && (
-                                                                                    <span style={{ color: 'var(--success)', fontWeight: 600 }}>
+                                                                                    <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>
                                                                                         +{round.currency_symbol || '฿'}{billTotal.toLocaleString()}
                                                                                     </span>
                                                                                 )}
@@ -4048,22 +4088,28 @@ export default function UserDashboard() {
                                                                                 )}
                                                                             </div>
                                                                             {isResultBillExpanded && (
-                                                                                <div className="result-bill-items">
-                                                                                    {items.map(sub => (
-                                                                                        <div key={sub.id} className={`result-item ${sub.is_winner ? 'winner' : ''}`}>
+                                                                                <div className="result-bill-items" onClick={(e) => e.stopPropagation()}>
+                                                                                    {processedItems.map(sub => {
+                                                                                        const prize = sub._prize != null ? sub._prize : (sub.is_winner ? getCalculatedPrize(sub, round) : 0)
+                                                                                        const displayNum = (displayMode === 'summary' && sub.display_numbers) ? sub.display_numbers : sub.numbers
+                                                                                        return (
+                                                                                        <div key={sub.id || sub.entry_id} className={`result-item ${sub.is_winner ? 'winner' : ''}`}>
                                                                                             <div className="result-number">
-                                                                                                <span className="number-value">{sub.numbers}</span>
-                                                                                                <span className="bet-type">{BET_TYPES[sub.bet_type]?.label || sub.bet_type}</span>
+                                                                                                <span className="number-value">{displayNum}</span>
+                                                                                                {displayMode === 'detailed' && (
+                                                                                                    <span className="bet-type">{BET_TYPES[sub.bet_type]?.label || sub.bet_type}</span>
+                                                                                                )}
                                                                                             </div>
                                                                                             <div className="result-amounts">
                                                                                                 <span className="bet-amount">{round.currency_symbol || '฿'}{sub.amount}</span>
                                                                                                 <span className="arrow">→</span>
                                                                                                 <span className={`prize-amount ${sub.is_winner ? 'winner' : ''}`}>
-                                                                                                    {round.currency_symbol || '฿'}{(sub.is_winner ? getCalculatedPrize(sub, round) : 0).toLocaleString()}
+                                                                                                    {round.currency_symbol || '฿'}{prize.toLocaleString()}
                                                                                                 </span>
                                                                                             </div>
                                                                                         </div>
-                                                                                    ))}
+                                                                                        )
+                                                                                    })}
                                                                                 </div>
                                                                             )}
                                                                         </div>
@@ -4078,42 +4124,52 @@ export default function UserDashboard() {
                                                                                         <FiGift /> โพย {billId === 'no-bill' ? '-' : billId.slice(-6).toUpperCase()}
                                                                                     </span>
                                                                                 </div>
-                                                                                <span className="bill-prize" style={{ color: 'var(--success)', fontWeight: 600 }}>
+                                                                                <span className="bill-prize" style={{ color: 'var(--color-success)', fontWeight: 600 }}>
                                                                                     +{round.currency_symbol || '฿'}{billTotal.toLocaleString()}
                                                                                 </span>
                                                                             </div>
-                                                                            {billNote && (
-                                                                                <div className="bill-note-display" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)', borderTop: '1.5px solid rgba(128, 128, 128, 0.3)' }}>
-                                                                                    <FiFileText style={{ marginRight: '0.5rem' }} />
-                                                                                    {billNote}
-                                                                                </div>
-                                                                            )}
-                                                                            {billCreatedAt && (
-                                                                                <div className="bill-time-display" style={{ padding: '0.25rem 1rem 0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                                                                    <FiClock style={{ marginRight: '0.5rem' }} />
-                                                                                    {new Date(billCreatedAt).toLocaleString('th-TH', {
-                                                                                        day: 'numeric',
-                                                                                        month: 'short',
-                                                                                        year: 'numeric',
-                                                                                        hour: '2-digit',
-                                                                                        minute: '2-digit'
-                                                                                    })}
+                                                                            {(billNote || billCreatedAt) && (
+                                                                                <div className="bill-info-row" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)', borderTop: '1.5px solid rgba(128, 128, 128, 0.3)', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                                                    {billNote && (
+                                                                                        <span style={{ display: 'flex', alignItems: 'center' }}>
+                                                                                            <FiFileText style={{ marginRight: '0.25rem' }} />
+                                                                                            {billNote}
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {billCreatedAt && (
+                                                                                        <span style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto' }}>
+                                                                                            <FiClock style={{ marginRight: '0.25rem' }} />
+                                                                                            {new Date(billCreatedAt).toLocaleString('th-TH', {
+                                                                                                day: 'numeric',
+                                                                                                month: 'short',
+                                                                                                year: 'numeric',
+                                                                                                hour: '2-digit',
+                                                                                                minute: '2-digit'
+                                                                                            })}
+                                                                                        </span>
+                                                                                    )}
                                                                                 </div>
                                                                             )}
                                                                             <div className="result-bill-items">
-                                                                                {items.map(sub => (
-                                                                                    <div key={sub.id} className="result-item winner">
+                                                                                {processedItems.map(sub => {
+                                                                                    const prize = sub._prize != null ? sub._prize : (sub.is_winner ? getCalculatedPrize(sub, round) : 0)
+                                                                                    const displayNum = (displayMode === 'summary' && sub.display_numbers) ? sub.display_numbers : sub.numbers
+                                                                                    return (
+                                                                                    <div key={sub.id || sub.entry_id} className="result-item winner">
                                                                                         <div className="result-number">
-                                                                                            <span className="number-value">{sub.numbers}</span>
-                                                                                            <span className="bet-type">{BET_TYPES[sub.bet_type]?.label || sub.bet_type}</span>
+                                                                                            <span className="number-value">{displayNum}</span>
+                                                                                            {displayMode === 'detailed' && (
+                                                                                                <span className="bet-type">{BET_TYPES[sub.bet_type]?.label || sub.bet_type}</span>
+                                                                                            )}
                                                                                         </div>
                                                                                         <div className="result-amounts">
                                                                                             <span className="bet-amount">{round.currency_symbol || '฿'}{sub.amount}</span>
                                                                                             <span className="arrow">→</span>
-                                                                                            <span className="prize-amount winner">{round.currency_symbol || '฿'}{getCalculatedPrize(sub, round).toLocaleString()}</span>
+                                                                                            <span className="prize-amount winner">{round.currency_symbol || '฿'}{prize.toLocaleString()}</span>
                                                                                         </div>
                                                                                     </div>
-                                                                                ))}
+                                                                                    )
+                                                                                })}
                                                                             </div>
                                                                         </div>
                                                                     )
