@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { supabase } from '../lib/supabase'
+import { confirmDialog } from '../utils/confirmDialog'
 import {
     FiSettings,
     FiUsers,
@@ -177,7 +178,7 @@ export default function Admin() {
     }
 
     const handleDeleteDraw = async (id) => {
-        if (!confirm('ต้องการลบงวดนี้?')) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: 'ต้องการลบงวดนี้?', confirmText: 'ลบเลย' }))) return
 
         try {
             const { error } = await supabase

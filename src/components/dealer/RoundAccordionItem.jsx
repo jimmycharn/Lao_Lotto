@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase, fetchAllRows } from '../../lib/supabase'
 import { useToast } from '../../contexts/ToastContext'
 import { updatePendingDeduction } from '../../utils/creditCheck'
+import { confirmDialog } from '../../utils/confirmDialog'
 import {
     FiCalendar,
     FiClock,
@@ -1532,7 +1533,7 @@ export default function RoundAccordionItem({
             toast.warning('กรุณาเลือกรายการที่ต้องการเอาคืน')
             return
         }
-        if (!confirm(`ต้องการเอาคืน ${selectedBatchIds.length} รายการหรือไม่?`)) return
+        if (!(await confirmDialog({ title: 'ยืนยันการเอาคืน', message: `ต้องการเอาคืน ${selectedBatchIds.length} รายการหรือไม่?`, confirmText: 'เอาคืน' }))) return
 
         setRevertingTransfer(true)
         try {
@@ -1561,7 +1562,7 @@ export default function RoundAccordionItem({
             toast.warning('กรุณาเลือกรายการที่ต้องการคืน')
             return
         }
-        if (!confirm(`ต้องการคืนเลข ${selectedIds.length} รายการกลับไปยังเจ้ามือต้นทางหรือไม่?`)) return
+        if (!(await confirmDialog({ title: 'ยืนยันการคืนเลข', message: `ต้องการคืนเลข ${selectedIds.length} รายการกลับไปยังเจ้ามือต้นทางหรือไม่?`, confirmText: 'คืนเลข' }))) return
 
         setReturningIncoming(true)
         try {
@@ -1877,7 +1878,7 @@ export default function RoundAccordionItem({
             return
         }
 
-        if (!confirm(`ต้องการลบ ${selectedIds.length} รายการ?`)) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: `ต้องการลบ ${selectedIds.length} รายการ?`, confirmText: 'ลบเลย' }))) return
 
         setDeletingItems(true)
         try {
@@ -1902,7 +1903,7 @@ export default function RoundAccordionItem({
 
     // Delete single submission or group of submissions
     const handleDeleteSingleItem = async (idOrIds) => {
-        if (!confirm('ต้องการลบรายการนี้?')) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: 'ต้องการลบรายการนี้?', confirmText: 'ลบเลย' }))) return
 
         try {
             // Support both single id and array of ids (for summary mode groups)
@@ -1990,7 +1991,7 @@ export default function RoundAccordionItem({
 
     // Delete entire bill
     const handleDeleteBill = async (billItems) => {
-        if (!confirm(`ต้องการลบใบโพยนี้ (${billItems.length} รายการ)?`)) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: `ต้องการลบใบโพยนี้ (${billItems.length} รายการ)?`, confirmText: 'ลบเลย' }))) return
 
         setDeletingItems(true)
         try {
@@ -2041,7 +2042,7 @@ export default function RoundAccordionItem({
             toast.warning('ไม่มีรายการที่ต้องการเอาคืน')
             return
         }
-        if (!confirm(`ต้องการเอาคืน ${transferItems.length} รายการที่ถูกคืนกลับเข้าระบบหรือไม่?`)) return
+        if (!(await confirmDialog({ title: 'ยืนยันการเอาคืน', message: `ต้องการเอาคืน ${transferItems.length} รายการที่ถูกคืนกลับเข้าระบบหรือไม่?`, confirmText: 'เอาคืน' }))) return
 
         setRevertingTransfer(true)
         try {
@@ -3962,9 +3963,9 @@ export default function RoundAccordionItem({
                                                                                 onClick={(e) => {
                                                                                     e.stopPropagation()
                                                                                     const allItemIds = userGroup.bills.flatMap(bill => bill.items.map(item => item.id))
-                                                                                    if (window.confirm(`ต้องการลบข้อมูลทั้งหมดของ ${userGroup.user_name} (${allItemIds.length}) หรือไม่?`)) {
-                                                                                        handleDeleteMultipleItems(allItemIds)
-                                                                                    }
+                                                                                    confirmDialog({ title: 'ยืนยันการลบ', message: `ต้องการลบข้อมูลทั้งหมดของ ${userGroup.user_name} (${allItemIds.length}) หรือไม่?`, confirmText: 'ลบเลย' }).then((ok) => {
+                                                                                        if (ok) handleDeleteMultipleItems(allItemIds)
+                                                                                    })
                                                                                 }}
                                                                                 title={`ลบข้อมูลทั้งหมดของ ${userGroup.user_name}`}
                                                                                 style={{ padding: '0.2rem 0.35rem', background: 'rgba(0,0,0,0.2)', border: 'none', borderRadius: '4px' }}

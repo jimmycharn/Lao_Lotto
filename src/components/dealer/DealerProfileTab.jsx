@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useToast } from '../../contexts/ToastContext'
 import { supabase } from '../../lib/supabase'
 import ChangePasswordModal from '../ChangePasswordModal'
+import { confirmDialog } from '../../utils/confirmDialog'
 import {
     FiUser,
     FiEdit2,
@@ -194,7 +195,7 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
 
     // Delete bank account
     async function handleDeleteBank(bankId) {
-        if (!confirm('ต้องการลบบัญชีนี้?')) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: 'ต้องการลบบัญชีนี้?', confirmText: 'ลบเลย' }))) return
 
         try {
             const { error } = await supabase

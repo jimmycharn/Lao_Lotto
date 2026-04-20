@@ -81,6 +81,7 @@ import UpstreamDealerSettings from '../components/dealer/UpstreamDealerSettings'
 import MemberSettings from '../components/dealer/MemberSettings'
 import BankAccountCard from '../components/BankAccountCard'
 import CopyButton from '../components/CopyButton'
+import { confirmDialog } from '../utils/confirmDialog'
 
 export default function Dealer() {
     const { user, profile, loading: authLoading, isDealer, isSuperAdmin, isAccountSuspended, skipAuthEventRef } = useAuth()
@@ -638,7 +639,7 @@ export default function Dealer() {
     // Delete a history record
     async function handleDeleteHistory(historyId, e) {
         e.stopPropagation()
-        if (!window.confirm('ต้องการลบประวัติงวดหวยนี้หรือไม่?')) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: 'ต้องการลบประวัติงวดหวยนี้หรือไม่?', confirmText: 'ลบเลย' }))) return
         try {
             const { error } = await supabase
                 .from('round_history')
@@ -1182,7 +1183,7 @@ export default function Dealer() {
     }
 
     async function handleRejectMember(member) {
-        if (!confirm(`ต้องการปฏิเสธ "${member.full_name || member.email}" หรือไม่?`)) return
+        if (!(await confirmDialog({ title: 'ยืนยันการปฏิเสธ', message: `ต้องการปฏิเสธ "${member.full_name || member.email}" หรือไม่?`, confirmText: 'ปฏิเสธ' }))) return
 
         try {
             const { error } = await supabase
@@ -1199,7 +1200,7 @@ export default function Dealer() {
     }
 
     async function handleBlockMember(member) {
-        if (!confirm(`ต้องการบล็อค "${member.full_name || member.email}" หรือไม่?\nสมาชิกจะไม่สามารถส่งเลขให้คุณได้`)) return
+        if (!(await confirmDialog({ title: 'ยืนยันการบล็อค', message: `ต้องการบล็อค "${member.full_name || member.email}" หรือไม่?\nสมาชิกจะไม่สามารถส่งเลขให้คุณได้`, confirmText: 'บล็อค' }))) return
 
         try {
             const { error } = await supabase
@@ -1419,7 +1420,7 @@ export default function Dealer() {
             return
         }
 
-        if (!confirm(`ต้องการลบ "${member.full_name || member.email}" ออกจากรายชื่อสมาชิกหรือไม่?\n\nการลบจะยกเลิกการเป็นสมาชิกของเจ้ามือนี้`)) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบสมาชิก', message: `ต้องการลบ "${member.full_name || member.email}" ออกจากรายชื่อสมาชิกหรือไม่?\nการลบจะยกเลิกการเป็นสมาชิกของเจ้ามือนี้`, confirmText: 'ลบเลย' }))) return
 
         try {
             const { data, error, count } = await supabase
@@ -1508,7 +1509,7 @@ export default function Dealer() {
 
     // Reject downstream dealer connection request
     async function handleRejectDownstreamDealer(dealer) {
-        if (!confirm(`ต้องการปฏิเสธคำขอจาก "${dealer.full_name || dealer.email}" หรือไม่?`)) return
+        if (!(await confirmDialog({ title: 'ยืนยันการปฏิเสธ', message: `ต้องการปฏิเสธคำขอจาก "${dealer.full_name || dealer.email}" หรือไม่?`, confirmText: 'ปฏิเสธ' }))) return
 
         try {
             console.log('Rejecting dealer:', dealer)
@@ -1571,7 +1572,7 @@ export default function Dealer() {
     // Block/Unblock downstream dealer (dealer who sends bets to us)
     async function handleBlockDownstreamDealer(dealer) {
         const newBlockedState = dealer.membership_status !== 'blocked'
-        if (newBlockedState && !confirm(`ต้องการบล็อค "${dealer.full_name || dealer.email}" หรือไม่?\nเจ้ามือนี้จะไม่สามารถตีเลขมาให้คุณได้`)) return
+        if (newBlockedState && !(await confirmDialog({ title: 'ยืนยันการบล็อค', message: `ต้องการบล็อค "${dealer.full_name || dealer.email}" หรือไม่?\nเจ้ามือนี้จะไม่สามารถตีเลขมาให้คุณได้`, confirmText: 'บล็อค' }))) return
 
         try {
             const { error } = await supabase
@@ -1601,7 +1602,7 @@ export default function Dealer() {
 
     // Disconnect dealer connection
     async function handleDisconnectDealer(dealer) {
-        if (!confirm(`ยกเลิกการเชื่อมต่อกับ "${dealer.full_name || dealer.email}"?\n\nรายชื่อจะหายไปทั้ง 2 ฝ่าย`)) return
+        if (!(await confirmDialog({ title: 'ยกเลิกการเชื่อมต่อ', message: `ยกเลิกการเชื่อมต่อกับ "${dealer.full_name || dealer.email}"?\nรายชื่อจะหายไปทั้ง 2 ฝ่าย`, confirmText: 'ยกเลิก' }))) return
 
         try {
             console.log('Disconnecting dealer:', dealer)
@@ -1861,7 +1862,7 @@ export default function Dealer() {
 
     // Close round
     async function handleCloseRound(roundId) {
-        if (!confirm('ต้องการปิดงวดนี้?')) return
+        if (!(await confirmDialog({ title: 'ยืนยันการปิดงวด', message: 'ต้องการปิดงวดนี้?', confirmText: 'ปิดงวด' }))) return
 
         try {
             const { error } = await supabase
@@ -1920,7 +1921,7 @@ export default function Dealer() {
 
     // Delete round - with history preservation (only for closed + announced + has submissions)
     async function handleDeleteRound(roundId, roundStatus) {
-        if (!confirm('ต้องการลบงวดนี้?')) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: 'ต้องการลบงวดนี้?', confirmText: 'ลบเลย' }))) return
 
         try {
             // Get round details first

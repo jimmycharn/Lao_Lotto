@@ -20,6 +20,7 @@ import UpstreamDealerSettingsInline from './UpstreamDealerSettingsInline'
 import UpstreamDealerSettings from './UpstreamDealerSettings'
 import BankAccountCard from '../BankAccountCard'
 import CopyButton from '../CopyButton'
+import { confirmDialog } from '../../utils/confirmDialog'
 
 // Upstream Dealer Accordion Item Component
 export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onToggle, onEdit, onDelete, onToggleBlock, onSaveSettings }) {
@@ -221,7 +222,7 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
     }
 
     async function handleDeleteBank(bankId) {
-        if (!confirm('ต้องการลบบัญชีนี้?')) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: 'ต้องการลบบัญชีนี้?', confirmText: 'ลบเลย' }))) return
         try {
             const { error } = await supabase
                 .from('upstream_dealer_bank_accounts')

@@ -38,6 +38,7 @@ import QRCode from 'react-qr-code'
 import ChangePasswordModal from '../components/ChangePasswordModal'
 import CopyButton from '../components/CopyButton'
 import { LOTTERY_TYPES } from '../constants/lotteryTypes'
+import { confirmDialog } from '../utils/confirmDialog'
 import './SuperAdmin.css'
 
 export default function SuperAdmin() {
@@ -392,7 +393,7 @@ export default function SuperAdmin() {
     }
     
     const handleDeleteBankAccount = async (id) => {
-        if (!confirm('ต้องการลบบัญชีธนาคารนี้?')) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: 'ต้องการลบบัญชีธนาคารนี้?', confirmText: 'ลบเลย' }))) return
         
         try {
             const { error } = await supabase
@@ -439,7 +440,7 @@ export default function SuperAdmin() {
     }
     
     const handleRemoveBankAssignment = async (id) => {
-        if (!confirm('ต้องการยกเลิกการผูกบัญชีนี้?')) return
+        if (!(await confirmDialog({ title: 'ยืนยันการยกเลิก', message: 'ต้องการยกเลิกการผูกบัญชีนี้?', confirmText: 'ยกเลิก' }))) return
         
         try {
             const { error } = await supabase
@@ -457,7 +458,7 @@ export default function SuperAdmin() {
     
     // Approve topup request
     const handleApproveTopup = async (requestId) => {
-        if (!confirm('ต้องการอนุมัติคำขอเติมเครดิตนี้?')) return
+        if (!(await confirmDialog({ title: 'ยืนยันการอนุมัติ', message: 'ต้องการอนุมัติคำขอเติมเครดิตนี้?', confirmText: 'อนุมัติ', variant: 'primary' }))) return
         
         try {
             // Get request details first
@@ -551,7 +552,7 @@ export default function SuperAdmin() {
     
     // Reject topup request
     const handleRejectTopup = async (requestId) => {
-        if (!confirm('ต้องการปฏิเสธคำขอเติมเครดิตนี้?')) return
+        if (!(await confirmDialog({ title: 'ยืนยันการปฏิเสธ', message: 'ต้องการปฏิเสธคำขอเติมเครดิตนี้?', confirmText: 'ปฏิเสธ' }))) return
         
         const reason = prompt('ระบุเหตุผลที่ปฏิเสธ (ไม่บังคับ):') || 'ไม่ผ่านการตรวจสอบ'
         
@@ -878,7 +879,7 @@ export default function SuperAdmin() {
 
     const handleBulkDeleteTopupRequests = async () => {
         if (topupSelectedIds.size === 0) return
-        if (!confirm(`ต้องการลบคำขอเติมเครดิตที่เลือก ${topupSelectedIds.size} รายการ?`)) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: `ต้องการลบคำขอเติมเครดิตที่เลือก ${topupSelectedIds.size} รายการ?`, confirmText: 'ลบเลย' }))) return
         setBulkDeleting(true)
         try {
             const ids = [...topupSelectedIds]
@@ -906,7 +907,7 @@ export default function SuperAdmin() {
 
     const handleBulkDeleteTransactions = async () => {
         if (txSelectedIds.size === 0) return
-        if (!confirm(`ต้องการลบประวัติการทำรายการ ${txSelectedIds.size} รายการ?\n\nหมายเหตุ: การลบจะไม่กระทบยอดเครดิตที่ดำเนินการไปแล้ว`)) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: `ต้องการลบประวัติการทำรายการ ${txSelectedIds.size} รายการ?\nหมายเหตุ: การลบจะไม่กระทบยอดเครดิตที่ดำเนินการไปแล้ว`, confirmText: 'ลบเลย' }))) return
         setBulkDeleting(true)
         try {
             const ids = [...txSelectedIds]
@@ -974,7 +975,7 @@ export default function SuperAdmin() {
 
     const handleBulkDeleteDeductions = async () => {
         if (deductSelectedIds.size === 0) return
-        if (!confirm(`ต้องการลบรายการตัดเครดิต ${deductSelectedIds.size} รายการ?`)) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: `ต้องการลบรายการตัดเครดิต ${deductSelectedIds.size} รายการ?`, confirmText: 'ลบเลย' }))) return
         setBulkDeleting(true)
         try {
             const ids = [...deductSelectedIds]
@@ -1042,7 +1043,7 @@ export default function SuperAdmin() {
 
     const handleBulkDeletePayments = async () => {
         if (paySelectedIds.size === 0) return
-        if (!confirm(`ต้องการลบรายการชำระเงิน ${paySelectedIds.size} รายการ?`)) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: `ต้องการลบรายการชำระเงิน ${paySelectedIds.size} รายการ?`, confirmText: 'ลบเลย' }))) return
         setBulkDeleting(true)
         try {
             const ids = [...paySelectedIds]
@@ -1492,7 +1493,7 @@ export default function SuperAdmin() {
     }
 
     const deletePackage = async (pkg) => {
-        if (!confirm(`ต้องการลบแพ็คเกจ "${pkg.name}" หรือไม่?`)) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบแพ็คเกจ', message: `ต้องการลบแพ็คเกจ "${pkg.name}" หรือไม่?`, confirmText: 'ลบเลย' }))) return
 
         try {
             const { error } = await supabase

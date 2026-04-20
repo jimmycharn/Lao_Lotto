@@ -13,6 +13,7 @@ import {
 import '../../pages/Dealer.css'
 import '../../pages/SettingsTabs.css'
 import UpstreamDealerAccordionItem from './UpstreamDealerAccordionItem'
+import { confirmDialog } from '../../utils/confirmDialog'
 import UpstreamDealerSettings from './UpstreamDealerSettings'
 
 // Upstream Dealers Tab - For managing dealers to transfer bets to
@@ -189,7 +190,7 @@ export default function UpstreamDealersTab({ user, upstreamDealers, setUpstreamD
 
     // Delete / Disconnect
     async function handleDelete(dealer) {
-        if (!confirm(`ต้องการยกเลิกการเชื่อมต่อกับ "${dealer.upstream_name}"?\n\nรายชื่อจะหายไปทั้ง 2 ฝ่าย`)) return
+        if (!(await confirmDialog({ title: 'ยกเลิกการเชื่อมต่อ', message: `ต้องการยกเลิกการเชื่อมต่อกับ "${dealer.upstream_name}"?\nรายชื่อจะหายไปทั้ง 2 ฝ่าย`, confirmText: 'ยกเลิก' }))) return
 
         try {
             let error

@@ -46,6 +46,7 @@ import DealerInfoTab from '../components/user/DealerInfoTab'
 import UserQRScannerModal from '../components/user/UserQRScannerModal'
 import { createBill } from '../services/submissionService'
 import { formatCopyText, copyToClipboard } from '../utils/copyFormat'
+import { confirmDialog } from '../utils/confirmDialog'
 
 // Import constants from centralized file
 import {
@@ -1898,7 +1899,7 @@ export default function UserDashboard() {
             toast.warning('ไม่สามารถลบได้ เนื่องจากเลยเวลาที่กำหนด')
             return
         }
-        if (!confirm('ต้องการลบรายการนี้?')) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: 'ต้องการลบรายการนี้?', confirmText: 'ลบเลย' }))) return
 
         try {
             let query = supabase
@@ -1937,7 +1938,7 @@ export default function UserDashboard() {
             toast.warning('ไม่สามารถลบได้ เนื่องจากเลยเวลาที่กำหนด')
             return
         }
-        if (!confirm(`ต้องการลบโพยใบที่ ${billId} ทั้งหมด?`)) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบโพย', message: `ต้องการลบโพยใบที่ ${billId} ทั้งหมด?`, confirmText: 'ลบเลย' }))) return
 
         try {
             const { error } = await supabase

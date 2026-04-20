@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { FiUser, FiEdit2, FiSave, FiCheck, FiLock, FiPlus, FiTrash2, FiStar, FiX } from 'react-icons/fi'
 import ChangePasswordModal from '../components/ChangePasswordModal'
 import CopyButton from '../components/CopyButton'
+import { confirmDialog } from '../utils/confirmDialog'
 import './Profile.css'
 
 const bankOptions = [
@@ -171,7 +172,7 @@ export default function Profile() {
     }
 
     const handleDeleteBank = async (bankId) => {
-        if (!confirm('ต้องการลบบัญชีนี้?')) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: 'ต้องการลบบัญชีนี้?', confirmText: 'ลบเลย' }))) return
         try {
             const { error } = await supabase
                 .from('user_bank_accounts')

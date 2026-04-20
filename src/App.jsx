@@ -6,6 +6,7 @@ import { ThemeProvider } from './contexts/ThemeContext'
 import Navbar from './components/Navbar'
 import ErrorBoundary from './components/ErrorBoundary'
 import ForceLogoutOverlay from './components/ForceLogoutOverlay'
+import { ConfirmDialogHost } from './utils/confirmDialog'
 import './index.css'
 
 // Lazy load pages - โหลดเฉพาะหน้าที่ใช้
@@ -139,6 +140,7 @@ function AppContent() {
   return (
     <Router>
       <ForceLogoutOverlay />
+      <ConfirmDialogHost />
       <Navbar />
       <main className="main-content">
         <ErrorBoundary>

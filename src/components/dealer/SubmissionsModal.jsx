@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
 import { supabase, fetchAllRows } from '../../lib/supabase'
 import { checkUpstreamDealerCredit, updatePendingDeduction } from '../../utils/creditCheck'
+import { confirmDialog } from '../../utils/confirmDialog'
 import { jsPDF } from 'jspdf'
 import { addThaiFont } from '../../utils/thaiFontLoader'
 import {
@@ -758,7 +759,7 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
             : `ครั้งนี้ ${itemsToUndo.length} รายการ`
         const totalAmount = itemsToUndo.reduce((sum, t) => sum + (t.amount || 0), 0)
 
-        if (!confirm(`ต้องการเอาคืน${undoLabel} ยอดรวม ${round.currency_symbol}${totalAmount.toLocaleString()} หรือไม่?`)) {
+        if (!(await confirmDialog({ title: 'ยืนยันการเอาคืน', message: `ต้องการเอาคืน${undoLabel} ยอดรวม ${round.currency_symbol}${totalAmount.toLocaleString()} หรือไม่?`, confirmText: 'เอาคืน' }))) {
             return
         }
 

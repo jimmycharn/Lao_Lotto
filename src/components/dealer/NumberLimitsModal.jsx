@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useToast } from '../../contexts/ToastContext'
 import { FiAlertTriangle, FiX, FiPlus, FiTrash2, FiSearch, FiEdit2, FiCheck, FiSlash, FiClock, FiRefreshCw } from 'react-icons/fi'
 import { BET_TYPES, BET_TYPES_BY_LOTTERY, getPermutations } from '../../constants/lotteryTypes'
+import { confirmDialog } from '../../utils/confirmDialog'
 
 // Generate all permutations (reversed numbers) for a given number string
 function generateReversedNumbers(numbers) {
@@ -185,7 +186,7 @@ export default function NumberLimitsModal({ round, onClose }) {
     }
 
     async function handleDeleteLimit(id) {
-        if (!confirm('ต้องการลบรายการนี้?')) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: 'ต้องการลบรายการนี้?', confirmText: 'ลบเลย' }))) return
 
         try {
             const { error } = await supabase
@@ -205,7 +206,7 @@ export default function NumberLimitsModal({ round, onClose }) {
     async function handleDeleteByNumber(numbers) {
         const matching = limits.filter(l => l.numbers === numbers)
         if (matching.length === 0) return
-        if (!confirm(`ต้องการลบเลข ${numbers} ทั้งหมด (${matching.length} รายการ)?`)) return
+        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: `ต้องการลบเลข ${numbers} ทั้งหมด (${matching.length} รายการ)?`, confirmText: 'ลบเลย' }))) return
 
         try {
             const { error } = await supabase
