@@ -3996,10 +3996,10 @@ export default function RoundAccordionItem({
                                                                                 {/* Row 3: payout & profit for winning users */}
                                                                                 {userHasWin && (
                                                                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: '1.3rem', marginTop: '0.15rem' }}>
-                                                                                        <span style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--color-danger)' }}>
+                                                                                        <span style={{ fontSize: '0.85rem', fontWeight: '600', color: '#842029' }}>
                                                                                             จ่าย -{round.currency_symbol}{Math.round(userTotalWinPayout).toLocaleString()}
                                                                                         </span>
-                                                                                        <span style={{ fontSize: '0.9rem', fontWeight: '700', color: userProfit >= 0 ? '#000' : 'var(--color-danger)' }}>
+                                                                                        <span style={{ fontSize: '0.9rem', fontWeight: '700', color: userProfit >= 0 ? '#0f5132' : '#842029' }}>
                                                                                             กำไร {userProfit >= 0 ? '+' : '-'}{round.currency_symbol}{Math.round(Math.abs(userProfit)).toLocaleString()}
                                                                                         </span>
                                                                                     </div>
