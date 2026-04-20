@@ -1677,7 +1677,7 @@
     gap: 0.75rem;
 }
 
-.round-accordion-item {
+.dealer-page .round-accordion-item {
     border-radius: var(--radius-md);
     overflow: hidden;
     border: 2px solid var(--color-border);
@@ -1686,7 +1686,7 @@
     transition: all 0.2s ease;
 }
 
-.round-accordion-header {
+.dealer-page .round-accordion-header {
     display: flex;
     align-items: center;
     gap: 1rem;
@@ -1696,7 +1696,7 @@
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, transparent 30%);
 }
 
-.round-accordion-header:hover {
+.dealer-page .round-accordion-header:hover {
     background: var(--color-card-hover);
 }
 
@@ -1746,7 +1746,7 @@
     transform: rotate(180deg);
 }
 
-.round-accordion-content {
+.dealer-page .round-accordion-content {
     background: var(--color-card);
     padding: 1.25rem;
     border-top: 1px solid var(--color-border);
@@ -1760,62 +1760,62 @@
 }
 
 /* Lottery type colors for accordion - Full border style */
-.round-accordion-item.thai {
+.dealer-page .round-accordion-item.thai {
     border-color: #ed1c24;
     background: linear-gradient(180deg, rgba(237, 28, 36, 0.15) 0%, var(--color-card) 30%);
 }
 
-.round-accordion-item.thai:hover {
+.dealer-page .round-accordion-item.thai:hover {
     box-shadow: 0 0 15px rgba(237, 28, 36, 0.3);
 }
 
-.round-accordion-item.lao {
+.dealer-page .round-accordion-item.lao {
     border-color: #4a90ff;
     background: linear-gradient(180deg, rgba(74, 144, 255, 0.12) 0%, var(--color-card) 30%);
 }
 
-.round-accordion-item.lao:hover {
+.dealer-page .round-accordion-item.lao:hover {
     box-shadow: 0 0 15px rgba(74, 144, 255, 0.35);
 }
 
-.round-accordion-item.hanoi {
+.dealer-page .round-accordion-item.hanoi {
     border-color: #9c27b0;
     background: linear-gradient(180deg, rgba(156, 39, 176, 0.15) 0%, var(--color-card) 30%);
 }
 
-.round-accordion-item.hanoi:hover {
+.dealer-page .round-accordion-item.hanoi:hover {
     box-shadow: 0 0 15px rgba(156, 39, 176, 0.3);
 }
 
-.round-accordion-item.stock {
+.dealer-page .round-accordion-item.stock {
     border-color: #ffc107;
     background: linear-gradient(180deg, rgba(255, 193, 7, 0.15) 0%, var(--color-card) 30%);
 }
 
-.round-accordion-item.stock:hover {
+.dealer-page .round-accordion-item.stock:hover {
     box-shadow: 0 0 15px rgba(255, 193, 7, 0.3);
 }
 
-.round-accordion-item.yeekee {
+.dealer-page .round-accordion-item.yeekee {
     border-color: #00c853;
     background: linear-gradient(180deg, rgba(0, 200, 83, 0.15) 0%, var(--color-card) 30%);
 }
 
-.round-accordion-item.yeekee:hover {
+.dealer-page .round-accordion-item.yeekee:hover {
     box-shadow: 0 0 15px rgba(0, 200, 83, 0.3);
 }
 
-.round-accordion-item.expanded {
+.dealer-page .round-accordion-item.expanded {
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
 }
 
-.round-accordion-item.expanded .round-accordion-header {
+.dealer-page .round-accordion-item.expanded .round-accordion-header {
     background: rgba(255, 255, 255, 0.05);
 }
 
 /* Mobile responsive */
 @media (max-width: 768px) {
-    .round-accordion-header {
+    .dealer-page .round-accordion-header {
         flex-wrap: wrap;
         gap: 0.75rem;
     }
@@ -1932,7 +1932,7 @@
     transform: rotate(180deg);
 }
 
-.round-accordion-content {
+.dealer-page .round-accordion-content {
     background: var(--color-card);
     padding: 1.25rem;
     border-top: 1px solid var(--color-border);
@@ -1946,62 +1946,62 @@
 }
 
 /* Lottery type colors for accordion - Full border style */
-.round-accordion-item.thai {
+.dealer-page .round-accordion-item.thai {
     border-color: #ed1c24;
     background: linear-gradient(180deg, rgba(237, 28, 36, 0.15) 0%, var(--color-card) 30%);
 }
 
-.round-accordion-item.thai:hover {
+.dealer-page .round-accordion-item.thai:hover {
     box-shadow: 0 0 15px rgba(237, 28, 36, 0.3);
 }
 
-.round-accordion-item.lao {
+.dealer-page .round-accordion-item.lao {
     border-color: #4a90ff;
     background: linear-gradient(180deg, rgba(74, 144, 255, 0.12) 0%, var(--color-card) 30%);
 }
 
-.round-accordion-item.lao:hover {
+.dealer-page .round-accordion-item.lao:hover {
     box-shadow: 0 0 15px rgba(74, 144, 255, 0.35);
 }
 
-.round-accordion-item.hanoi {
+.dealer-page .round-accordion-item.hanoi {
     border-color: #9c27b0;
     background: linear-gradient(180deg, rgba(156, 39, 176, 0.15) 0%, var(--color-card) 30%);
 }
 
-.round-accordion-item.hanoi:hover {
+.dealer-page .round-accordion-item.hanoi:hover {
     box-shadow: 0 0 15px rgba(156, 39, 176, 0.3);
 }
 
-.round-accordion-item.stock {
+.dealer-page .round-accordion-item.stock {
     border-color: #ffc107;
     background: linear-gradient(180deg, rgba(255, 193, 7, 0.15) 0%, var(--color-card) 30%);
 }
 
-.round-accordion-item.stock:hover {
+.dealer-page .round-accordion-item.stock:hover {
     box-shadow: 0 0 15px rgba(255, 193, 7, 0.3);
 }
 
-.round-accordion-item.yeekee {
+.dealer-page .round-accordion-item.yeekee {
     border-color: #00c853;
     background: linear-gradient(180deg, rgba(0, 200, 83, 0.15) 0%, var(--color-card) 30%);
 }
 
-.round-accordion-item.yeekee:hover {
+.dealer-page .round-accordion-item.yeekee:hover {
     box-shadow: 0 0 15px rgba(0, 200, 83, 0.3);
 }
 
-.round-accordion-item.expanded {
+.dealer-page .round-accordion-item.expanded {
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
 }
 
-.round-accordion-item.expanded .round-accordion-header {
+.dealer-page .round-accordion-item.expanded .round-accordion-header {
     background: rgba(255, 255, 255, 0.05);
 }
 
 /* Mobile responsive */
 @media (max-width: 768px) {
-    .round-accordion-header {
+    .dealer-page .round-accordion-header {
         flex-wrap: wrap;
         gap: 0.75rem;
     }
@@ -4162,7 +4162,7 @@ html.theme-light .expand-icon {
 
 /* Mobile responsive fixes for round accordion */
 @media (max-width: 768px) {
-    .round-accordion-header {
+    .dealer-page .round-accordion-header {
         flex-direction: column !important;
         align-items: stretch !important;
         padding: 1rem !important;
@@ -4773,11 +4773,11 @@ html.theme-light .icon-btn-sm:hover {
 }
 
 /* Fix border overlap at corners of accordion content */
-.round-accordion-item {
+.dealer-page .round-accordion-item {
     overflow: hidden;
 }
 
-.round-accordion-content {
+.dealer-page .round-accordion-content {
     position: relative;
     margin: 0 -2px -2px -2px;
     padding-left: calc(1.25rem + 2px);
@@ -4787,13 +4787,13 @@ html.theme-light .icon-btn-sm:hover {
 
 /* Mobile: reduce padding from screen edges for more display space */
 @media (max-width: 768px) {
-    .round-accordion-content {
+    .dealer-page .round-accordion-content {
         padding-left: calc(0.5rem + 2px) !important;
         padding-right: calc(0.5rem + 2px) !important;
         padding-bottom: calc(0.75rem + 2px) !important;
     }
 
-    .round-accordion-header {
+    .dealer-page .round-accordion-header {
         padding: 0.75rem !important;
     }
 }

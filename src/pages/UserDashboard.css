@@ -148,14 +148,14 @@
     margin: 0 auto;
 }
 
-.round-accordion-item {
+.user-dashboard .round-accordion-item {
     border-radius: var(--radius-lg);
     overflow: hidden;
     transition: box-shadow 0.3s ease;
     border: none;
 }
 
-.round-accordion-header {
+.user-dashboard .round-accordion-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -170,36 +170,36 @@
     -webkit-transform: translateZ(0);
 }
 
-.round-accordion-header:hover {
+.user-dashboard .round-accordion-header:hover {
     background: rgba(212, 175, 55, 0.05);
 }
 
-.round-accordion-item.expanded .round-accordion-header {
+.user-dashboard .round-accordion-item.expanded .round-accordion-header {
     background: rgba(212, 175, 55, 0.08);
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
 }
 
-.round-header-info {
+.user-dashboard .round-header-info {
     display: flex;
     align-items: center;
     gap: 1.5rem;
     flex: 1;
 }
 
-.round-title-group h3 {
+.user-dashboard .round-title-group h3 {
     margin-bottom: 0.25rem;
     font-size: 1.2rem;
     color: var(--color-text);
     font-weight: 600;
 }
 
-.round-title-group .round-date {
+.user-dashboard .round-title-group .round-date {
     font-size: 0.85rem;
     color: var(--color-text-muted);
 }
 
-.round-header-status {
+.user-dashboard .round-header-status {
     display: flex;
     align-items: center;
     gap: 1.5rem;
@@ -207,17 +207,17 @@
     justify-content: flex-end;
 }
 
-.round-header-status svg {
+.user-dashboard .round-header-status svg {
     color: var(--color-text-muted);
     transition: transform 0.3s ease;
 }
 
-.round-accordion-item.expanded .round-header-status svg {
+.user-dashboard .round-accordion-item.expanded .round-header-status svg {
     transform: rotate(180deg);
     color: var(--color-primary);
 }
 
-.round-accordion-content {
+.user-dashboard .round-accordion-content {
     padding: 2rem;
     background: rgba(0, 0, 0, 0.15);
     border: 1px solid rgba(212, 175, 55, 0.1);
@@ -1539,7 +1539,7 @@
         display: none;
     }
 
-    .round-accordion-header {
+    .user-dashboard .round-accordion-header {
         flex-direction: column;
         align-items: flex-start;
         gap: 1rem;
@@ -1561,11 +1561,11 @@
         gap: 0.5rem;
     }
 
-    .round-accordion-item {
+    .user-dashboard .round-accordion-item {
         border-radius: var(--radius-md);
     }
 
-    .round-accordion-content {
+    .user-dashboard .round-accordion-content {
         padding: 0.5rem;
         gap: 0.5rem;
     }
@@ -1606,7 +1606,7 @@
         padding: 0;
     }
 
-    .round-accordion-content {
+    .user-dashboard .round-accordion-content {
         padding: 0.25rem;
         gap: 0.25rem;
     }
@@ -1682,7 +1682,7 @@
         padding: 0.5rem 0.25rem !important;
     }
 
-    .round-accordion-content {
+    .user-dashboard .round-accordion-content {
         padding: 0 !important;
     }
 }
@@ -1694,7 +1694,7 @@
         padding: 0 0.5rem !important;
     }
 
-    .round-accordion-content {
+    .user-dashboard .round-accordion-content {
         padding: 0.5rem !important;
         gap: 0.75rem !important;
     }
@@ -1960,8 +1960,9 @@
 }
 
 .clear-btn:hover {
-    background: rgba(255, 100, 100, 0.2);
-    color: var(--color-danger);
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: var(--color-text);
 }
 
 .clear-btn svg {
@@ -2248,7 +2249,7 @@
     padding: 0.35rem 0.75rem;
     background: linear-gradient(135deg, #10b981, #059669);
     color: #fff;
-    border-radius: var(--radius-md, 8px);
+    border-radius: var(--radius-md);
     font-size: 0.8rem;
     font-weight: 600;
     box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
@@ -2406,117 +2407,117 @@
    ============================================= */
 
 /* Thai Lottery - Red Theme */
-.round-accordion-item.thai .round-accordion-header {
+.user-dashboard .round-accordion-item.thai .round-accordion-header {
     border: 2px solid #ed1c24;
     border-top: 5px solid #ed1c24;
     background: linear-gradient(180deg, rgba(237, 28, 36, 0.15) 0%, var(--color-card) 30%);
 }
 
-.round-accordion-item.thai:hover .round-accordion-header,
-.round-accordion-item.thai.expanded .round-accordion-header {
+.user-dashboard .round-accordion-item.thai:hover .round-accordion-header,
+.user-dashboard .round-accordion-item.thai.expanded .round-accordion-header {
     border-color: #ed1c24;
     background: linear-gradient(180deg, rgba(237, 28, 36, 0.25) 0%, rgba(237, 28, 36, 0.08) 50%);
     box-shadow: 0 0 20px rgba(237, 28, 36, 0.2);
 }
 
-.round-accordion-item.thai .round-accordion-content {
+.user-dashboard .round-accordion-item.thai .round-accordion-content {
     border: 2px solid #ed1c24;
     border-top: none;
 }
 
-.round-accordion-item.thai.expanded .round-header-status svg {
+.user-dashboard .round-accordion-item.thai.expanded .round-header-status svg {
     color: #ed1c24;
 }
 
 /* Lao Lottery - Neon Blue Theme */
-.round-accordion-item.lao .round-accordion-header {
+.user-dashboard .round-accordion-item.lao .round-accordion-header {
     border: 2px solid #4a90ff;
     border-top: 5px solid #4a90ff;
     background: linear-gradient(180deg, rgba(74, 144, 255, 0.12) 0%, var(--color-card) 30%);
 }
 
-.round-accordion-item.lao:hover .round-accordion-header,
-.round-accordion-item.lao.expanded .round-accordion-header {
+.user-dashboard .round-accordion-item.lao:hover .round-accordion-header,
+.user-dashboard .round-accordion-item.lao.expanded .round-accordion-header {
     border-color: #4a90ff;
     background: linear-gradient(180deg, rgba(74, 144, 255, 0.2) 0%, rgba(74, 144, 255, 0.06) 50%);
     box-shadow: 0 0 20px rgba(74, 144, 255, 0.25);
 }
 
-.round-accordion-item.lao .round-accordion-content {
+.user-dashboard .round-accordion-item.lao .round-accordion-content {
     border: 2px solid #4a90ff;
     border-top: none;
 }
 
-.round-accordion-item.lao.expanded .round-header-status svg {
+.user-dashboard .round-accordion-item.lao.expanded .round-header-status svg {
     color: #4a90ff;
 }
 
 /* Hanoi Lottery - Yellow Theme */
-.round-accordion-item.hanoi .round-accordion-header {
+.user-dashboard .round-accordion-item.hanoi .round-accordion-header {
     border: 2px solid #ffcd00;
     border-top: 5px solid #ffcd00;
     background: linear-gradient(180deg, rgba(255, 205, 0, 0.15) 0%, var(--color-card) 30%);
 }
 
-.round-accordion-item.hanoi:hover .round-accordion-header,
-.round-accordion-item.hanoi.expanded .round-accordion-header {
+.user-dashboard .round-accordion-item.hanoi:hover .round-accordion-header,
+.user-dashboard .round-accordion-item.hanoi.expanded .round-accordion-header {
     border-color: #ffcd00;
     background: linear-gradient(180deg, rgba(255, 205, 0, 0.25) 0%, rgba(255, 205, 0, 0.08) 50%);
     box-shadow: 0 0 20px rgba(255, 205, 0, 0.2);
 }
 
-.round-accordion-item.hanoi .round-accordion-content {
+.user-dashboard .round-accordion-item.hanoi .round-accordion-content {
     border: 2px solid #ffcd00;
     border-top: none;
 }
 
-.round-accordion-item.hanoi.expanded .round-header-status svg {
+.user-dashboard .round-accordion-item.hanoi.expanded .round-header-status svg {
     color: #ffcd00;
 }
 
 /* Yeekee Lottery - Purple Theme */
-.round-accordion-item.yeekee .round-accordion-header {
+.user-dashboard .round-accordion-item.yeekee .round-accordion-header {
     border: 2px solid #9c27b0;
     border-top: 5px solid #9c27b0;
     background: linear-gradient(180deg, rgba(156, 39, 176, 0.15) 0%, var(--color-card) 30%);
 }
 
-.round-accordion-item.yeekee:hover .round-accordion-header,
-.round-accordion-item.yeekee.expanded .round-accordion-header {
+.user-dashboard .round-accordion-item.yeekee:hover .round-accordion-header,
+.user-dashboard .round-accordion-item.yeekee.expanded .round-accordion-header {
     border-color: #9c27b0;
     background: linear-gradient(180deg, rgba(156, 39, 176, 0.25) 0%, rgba(156, 39, 176, 0.08) 50%);
     box-shadow: 0 0 20px rgba(156, 39, 176, 0.2);
 }
 
-.round-accordion-item.yeekee .round-accordion-content {
+.user-dashboard .round-accordion-item.yeekee .round-accordion-content {
     border: 2px solid #9c27b0;
     border-top: none;
 }
 
-.round-accordion-item.yeekee.expanded .round-header-status svg {
+.user-dashboard .round-accordion-item.yeekee.expanded .round-header-status svg {
     color: #9c27b0;
 }
 
 /* Stock Lottery - Green Theme */
-.round-accordion-item.stock .round-accordion-header {
+.user-dashboard .round-accordion-item.stock .round-accordion-header {
     border: 2px solid #00c853;
     border-top: 5px solid #00c853;
     background: linear-gradient(180deg, rgba(0, 200, 83, 0.15) 0%, var(--color-card) 30%);
 }
 
-.round-accordion-item.stock:hover .round-accordion-header,
-.round-accordion-item.stock.expanded .round-accordion-header {
+.user-dashboard .round-accordion-item.stock:hover .round-accordion-header,
+.user-dashboard .round-accordion-item.stock.expanded .round-accordion-header {
     border-color: #00c853;
     background: linear-gradient(180deg, rgba(0, 200, 83, 0.25) 0%, rgba(0, 200, 83, 0.08) 50%);
     box-shadow: 0 0 20px rgba(0, 200, 83, 0.2);
 }
 
-.round-accordion-item.stock .round-accordion-content {
+.user-dashboard .round-accordion-item.stock .round-accordion-content {
     border: 2px solid #00c853;
     border-top: none;
 }
 
-.round-accordion-item.stock.expanded .round-header-status svg {
+.user-dashboard .round-accordion-item.stock.expanded .round-header-status svg {
     color: #00c853;
 }
 
@@ -4346,11 +4347,11 @@
         min-width: auto;
     }
     
-    .round-accordion-header {
+    .user-dashboard .round-accordion-header {
         padding: 1.25rem 1.5rem;
     }
     
-    .round-accordion-content {
+    .user-dashboard .round-accordion-content {
         padding: 1.5rem;
         gap: 1.5rem;
     }
@@ -4539,92 +4540,92 @@ html.theme-light .time-remaining {
    ============================================= */
 
 /* Remove individual borders from header and content when expanded */
-.round-accordion-item.expanded {
+.user-dashboard .round-accordion-item.expanded {
     border-radius: var(--radius-lg);
     overflow: hidden;
 }
 
 /* Thai - wrapper approach */
-.round-accordion-item.thai.expanded {
+.user-dashboard .round-accordion-item.thai.expanded {
     border: 2px solid #ed1c24;
     border-top-width: 5px;
 }
 
-.round-accordion-item.thai.expanded .round-accordion-header {
+.user-dashboard .round-accordion-item.thai.expanded .round-accordion-header {
     border: none;
     border-radius: 0;
     border-bottom: 1px solid rgba(237, 28, 36, 0.3);
 }
 
-.round-accordion-item.thai.expanded .round-accordion-content {
+.user-dashboard .round-accordion-item.thai.expanded .round-accordion-content {
     border: none;
     border-radius: 0;
 }
 
 /* Lao - wrapper approach */
-.round-accordion-item.lao.expanded {
+.user-dashboard .round-accordion-item.lao.expanded {
     border: 2px solid #4a90ff;
     border-top-width: 5px;
 }
 
-.round-accordion-item.lao.expanded .round-accordion-header {
+.user-dashboard .round-accordion-item.lao.expanded .round-accordion-header {
     border: none;
     border-radius: 0;
     border-bottom: 1px solid rgba(74, 144, 255, 0.3);
 }
 
-.round-accordion-item.lao.expanded .round-accordion-content {
+.user-dashboard .round-accordion-item.lao.expanded .round-accordion-content {
     border: none;
     border-radius: 0;
 }
 
 /* Hanoi - wrapper approach */
-.round-accordion-item.hanoi.expanded {
+.user-dashboard .round-accordion-item.hanoi.expanded {
     border: 2px solid #ffcd00;
     border-top-width: 5px;
 }
 
-.round-accordion-item.hanoi.expanded .round-accordion-header {
+.user-dashboard .round-accordion-item.hanoi.expanded .round-accordion-header {
     border: none;
     border-radius: 0;
     border-bottom: 1px solid rgba(255, 205, 0, 0.3);
 }
 
-.round-accordion-item.hanoi.expanded .round-accordion-content {
+.user-dashboard .round-accordion-item.hanoi.expanded .round-accordion-content {
     border: none;
     border-radius: 0;
 }
 
 /* Yeekee - wrapper approach */
-.round-accordion-item.yeekee.expanded {
+.user-dashboard .round-accordion-item.yeekee.expanded {
     border: 2px solid #9c27b0;
     border-top-width: 5px;
 }
 
-.round-accordion-item.yeekee.expanded .round-accordion-header {
+.user-dashboard .round-accordion-item.yeekee.expanded .round-accordion-header {
     border: none;
     border-radius: 0;
     border-bottom: 1px solid rgba(156, 39, 176, 0.3);
 }
 
-.round-accordion-item.yeekee.expanded .round-accordion-content {
+.user-dashboard .round-accordion-item.yeekee.expanded .round-accordion-content {
     border: none;
     border-radius: 0;
 }
 
 /* Stock - wrapper approach */
-.round-accordion-item.stock.expanded {
+.user-dashboard .round-accordion-item.stock.expanded {
     border: 2px solid #00c853;
     border-top-width: 5px;
 }
 
-.round-accordion-item.stock.expanded .round-accordion-header {
+.user-dashboard .round-accordion-item.stock.expanded .round-accordion-header {
     border: none;
     border-radius: 0;
     border-bottom: 1px solid rgba(0, 200, 83, 0.3);
 }
 
-.round-accordion-item.stock.expanded .round-accordion-content {
+.user-dashboard .round-accordion-item.stock.expanded .round-accordion-content {
     border: none;
     border-radius: 0;
 }
