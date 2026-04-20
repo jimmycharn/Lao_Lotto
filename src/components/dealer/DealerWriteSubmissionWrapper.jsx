@@ -90,10 +90,7 @@ export default function DealerWriteSubmissionWrapper({
             throw new Error('ไม่มีข้อมูลที่จะบันทึก')
         }
 
-        // Safety check: verify user hasn't changed password (prevent dealer input for independent users)
-        if (targetUser?.password_changed) {
-            throw new Error('ไม่สามารถเขียนโพยแทนสมาชิกที่เปลี่ยนรหัสผ่านแล้วได้')
-        }
+        // Permission is now controlled by user's dealerCanSubmit setting (enforced at UI layer in RoundAccordionItem).
 
         // Calculate total amount
         const totalAmount = entries.reduce((sum, e) => sum + (e.amount || 0), 0)
@@ -218,10 +215,7 @@ export default function DealerWriteSubmissionWrapper({
             throw new Error('ไม่มีข้อมูลที่จะบันทึก')
         }
 
-        // Safety check: verify user hasn't changed password
-        if (targetUser?.password_changed) {
-            throw new Error('ไม่สามารถแก้ไขโพยของสมาชิกที่เปลี่ยนรหัสผ่านแล้วได้')
-        }
+        // Permission is now controlled by user's dealerCanSubmit setting (enforced at UI layer in RoundAccordionItem).
 
         // Soft delete old entries
         if (originalItems && originalItems.length > 0) {

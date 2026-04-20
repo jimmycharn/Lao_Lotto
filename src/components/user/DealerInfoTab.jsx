@@ -14,8 +14,11 @@ import {
 import BankAccountCard from '../BankAccountCard'
 
 // Dealer Info Tab Component - Shows selected dealer's information
-export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
+export default function DealerInfoTab({ dealer, userSettings: userSettingsProp, isOwnDealer }) {
     const { user } = useAuth()
+    // Local mirror for optimistic UI updates (toggles reflect immediately without waiting for realtime)
+    const [userSettings, setUserSettings] = useState(userSettingsProp)
+    useEffect(() => { setUserSettings(userSettingsProp) }, [userSettingsProp])
     const [dealerProfile, setDealerProfile] = useState(null)
     const [dealerBankAccounts, setDealerBankAccounts] = useState([])
     const [assignedBankAccountId, setAssignedBankAccountId] = useState(null)
@@ -23,6 +26,7 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
     const [subTab, setSubTab] = useState(isOwnDealer ? 'rounds' : 'profile') // Different default tabs
     const [ratesTab, setRatesTab] = useState('thai') // lottery type tab for rates
     const [savingBonus, setSavingBonus] = useState(false)
+    const [savingDealerCanSubmit, setSavingDealerCanSubmit] = useState(false)
 
     // User's own bank accounts
     const [userBankAccounts, setUserBankAccounts] = useState([])
@@ -303,8 +307,11 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
                 if (userSettings.lottery_settings[tab].bonusEnabled !== undefined) {
                     merged[tab].bonusEnabled = userSettings.lottery_settings[tab].bonusEnabled
                 }
+                if (userSettings.lottery_settings[tab].dealerCanSubmit !== undefined) {
+                    merged[tab].dealerCanSubmit = userSettings.lottery_settings[tab].dealerCanSubmit
+                }
                 Object.keys(userSettings.lottery_settings[tab]).forEach(key => {
-                    if (key === 'bonusEnabled') return
+                    if (key === 'bonusEnabled' || key === 'dealerCanSubmit') return
                     if (merged[tab][key]) {
                         merged[tab][key] = { ...merged[tab][key], ...userSettings.lottery_settings[tab][key] }
                     }
@@ -341,10 +348,39 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
                 }, { onConflict: 'user_id, dealer_id' })
 
             if (error) throw error
+            // Optimistically reflect in local state so UI updates immediately
+            setUserSettings(prev => ({ ...(prev || {}), lottery_settings: newLotterySettings }))
         } catch (error) {
             console.error('Error saving bonus settings:', error)
         } finally {
             setSavingBonus(false)
+        }
+    }
+
+    // Save dealerCanSubmit flag to user_settings.lottery_settings[lotteryKey]
+    async function handleSaveDealerCanSubmit(lotteryKey, dealerCanSubmit) {
+        setSavingDealerCanSubmit(true)
+        try {
+            const existingSettings = userSettings?.lottery_settings || {}
+            const updatedTab = { ...existingSettings[lotteryKey], dealerCanSubmit }
+            const newLotterySettings = { ...existingSettings, [lotteryKey]: updatedTab }
+
+            const { error } = await supabase
+                .from('user_settings')
+                .upsert({
+                    user_id: user.id,
+                    dealer_id: dealer.id,
+                    lottery_settings: newLotterySettings,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'user_id, dealer_id' })
+
+            if (error) throw error
+            // Optimistically reflect in local state so UI updates immediately
+            setUserSettings(prev => ({ ...(prev || {}), lottery_settings: newLotterySettings }))
+        } catch (error) {
+            console.error('Error saving dealerCanSubmit:', error)
+        } finally {
+            setSavingDealerCanSubmit(false)
         }
     }
 
@@ -550,39 +586,71 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
                             </div>
                         )}
 
-                        {/* Bonus Settings Toggle */}
-                        <label
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.5rem',
-                                margin: '0.75rem 0 0.75rem',
-                                cursor: 'pointer',
-                                fontSize: '0.95rem',
-                                color: settings[ratesTab]?.bonusEnabled ? '#22c55e' : 'var(--color-text)'
-                            }}
-                            onClick={async (e) => {
-                                const newEnabled = !settings[ratesTab]?.bonusEnabled
-                                // Collect current bonus values
-                                const bonusUpdates = {}
-                                Object.entries(settings[ratesTab] || {}).forEach(([key, val]) => {
-                                    if (key !== '4_set' && key !== 'bonusEnabled' && typeof val === 'object') {
-                                        bonusUpdates[key] = val.bonus || 0
-                                    }
-                                })
-                                await handleSaveBonusSettings(ratesTab, newEnabled, bonusUpdates)
-                            }}
-                        >
-                            <input
-                                type="checkbox"
-                                checked={settings[ratesTab]?.bonusEnabled || false}
-                                readOnly
-                                style={{ width: '18px', height: '18px', accentColor: '#22c55e', cursor: 'pointer' }}
-                            />
-                            <FiGift style={{ color: settings[ratesTab]?.bonusEnabled ? '#22c55e' : 'var(--color-text-muted)' }} />
-                            <span style={{ fontWeight: 500 }}>เปิดแถมเงินแทง</span>
-                            {savingBonus && <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>กำลังบันทึก...</span>}
-                        </label>
+                        {/* Toggles row: Bonus + Dealer can submit */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '1rem', margin: '0.75rem 0' }}>
+                            {/* Bonus Settings Toggle */}
+                            <label
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    cursor: 'pointer',
+                                    fontSize: '0.95rem',
+                                    color: settings[ratesTab]?.bonusEnabled ? '#22c55e' : 'var(--color-text)'
+                                }}
+                                onClick={async (e) => {
+                                    const newEnabled = !settings[ratesTab]?.bonusEnabled
+                                    // Collect current bonus values
+                                    const bonusUpdates = {}
+                                    Object.entries(settings[ratesTab] || {}).forEach(([key, val]) => {
+                                        if (key !== '4_set' && key !== 'bonusEnabled' && key !== 'dealerCanSubmit' && typeof val === 'object') {
+                                            bonusUpdates[key] = val.bonus || 0
+                                        }
+                                    })
+                                    await handleSaveBonusSettings(ratesTab, newEnabled, bonusUpdates)
+                                }}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={settings[ratesTab]?.bonusEnabled || false}
+                                    readOnly
+                                    style={{ width: '18px', height: '18px', accentColor: '#22c55e', cursor: 'pointer' }}
+                                />
+                                <FiGift style={{ color: settings[ratesTab]?.bonusEnabled ? '#22c55e' : 'var(--color-text-muted)' }} />
+                                <span style={{ fontWeight: 500 }}>เปิดแถมเงินแทง</span>
+                                {savingBonus && <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>กำลังบันทึก...</span>}
+                            </label>
+
+                            {/* Dealer can submit toggle */}
+                            {(() => {
+                                const canSubmit = settings[ratesTab]?.dealerCanSubmit !== false // default true
+                                return (
+                                    <label
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem',
+                                            cursor: 'pointer',
+                                            fontSize: '0.95rem',
+                                            color: canSubmit ? '#22c55e' : 'var(--color-text)'
+                                        }}
+                                        onClick={async () => {
+                                            await handleSaveDealerCanSubmit(ratesTab, !canSubmit)
+                                        }}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={canSubmit}
+                                            readOnly
+                                            style={{ width: '18px', height: '18px', accentColor: '#22c55e', cursor: 'pointer' }}
+                                        />
+                                        <FiCheck style={{ color: canSubmit ? '#22c55e' : 'var(--color-text-muted)' }} />
+                                        <span style={{ fontWeight: 500 }}>เจ้ามือคีย์แทนได้</span>
+                                        {savingDealerCanSubmit && <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>กำลังบันทึก...</span>}
+                                    </label>
+                                )
+                            })()}
+                        </div>
 
                         {/* Regular Rates Table */}
                         <div className="rates-table-container">
@@ -597,7 +665,7 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
                                 </thead>
                                 <tbody>
                                     {Object.entries(settings[ratesTab] || {})
-                                        .filter(([key]) => key !== '4_set' && key !== 'bonusEnabled')
+                                        .filter(([key]) => key !== '4_set' && key !== 'bonusEnabled' && key !== 'dealerCanSubmit')
                                         .map(([key, value]) => (
                                             <tr key={key}>
                                                 <td className="type-cell">{BET_LABELS[ratesTab]?.[key] || key}</td>
@@ -618,7 +686,7 @@ export default function DealerInfoTab({ dealer, userSettings, isOwnDealer }) {
                                                                 const newBonus = parseFloat(e.target.value) || 0
                                                                 const bonusUpdates = {}
                                                                 Object.entries(settings[ratesTab] || {}).forEach(([k, v]) => {
-                                                                    if (k !== '4_set' && k !== 'bonusEnabled' && typeof v === 'object') {
+                                                                    if (k !== '4_set' && k !== 'bonusEnabled' && k !== 'dealerCanSubmit' && typeof v === 'object') {
                                                                         bonusUpdates[k] = k === key ? newBonus : (v.bonus || 0)
                                                                     }
                                                                 })

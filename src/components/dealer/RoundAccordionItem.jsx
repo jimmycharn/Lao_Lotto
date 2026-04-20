@@ -195,6 +195,19 @@ export default function RoundAccordionItem({
     // Get allMembers filtered to exclude blocked members for this round
     const allowedMembers = allMembers.filter(m => !isMemberBlockedForRound(m.id))
 
+    // Check if dealer can key on behalf of a member (user explicitly allows dealerCanSubmit).
+    // Note: password_changed is NO longer a gate here - user's checkbox is the sole authority.
+    const canDealerKeyForMember = (member) => {
+        if (!member) return false
+        const s = allMemberSettings[member.id]
+        const dealerCanSubmit = s?.lottery_settings?.[round.lottery_type]?.dealerCanSubmit
+        // default true when undefined
+        return dealerCanSubmit !== false
+    }
+
+    // Members that the dealer is allowed to key bets for (used in write modal dropdown & button visibility)
+    const keyableMembers = allowedMembers.filter(canDealerKeyForMember)
+
     // Fetch upstream dealers on mount
     useEffect(() => {
         if (user?.id) {
@@ -954,9 +967,9 @@ export default function RoundAccordionItem({
             (m.full_name || m.email || 'ไม่ระบุ') === memberName
         )
         if (member) {
-            // Check if member has changed password - if so, dealer cannot write on their behalf
-            if (member.password_changed) {
-                toast.error('ไม่สามารถเขียนโพยแทนสมาชิกที่เปลี่ยนรหัสผ่านแล้วได้')
+            // Gate by dealerCanSubmit (user's explicit permission). password_changed is no longer checked.
+            if (!canDealerKeyForMember(member)) {
+                toast.error('สมาชิกไม่อนุญาตให้เจ้ามือคีย์แทน')
                 return
             }
             setSelectedMemberForBet(member)
@@ -972,14 +985,16 @@ export default function RoundAccordionItem({
         const member = allowedMembers.find(m => 
             (m.full_name || m.email || 'ไม่ระบุ') === memberName
         )
-        // Can write bet only if member exists, hasn't changed password, and not blocked
-        return member && !member.password_changed
+        // Can write bet only if member exists, hasn't changed password, not blocked,
+        // and user allows dealer to key on their behalf for this round's lottery type
+        return canDealerKeyForMember(member)
     }
 
-    // Check if dealer can edit a specific user's bill (user hasn't changed password)
+    // Check if dealer can edit/delete a specific user's bill.
+    // Gate solely by user's dealerCanSubmit permission for this round's lottery type.
     const canEditBillForUser = (userId) => {
         const member = allMembers.find(m => m.id === userId)
-        return member && !member.password_changed
+        return canDealerKeyForMember(member)
     }
 
     // Edit bill - open WriteSubmissionModal with existing data
@@ -2508,23 +2523,20 @@ export default function RoundAccordionItem({
                             </div>
                             {/* Row: เขียนโพย + AI วิเคราะห์ */}
                             <div className="open-round-extra-actions">
-                                <button
-                                    className="extra-action-btn write-bet-btn"
-                                    onClick={(e) => {
-                                        e.stopPropagation()
-                                        if (allowedMembers.length > 0) {
-                                            const firstMember = allowedMembers[0]
-                                            if (!firstMember.password_changed) {
-                                                setSelectedMemberForBet(firstMember)
-                                                setEditingBillData(null)
-                                                setShowWriteBetModal(true)
-                                            }
-                                        }
-                                    }}
-                                    title="เขียนโพย"
-                                >
-                                    <FiFileText /> เขียนโพย
-                                </button>
+                                {keyableMembers.length > 0 && (
+                                    <button
+                                        className="extra-action-btn write-bet-btn"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            setSelectedMemberForBet(keyableMembers[0])
+                                            setEditingBillData(null)
+                                            setShowWriteBetModal(true)
+                                        }}
+                                        title="เขียนโพย"
+                                    >
+                                        <FiFileText /> เขียนโพย
+                                    </button>
+                                )}
                                 <button
                                     className="extra-action-btn ai-btn"
                                     onClick={(e) => { e.stopPropagation(); handleOpenAIAnalysis(); }}
@@ -2658,23 +2670,20 @@ export default function RoundAccordionItem({
                                 >
                                     <FiPower /> {round.is_active ? 'เปิดอยู่' : 'ปิดอยู่'}
                                 </button>
-                                <button
-                                    className="extra-action-btn write-bet-btn"
-                                    onClick={(e) => {
-                                        e.stopPropagation()
-                                        if (allowedMembers.length > 0) {
-                                            const firstMember = allowedMembers[0]
-                                            if (!firstMember.password_changed) {
-                                                setSelectedMemberForBet(firstMember)
-                                                setEditingBillData(null)
-                                                setShowWriteBetModal(true)
-                                            }
-                                        }
-                                    }}
-                                    title="เขียนโพย"
-                                >
-                                    <FiFileText /> เขียนโพย
-                                </button>
+                                {keyableMembers.length > 0 && (
+                                    <button
+                                        className="extra-action-btn write-bet-btn"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            setSelectedMemberForBet(keyableMembers[0])
+                                            setEditingBillData(null)
+                                            setShowWriteBetModal(true)
+                                        }}
+                                        title="เขียนโพย"
+                                    >
+                                        <FiFileText /> เขียนโพย
+                                    </button>
+                                )}
                                 <button
                                     className="extra-action-btn ai-btn"
                                     onClick={(e) => { e.stopPropagation(); handleOpenAIAnalysis(); }}
@@ -5059,7 +5068,11 @@ export default function RoundAccordionItem({
                     round={round}
                     targetUser={selectedMemberForBet}
                     dealerId={user.id}
-                    allMembers={allowedMembers}
+                    allMembers={
+                        selectedMemberForBet && !keyableMembers.some(m => m.id === selectedMemberForBet.id)
+                            ? [selectedMemberForBet, ...keyableMembers]
+                            : keyableMembers
+                    }
                     onMemberChange={(member) => setSelectedMemberForBet(member)}
                     onClose={() => {
                         setShowWriteBetModal(false)
