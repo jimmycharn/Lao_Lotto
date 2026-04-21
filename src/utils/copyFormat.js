@@ -14,7 +14,11 @@ const BET_TYPE_ORDER = [
     '2_top',          // 2 ตัวบน
     '2_front',        // 2 ตัวหน้า
     '2_center',       // 2 ตัวถ่าง
+    '2_spread',       // 2 ตัวถ่าง (alias)
+    '2_tang',         // 2 ตัวถ่าง (legacy)
     '2_run',          // 2 ตัวลอย
+    '2_have',         // 2 ตัวมี
+    '2_teng',         // 2 ตัวมี (legacy)
     '2_bottom',       // 2 ตัวล่าง
     'teng_tod',       // 3 ตัวเต็งโต๊ด (virtual type)
     '3_top',          // 3 ตัวบน/ตรง

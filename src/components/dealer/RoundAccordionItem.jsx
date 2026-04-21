@@ -4303,7 +4303,11 @@ export default function RoundAccordionItem({
                                                                                                             fontWeight: '600',
                                                                                                             color: 'var(--color-success)'
                                                                                                         }}>
-                                                                                                            ถูก {round.currency_symbol}{winInfo.amount.toLocaleString()} → {round.currency_symbol}{winInfo.payout.toLocaleString()}
+                                                                                                            {item.bet_type === '4_set' ? (
+                                                                                                                <>ถูก {Math.max(1, Math.floor(winInfo.amount / (round?.set_prices?.['4_top'] || 120)))} ชุด → {round.currency_symbol}{winInfo.payout.toLocaleString()}</>
+                                                                                                            ) : (
+                                                                                                                <>ถูก {round.currency_symbol}{winInfo.amount.toLocaleString()} → {round.currency_symbol}{winInfo.payout.toLocaleString()}</>
+                                                                                                            )}
                                                                                                         </div>
                                                                                                     )}
                                                                                                 </div>
@@ -5049,7 +5053,11 @@ export default function RoundAccordionItem({
                                                                                                 </div>
                                                                                                 {itemWin && (
                                                                                                     <div style={{ padding: '0.15rem 0.75rem 0.4rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-success)' }}>
-                                                                                                        ถูก {round.currency_symbol}{itemWin.amount.toLocaleString()} → {round.currency_symbol}{itemWin.payout.toLocaleString()}
+                                                                                                        {item.bet_type === '4_set' ? (
+                                                                                                            <>ถูก {Math.max(1, Math.floor(itemWin.amount / setPrice))} ชุด → {round.currency_symbol}{itemWin.payout.toLocaleString()}</>
+                                                                                                        ) : (
+                                                                                                            <>ถูก {round.currency_symbol}{itemWin.amount.toLocaleString()} → {round.currency_symbol}{itemWin.payout.toLocaleString()}</>
+                                                                                                        )}
                                                                                                     </div>
                                                                                                 )}
                                                                                             </div>

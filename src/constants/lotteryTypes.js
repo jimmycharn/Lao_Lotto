@@ -125,7 +125,9 @@ export const BET_TYPES = {
     '2_back': '2 ตัวหลัง',
     '2_center': '2 ตัวถ่าง',
     '2_spread': '2 ตัวถ่าง',
+    '2_tang': '2 ตัวถ่าง',
     '2_have': '2 ตัวมี',
+    '2_teng': '2 ตัวมี',
     '2_run': '2 ตัวลอย',
 
     // 2 Digits Reversed (กลับ)
@@ -187,8 +189,10 @@ export const BET_TYPES_WITH_DIGITS = {
     '2_front': { label: '2 ตัวหน้า', digits: 2 },
     '2_center': { label: '2 ตัวถ่าง', digits: 2 },
     '2_spread': { label: '2 ตัวถ่าง', digits: 2 },
+    '2_tang': { label: '2 ตัวถ่าง', digits: 2 },
     '2_run': { label: '2 ตัวลอย', digits: 2 },
     '2_have': { label: '2 ตัวมี', digits: 2 },
+    '2_teng': { label: '2 ตัวมี', digits: 2 },
     '2_bottom': { label: '2 ตัวล่าง', digits: 2 },
     // 2 Digits Reversed (กลับ)
     '2_top_rev': { label: '2 ตัวบนกลับ', digits: 2 },
