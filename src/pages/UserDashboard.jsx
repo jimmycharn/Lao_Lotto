@@ -729,9 +729,11 @@ export default function UserDashboard() {
 
                     const totalPrize = subs.reduce((sum, s) => {
                         if (!s.is_winner) return sum
-                        // For 4_set, use prize_amount from database (FIXED amount)
+                        // For 4_set, DB stores single-set prize — multiply by numSets
                         if (s.bet_type === '4_set') {
-                            return sum + (s.prize_amount || 0)
+                            const setPrice = round?.set_prices?.['4_top'] || 120
+                            const numSets = Math.max(1, Math.floor((s.amount || 0) / setPrice))
+                            return sum + (s.prize_amount || 0) * numSets
                         }
                         // Map position bet types to pak_top/pak_bottom settings
                         const POSITION_MAP_P = {
@@ -2711,9 +2713,11 @@ export default function UserDashboard() {
     const getCalculatedPrize = useCallback((sub, round) => {
         if (!sub.is_winner) return 0
 
-        // For 4_set (4 ตัวชุด), use prize_amount from database (FIXED amount, not multiplied)
+        // For 4_set (4 ตัวชุด), DB stores single-set prize — multiply by numSets
         if (sub.bet_type === '4_set') {
-            return sub.prize_amount || 0
+            const setPrice = round?.set_prices?.['4_top'] || 120
+            const numSets = Math.max(1, Math.floor((sub.amount || 0) / setPrice))
+            return (sub.prize_amount || 0) * numSets
         }
 
         const lotteryKey = getLotteryTypeKey(round?.lottery_type)

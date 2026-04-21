@@ -523,7 +523,14 @@ export default function RoundAccordionItem({
                                 upstreamSubs.forEach(sub => {
                                     if (sub.is_winner) {
                                         dealer.winCount++
-                                        dealer.totalWin += sub.prize_amount || 0
+                                        // For 4_set, DB stores SINGLE-SET prize — multiply by numSets
+                                        if (sub.bet_type === '4_set') {
+                                            const setPrice = upstreamRound?.set_prices?.['4_top'] || round?.set_prices?.['4_top'] || 120
+                                            const numSets = Math.max(1, Math.floor((sub.amount || 0) / setPrice))
+                                            dealer.totalWin += (sub.prize_amount || 0) * numSets
+                                        } else {
+                                            dealer.totalWin += sub.prize_amount || 0
+                                        }
                                     }
                                 })
                             }
@@ -633,18 +640,21 @@ export default function RoundAccordionItem({
                             } else if (bt === '5_float' && w3top && w3top.length === 3 && num.length === 5) {
                                 isWinner = floatCheck(w3top, num)
                             } else if (bt === '4_set' && w4set && num.length === 4) {
-                                // 4_set uses calculate4SetPrizes logic (fixed prize)
+                                // 4_set uses calculate4SetPrizes logic (fixed prize per set)
                                 const { totalPrize } = calculate4SetPrizes(num, w4set, round.set_prizes?.['4_top'] ? undefined : undefined)
                                 if (totalPrize > 0) {
                                     isWinner = true
-                                    prize = totalPrize // Fixed prize, not multiplied by amount
+                                    prize = totalPrize // Single-set prize
                                 }
                             }
 
                             if (isWinner) {
                                 dealer.winCount++
                                 if (bt === '4_set') {
-                                    dealer.totalWin += prize
+                                    // Multiply single-set prize by numSets the user purchased
+                                    const setPrice = round?.set_prices?.['4_top'] || 120
+                                    const numSets = Math.max(1, Math.floor((t.amount || 0) / setPrice))
+                                    dealer.totalWin += prize * numSets
                                 } else {
                                     dealer.totalWin += (t.amount || 0) * payoutRate
                                 }
@@ -2384,9 +2394,13 @@ export default function RoundAccordionItem({
     const getExpectedPayout = (sub) => {
         if (!sub.is_winner) return 0
         
-        // For 4_set, use prize_amount from database (FIXED amount, not multiplied)
+        // For 4_set, DB stores prize_amount as the SINGLE-SET prize (e.g. 3000 for
+        // 3_tod_set). Actual payout must be multiplied by the number of sets the
+        // user bought (sub.amount / setPrice).
         if (sub.bet_type === '4_set') {
-            return sub.prize_amount || 0
+            const setPrice = round?.set_prices?.['4_top'] || 120
+            const numSets = Math.max(1, Math.floor((sub.amount || 0) / setPrice))
+            return (sub.prize_amount || 0) * numSets
         }
         
         const lotteryKey = getLotteryTypeKey(round.lottery_type)

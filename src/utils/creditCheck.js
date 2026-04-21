@@ -976,9 +976,11 @@ export async function calculateRoundProfit(dealerId, roundId) {
         // Payout calculation — matches dealer dashboard getExpectedPayout() exactly
         const calcPayout = (sub) => {
             if (!sub.is_winner) return 0
-            // For 4_set, use stored prize_amount (FIXED amount, not multiplied)
+            // For 4_set, DB stores single-set prize. Multiply by numSets.
             if (sub.bet_type === '4_set') {
-                return parseFloat(sub.prize_amount || 0)
+                const setPrice = setPrices['4_top'] || 120
+                const numSets = Math.max(1, Math.floor(parseFloat(sub.amount || 0) / setPrice))
+                return parseFloat(sub.prize_amount || 0) * numSets
             }
             const amount = parseFloat(sub.amount || 0)
             const settingsKey = getSettingsKey(sub.bet_type)
@@ -1028,7 +1030,13 @@ export async function calculateRoundProfit(dealerId, roundId) {
 
                 for (const ts of (targetSubs || [])) {
                     if (ts.is_winner) {
-                        outgoingTotalWin += parseFloat(ts.prize_amount || 0)
+                        if (ts.bet_type === '4_set') {
+                            const setPrice = setPrices['4_top'] || 120
+                            const numSets = Math.max(1, Math.floor(parseFloat(ts.amount || 0) / setPrice))
+                            outgoingTotalWin += parseFloat(ts.prize_amount || 0) * numSets
+                        } else {
+                            outgoingTotalWin += parseFloat(ts.prize_amount || 0)
+                        }
                     }
                     const commRate = DEFAULT_COMMISSIONS[ts.bet_type] || 15
                     outgoingTotalCommission += parseFloat(ts.amount || 0) * (commRate / 100)

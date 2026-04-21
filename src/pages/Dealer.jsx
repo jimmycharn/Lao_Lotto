@@ -2012,7 +2012,12 @@ export default function Dealer() {
                 // Helper: calculate payout for a submission (matches dealer dashboard getExpectedPayout)
                 const calcPayout = (sub) => {
                     if (!sub.is_winner) return 0
-                    if (sub.bet_type === '4_set') return sub.prize_amount || 0
+                    if (sub.bet_type === '4_set') {
+                        // DB stores single-set prize — multiply by numSets
+                        const setPrice = roundData?.set_prices?.['4_top'] || 120
+                        const numSets = Math.max(1, Math.floor((sub.amount || 0) / setPrice))
+                        return (sub.prize_amount || 0) * numSets
+                    }
                     const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
                     const settings = allUserSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
                     if (settings?.payout !== undefined) return (sub.amount || 0) * settings.payout

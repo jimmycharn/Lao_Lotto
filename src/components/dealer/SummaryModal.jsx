@@ -86,9 +86,11 @@ export default function SummaryModal({ round, onClose }) {
     const getExpectedPayout = (sub) => {
         if (!sub.is_winner) return 0
         
-        // For 4_set, use prize_amount from database (FIXED amount, not multiplied)
+        // For 4_set, DB stores single-set prize — multiply by numSets
         if (sub.bet_type === '4_set') {
-            return sub.prize_amount || 0
+            const setPrice = round?.set_prices?.['4_top'] || 120
+            const numSets = Math.max(1, Math.floor((sub.amount || 0) / setPrice))
+            return (sub.prize_amount || 0) * numSets
         }
         
         const lotteryKey = getLotteryTypeKey(round.lottery_type)
