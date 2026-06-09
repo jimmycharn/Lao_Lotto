@@ -2137,7 +2137,7 @@ serve(async (req) => {
                     "header": {
                       "type": "box",
                       "layout": "vertical",
-                      "backgroundColor": "#1e1b4b", // Dark indigo
+                      "backgroundColor": "#4f46e5", // Indigo-600
                       "paddingAll": "lg",
                       "contents": [
                         {
@@ -2151,7 +2151,7 @@ serve(async (req) => {
                           "type": "text",
                           "text": `งวดวันที่: ${formatToThaiBudDate(activeRound.round_date)} (${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()})`,
                           "size": "xs",
-                          "color": "#e1d9f0",
+                          "color": "#c7d2fe", // Indigo-200
                           "margin": "xs"
                         },
                         {
@@ -2167,13 +2167,13 @@ serve(async (req) => {
                     "body": {
                       "type": "box",
                       "layout": "vertical",
-                      "backgroundColor": "#0f172a", // Dark slate
+                      "backgroundColor": "#f8fafc", // Slate-50
                       "paddingAll": "md",
                       "contents": [
                         {
                           "type": "box",
                           "layout": "vertical",
-                          "backgroundColor": "#1e293b",
+                          "backgroundColor": "#ffffff", // White Card
                           "cornerRadius": "md",
                           "paddingAll": "lg",
                           "contents": [
@@ -2182,12 +2182,12 @@ serve(async (req) => {
                               "text": `คุณ ${u.userName}`,
                               "weight": "bold",
                               "size": "md",
-                              "color": "#ffffff"
+                              "color": "#0f172a"
                             },
                             {
                               "type": "separator",
                               "margin": "md",
-                              "color": "#334155"
+                              "color": "#e2e8f0"
                             },
                             {
                               "type": "box",
@@ -2198,14 +2198,14 @@ serve(async (req) => {
                                   "type": "text",
                                   "text": "ยอดส่งแทง:",
                                   "size": "sm",
-                                  "color": "#94a3b8"
+                                  "color": "#64748b"
                                 },
                                 {
                                   "type": "text",
                                   "text": `฿${roundedBet.toLocaleString('th-TH')}`,
                                   "weight": "bold",
                                   "size": "sm",
-                                  "color": "#ffffff",
+                                  "color": "#0f172a",
                                   "align": "end"
                                 }
                               ]
@@ -2219,14 +2219,14 @@ serve(async (req) => {
                                   "type": "text",
                                   "text": "ส่วนลด/ค่าคอม:",
                                   "size": "sm",
-                                  "color": "#94a3b8"
+                                  "color": "#64748b"
                                 },
                                 {
                                   "type": "text",
                                   "text": `฿${roundedComm.toLocaleString('th-TH')}`,
                                   "weight": "bold",
                                   "size": "sm",
-                                  "color": "#ffffff",
+                                  "color": "#0f172a",
                                   "align": "end"
                                 }
                               ]
@@ -2240,14 +2240,14 @@ serve(async (req) => {
                                   "type": "text",
                                   "text": "ยอดถูกรางวัล:",
                                   "size": "sm",
-                                  "color": "#94a3b8"
+                                  "color": "#64748b"
                                 },
                                 {
                                   "type": "text",
                                   "text": isAnnounced ? `ถูก ${u.winCount} ครั้ง / ฿${roundedWin.toLocaleString('th-TH')}` : "-",
                                   "weight": "bold",
                                   "size": "sm",
-                                  "color": "#ffffff",
+                                  "color": "#0f172a",
                                   "align": "end"
                                 }
                               ]
@@ -2255,7 +2255,7 @@ serve(async (req) => {
                             {
                               "type": "separator",
                               "margin": "md",
-                              "color": "#334155"
+                              "color": "#e2e8f0"
                             },
                             {
                               "type": "box",
@@ -2267,7 +2267,7 @@ serve(async (req) => {
                                   "text": "สรุปยอดสุทธิ:",
                                   "weight": "bold",
                                   "size": "sm",
-                                  "color": "#ffffff"
+                                  "color": "#0f172a"
                                 },
                                 {
                                   "type": "text",
@@ -2318,7 +2318,7 @@ serve(async (req) => {
                     "type": "text",
                     "text": "ยังไม่มียอดแทงส่งเข้ามาค่ะ",
                     "size": "sm",
-                    "color": "#888888",
+                    "color": "#64748b",
                     "align": "center",
                     "margin": "md"
                   });
@@ -2340,7 +2340,7 @@ serve(async (req) => {
                       netColor = '#10b981'; // Green (dealer collects from member)
                     } else {
                       netLabel = 'เสมอ';
-                      netColor = '#888888';
+                      netColor = '#64748b';
                     }
 
                     summaryText += `${idx + 1}. คุณ ${u.userName}\n`;
@@ -2353,7 +2353,7 @@ serve(async (req) => {
                       {
                         "type": "box",
                         "layout": "vertical",
-                        "backgroundColor": "#1e293b",
+                        "backgroundColor": "#ffffff", // White Card
                         "cornerRadius": "md",
                         "paddingAll": "md",
                         "margin": "md",
@@ -2367,7 +2367,7 @@ serve(async (req) => {
                                 "text": `คุณ ${u.userName}`,
                                 "weight": "bold",
                                 "size": "sm",
-                                "color": "#ffffff",
+                                "color": "#0f172a",
                                 "flex": 7
                               },
                               {
@@ -2390,21 +2390,21 @@ serve(async (req) => {
                                 "type": "text",
                                 "text": `แทง: ฿${roundedBet.toLocaleString('th-TH')}`,
                                 "size": "xs",
-                                "color": "#94a3b8",
+                                "color": "#64748b",
                                 "flex": 4
                               },
                               {
                                 "type": "text",
                                 "text": `คอม: ฿${roundedComm.toLocaleString('th-TH')}`,
                                 "size": "xs",
-                                "color": "#94a3b8",
+                                "color": "#64748b",
                                 "flex": 4
                               },
                               {
                                 "type": "text",
                                 "text": isAnnounced ? `ถูก: ${u.winCount}/฿${roundedWin.toLocaleString('th-TH')}` : "ถูก: -",
                                 "size": "xs",
-                                "color": "#94a3b8",
+                                "color": "#64748b",
                                 "align": "end",
                                 "flex": 4
                               }
@@ -2423,7 +2423,7 @@ serve(async (req) => {
                     "text": "1. ภาพรวมงวด",
                     "weight": "bold",
                     "size": "sm",
-                    "color": "#ffffff",
+                    "color": "#0f172a",
                     "margin": "none"
                   },
                   // ยอดรับ Row
@@ -2444,9 +2444,9 @@ serve(async (req) => {
                         "layout": "horizontal",
                         "margin": "xs",
                         "contents": [
-                          { "type": "text", "text": `รวม: ฿${roundedGrandTotalBet.toLocaleString('th-TH')}`, "size": "xs", "color": "#94a3b8" },
-                          { "type": "text", "text": `คอม: ฿${roundedGrandTotalCommission.toLocaleString('th-TH')}`, "size": "xs", "color": "#94a3b8" },
-                          { "type": "text", "text": isAnnounced ? `จ่าย: ฿${roundedGrandTotalWin.toLocaleString('th-TH')}` : "จ่าย: -", "size": "xs", "color": "#94a3b8", "align": "end" },
+                          { "type": "text", "text": `รวม: ฿${roundedGrandTotalBet.toLocaleString('th-TH')}`, "size": "xs", "color": "#64748b" },
+                          { "type": "text", "text": `คอม: ฿${roundedGrandTotalCommission.toLocaleString('th-TH')}`, "size": "xs", "color": "#64748b" },
+                          { "type": "text", "text": isAnnounced ? `จ่าย: ฿${roundedGrandTotalWin.toLocaleString('th-TH')}` : "จ่าย: -", "size": "xs", "color": "#64748b", "align": "end" },
                           { "type": "text", "text": isAnnounced ? `กำไร: ฿${roundedDealerProfit.toLocaleString('th-TH')}` : "กำไร: -", "size": "xs", "color": isAnnounced && roundedDealerProfit >= 0 ? "#10b981" : "#ef4444", "align": "end" }
                         ]
                       }
@@ -2470,9 +2470,9 @@ serve(async (req) => {
                         "layout": "horizontal",
                         "margin": "xs",
                         "contents": [
-                          { "type": "text", "text": `รวม: ฿${roundedOutgoingTotalBet.toLocaleString('th-TH')}`, "size": "xs", "color": "#94a3b8" },
-                          { "type": "text", "text": `คอม: ฿${roundedOutgoingTotalCommission.toLocaleString('th-TH')}`, "size": "xs", "color": "#94a3b8" },
-                          { "type": "text", "text": isAnnounced ? `รับ: ฿${roundedOutgoingTotalWin.toLocaleString('th-TH')}` : "รับ: -", "size": "xs", "color": "#94a3b8", "align": "end" },
+                          { "type": "text", "text": `รวม: ฿${roundedOutgoingTotalBet.toLocaleString('th-TH')}`, "size": "xs", "color": "#64748b" },
+                          { "type": "text", "text": `คอม: ฿${roundedOutgoingTotalCommission.toLocaleString('th-TH')}`, "size": "xs", "color": "#64748b" },
+                          { "type": "text", "text": isAnnounced ? `รับ: ฿${roundedOutgoingTotalWin.toLocaleString('th-TH')}` : "รับ: -", "size": "xs", "color": "#64748b", "align": "end" },
                           { "type": "text", "text": isAnnounced ? `กำไร: ฿${roundedOutgoingProfit.toLocaleString('th-TH')}` : "กำไร: -", "size": "xs", "color": isAnnounced && roundedOutgoingProfit >= 0 ? "#10b981" : "#ef4444", "align": "end" }
                         ]
                       }
@@ -2492,7 +2492,7 @@ serve(async (req) => {
                           "text": "💰 กำไรรวมสุทธิ:",
                           "weight": "bold",
                           "size": "sm",
-                          "color": "#ffffff"
+                          "color": "#0f172a"
                         },
                         {
                           "type": "text",
@@ -2516,7 +2516,7 @@ serve(async (req) => {
                     "header": {
                       "type": "box",
                       "layout": "vertical",
-                      "backgroundColor": "#1e1b4b", // Dark indigo
+                      "backgroundColor": "#4f46e5", // Indigo-600
                       "paddingAll": "lg",
                       "contents": [
                         {
@@ -2530,7 +2530,7 @@ serve(async (req) => {
                           "type": "text",
                           "text": `งวดวันที่: ${formatToThaiBudDate(activeRound.round_date)}`,
                           "size": "xs",
-                          "color": "#e1d9f0",
+                          "color": "#c7d2fe", // Indigo-200
                           "margin": "xs"
                         },
                         {
@@ -2546,14 +2546,14 @@ serve(async (req) => {
                     "body": {
                       "type": "box",
                       "layout": "vertical",
-                      "backgroundColor": "#0f172a", // Dark slate
+                      "backgroundColor": "#f8fafc", // Slate-50
                       "paddingAll": "md",
                       "contents": [
                         // Overview Section
                         {
                           "type": "box",
                           "layout": "vertical",
-                          "backgroundColor": "#1e293b",
+                          "backgroundColor": "#ffffff", // White Card
                           "cornerRadius": "md",
                           "paddingAll": "md",
                           "contents": overviewBoxContents
@@ -2569,7 +2569,7 @@ serve(async (req) => {
                               "text": "2. รายละเอียดสมาชิก",
                               "weight": "bold",
                               "size": "sm",
-                              "color": "#ffffff"
+                              "color": "#0f172a"
                             }
                           ]
                         },
