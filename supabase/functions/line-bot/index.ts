@@ -1156,6 +1156,580 @@ async function getCommissionInfo(userId: string, dealerId: string, betType: stri
   return { rate: DEFAULT_COMMISSIONS[betType] || 15, isFixed: false };
 }
 
+function parseWinningNumbers(param: string, lotteryType: string): any | null {
+  const clean = param.replace(/\s+/g, ''); // Remove spaces
+  const typeLower = lotteryType.toLowerCase();
+  if (typeLower === 'lao' || typeLower === 'hanoi') {
+    if (/^\d{4}$/.test(clean)) {
+      return {
+        '4_set': clean,
+        '3_top': clean.slice(-3),
+        '2_top': clean.slice(-2),
+        '2_bottom': clean.slice(0, 2)
+      };
+    }
+  } else if (typeLower === 'thai') {
+    const match = clean.match(/^(\d{6})\/(\d{2})$/);
+    if (match) {
+      const top6 = match[1];
+      const bot2 = match[2];
+      return {
+        '6_top': top6,
+        '3_top': top6.slice(-3),
+        '2_top': top6.slice(-2),
+        '2_bottom': bot2,
+        '3_bottom': []
+      };
+    }
+  } else if (typeLower === 'stock') {
+    const match = clean.match(/^(\d{2})\/(\d{2})$/);
+    if (match) {
+      return {
+        '2_top': match[1],
+        '2_bottom': match[2]
+      };
+    }
+  }
+  return null;
+}
+
+async function fetchAllSubmissions(roundId: string): Promise<any[]> {
+  let allSubs: any[] = [];
+  let page = 0;
+  const pageSize = 1000;
+  while (true) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    const { data, error } = await supabase
+      .from('submissions')
+      .select('id, amount, user_id, source, submitted_by_type, commission_amount, prize_amount, is_winner, bet_type')
+      .eq('round_id', roundId)
+      .eq('is_deleted', false)
+      .range(from, to);
+    if (error) {
+      console.error("Error fetching submissions page:", error);
+      throw error;
+    }
+    if (!data || data.length === 0) {
+      break;
+    }
+    allSubs.push(...data);
+    if (data.length < pageSize) {
+      break;
+    }
+    page++;
+  }
+  return allSubs;
+}
+
+async function fetchAllDealerMembers(dealerId: string): Promise<any[]> {
+  let allMembers: any[] = [];
+  let page = 0;
+  const pageSize = 1000;
+  while (true) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    const { data, error } = await supabase
+      .from('user_dealer_memberships')
+      .select('user_id')
+      .eq('dealer_id', dealerId)
+      .eq('status', 'active')
+      .range(from, to);
+    if (error) {
+      console.error("Error fetching dealer members page:", error);
+      throw error;
+    }
+    if (!data || data.length === 0) {
+      break;
+    }
+    allMembers.push(...data);
+    if (data.length < pageSize) {
+      break;
+    }
+    page++;
+  }
+  return allMembers;
+}
+
+async function calculateRoundCreditFeeDeno(dealerId: string, roundId: string): Promise<{ fee: number; details: any }> {
+  const { data: subscriptions } = await supabase
+    .from('dealer_subscriptions')
+    .select(`
+      *,
+      subscription_packages (
+        id,
+        billing_model,
+        percentage_rate,
+        min_amount_before_charge,
+        min_deduction,
+        max_deduction
+      )
+    `)
+    .eq('dealer_id', dealerId)
+    .in('status', ['active', 'trial'])
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  const subscription = subscriptions?.[0] || null;
+  const pkg = subscription?.subscription_packages;
+  const billingModel = subscription?.billing_model || pkg?.billing_model;
+
+  if (!subscription || (billingModel !== 'percentage' && billingModel !== 'profit_percentage')) {
+    return { fee: 0, details: { reason: 'Not percentage billing', billingModel } };
+  }
+
+  const percentageRate = pkg?.percentage_rate || 0;
+  const minAmount = pkg?.min_amount_before_charge || 0;
+  const minDeduction = pkg?.min_deduction || 0;
+  const maxDeduction = pkg?.max_deduction || 100000;
+
+  const memberships = await fetchAllDealerMembers(dealerId);
+  const memberUserIds = memberships.map(m => m.user_id);
+  const memberIds = new Set(memberUserIds);
+
+  let dealerCreatedUnchangedIds = new Set<string>();
+  if (memberUserIds.length > 0) {
+    const chunks = [];
+    const chunkSize = 500;
+    for (let i = 0; i < memberUserIds.length; i += chunkSize) {
+      chunks.push(memberUserIds.slice(i, i + chunkSize));
+    }
+    for (const chunk of chunks) {
+      const { data: memberProfiles } = await supabase
+        .from('profiles')
+        .select('id, password_changed')
+        .in('id', chunk);
+      
+      if (memberProfiles) {
+        for (const p of memberProfiles) {
+          if (!p.password_changed) {
+            dealerCreatedUnchangedIds.add(p.id);
+          }
+        }
+      }
+    }
+  }
+
+  const { data: downstreamConnections } = await supabase
+    .from('dealer_upstream_connections')
+    .select('dealer_id, status, is_blocked')
+    .eq('upstream_dealer_id', dealerId);
+  
+  const activeDownstream = (downstreamConnections || []).filter(d => 
+    (d.status === 'active' || !d.status) && !d.is_blocked
+  );
+  const downstreamDealerIds = new Set(activeDownstream.map(d => d.dealer_id));
+
+  const allSubs = await fetchAllSubmissions(roundId);
+
+  const { data: outgoingTransfers } = await supabase
+    .from('bet_transfers')
+    .select('amount, status, is_linked')
+    .eq('round_id', roundId);
+  
+  const activeTransfers = (outgoingTransfers || []).filter(t => t.status !== 'returned');
+  const linkedTransfers = activeTransfers.filter(t => t.is_linked);
+  const transferredOutAmount = linkedTransfers.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0);
+
+  let dealerOwnVolume = 0;
+  let dealerInputForOwnUsers = 0;
+  let selfInputVolume = 0;
+  let downstreamVolume = 0;
+
+  for (const sub of allSubs) {
+    const amount = parseFloat(sub.amount || '0');
+    if (sub.source === 'transfer') {
+      downstreamVolume += amount;
+    } else if (sub.user_id === dealerId) {
+      dealerOwnVolume += amount;
+    } else if (downstreamDealerIds.has(sub.user_id)) {
+      downstreamVolume += amount;
+    } else if (memberIds.has(sub.user_id)) {
+      if (dealerCreatedUnchangedIds.has(sub.user_id)) {
+        dealerInputForOwnUsers += amount;
+      } else {
+        selfInputVolume += amount;
+      }
+    } else {
+      if (sub.submitted_by_type === 'user') {
+        selfInputVolume += amount;
+      } else {
+        dealerInputForOwnUsers += amount;
+      }
+    }
+  }
+
+  let remainingTransfer = transferredOutAmount;
+  let netDealerInputForOwnUsers = dealerInputForOwnUsers;
+  let netDealerOwnVolume = dealerOwnVolume;
+  let netSelfInputVolume = selfInputVolume;
+  let netDownstreamVolume = downstreamVolume;
+
+  if (remainingTransfer > 0) {
+    const d = Math.min(remainingTransfer, netDealerInputForOwnUsers);
+    netDealerInputForOwnUsers -= d;
+    remainingTransfer -= d;
+  }
+  if (remainingTransfer > 0) {
+    const d = Math.min(remainingTransfer, netDealerOwnVolume);
+    netDealerOwnVolume -= d;
+    remainingTransfer -= d;
+  }
+  if (remainingTransfer > 0) {
+    const d = Math.min(remainingTransfer, netSelfInputVolume);
+    netSelfInputVolume -= d;
+    remainingTransfer -= d;
+  }
+  if (remainingTransfer > 0) {
+    const d = Math.min(remainingTransfer, netDownstreamVolume);
+    netDownstreamVolume -= d;
+    remainingTransfer -= d;
+  }
+
+  const totalVolume = netDealerOwnVolume + netDealerInputForOwnUsers + netSelfInputVolume + netDownstreamVolume;
+  let totalChargeableVolume = 0;
+  if (totalVolume > minAmount) {
+    totalChargeableVolume = totalVolume - minAmount;
+  }
+
+  let fee = totalChargeableVolume * (percentageRate / 100);
+  if (fee > 0 && fee < minDeduction) fee = minDeduction;
+  if (fee > maxDeduction) fee = maxDeduction;
+
+  return {
+    fee,
+    details: {
+      billingModel,
+      dealerOwnVolume: netDealerOwnVolume,
+      dealerInputForOwnUsers: netDealerInputForOwnUsers,
+      selfInputVolume: netSelfInputVolume,
+      downstreamVolume: netDownstreamVolume,
+      transferredOutAmount,
+      totalChargeableVolume,
+      percentageRate,
+      minAmount,
+      minDeduction,
+      maxDeduction
+    }
+  };
+}
+
+async function deductAdditionalCreditForRoundDeno(dealerId: string, roundId: string, previouslyCharged: number): Promise<{ success: boolean; amountDeducted: number; message: string }> {
+  try {
+    const { fee: currentFee } = await calculateRoundCreditFeeDeno(dealerId, roundId);
+    const additionalAmount = Math.max(0, currentFee - previouslyCharged);
+
+    if (additionalAmount <= 0) {
+      return {
+        success: true,
+        amountDeducted: 0,
+        message: 'ไม่มียอดเครดิตที่ต้องตัดเพิ่ม'
+      };
+    }
+
+    const { data: creditData } = await supabase
+      .from('dealer_credits')
+      .select('balance')
+      .eq('dealer_id', dealerId)
+      .single();
+
+    const currentBalance = creditData?.balance || 0;
+    const actualDeduction = Math.min(additionalAmount, currentBalance);
+
+    if (actualDeduction > 0) {
+      const { error: updateError } = await supabase
+        .from('dealer_credits')
+        .update({
+          balance: currentBalance - actualDeduction,
+          updated_at: new Date().toISOString()
+        })
+        .eq('dealer_id', dealerId);
+
+      if (updateError) throw updateError;
+
+      await supabase
+        .from('credit_transactions')
+        .insert({
+          dealer_id: dealerId,
+          transaction_type: 'deduction',
+          amount: -actualDeduction,
+          balance_after: currentBalance - actualDeduction,
+          reference_type: 'round',
+          reference_id: roundId,
+          description: `ค่าธรรมเนียมเพิ่มเติมจากการแก้ไขงวด (LINE Bot)`,
+          metadata: { type: 'additional_deduction', currentFee, previouslyCharged }
+        });
+    }
+
+    await supabase
+      .from('lottery_rounds')
+      .update({
+        charged_credit_amount: currentFee
+      })
+      .eq('id', roundId);
+
+    return {
+      success: true,
+      amountDeducted: actualDeduction,
+      message: actualDeduction > 0 
+        ? `ตัดเครดิตเพิ่ม ฿${actualDeduction.toLocaleString('th-TH', {minimumFractionDigits: 2})}` 
+        : 'ไม่มียอดเครดิตที่ต้องตัดเพิ่ม'
+    };
+  } catch (error: any) {
+    console.error('Error in deductAdditionalCreditForRoundDeno:', error);
+    return {
+      success: false,
+      amountDeducted: 0,
+      message: 'เกิดข้อผิดพลาดในการตัดเครดิต: ' + error.message
+    };
+  }
+}
+
+async function deductProfitBasedCreditDeno(dealerId: string, roundId: string, previousPendingAmount: number): Promise<{ success: boolean; amountDeducted: number; profitAmount: number; message: string }> {
+  try {
+    const { data: subscriptions } = await supabase
+      .from('dealer_subscriptions')
+      .select(`
+        *,
+        subscription_packages (
+          id,
+          billing_model,
+          percentage_rate,
+          profit_percentage_rate,
+          min_amount_before_charge,
+          min_deduction,
+          max_deduction
+        )
+      `)
+      .eq('dealer_id', dealerId)
+      .in('status', ['active', 'trial'])
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    const subscription = subscriptions?.[0] || null;
+    const pkg = subscription?.subscription_packages;
+    const billingModel = subscription?.billing_model || pkg?.billing_model;
+
+    if (!subscription || billingModel !== 'profit_percentage') {
+      return {
+        success: true,
+        amountDeducted: 0,
+        profitAmount: 0,
+        message: 'Not profit_percentage billing'
+      };
+    }
+
+    const profitPercentageRate = pkg?.profit_percentage_rate || 0;
+    const minDeduction = pkg?.min_deduction || 0;
+    const maxDeduction = pkg?.max_deduction || 100000;
+
+    const { data: roundData } = await supabase
+      .from('lottery_rounds')
+      .select('lottery_type, set_prices, winning_numbers')
+      .eq('id', roundId)
+      .single();
+
+    if (!roundData) {
+      return { success: false, amountDeducted: 0, profitAmount: 0, message: 'Round not found' };
+    }
+
+    const allSubs = await fetchAllSubmissions(roundId);
+
+    let incomingTotalBet = 0;
+    let incomingTotalCommission = 0;
+    let incomingTotalPayout = 0;
+    for (const sub of allSubs) {
+      incomingTotalBet += parseFloat(sub.amount || '0');
+      incomingTotalCommission += parseFloat(sub.commission_amount || '0');
+      if (sub.is_winner) {
+        incomingTotalPayout += parseFloat(sub.prize_amount || '0');
+      }
+    }
+    const dealerProfit = incomingTotalBet - incomingTotalPayout - incomingTotalCommission;
+
+    const { data: outgoingTransfers } = await supabase
+      .from('bet_transfers')
+      .select('amount, status, target_submission_id, is_linked, bet_type, numbers')
+      .eq('round_id', roundId);
+    
+    const activeOutgoing = (outgoingTransfers || []).filter((t: any) => t.status !== 'returned');
+    const outgoingBetAmount = activeOutgoing.reduce((sum: number, t: any) => sum + parseFloat(t.amount || '0'), 0);
+
+    let outgoingTotalWin = 0;
+    let outgoingTotalCommission = 0;
+
+    const linkedOutgoing = activeOutgoing.filter((t: any) => t.target_submission_id);
+    if (linkedOutgoing.length > 0) {
+      const targetSubIds = linkedOutgoing.map((t: any) => t.target_submission_id);
+      const { data: targetSubs } = await supabase
+        .from('submissions')
+        .select('id, amount, prize_amount, is_winner, bet_type')
+        .in('id', targetSubIds)
+        .eq('is_deleted', false);
+
+      const targetSubsMap = (targetSubs || []).reduce((map: any, s: any) => {
+        map[s.id] = s;
+        return map;
+      }, {});
+
+      for (const t of linkedOutgoing) {
+        const ts = targetSubsMap[t.target_submission_id];
+        if (ts) {
+          if (ts.is_winner) {
+            if (ts.bet_type === '4_set') {
+              const setPrice = roundData?.set_prices?.['4_top'] || 120;
+              const numSets = Math.max(1, Math.floor(parseFloat(ts.amount || '0') / setPrice));
+              outgoingTotalWin += parseFloat(ts.prize_amount || '0') * numSets;
+            } else {
+              outgoingTotalWin += parseFloat(ts.prize_amount || '0');
+            }
+          }
+          const commRate = DEFAULT_COMMISSIONS[ts.bet_type] || 15;
+          outgoingTotalCommission += parseFloat(ts.amount || '0') * (commRate / 100);
+        }
+      }
+    }
+
+    const externalOutgoing = activeOutgoing.filter((t: any) => !t.target_submission_id);
+    for (const t of externalOutgoing) {
+      const commRate = DEFAULT_COMMISSIONS[t.bet_type] || 15;
+      outgoingTotalCommission += parseFloat(t.amount || '0') * (commRate / 100);
+
+      const setPrice = roundData?.set_prices?.['4_top'] || 120;
+      const res = checkTransferWin(
+        t.bet_type,
+        t.numbers || '',
+        roundData.winning_numbers,
+        roundData.lottery_type,
+        parseFloat(t.amount || '0'),
+        setPrice,
+        DEFAULT_4_SET_SETTINGS.prizes
+      );
+      if (res.wins) {
+        outgoingTotalWin += res.payout;
+      }
+    }
+
+    const outgoingProfit = outgoingTotalWin + outgoingTotalCommission - outgoingBetAmount;
+    const totalProfit = dealerProfit + outgoingProfit;
+
+    const { data: existingDeductions } = await supabase
+      .from('credit_transactions')
+      .select('id, amount')
+      .eq('dealer_id', dealerId)
+      .eq('reference_id', roundId)
+      .eq('reference_type', 'round')
+      .eq('transaction_type', 'deduction')
+      .not('metadata->>type', 'eq', 'profit_percentage_deduction');
+
+    const previouslyDeducted = (existingDeductions || []).reduce(
+      (sum, t) => sum + Math.abs(parseFloat(t.amount || '0')), 0
+    );
+    const refundAmount = Math.max(previousPendingAmount, previouslyDeducted);
+
+    const { data: creditData } = await supabase
+      .from('dealer_credits')
+      .select('balance, pending_deduction, outstanding_debt')
+      .eq('dealer_id', dealerId)
+      .single();
+
+    const currentBalance = creditData?.balance || 0;
+    const currentPending = creditData?.pending_deduction || 0;
+    const currentDebt = creditData?.outstanding_debt || 0;
+
+    let newBalance = currentBalance + refundAmount;
+    let newPending = Math.max(0, currentPending - refundAmount);
+
+    let profitFee = 0;
+    if (totalProfit > 0) {
+      profitFee = totalProfit * (profitPercentageRate / 100);
+      if (profitFee > 0 && profitFee < minDeduction) profitFee = minDeduction;
+      if (profitFee > maxDeduction) profitFee = maxDeduction;
+    }
+
+    let newOutstandingDebt = currentDebt;
+    if (profitFee > 0) {
+      newBalance = newBalance - profitFee;
+      if (newBalance < 0) {
+        newOutstandingDebt = currentDebt + Math.abs(newBalance);
+      }
+    }
+
+    await supabase
+      .from('dealer_credits')
+      .update({
+        balance: newBalance,
+        pending_deduction: newPending,
+        outstanding_debt: newOutstandingDebt,
+        updated_at: new Date().toISOString()
+      })
+      .eq('dealer_id', dealerId);
+
+    if (refundAmount > 0) {
+      await supabase
+        .from('credit_transactions')
+        .insert({
+          dealer_id: dealerId,
+          transaction_type: 'refund',
+          amount: refundAmount,
+          balance_after: newBalance + profitFee,
+          reference_type: 'round',
+          reference_id: roundId,
+          description: `คืนเครดิตค่าธรรมเนียมทันที (ก่อนคำนวณกำไร) (LINE Bot)`,
+          metadata: { type: 'profit_percentage_refund', refundAmount, previousPendingAmount }
+        });
+    }
+
+    if (profitFee > 0) {
+      await supabase
+        .from('credit_transactions')
+        .insert({
+          dealer_id: dealerId,
+          transaction_type: 'deduction',
+          amount: -profitFee,
+          balance_after: newBalance,
+          reference_type: 'round',
+          reference_id: roundId,
+          description: `ค่าบริการจากกำไร (${profitPercentageRate}%) (LINE Bot)`,
+          metadata: {
+            type: 'profit_percentage_deduction',
+            profit: totalProfit,
+            profitPercentageRate,
+            profitFee
+          }
+        });
+    }
+
+    await supabase
+      .from('lottery_rounds')
+      .update({ charged_credit_amount: profitFee })
+      .eq('id', roundId);
+
+    await supabase
+      .from('round_pending_credits')
+      .delete()
+      .eq('round_id', roundId)
+      .eq('dealer_id', dealerId);
+
+    return {
+      success: true,
+      amountDeducted: profitFee,
+      profitAmount: totalProfit,
+      message: totalProfit > 0
+        ? `ตัดเครดิตจากกำไร ฿${profitFee.toLocaleString('th-TH', {minimumFractionDigits: 2})} (กำไร ฿${totalProfit.toLocaleString('th-TH', {minimumFractionDigits: 2})} × ${profitPercentageRate}%)`
+        : 'ไม่มีกำไร ไม่ตัดเครดิต'
+    };
+  } catch (error: any) {
+    console.error('Error in deductProfitBasedCreditDeno:', error);
+    return {
+      success: false,
+      amountDeducted: 0,
+      profitAmount: 0,
+      message: 'เกิดข้อผิดพลาดในการตัดเครดิต: ' + error.message
+    };
+  }
+}
+
 serve(async (req) => {
   // CORS Preflight
   if (req.method === 'OPTIONS') {
@@ -1959,6 +2533,97 @@ serve(async (req) => {
               if (!activeRound) {
                 await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงหรือกำลังตรวจผลสำหรับหวยประเภท ${groupLink.lottery_type.toUpperCase()}`);
                 continue;
+              }
+
+              // --- PARAM CHECK FOR WINNING NUMBERS ---
+              const isSummaryTh = text.startsWith('/สรุป');
+              const prefixLen = isSummaryTh ? '/สรุป'.length : '/summary'.length;
+              const param = text.substring(prefixLen).trim();
+
+              if (param !== "") {
+                if (showOwnOnly) {
+                  await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์บันทึกผลรางวัล`);
+                  continue;
+                }
+
+                const parsedWinning = parseWinningNumbers(param, activeRound.lottery_type);
+                if (!parsedWinning) {
+                  let formatHelp = '';
+                  if (activeRound.lottery_type === 'lao' || activeRound.lottery_type === 'hanoi') {
+                    formatHelp = `สำหรับหวยประเภท ${activeRound.lottery_type.toUpperCase()} กรุณาระบุเลขรางวัล 4 ตัว เช่น /สรุป 1234`;
+                  } else if (activeRound.lottery_type === 'thai') {
+                    formatHelp = `สำหรับหวยไทย กรุณาระบุ [เลขรางวัลที่หนึ่ง 6 ตัว]/[เลข 2 ตัวล่าง] เช่น /สรุป 123456/25`;
+                  } else if (activeRound.lottery_type === 'stock') {
+                    formatHelp = `สำหรับหวยหุ้น กรุณาระบุ [เลข 2 ตัวบน]/[เลข 2 ตัวล่าง] เช่น /สรุป 25/49`;
+                  }
+                  await sendLineReply(replyToken, `❌ รูปแบบเลขรางวัลไม่ถูกต้อง\n${formatHelp}`);
+                  continue;
+                }
+
+                const isEditing = activeRound.is_result_announced === true;
+
+                // Update lottery round with winning numbers
+                const { error: updateRoundErr } = await supabase
+                  .from('lottery_rounds')
+                  .update({
+                    winning_numbers: parsedWinning,
+                    is_result_announced: true,
+                    status: 'announced'
+                  })
+                  .eq('id', activeRound.id);
+
+                if (updateRoundErr) {
+                  await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการบันทึกผลรางวัล: ${updateRoundErr.message}`);
+                  continue;
+                }
+
+                // If editing, reset previous winners first
+                if (isEditing) {
+                  await supabase
+                    .from('submissions')
+                    .update({ is_winner: false, prize_amount: 0 })
+                    .eq('round_id', activeRound.id)
+                    .eq('is_deleted', false);
+                }
+
+                // Calculate winners
+                const { error: rpcErr } = await supabase
+                  .rpc('calculate_round_winners', { p_round_id: activeRound.id });
+
+                if (rpcErr) {
+                  console.error('Error running calculate_round_winners:', rpcErr);
+                }
+
+                // Deduct billing based on subscription package
+                try {
+                  const { data: dealerSubs } = await supabase
+                    .from('dealer_subscriptions')
+                    .select('billing_model, subscription_packages(billing_model, profit_percentage_rate)')
+                    .eq('dealer_id', activeRound.dealer_id)
+                    .in('status', ['active', 'trial'])
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+                  
+                  const dealerSub = dealerSubs?.[0];
+                  const billingModel = dealerSub?.subscription_packages?.billing_model || dealerSub?.billing_model;
+
+                  if (billingModel === 'profit_percentage') {
+                    if (!isEditing) {
+                      const previousPending = activeRound.charged_credit_amount || 0;
+                      await deductProfitBasedCreditDeno(activeRound.dealer_id, activeRound.id, previousPending);
+                    }
+                  } else {
+                    const previouslyCharged = activeRound.charged_credit_amount || 0;
+                    await deductAdditionalCreditForRoundDeno(activeRound.dealer_id, activeRound.id, previouslyCharged);
+                  }
+                } catch (billingErr) {
+                  console.error('Billing deduction calculation failed:', billingErr);
+                }
+
+                // Update local activeRound properties
+                activeRound.winning_numbers = parsedWinning;
+                activeRound.is_result_announced = true;
+                activeRound.status = 'announced';
               }
 
               const isAnnounced = activeRound.status === 'announced' && activeRound.is_result_announced;
