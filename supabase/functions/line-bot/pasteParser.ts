@@ -172,8 +172,11 @@ function expandLines(rawLines: string[]): string[] {
 export function parseMultiLinePaste(text: string, lotteryType = 'lao'): ParsedBet[] {
     if (!text || !text.trim()) return [];
 
+    // Filter out laughter (555, 5555, etc.) that are standalone and not part of a bet specification
+    const filteredText = text.replace(/(?<!\d)5{3,}\+*(?!\d)(?!\s*([=\*xX×tTต\-/]|\d|\+\s*\d))/g, '');
+
     const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType);
-    const rawLines = text.split('\n');
+    const rawLines = filteredText.split('\n');
     const lines = expandLines(rawLines);
     const results: ParsedBet[] = [];
     let contextMode = 'top'; // default: บน
