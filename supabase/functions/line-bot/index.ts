@@ -3091,7 +3091,7 @@ serve(async (req) => {
 
               const { data: activeRound } = await supabase
                 .from('lottery_rounds')
-                .select('id, round_date')
+                .select('id, round_date, set_prices, lottery_type')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
                 .in('status', ['open', 'announced'])
@@ -3112,7 +3112,165 @@ serve(async (req) => {
               }
 
               const commandArgLower = commandArg.toLowerCase();
-              if (commandArgLower === 'เกิน' || commandArgLower === 'excess') {
+              if (commandArgLower === '') {
+                // Fetch all transfers
+                const { data: transfers, error: trErr } = await supabase
+                  .from('bet_transfers')
+                  .select('*')
+                  .eq('round_id', activeRound.id);
+
+                if (trErr || !transfers) {
+                  await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลรายการตีออก`);
+                  continue;
+                }
+
+                const activeTransfers = transfers.filter((t: any) => t.status !== 'returned');
+
+                if (activeTransfers.length === 0) {
+                  await sendLineReply(replyToken, `ℹ️ ยังไม่มีรายการตีออกในงวดนี้ค่ะ`);
+                  continue;
+                }
+
+                // Retrieve settings to compute commissions
+                const linkedTransfers = activeTransfers.filter((t: any) => t.is_linked);
+                const uniqueUpstreamDealerIds = [...new Set(linkedTransfers.map((t: any) => t.upstream_dealer_id).filter(Boolean))];
+                const userSettingsMap: Record<string, any> = {};
+                if (uniqueUpstreamDealerIds.length > 0) {
+                  const { data: settings } = await supabase
+                    .from('user_settings')
+                    .select('*')
+                    .eq('user_id', dealerId)
+                    .in('dealer_id', uniqueUpstreamDealerIds);
+
+                  (settings || []).forEach((s: any) => {
+                    userSettingsMap[s.dealer_id] = s;
+                  });
+                }
+
+                const externalTransfers = activeTransfers.filter((t: any) => !t.is_linked);
+                const uniqueExternalDealerNames = [...new Set(externalTransfers.map((t: any) => t.target_dealer_name).filter(Boolean))];
+                const connMap: Record<string, any> = {};
+                if (uniqueExternalDealerNames.length > 0) {
+                  const { data: connData } = await supabase
+                    .from('dealer_upstream_connections')
+                    .select('upstream_name, lottery_settings')
+                    .eq('dealer_id', dealerId)
+                    .in('upstream_name', uniqueExternalDealerNames);
+
+                  (connData || []).forEach((c: any) => {
+                    connMap[c.upstream_name] = c;
+                  });
+                }
+
+                const lotteryKey = activeRound.lottery_type === 'thai' ? 'thai' : activeRound.lottery_type === 'lao' ? 'lao' : activeRound.lottery_type === 'hanoi' ? 'hanoi' : 'thai';
+
+                // Replicate commission calculation mapping helpers
+                const getBetSettingsKey = (betType: string, lKey: string): string => {
+                  if (lKey === 'lao' || lKey === 'hanoi') {
+                    const LAO_MAP: Record<string, string> = { '3_top': '3_straight', '3_tod': '3_tod_single' };
+                    return LAO_MAP[betType] || betType;
+                  }
+                  return betType;
+                };
+
+                const DEFAULT_COMMISSIONS: Record<string, number> = {
+                  '3_top': 30, '3_tod': 30, '2_top': 28, '2_bottom': 28,
+                  '3_front': 30, '3_back': 30, 'run_top': 12, 'run_bottom': 12
+                };
+                const DEFAULT_4_SET_SETTINGS = { commission: 25 };
+
+                // Compute commission for each active transfer
+                activeTransfers.forEach((t: any) => {
+                  const amt = Number(t.amount || 0);
+                  let comm = 0;
+                  let betSettings: any = null;
+
+                  const settingsKey = getBetSettingsKey(t.bet_type, lotteryKey);
+                  if (t.is_linked && t.upstream_dealer_id) {
+                    const s = userSettingsMap[t.upstream_dealer_id];
+                    betSettings = s?.lottery_settings?.[lotteryKey]?.[settingsKey];
+                  } else if (!t.is_linked && t.target_dealer_name) {
+                    const c = connMap[t.target_dealer_name];
+                    betSettings = c?.lottery_settings?.[lotteryKey]?.[settingsKey];
+                  }
+
+                  if (t.bet_type === '4_set' || t.bet_type === '4_top') {
+                    const setPrice = betSettings?.setPrice || activeRound?.set_prices?.['4_top'] || 120;
+                    const numSets = Math.floor(amt / setPrice);
+                    const commRate = betSettings?.commission !== undefined ? betSettings.commission : (DEFAULT_4_SET_SETTINGS.commission || 25);
+                    comm = numSets * commRate;
+                  } else {
+                    const commissionRate = betSettings?.commission !== undefined 
+                      ? betSettings.commission 
+                      : (DEFAULT_COMMISSIONS[t.bet_type] || 15);
+                    comm = amt * (commissionRate / 100);
+                  }
+                  t.computedCommission = comm;
+                });
+
+                // Group active transfers by transfer_batch_id
+                const batchesMap: Record<string, {
+                  batchId: string;
+                  createdAt: string;
+                  targetDealer: string;
+                  transfers: any[];
+                  totalAmount: number;
+                  totalCommission: number;
+                }> = {};
+
+                activeTransfers.forEach((t: any) => {
+                  const batchId = t.transfer_batch_id || `single_${t.id}`;
+                  if (!batchesMap[batchId]) {
+                    batchesMap[batchId] = {
+                      batchId,
+                      createdAt: t.created_at || new Date().toISOString(),
+                      targetDealer: t.target_dealer_name || 'ไม่ระบุชื่อ',
+                      transfers: [],
+                      totalAmount: 0,
+                      totalCommission: 0
+                    };
+                  }
+                  batchesMap[batchId].transfers.push(t);
+                  batchesMap[batchId].totalAmount += Number(t.amount || 0);
+                  batchesMap[batchId].totalCommission += Number(t.computedCommission || 0);
+                });
+
+                // Sort batches by createdAt descending (newest first)
+                const sortedBatches = Object.values(batchesMap).sort((a, b) => 
+                  new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                );
+
+                let replyText = `📋 รายการตีออกแล้วทั้งหมดในงวดนี้\n`;
+                replyText += `หวยประเภท: ${activeRound.lottery_type.toUpperCase()} (${activeRound.round_date})\n`;
+                replyText += `จำนวนตีออก: ${sortedBatches.length} ครั้ง\n`;
+                replyText += `--------------------------\n`;
+
+                let grandTotalAmt = 0;
+                let grandTotalComm = 0;
+
+                sortedBatches.forEach((batch, index) => {
+                  const dateObj = new Date(batch.createdAt);
+                  const timeStr = dateObj.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }) + ' น.';
+                  const numStr = (sortedBatches.length - index).toString();
+                  
+                  replyText += `ครั้งที่ ${numStr} (${timeStr})\n`;
+                  replyText += `- ส่งให้: ${batch.targetDealer}\n`;
+                  replyText += `- ยอดส่ง: ฿${Math.round(batch.totalAmount).toLocaleString('th-TH')}\n`;
+                  replyText += `- ค่าคอม: ฿${Math.round(batch.totalCommission).toLocaleString('th-TH')}\n`;
+                  replyText += `- ยอดสุทธิ: ฿${Math.round(batch.totalAmount - batch.totalCommission).toLocaleString('th-TH')}\n`;
+                  replyText += `--------------------------\n`;
+
+                  grandTotalAmt += batch.totalAmount;
+                  grandTotalComm += batch.totalCommission;
+                });
+
+                replyText += `💰 ยอดส่งรวมทั้งหมด: ฿${Math.round(grandTotalAmt).toLocaleString('th-TH')}\n`;
+                replyText += `💸 ค่าคอมรวมทั้งหมด: ฿${Math.round(grandTotalComm).toLocaleString('th-TH')}\n`;
+                replyText += `💵 ยอดสุทธิรวมทั้งหมด: ฿${Math.round(grandTotalAmt - grandTotalComm).toLocaleString('th-TH')}`;
+
+                await sendLineReply(replyToken, replyText);
+                continue;
+              } else if (commandArgLower === 'เกิน' || commandArgLower === 'excess') {
                 const excessItems = await calculateRoundExcess(activeRound.id);
                 if (excessItems.length === 0) {
                   await sendLineReply(replyToken, `ℹ️ ไม่มียอดเกินลิมิตให้ออกในงวดนี้ค่ะ`);
