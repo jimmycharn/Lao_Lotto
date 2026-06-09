@@ -1,0 +1,2846 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0"
+import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts"
+import { parseMultiLinePaste, ParsedBet, getPermutations, getUnique3DigitPermsFrom4, getUnique3DigitPermsFrom5, extractBuyerNote } from "./pasteParser.ts"
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+const LINE_CHANNEL_SECRET = (Deno.env.get('LINE_CHANNEL_SECRET') || '').trim().replace(/^["']|["']$/g, '')
+const LINE_CHANNEL_ACCESS_TOKEN = (Deno.env.get('LINE_CHANNEL_ACCESS_TOKEN') || '').trim().replace(/^["']|["']$/g, '')
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || ''
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+
+// Initialize Supabase client with Service Role Key to bypass RLS for bot actions
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+// Helper: Format YYYY-MM-DD to DD-MM-YYYY (Buddhist Era)
+function formatToThaiBudDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const y = parseInt(match[1]);
+    const m = match[2];
+    const d = match[3];
+    const thYear = y + 543;
+    return `${d}-${m}-${thYear}`;
+  }
+  return dateStr;
+}
+
+// Helper: Verify LINE Signature
+async function verifySignature(body: string, signature: string, channelSecret: string): Promise<boolean> {
+  if (!signature || !channelSecret) return false;
+  
+  // Diagnostic log
+  console.log(`Verifying signature. Secret length: ${channelSecret.length}. Mask: ${channelSecret.substring(0, 4)}...${channelSecret.substring(Math.max(0, channelSecret.length - 4))}`);
+  
+  const encoder = new TextEncoder();
+  const secretKeyData = encoder.encode(channelSecret);
+  const key = await crypto.subtle.importKey(
+    "raw",
+    secretKeyData,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const bodyData = encoder.encode(body);
+  const signatureBuffer = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    bodyData
+  );
+  
+  const calculatedSignature = encodeBase64(new Uint8Array(signatureBuffer));
+  const isValid = calculatedSignature === signature;
+  
+  if (!isValid) {
+    console.warn(`Signature mismatch. LINE sent: "${signature.substring(0, 8)}...", Computed: "${calculatedSignature.substring(0, 8)}..."`);
+  }
+  return isValid;
+}
+
+// Helper: Send Reply Message to LINE
+async function sendLineReply(replyToken: string, textOrPayload: string | Record<string, any>): Promise<void> {
+  if (!LINE_CHANNEL_ACCESS_TOKEN) {
+    console.error("LINE_CHANNEL_ACCESS_TOKEN not configured");
+    return;
+  }
+  const message = typeof textOrPayload === "string"
+    ? {
+        type: "text",
+        text: textOrPayload
+      }
+    : textOrPayload;
+
+  const response = await fetch("https://api.line.me/v2/bot/message/reply", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`
+    },
+    body: JSON.stringify({
+      replyToken,
+      messages: [message]
+    })
+  });
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error(`Failed to send LINE reply: ${response.status} - ${errText}`);
+
+    // If it was a Flex message and failed, try falling back to sending the altText as plain text!
+    if (typeof textOrPayload !== "string" && textOrPayload.type === "flex" && textOrPayload.altText) {
+      console.warn("Flex message failed. Falling back to plain text altText.");
+      const fallbackResponse = await fetch("https://api.line.me/v2/bot/message/reply", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`
+        },
+        body: JSON.stringify({
+          replyToken,
+          messages: [
+            {
+              type: "text",
+              text: `⚠️ [บอท: การ์ดข้อความเกิดข้อผิดพลาด - แสดงผลแบบข้อความธรรมดา]:\n\n${textOrPayload.altText}\n\n(รายละเอียดข้อผิดพลาด: ${errText})`
+            }
+          ]
+        })
+      });
+      if (!fallbackResponse.ok) {
+        const fallbackErr = await fallbackResponse.text();
+        console.error(`Fallback failed: ${fallbackResponse.status} - ${fallbackErr}`);
+      }
+    }
+  }
+}
+
+// Helper: Fetch Group Name from LINE API
+async function fetchGroupName(groupId: string): Promise<string | null> {
+  if (!LINE_CHANNEL_ACCESS_TOKEN || !groupId) return null;
+  if (!groupId.startsWith('C')) {
+    // Only group chats (starting with C) support the summary endpoint
+    return null;
+  }
+  try {
+    const response = await fetch(`https://api.line.me/v2/bot/group/${groupId}/summary`, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`
+      }
+    });
+    if (response.ok) {
+      const data = await response.json();
+      return data.groupName || null;
+    } else {
+      const errText = await response.text();
+      console.warn(`Failed to fetch group summary for ${groupId}: ${response.status} - ${errText}`);
+    }
+  } catch (error) {
+    console.error(`Error fetching group summary for ${groupId}:`, error);
+  }
+  return null;
+}
+
+// Helper: Fetch User Profile from LINE API
+async function fetchLineUserProfile(groupId: string, userId: string, sourceType: string): Promise<{ displayName: string } | null> {
+  if (!LINE_CHANNEL_ACCESS_TOKEN || !userId) return null;
+  
+  let url = `https://api.line.me/v2/bot/profile/${userId}`;
+  if (sourceType === 'group' && groupId) {
+    url = `https://api.line.me/v2/bot/group/${groupId}/member/${userId}`;
+  } else if (sourceType === 'room' && groupId) {
+    url = `https://api.line.me/v2/bot/room/${groupId}/member/${userId}`;
+  }
+  
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`
+      }
+    });
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        displayName: data.displayName || 'Unknown LINE User'
+      };
+    } else {
+      const errText = await response.text();
+      console.warn(`Failed to fetch user profile for ${userId} in ${groupId}: ${response.status} - ${errText}`);
+      
+      // Fallback to general profile
+      if (sourceType === 'group' || sourceType === 'room') {
+        const fallbackResponse = await fetch(`https://api.line.me/v2/bot/profile/${userId}`, {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`
+          }
+        });
+        if (fallbackResponse.ok) {
+          const data = await fallbackResponse.json();
+          return {
+            displayName: data.displayName || 'Unknown LINE User'
+          };
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`Error fetching user profile for ${userId}:`, error);
+  }
+  return null;
+}
+
+// Helper: Upsert LINE Group Member details
+async function upsertGroupMember(groupId: string, userId: string, sourceType: string, preFetchedDisplayName?: string, preFetchedUserId?: string | null) {
+  if (!groupId || !userId) return;
+  if (!groupId.startsWith('C') && !groupId.startsWith('R')) return; // Only for groups/rooms
+
+  try {
+    // 1. Check if group exists in line_groups
+    const { data: group } = await supabase
+      .from('line_groups')
+      .select('id')
+      .eq('line_group_id', groupId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (!group) return;
+
+    // 2. Check if member already exists in line_group_members
+    const { data: existingMember } = await supabase
+      .from('line_group_members')
+      .select('id, display_name, user_id')
+      .eq('line_group_id', groupId)
+      .eq('line_user_id', userId)
+      .maybeSingle();
+
+    // 3. Find if there is a profile linked to this line_user_id (if not pre-fetched)
+    let linkedUserId = preFetchedUserId;
+    if (linkedUserId === undefined) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('line_user_id', userId)
+        .maybeSingle();
+      linkedUserId = profile ? profile.id : null;
+    }
+
+    if (existingMember) {
+      // If linked user_id changed, update it
+      if (existingMember.user_id !== linkedUserId) {
+        await supabase
+          .from('line_group_members')
+          .update({
+            user_id: linkedUserId,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingMember.id);
+      }
+      return;
+    }
+
+    // 4. Resolve display name
+    let displayName = preFetchedDisplayName;
+    if (!displayName) {
+      const lineProfile = await fetchLineUserProfile(groupId, userId, sourceType);
+      displayName = lineProfile?.displayName || 'คุณสมาชิกใหม่';
+    }
+
+    // 5. Insert new member
+    await supabase
+      .from('line_group_members')
+      .insert({
+        line_group_id: groupId,
+        line_user_id: userId,
+        display_name: displayName,
+        user_id: linkedUserId
+      });
+
+  } catch (error) {
+    console.error(`Error in upsertGroupMember for user ${userId} in group ${groupId}:`, error);
+  }
+}
+
+interface ExcessItem {
+  bet_type: string;
+  numbers: string;
+  amount: number;
+}
+
+// Helper: Calculate excess volume for a round
+async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
+  const { data: submissions, error: subErr } = await supabase
+    .from('submissions')
+    .select('bet_type, numbers, amount')
+    .eq('round_id', roundId)
+    .eq('is_deleted', false);
+
+  if (subErr || !submissions) return [];
+
+  const { data: typeLimits, error: tlErr } = await supabase
+    .from('type_limits')
+    .select('bet_type, max_per_number')
+    .eq('round_id', roundId);
+
+  const typeLimitsMap: Record<string, number> = {};
+  (typeLimits || []).forEach((tl: any) => {
+    typeLimitsMap[tl.bet_type] = Number(tl.max_per_number);
+  });
+
+  const { data: numberLimits, error: nlErr } = await supabase
+    .from('number_limits')
+    .select('bet_type, numbers, max_amount')
+    .eq('round_id', roundId);
+
+  const numberLimitsMap: Record<string, number> = {};
+  (numberLimits || []).forEach((nl: any) => {
+    const key = `${nl.bet_type}|${nl.numbers}`;
+    numberLimitsMap[key] = Number(nl.max_amount);
+  });
+
+  const { data: transfers, error: trErr } = await supabase
+    .from('bet_transfers')
+    .select('bet_type, numbers, amount, status')
+    .eq('round_id', roundId);
+
+  const transferredMap: Record<string, number> = {};
+  (transfers || []).forEach((t: any) => {
+    if (t.status !== 'returned') {
+      const key = `${t.bet_type}|${t.numbers}`;
+      transferredMap[key] = (transferredMap[key] || 0) + Number(t.amount);
+    }
+  });
+
+  const sumMap: Record<string, number> = {};
+  submissions.forEach((s: any) => {
+    const key = `${s.bet_type}|${s.numbers}`;
+    sumMap[key] = (sumMap[key] || 0) + Number(s.amount);
+  });
+
+  const excessItems: ExcessItem[] = [];
+
+  for (const [key, totalAmt] of Object.entries(sumMap)) {
+    const [bet_type, numbers] = key.split('|');
+    const numLimit = numberLimitsMap[key];
+    const typeLimit = typeLimitsMap[bet_type];
+    const limit = numLimit !== undefined ? numLimit : (typeLimit !== undefined ? typeLimit : 999999999);
+    
+    const alreadyTransferred = transferredMap[key] || 0;
+    const currentExcess = totalAmt - limit - alreadyTransferred;
+
+    if (currentExcess > 0) {
+      excessItems.push({
+        bet_type,
+        numbers,
+        amount: currentExcess
+      });
+    }
+  }
+
+  return excessItems;
+}
+
+// Helper: Lay off excess bets to upstream dealer
+async function performLayoff(
+  dealerId: string,
+  roundId: string,
+  lotteryType: string,
+  items: ExcessItem[]
+): Promise<{ success: boolean; message: string; text?: string }> {
+  if (items.length === 0) {
+    return { success: true, message: 'ไม่มีรายการให้ตีออก' };
+  }
+
+  const { data: connection, error: connErr } = await supabase
+    .from('dealer_upstream_connections')
+    .select('*')
+    .eq('dealer_id', dealerId)
+    .eq('status', 'active')
+    .eq('is_blocked', false)
+    .limit(1)
+    .maybeSingle();
+
+  if (connErr || !connection) {
+    return { success: false, message: 'กรุณาตั้งค่าเจ้ามือปลายทาง (Upstream Connection) บนหน้าเว็บก่อน' };
+  }
+
+  const upstreamDealerId = connection.upstream_dealer_id;
+  const targetDealerName = connection.upstream_name || 'Upstream Dealer';
+  
+  let targetRoundId: string | null = null;
+  if (connection.is_linked && upstreamDealerId) {
+    const { data: upRound } = await supabase
+      .from('lottery_rounds')
+      .select('id')
+      .eq('dealer_id', upstreamDealerId)
+      .eq('lottery_type', lotteryType)
+      .eq('status', 'open')
+      .limit(1)
+      .maybeSingle();
+
+    if (upRound) {
+      targetRoundId = upRound.id;
+    }
+  }
+
+  const batchId = crypto.randomUUID();
+  const timestamp = new Date().toISOString();
+  const transferInserts: any[] = [];
+
+  // Group items by category for copy-pasting
+  const topBets: string[] = [];
+  const bottomBets: string[] = [];
+  const todBets: string[] = [];
+  const runTopBets: string[] = [];
+  const runBottomBets: string[] = [];
+  const setBets: string[] = [];
+  const otherBets: string[] = [];
+
+  for (const item of items) {
+    let targetSubmissionId: string | null = null;
+
+    if (targetRoundId && upstreamDealerId) {
+      const { data: upSub, error: upSubErr } = await supabase
+        .from('submissions')
+        .insert({
+          round_id: targetRoundId,
+          user_id: dealerId,
+          bet_type: item.bet_type,
+          numbers: item.numbers,
+          amount: item.amount,
+          source: 'transfer',
+          submitted_by: dealerId,
+          submitted_by_type: 'dealer',
+          created_at: timestamp,
+          updated_at: timestamp
+        })
+        .select('id')
+        .single();
+
+      if (!upSubErr && upSub) {
+        targetSubmissionId = upSub.id;
+      }
+    }
+
+    transferInserts.push({
+      round_id: roundId,
+      bet_type: item.bet_type,
+      numbers: item.numbers,
+      amount: item.amount,
+      target_dealer_name: targetDealerName,
+      transfer_batch_id: batchId,
+      upstream_dealer_id: upstreamDealerId || null,
+      is_linked: !!targetRoundId,
+      target_round_id: targetRoundId,
+      target_submission_id: targetSubmissionId,
+      created_at: timestamp,
+      updated_at: timestamp
+    });
+
+    if (item.bet_type === '3_top' || item.bet_type === '2_top') {
+      topBets.push(`${item.numbers}=${item.amount}`);
+    } else if (item.bet_type === '2_bottom') {
+      bottomBets.push(`${item.numbers}=${item.amount}`);
+    } else if (item.bet_type === '3_tod') {
+      todBets.push(`${item.numbers}=${item.amount}`);
+    } else if (item.bet_type === 'run_top') {
+      runTopBets.push(`${item.numbers}=${item.amount}`);
+    } else if (item.bet_type === 'run_bottom') {
+      runBottomBets.push(`${item.numbers}=${item.amount}`);
+    } else if (item.bet_type === '4_set') {
+      setBets.push(item.numbers);
+    } else {
+      const betLabel = item.bet_type === '3_top' ? 'บน' : item.bet_type === '2_top' ? 'บน' : item.bet_type === '2_bottom' ? 'ล่าง' : item.bet_type;
+      otherBets.push(`${item.numbers}=${item.amount} (${betLabel})`);
+    }
+  }
+
+  const { error: insertErr } = await supabase
+    .from('bet_transfers')
+    .insert(transferInserts);
+
+  if (insertErr) {
+    console.error("Failed to insert bet transfers:", insertErr);
+    return { success: false, message: 'เกิดข้อผิดพลาดทางเทคนิคในการบันทึกการตีออก' };
+  }
+
+  if (targetRoundId && upstreamDealerId) {
+    updatePendingDeduction(upstreamDealerId).catch(err => {
+      console.error("Failed updating upstream pending deduction:", err);
+    });
+  }
+
+  let copyableBlock = '';
+  if (topBets.length > 0) {
+    copyableBlock += `บน\n${topBets.join('\n')}\n`;
+  }
+  if (todBets.length > 0) {
+    copyableBlock += `โต๊ด\n${todBets.join('\n')}\n`;
+  }
+  if (bottomBets.length > 0) {
+    copyableBlock += `ล่าง\n${bottomBets.join('\n')}\n`;
+  }
+  if (runTopBets.length > 0) {
+    copyableBlock += `วิ่งบน\n${runTopBets.join('\n')}\n`;
+  }
+  if (runBottomBets.length > 0) {
+    copyableBlock += `วิ่งล่าง\n${runBottomBets.join('\n')}\n`;
+  }
+  if (setBets.length > 0) {
+    copyableBlock += `ชุด\n${setBets.join('\n')}\n`;
+  }
+  if (otherBets.length > 0) {
+    copyableBlock += `${otherBets.join('\n')}\n`;
+  }
+  copyableBlock = copyableBlock.trim();
+
+  const grandTotal = items.reduce((sum, item) => sum + item.amount, 0);
+  let detailText = `📦 ยอดส่งออกไปที่: ${targetDealerName}\n`;
+  detailText += `--------------------------\n`;
+  detailText += `${copyableBlock}\n`;
+  detailText += `--------------------------\n`;
+  detailText += `💰 ยอดรวมตีออก: ฿${grandTotal.toLocaleString('th-TH')}`;
+
+  return { success: true, message: 'ตีออกสำเร็จ', text: detailText };
+}
+
+// Helper: Check Dealer Credit for Bet (Deno port of creditCheck.js)
+async function checkDealerCreditForBet(dealerId: string, newBetAmount: number): Promise<{ allowed: boolean; message: string }> {
+  try {
+    const { data: subscriptions, error: subError } = await supabase
+      .from('dealer_subscriptions')
+      .select(`
+        *,
+        subscription_packages (
+          id,
+          billing_model,
+          percentage_rate,
+          min_amount_before_charge
+        )
+      `)
+      .eq('dealer_id', dealerId)
+      .in('status', ['active', 'trial'])
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    const subscription = subscriptions?.[0] || null;
+    if (subError || !subscription) {
+      return { allowed: true, message: 'No active subscription' };
+    }
+
+    const pkg = subscription.subscription_packages;
+    const billingModel = subscription.billing_model || pkg?.billing_model;
+
+    if (billingModel !== 'percentage' && billingModel !== 'profit_percentage') {
+      return { allowed: true, message: 'Not percentage billing' };
+    }
+
+    const percentageRate = pkg?.percentage_rate || 0;
+
+    const { data: creditData } = await supabase
+      .from('dealer_credits')
+      .select('balance, pending_deduction')
+      .eq('dealer_id', dealerId)
+      .single();
+
+    const currentBalance = creditData?.balance || 0;
+    const currentPendingDeduction = creditData?.pending_deduction || 0;
+
+    const newPendingFee = newBetAmount * (percentageRate / 100);
+    const availableCredit = currentBalance - currentPendingDeduction;
+    const hasEnoughCredit = availableCredit >= newPendingFee;
+
+    return {
+      allowed: hasEnoughCredit,
+      message: hasEnoughCredit
+        ? 'เครดิตเพียงพอ'
+        : `เครดิตไม่เพียงพอ ต้องการ ฿${newPendingFee.toFixed(2)} แต่มีเครดิตคงเหลือ ฿${availableCredit.toFixed(2)}`
+    };
+  } catch (error: any) {
+    console.error('Error checking dealer credit:', error);
+    return { allowed: true, message: 'Error checking credit: ' + error.message };
+  }
+}
+
+// Helper: Update Pending Deduction in Database (Deno port of creditCheck.js)
+async function updatePendingDeduction(dealerId: string): Promise<void> {
+  try {
+    const { data: subscriptions } = await supabase
+      .from('dealer_subscriptions')
+      .select(`
+        id,
+        billing_model,
+        subscription_packages (
+          id,
+          billing_model,
+          percentage_rate,
+          min_amount_before_charge,
+          min_deduction,
+          max_deduction
+        )
+      `)
+      .eq('dealer_id', dealerId)
+      .in('status', ['active', 'trial'])
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    const subscription = subscriptions?.[0] || null;
+    const pkg = subscription?.subscription_packages;
+    const billingModel = subscription?.billing_model || pkg?.billing_model;
+
+    if (!subscription || (billingModel !== 'percentage' && billingModel !== 'profit_percentage')) {
+      return;
+    }
+
+    const percentageRate = pkg?.percentage_rate || 0;
+    const minAmount = pkg?.min_amount_before_charge || 0;
+    const minDeduction = pkg?.min_deduction || 0;
+    const maxDeduction = pkg?.max_deduction || 100000;
+
+    const { data: rounds } = await supabase
+      .from('lottery_rounds')
+      .select('id, lottery_type, lottery_name')
+      .eq('dealer_id', dealerId)
+      .eq('status', 'open');
+
+    if (!rounds || rounds.length === 0) {
+      await supabase.from('dealer_credits').update({ pending_deduction: 0, updated_at: new Date().toISOString() }).eq('dealer_id', dealerId);
+      await supabase.from('round_pending_credits').delete().eq('dealer_id', dealerId);
+      return;
+    }
+
+    const { data: memberships } = await supabase
+      .from('user_dealer_memberships')
+      .select('user_id')
+      .eq('dealer_id', dealerId)
+      .eq('status', 'active');
+
+    const memberUserIds = (memberships || []).map(m => m.user_id);
+    const memberIds = new Set(memberUserIds);
+
+    let dealerCreatedUnchangedIds = new Set<string>();
+    if (memberUserIds.length > 0) {
+      const { data: memberProfiles } = await supabase
+        .from('profiles')
+        .select('id, password_changed')
+        .in('id', memberUserIds);
+      
+      dealerCreatedUnchangedIds = new Set(
+        (memberProfiles || [])
+          .filter(p => !p.password_changed)
+          .map(p => p.id)
+      );
+    }
+
+    const { data: downstreamConnections } = await supabase
+      .from('dealer_upstream_connections')
+      .select('dealer_id, status, is_blocked')
+      .eq('upstream_dealer_id', dealerId);
+    
+    const activeDownstream = (downstreamConnections || []).filter(d => 
+      (d.status === 'active' || !d.status) && !d.is_blocked
+    );
+    const downstreamDealerIds = new Set(activeDownstream.map(d => d.dealer_id));
+
+    let totalPending = 0;
+
+    for (const round of rounds) {
+      const { data: allSubs } = await supabase
+        .from('submissions')
+        .select('id, amount, user_id, source, submitted_by_type')
+        .eq('round_id', round.id)
+        .eq('is_deleted', false);
+
+      const { data: outgoingTransfers } = await supabase
+        .from('bet_transfers')
+        .select('amount, status, is_linked')
+        .eq('round_id', round.id);
+      
+      const activeTransfers = (outgoingTransfers || []).filter(t => t.status !== 'returned');
+      const linkedTransfers = activeTransfers.filter(t => t.is_linked);
+      const transferredOutAmount = linkedTransfers.reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0);
+
+      let dealerOwnVolume = 0;
+      let dealerInputForOwnUsers = 0;
+      let selfInputVolume = 0;
+      let downstreamVolume = 0;
+
+      for (const sub of (allSubs || [])) {
+        const amount = parseFloat(sub.amount || '0');
+        if (sub.source === 'transfer') {
+          downstreamVolume += amount;
+        } else if (sub.user_id === dealerId) {
+          dealerOwnVolume += amount;
+        } else if (downstreamDealerIds.has(sub.user_id)) {
+          downstreamVolume += amount;
+        } else if (memberIds.has(sub.user_id)) {
+          if (dealerCreatedUnchangedIds.has(sub.user_id)) {
+            dealerInputForOwnUsers += amount;
+          } else if (sub.submitted_by_type === 'user') {
+            selfInputVolume += amount;
+          } else {
+            selfInputVolume += amount;
+          }
+        } else {
+          if (sub.submitted_by_type === 'user') {
+            selfInputVolume += amount;
+          } else {
+            dealerInputForOwnUsers += amount;
+          }
+        }
+      }
+
+      let remainingTransfer = transferredOutAmount;
+      let netDealerInputForOwnUsers = dealerInputForOwnUsers;
+      let netDealerOwnVolume = dealerOwnVolume;
+      let netSelfInputVolume = selfInputVolume;
+      let netDownstreamVolume = downstreamVolume;
+
+      if (remainingTransfer > 0) {
+        const d = Math.min(remainingTransfer, netDealerInputForOwnUsers);
+        netDealerInputForOwnUsers -= d;
+        remainingTransfer -= d;
+      }
+      if (remainingTransfer > 0) {
+        const d = Math.min(remainingTransfer, netDealerOwnVolume);
+        netDealerOwnVolume -= d;
+        remainingTransfer -= d;
+      }
+      if (remainingTransfer > 0) {
+        const d = Math.min(remainingTransfer, netSelfInputVolume);
+        netSelfInputVolume -= d;
+        remainingTransfer -= d;
+      }
+      if (remainingTransfer > 0) {
+        const d = Math.min(remainingTransfer, netDownstreamVolume);
+        netDownstreamVolume -= d;
+        remainingTransfer -= d;
+      }
+
+      const totalVolume = netDealerOwnVolume + netDealerInputForOwnUsers + netSelfInputVolume + netDownstreamVolume;
+      let totalChargeableVolume = 0;
+      if (totalVolume > minAmount) {
+        totalChargeableVolume = totalVolume - minAmount;
+      }
+
+      let roundPending = totalChargeableVolume * (percentageRate / 100);
+      if (roundPending > 0 && roundPending < minDeduction) {
+        roundPending = minDeduction;
+      }
+      if (roundPending > maxDeduction) {
+        roundPending = maxDeduction;
+      }
+
+      totalPending += roundPending;
+
+      const upsertData = {
+        round_id: round.id,
+        dealer_id: dealerId,
+        dealer_input_volume: netDealerOwnVolume + netDealerInputForOwnUsers,
+        member_input_volume: netSelfInputVolume,
+        upstream_volume: netDownstreamVolume,
+        total_chargeable_volume: totalChargeableVolume,
+        percentage_rate: percentageRate,
+        pending_fee: roundPending,
+        is_finalized: false,
+        updated_at: new Date().toISOString()
+      };
+
+      await supabase.from('round_pending_credits').upsert(upsertData, { onConflict: 'round_id,dealer_id' });
+    }
+
+    await supabase.from('dealer_credits').update({ pending_deduction: totalPending, updated_at: new Date().toISOString() }).eq('dealer_id', dealerId);
+
+  } catch (error) {
+    console.error('Error updating pending deduction:', error);
+  }
+}
+
+// Helper: Get Commission settings for user
+async function getCommissionInfo(userId: string, dealerId: string, betType: string, lotteryType: string) {
+  const lotteryKey = lotteryType === 'lao' ? 'lao' : lotteryType === 'hanoi' ? 'hanoi' : 'thai';
+  let settingsKey = betType;
+  if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+    const LAO_BET_TYPE_MAP: Record<string, string> = {
+      '3_top': '3_straight',
+      '3_tod': '3_tod_single',
+      '4_top': '4_set'
+    };
+    settingsKey = LAO_BET_TYPE_MAP[betType] || betType;
+  }
+
+  const { data: settings } = await supabase
+    .from('user_settings')
+    .select('lottery_settings')
+    .eq('user_id', userId)
+    .eq('dealer_id', dealerId)
+    .single();
+
+  const betSettings = settings?.lottery_settings?.[lotteryKey]?.[settingsKey];
+  if (betSettings?.commission !== undefined) {
+    return { rate: betSettings.commission, isFixed: betSettings.isFixed || false };
+  }
+
+  // Default fallback values
+  if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+    if (betType === '4_top' || betType === '4_set') {
+      return { rate: 25, isFixed: true };
+    }
+  }
+
+  const DEFAULT_COMMISSIONS: Record<string, number> = {
+    '2_top': 15, '2_bottom': 15, '2_front': 15, '2_spread': 15,
+    '3_top': 15, '3_tod': 15, '3_bottom': 15,
+    'run_top': 15, 'run_bottom': 15
+  };
+  return { rate: DEFAULT_COMMISSIONS[betType] || 15, isFixed: false };
+}
+
+serve(async (req) => {
+  // CORS Preflight
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
+  if (req.method !== 'POST') {
+    return new Response('Method not allowed', { status: 405 })
+  }
+
+  try {
+    const bodyText = await req.text()
+
+
+    // Check if it is a JSON API call from our frontend
+    let isApiCall = false
+    let apiPayload: any = null
+    try {
+      apiPayload = JSON.parse(bodyText)
+      if (apiPayload && apiPayload.action === 'refresh_group_names') {
+        isApiCall = true
+      }
+    } catch (e) {
+      // not JSON or not the action we want
+    }
+
+    if (isApiCall) {
+      const authHeader = req.headers.get('Authorization') || ''
+      const token = authHeader.replace('Bearer ', '')
+      if (!token) {
+        return new Response(JSON.stringify({ error: 'Unauthorized: missing authorization header' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      // Verify the user token using Supabase auth
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+      if (authError || !user) {
+        return new Response(JSON.stringify({ error: 'Unauthorized: invalid token' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      const dealerId = user.id
+      // Fetch active groups for this dealer
+      const { data: groups, error: groupsErr } = await supabase
+        .from('line_groups')
+        .select('id, line_group_id')
+        .eq('dealer_id', dealerId)
+        .eq('is_active', true)
+
+      if (groupsErr) {
+        return new Response(JSON.stringify({ error: groupsErr.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      const updatedGroups = []
+      for (const g of (groups || [])) {
+        if (g.line_group_id.startsWith('C')) {
+          const name = await fetchGroupName(g.line_group_id)
+          if (name) {
+            await supabase
+              .from('line_groups')
+              .update({ group_name: name })
+              .eq('id', g.id)
+            updatedGroups.push({ id: g.id, group_name: name })
+          }
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, updated: updatedGroups }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
+    // Otherwise it is the LINE webhook
+    const signature = req.headers.get('x-line-signature') || ''
+
+    // Verify LINE Webhook signature
+    if (LINE_CHANNEL_SECRET) {
+      const isValid = await verifySignature(bodyText, signature, LINE_CHANNEL_SECRET)
+
+      if (!isValid) {
+        console.warn("Invalid signature detected");
+        return new Response('Invalid signature', { status: 401 })
+      }
+    } else {
+      console.warn("LINE_CHANNEL_SECRET not set, signature verification skipped.");
+    }
+
+    const payload = JSON.parse(bodyText)
+    const events = payload.events || []
+
+    for (const event of events) {
+      const replyToken = event.replyToken
+      // memberLeft and leave events do not have a replyToken
+      if (!replyToken && event.type !== 'memberLeft' && event.type !== 'leave') {
+        continue
+      }
+
+      try {
+        const userId = event.source?.userId || ''
+        const groupId = event.source?.groupId || event.source?.roomId || userId
+        const sourceType = event.source?.type || 'user'
+
+      // Automatically upsert group member details in the background if event comes from a group or room
+      if (userId && (groupId.startsWith('C') || groupId.startsWith('R'))) {
+        upsertGroupMember(groupId, userId, sourceType).catch(err => {
+          console.error("Failed to upsert group member in background:", err);
+        });
+      }
+
+      // Handle Group/Room Join
+      if (event.type === 'join') {
+        const welcomeText = `สวัสดีค่ะ! ยินดีต้อนรับสู่ระบบ LINE Bot รับโพยหวย Big Lotto 🤖\n\nกรุณาพิมพ์:\n/bind [รหัสผูกกลุ่ม]\n\nเพื่อเชื่อมโยงกลุ่มแชทนี้เข้ากับระบบเจ้ามือหลักของท่านค่ะ`;
+        await sendLineReply(replyToken, welcomeText);
+        continue;
+      }
+
+      // Handle Member Joined Group/Room
+      if (event.type === 'memberJoined') {
+        const joinedMembers = event.joined?.members || [];
+        if (joinedMembers.length === 0) continue;
+
+        // Fetch group link information to check dealer
+        const { data: groupLink } = await supabase
+          .from('line_groups')
+          .select('dealer_id, group_name')
+          .eq('line_group_id', groupId)
+          .eq('is_active', true)
+          .maybeSingle();
+
+        if (!groupLink) {
+          // If this group is not bound to a dealer, ignore
+          continue;
+        }
+
+        const dealerId = groupLink.dealer_id;
+        const welcomeMsgs: string[] = [];
+
+        for (const member of joinedMembers) {
+          const mUserId = member.userId;
+          if (!mUserId) continue;
+
+          // 1. Fetch LINE display name
+          const userProfile = await fetchLineUserProfile(groupId, mUserId, event.source?.type || 'group');
+          const displayName = userProfile?.displayName || 'คุณสมาชิกใหม่';
+
+          // 2. Check if profile exists
+          const { data: existingProfile } = await supabase
+            .from('profiles')
+            .select('id, full_name')
+            .eq('line_user_id', mUserId)
+            .maybeSingle();
+
+          let targetProfileId: string | null = null;
+
+          if (existingProfile) {
+            targetProfileId = existingProfile.id;
+            // Check/insert membership
+            const { data: existingMembership } = await supabase
+              .from('user_dealer_memberships')
+              .select('id')
+              .eq('user_id', existingProfile.id)
+              .eq('dealer_id', dealerId)
+              .maybeSingle();
+
+            if (!existingMembership) {
+              await supabase
+                .from('user_dealer_memberships')
+                .insert({
+                  user_id: existingProfile.id,
+                  dealer_id: dealerId,
+                  status: 'active'
+                });
+            }
+            welcomeMsgs.push(`ยินดีต้อนรับคุณ ${existingProfile.full_name} กลับสู่กลุ่มค่ะ! 🎉\n(LINE User ID: ${mUserId})`);
+          } else {
+            // Create dummy auth user
+            const dummyEmail = `line_${mUserId}@lotto-line-bot.local`;
+            const { data: authUser, error: authErr } = await supabase.auth.admin.createUser({
+              email: dummyEmail,
+              password: Math.random().toString(36).substring(2, 12),
+              email_confirm: true,
+              user_metadata: { full_name: displayName }
+            });
+
+            if (authErr) {
+              console.error(`Error auto-creating auth user for LINE member ${mUserId}:`, authErr);
+              welcomeMsgs.push(`ยินดีต้อนรับสมาชิกใหม่เข้าสู่กลุ่มค่ะ! 🎉\n(LINE User ID: ${mUserId})\n\n* กรุณาแจ้งให้เจ้ามือแอดชื่อในระบบด้วยนะคะ`);
+            } else {
+              const newUserId = authUser.user.id;
+              targetProfileId = newUserId;
+              // Update profile
+              await supabase
+                .from('profiles')
+                .update({ line_user_id: mUserId, full_name: displayName })
+                .eq('id', newUserId);
+
+              // Insert membership
+              await supabase
+                .from('user_dealer_memberships')
+                .insert({
+                  user_id: newUserId,
+                  dealer_id: dealerId,
+                  status: 'active'
+                });
+
+              welcomeMsgs.push(`ยินดีต้อนรับคุณ ${displayName} สมาชิกใหม่เข้าสู่กลุ่มค่ะ! 🎉\n(LINE User ID: ${mUserId})\n\nบอทได้ทำการบันทึกข้อมูลเรียบร้อยแล้วค่ะ สมาชิกสามารถพิมพ์ส่งโพยได้ทันที 🤖`);
+            }
+          }
+
+          // 3. Upsert into line_group_members in the background
+          upsertGroupMember(groupId, mUserId, event.source?.type || 'group', displayName, targetProfileId).catch(err => {
+            console.error(`Error background upserting joined member ${mUserId} in group ${groupId}:`, err);
+          });
+        }
+
+        if (welcomeMsgs.length > 0) {
+          await sendLineReply(replyToken, welcomeMsgs.join('\n\n------------------\n\n'));
+        }
+        continue;
+      }
+
+      // Handle Member Left Group/Room
+      if (event.type === 'memberLeft') {
+        const leftMembers = event.left?.members || [];
+        if (leftMembers.length === 0) continue;
+
+        for (const member of leftMembers) {
+          const mUserId = member.userId;
+          if (!mUserId) continue;
+
+          // Delete from line_group_members
+          const { error: deleteErr } = await supabase
+            .from('line_group_members')
+            .delete()
+            .eq('line_group_id', groupId)
+            .eq('line_user_id', mUserId);
+
+          if (deleteErr) {
+            console.error(`Error deleting left member ${mUserId} from group ${groupId}:`, deleteErr);
+          } else {
+            console.log(`Successfully deleted left member ${mUserId} from group ${groupId}`);
+          }
+        }
+        continue;
+      }
+
+      // Handle Bot Leaving Group/Room (kicked or manually left)
+      if (event.type === 'leave') {
+        console.log(`Bot left group/room: ${groupId}`);
+        // 1. Deactivate the group link in line_groups
+        await supabase
+          .from('line_groups')
+          .update({ is_active: false, updated_at: new Date().toISOString() })
+          .eq('line_group_id', groupId);
+
+        // 2. Remove all members of this group from line_group_members
+        await supabase
+          .from('line_group_members')
+          .delete()
+          .eq('line_group_id', groupId);
+
+        continue;
+      }
+
+        // Handle Text Message
+        if (event.type === 'message' && event.message?.type === 'text') {
+          const text = event.message.text.trim();
+
+          // ─── MANAGER COMMANDS ROUTER ───
+          const isManagerCommand = 
+            text.startsWith('/stats') || text.startsWith('/สมาชิก') || text.startsWith('/ยอดสมาชิก') ||
+            text.startsWith('/total') || text.startsWith('/ยอดรวม') ||
+            text.startsWith('/excess') || text.startsWith('/ยอดเกิน') ||
+            text.startsWith('/transfer') || text.startsWith('/ตีออก') ||
+            text.startsWith('/คนส่ง') || text.startsWith('/ใครส่ง') || text.startsWith('/ส่งเลข');
+
+          if (isManagerCommand) {
+            // 1. Fetch group link information to check dealer
+            const { data: groupLink } = await supabase
+              .from('line_groups')
+              .select('*')
+              .eq('line_group_id', groupId)
+              .eq('is_active', true)
+              .maybeSingle();
+
+            if (!groupLink) {
+              // Not a registered group, ignore it
+              continue;
+            }
+
+            const dealerId = groupLink.dealer_id;
+
+            // 2. Check manager permissions
+            const { data: manager } = await supabase
+              .from('line_managers')
+              .select('*')
+              .eq('dealer_id', dealerId)
+              .eq('line_user_id', userId)
+              .eq('is_active', true)
+              .maybeSingle();
+
+            const isTotalCommand = text.startsWith('/total') || text.startsWith('/ยอดรวม');
+            let showOwnOnly = false;
+            let targetUserId: string | null = null;
+            let memberProfileName = '';
+
+            if (!manager) {
+              if (isTotalCommand) {
+                // Not a manager, check if registered active member of this dealer
+                const { data: profile } = await supabase
+                  .from('profiles')
+                  .select('id, full_name, is_active')
+                  .eq('line_user_id', userId)
+                  .eq('is_active', true)
+                  .maybeSingle();
+
+                if (!profile) {
+                  // Not a registered active profile, ignore silently
+                  continue;
+                }
+
+                // Check active membership with the group's dealer
+                const { data: membership } = await supabase
+                  .from('user_dealer_memberships')
+                  .select('id')
+                  .eq('user_id', profile.id)
+                  .eq('dealer_id', dealerId)
+                  .eq('status', 'active')
+                  .maybeSingle();
+
+                if (!membership) {
+                  // No active membership, ignore silently
+                  continue;
+                }
+
+                showOwnOnly = true;
+                targetUserId = profile.id;
+                memberProfileName = profile.full_name || 'Member';
+              } else {
+                // Not a manager and not a total command, ignore silently
+                continue;
+              }
+            }
+
+            const permissions = manager?.permissions || {};
+
+            // ─── COMMAND: /สมาชิก หรือ /stats ───
+            if (text.startsWith('/stats') || text.startsWith('/สมาชิก') || text.startsWith('/ยอดสมาชิก')) {
+              if (!permissions.can_view_stats) {
+                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์เข้าถึงรายงานข้อมูลสมาชิก`);
+                continue;
+              }
+              
+              let searchName = '';
+              if (text.startsWith('/stats')) {
+                searchName = text.substring('/stats'.length).trim().toLowerCase();
+              } else if (text.startsWith('/สมาชิก')) {
+                searchName = text.substring('/สมาชิก'.length).trim().toLowerCase();
+              } else if (text.startsWith('/ยอดสมาชิก')) {
+                searchName = text.substring('/ยอดสมาชิก'.length).trim().toLowerCase();
+              }
+
+              const { data: memberships, error: memErr } = await supabase
+                .from('user_dealer_memberships')
+                .select(`
+                  user_id,
+                  profiles:user_id (
+                    full_name,
+                    balance,
+                    line_user_id
+                  )
+                `)
+                .eq('dealer_id', dealerId)
+                .eq('status', 'active');
+
+              if (memErr || !memberships || memberships.length === 0) {
+                await sendLineReply(replyToken, `📊 ไม่พบสมาชิกที่เชื่อมต่อกับระบบดีลเลอร์ของคุณในขณะนี้`);
+                continue;
+              }
+
+              let filteredMembers = memberships;
+              if (searchName) {
+                filteredMembers = memberships.filter((m: any) => 
+                  m.profiles?.full_name?.toLowerCase().includes(searchName)
+                );
+                if (filteredMembers.length === 0) {
+                  await sendLineReply(replyToken, `📊 ไม่พบสมาชิกที่มีชื่อสอดคล้องกับ "${searchName}"`);
+                  continue;
+                }
+              }
+
+              const { data: activeRound } = await supabase
+                .from('lottery_rounds')
+                .select('id')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', groupLink.lottery_type)
+                .eq('status', 'open')
+                .maybeSingle();
+
+              const sumMap: Record<string, number> = {};
+              const commMap: Record<string, number> = {};
+              if (activeRound) {
+                const { data: submissions } = await supabase
+                  .from('submissions')
+                  .select('user_id, amount, commission_amount')
+                  .eq('round_id', activeRound.id)
+                  .eq('is_deleted', false);
+
+                (submissions || []).forEach((s: any) => {
+                  sumMap[s.user_id] = (sumMap[s.user_id] || 0) + Number(s.amount);
+                  commMap[s.user_id] = (commMap[s.user_id] || 0) + Number(s.commission_amount || 0);
+                });
+              }
+
+              let summaryText = `📊 รายงานยอดสมาชิก (${groupLink.lottery_type.toUpperCase()})\n`;
+              summaryText += `--------------------------\n`;
+              
+              filteredMembers.forEach((m: any) => {
+                const profile = m.profiles || {};
+                const name = profile.full_name || 'Unknown User';
+                const balance = Number(profile.balance || 0);
+                const betTotal = sumMap[m.user_id] || 0;
+                const commTotal = commMap[m.user_id] || 0;
+                const netTotal = betTotal - commTotal;
+                const isLinked = !!profile.line_user_id;
+                const linkStatus = isLinked ? '(ผูก)' : '(ไม่ผูก)';
+                summaryText += `- คุณ ${name} ${linkStatus}: ยอด ฿${betTotal.toLocaleString('th-TH')} | คอม ฿${commTotal.toLocaleString('th-TH')} | เหลือ ฿${netTotal.toLocaleString('th-TH')} (เครดิต ฿${balance.toLocaleString('th-TH')})\n`;
+              });
+              
+              summaryText += `--------------------------`;
+
+              await sendLineReply(replyToken, summaryText);
+              continue;
+            }
+
+            // ─── COMMAND: /คนส่ง หรือ /ใครส่ง หรือ /ส่งเลข ───
+            if (text.startsWith('/คนส่ง') || text.startsWith('/ใครส่ง') || text.startsWith('/ส่งเลข')) {
+              if (!permissions.can_view_stats) {
+                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์เข้าถึงรายงานข้อมูลสมาชิก`);
+                continue;
+              }
+
+              const { data: activeRound } = await supabase
+                .from('lottery_rounds')
+                .select('id, round_date')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', groupLink.lottery_type)
+                .eq('status', 'open')
+                .maybeSingle();
+
+              if (!activeRound) {
+                await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงสำหรับหวยประเภท ${groupLink.lottery_type.toUpperCase()}`);
+                continue;
+              }
+
+              // Get all submissions for this round
+              const { data: submissions, error: subErr } = await supabase
+                .from('submissions')
+                .select('user_id, amount, commission_amount')
+                .eq('round_id', activeRound.id)
+                .eq('is_deleted', false);
+
+              if (subErr) {
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลผู้ส่งเลข`);
+                continue;
+              }
+
+              const userTotals: Record<string, number> = {};
+              const userComms: Record<string, number> = {};
+              (submissions || []).forEach((s: any) => {
+                userTotals[s.user_id] = (userTotals[s.user_id] || 0) + Number(s.amount);
+                userComms[s.user_id] = (userComms[s.user_id] || 0) + Number(s.commission_amount || 0);
+              });
+
+              // Filter out users who have sent 0 or null amount
+              const activeUserIds = Object.keys(userTotals).filter(uid => userTotals[uid] > 0);
+
+              if (activeUserIds.length === 0) {
+                await sendLineReply(replyToken, `👥 ยังไม่มีสมาชิกส่งเลขเข้ามาในงวดนี้ค่ะ`);
+                continue;
+              }
+
+              // Fetch profiles for active users
+              const { data: profiles, error: profErr } = await supabase
+                .from('profiles')
+                .select('id, full_name, line_user_id')
+                .in('id', activeUserIds);
+
+              if (profErr || !profiles) {
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงชื่อสมาชิก`);
+                continue;
+              }
+
+              const profilesMap: Record<string, { name: string; isLinked: boolean }> = {};
+              profiles.forEach((p: any) => {
+                profilesMap[p.id] = {
+                  name: p.full_name || 'Unknown User',
+                  isLinked: !!p.line_user_id
+                };
+              });
+
+              let summaryText = `👥 สมาชิกที่ส่งเลขแล้ว (${groupLink.lottery_type.toUpperCase()})\nงวดวันที่: ${activeRound.round_date}\n`;
+              summaryText += `--------------------------\n`;
+              summaryText += `ชื่อ | ยอดส่ง | ค่าคอม | คงเหลือส่ง\n`;
+
+              const bubbleBodyContents: any[] = [
+                {
+                  "type": "box",
+                  "layout": "horizontal",
+                  "contents": [
+                    {
+                      "type": "text",
+                      "text": "ชื่อ",
+                      "size": "xs",
+                      "color": "#888888",
+                      "weight": "bold",
+                      "flex": 4
+                    },
+                    {
+                      "type": "text",
+                      "text": "ยอดส่ง (ค่าคอม)",
+                      "size": "xs",
+                      "color": "#888888",
+                      "weight": "bold",
+                      "align": "end",
+                      "flex": 4
+                    },
+                    {
+                      "type": "text",
+                      "text": "สุทธิส่ง",
+                      "size": "xs",
+                      "color": "#888888",
+                      "weight": "bold",
+                      "align": "end",
+                      "flex": 3
+                    }
+                  ]
+                },
+                {
+                  "type": "separator",
+                  "margin": "xs",
+                  "color": "#e5e5e5"
+                }
+              ];
+
+              let index = 1;
+              let overallTotal = 0;
+              let overallComm = 0;
+              activeUserIds.forEach((uid) => {
+                const userProf = profilesMap[uid] || { name: 'Unknown User', isLinked: false };
+                const name = userProf.name;
+                const total = userTotals[uid];
+                const comm = userComms[uid];
+                const net = total - comm;
+
+                const roundedTotal = Math.round(total);
+                const roundedComm = Math.round(comm);
+                const roundedNet = Math.round(net);
+
+                summaryText += `${index}. คุณ ${name} | ฿${roundedTotal.toLocaleString('th-TH')} | ฿${roundedComm.toLocaleString('th-TH')} | ฿${roundedNet.toLocaleString('th-TH')}\n`;
+
+                bubbleBodyContents.push({
+                  "type": "box",
+                  "layout": "horizontal",
+                  "margin": "md",
+                  "contents": [
+                    {
+                      "type": "text",
+                      "text": `${index}. คุณ ${name}`,
+                      "size": "sm",
+                      "color": "#333333",
+                      "weight": "bold",
+                      "flex": 4,
+                      "wrap": true
+                    },
+                    {
+                      "type": "box",
+                      "layout": "vertical",
+                      "flex": 4,
+                      "contents": [
+                        {
+                          "type": "text",
+                          "text": `฿${roundedTotal.toLocaleString('th-TH')}`,
+                          "size": "sm",
+                          "align": "end",
+                          "weight": "bold",
+                          "color": "#333333"
+                        },
+                        {
+                          "type": "text",
+                          "text": `(฿${roundedComm.toLocaleString('th-TH')})`,
+                          "size": "xs",
+                          "align": "end",
+                          "color": "#888888"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "text": `฿${roundedNet.toLocaleString('th-TH')}`,
+                      "size": "sm",
+                      "color": "#00A86B",
+                      "weight": "bold",
+                      "align": "end",
+                      "flex": 3
+                    }
+                  ]
+                });
+
+                overallTotal += roundedTotal;
+                overallComm += roundedComm;
+                index++;
+              });
+
+              const overallNet = overallTotal - overallComm;
+              summaryText += `--------------------------\n`;
+              summaryText += `รวมส่งเลขทั้งหมด: ${activeUserIds.length} คน\n`;
+              summaryText += `💰 ยอดรวม: ฿${overallTotal.toLocaleString('th-TH')}\n`;
+              summaryText += `💸 ค่าคอม: ฿${overallComm.toLocaleString('th-TH')}\n`;
+              summaryText += `💵 เหลือ: ฿${overallNet.toLocaleString('th-TH')}`;
+
+              const flexMessage = {
+                "type": "flex",
+                "altText": summaryText,
+                "contents": {
+                  "type": "bubble",
+                  "size": "mega",
+                  "header": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#4A2E80",
+                    "paddingAll": "lg",
+                    "contents": [
+                      {
+                        "type": "text",
+                        "text": `👥 สมาชิกที่ส่งเลขแล้ว (${groupLink.lottery_type.toUpperCase()})`,
+                        "weight": "bold",
+                        "size": "md",
+                        "color": "#ffffff"
+                      },
+                      {
+                        "type": "text",
+                        "text": `งวดวันที่: ${activeRound.round_date}`,
+                        "size": "xs",
+                        "color": "#e1d9f0",
+                        "margin": "xs"
+                      }
+                    ]
+                  },
+                  "body": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "paddingAll": "md",
+                    "contents": bubbleBodyContents
+                  },
+                  "footer": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [
+                      {
+                        "type": "box",
+                        "layout": "vertical",
+                        "backgroundColor": "#f8f9fa",
+                        "paddingAll": "md",
+                        "cornerRadius": "md",
+                        "contents": [
+                          {
+                            "type": "box",
+                            "layout": "horizontal",
+                            "contents": [
+                              {
+                                "type": "text",
+                                "text": "รวมส่งเลข:",
+                                "size": "sm",
+                                "color": "#555555"
+                              },
+                              {
+                                "type": "text",
+                                "text": `${activeUserIds.length} คน`,
+                                "size": "sm",
+                                "weight": "bold",
+                                "align": "end",
+                                "color": "#333333"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "box",
+                            "layout": "horizontal",
+                            "margin": "xs",
+                            "contents": [
+                              {
+                                "type": "text",
+                                "text": "💰 ยอดรวม:",
+                                "size": "sm",
+                                "color": "#555555"
+                              },
+                              {
+                                "type": "text",
+                                "text": `฿${overallTotal.toLocaleString('th-TH')}`,
+                                "size": "sm",
+                                "weight": "bold",
+                                "align": "end",
+                                "color": "#333333"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "box",
+                            "layout": "horizontal",
+                            "margin": "xs",
+                            "contents": [
+                              {
+                                "type": "text",
+                                "text": "💸 ค่าคอมรวม:",
+                                "size": "sm",
+                                "color": "#555555"
+                              },
+                              {
+                                "type": "text",
+                                "text": `฿${overallComm.toLocaleString('th-TH')}`,
+                                "size": "sm",
+                                "weight": "bold",
+                                "align": "end",
+                                "color": "#666666"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "separator",
+                            "margin": "sm",
+                            "color": "#dddddd"
+                          },
+                          {
+                            "type": "box",
+                            "layout": "horizontal",
+                            "margin": "sm",
+                            "contents": [
+                              {
+                                "type": "text",
+                                "text": "💵 ยอดสุทธิคงเหลือ:",
+                                "size": "sm",
+                                "weight": "bold",
+                                "color": "#111111"
+                              },
+                              {
+                                "type": "text",
+                                "text": `฿${overallNet.toLocaleString('th-TH')}`,
+                                "size": "sm",
+                                "weight": "bold",
+                                "align": "end",
+                                "color": "#4A2E80"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              };
+
+              await sendLineReply(replyToken, flexMessage);
+              continue;
+            }
+
+            // ─── COMMAND: /ยอดรวม หรือ /total ───
+            if (text.startsWith('/total') || text.startsWith('/ยอดรวม')) {
+              if (!showOwnOnly && !permissions.can_view_total) {
+                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์เข้าถึงรายงานยอดรวม`);
+                continue;
+              }
+
+              const { data: activeRound } = await supabase
+                .from('lottery_rounds')
+                .select('id, round_date')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', groupLink.lottery_type)
+                .eq('status', 'open')
+                .maybeSingle();
+
+              if (!activeRound) {
+                await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงสำหรับหวยประเภท ${groupLink.lottery_type.toUpperCase()}`);
+                continue;
+              }
+
+              let query = supabase
+                .from('submissions')
+                .select('bet_type, amount, commission_amount')
+                .eq('round_id', activeRound.id)
+                .eq('is_deleted', false);
+
+              if (showOwnOnly && targetUserId) {
+                query = query.eq('user_id', targetUserId);
+              }
+
+              const { data: submissions, error: sumErr } = await query;
+
+              if (sumErr) {
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการคำนวณยอดรวม`);
+                continue;
+              }
+
+              const betTypeTotals: Record<string, number> = {};
+              let grandTotal = 0;
+              let totalCommission = 0;
+              (submissions || []).forEach((s: any) => {
+                const amt = Number(s.amount || 0);
+                const comm = Number(s.commission_amount || 0);
+                betTypeTotals[s.bet_type] = (betTypeTotals[s.bet_type] || 0) + amt;
+                grandTotal += amt;
+                totalCommission += comm;
+              });
+
+              const leftAmount = grandTotal - totalCommission;
+
+              const LABELS: Record<string, string> = {
+                '2_top': '2 ตัวบน',
+                '2_bottom': '2 ตัวล่าง',
+                '3_top': groupLink.lottery_type === 'lao' || groupLink.lottery_type === 'hanoi' ? '3 ตัวตรง' : '3 ตัวบน',
+                '3_tod': '3 ตัวโต๊ด',
+                '3_front': '3 ตัวหน้า',
+                '3_back': '3 ตัวหลัง',
+                '4_tod': '4 ตัวโต๊ด',
+                '4_set': '4 ตัวชุด',
+                '6_top': '6 ตัวบน',
+                '4_float': '4 ตัวลอยแพ',
+                '5_float': '5 ตัวลอยแพ',
+                'run_top': 'ลอยบน',
+                'run_bottom': 'ลอยล่าง'
+              };
+
+              let summaryText = '';
+              let headerTitle = '';
+              const headerContents: any[] = [];
+
+              if (showOwnOnly) {
+                headerTitle = `📈 ยอดรวมส่งโพยของคุณ (${groupLink.lottery_type.toUpperCase()})`;
+                summaryText = `${headerTitle}\n`;
+                summaryText += `งวดวันที่: ${formatToThaiBudDate(activeRound.round_date)}\n`;
+                summaryText += `ผู้ซื้อ: คุณ ${memberProfileName}\n`;
+
+                headerContents.push(
+                  {
+                    "type": "text",
+                    "text": headerTitle,
+                    "weight": "bold",
+                    "size": "md",
+                    "color": "#ffffff"
+                  },
+                  {
+                    "type": "text",
+                    "text": `งวดวันที่: ${formatToThaiBudDate(activeRound.round_date)}`,
+                    "size": "xs",
+                    "color": "#e1d9f0",
+                    "margin": "xs"
+                  },
+                  {
+                    "type": "text",
+                    "text": `ผู้ซื้อ: คุณ ${memberProfileName}`,
+                    "size": "xs",
+                    "color": "#e1d9f0",
+                    "margin": "xs"
+                  }
+                );
+              } else {
+                headerTitle = `📈 ยอดรวมส่งโพย (${groupLink.lottery_type.toUpperCase()})`;
+                summaryText = `${headerTitle}\n`;
+                summaryText += `งวดวันที่: ${formatToThaiBudDate(activeRound.round_date)}\n`;
+
+                headerContents.push(
+                  {
+                    "type": "text",
+                    "text": headerTitle,
+                    "weight": "bold",
+                    "size": "md",
+                    "color": "#ffffff"
+                  },
+                  {
+                    "type": "text",
+                    "text": `งวดวันที่: ${formatToThaiBudDate(activeRound.round_date)}`,
+                    "size": "xs",
+                    "color": "#e1d9f0",
+                    "margin": "xs"
+                  }
+                );
+              }
+              summaryText += `--------------------------\n`;
+
+              const bubbleBodyContents: any[] = [];
+
+              if (Object.keys(betTypeTotals).length === 0) {
+                const noBetsMsg = showOwnOnly ? `คุณยังไม่มียอดแทงส่งเข้ามาในงวดนี้ค่ะ` : `ยังไม่มียอดแทงส่งเข้ามาค่ะ`;
+                summaryText += `${noBetsMsg}\n`;
+                bubbleBodyContents.push({
+                  "type": "text",
+                  "text": noBetsMsg,
+                  "size": "sm",
+                  "color": "#888888",
+                  "align": "center",
+                  "margin": "md"
+                });
+              } else {
+                for (const [type, sum] of Object.entries(betTypeTotals)) {
+                  const roundedSum = Math.round(sum);
+                  summaryText += `${LABELS[type] || type}: ฿${roundedSum.toLocaleString('th-TH')}\n`;
+
+                  bubbleBodyContents.push({
+                    "type": "box",
+                    "layout": "horizontal",
+                    "margin": "md",
+                    "contents": [
+                      {
+                        "type": "text",
+                        "text": `${LABELS[type] || type}`,
+                        "size": "sm",
+                        "color": "#333333",
+                        "weight": "bold",
+                        "flex": 6
+                      },
+                      {
+                        "type": "text",
+                        "text": `฿${roundedSum.toLocaleString('th-TH')}`,
+                        "size": "sm",
+                        "weight": "bold",
+                        "align": "end",
+                        "color": "#333333",
+                        "flex": 5
+                      }
+                    ]
+                  });
+                }
+              }
+
+              const roundedGrandTotal = Math.round(grandTotal);
+              const roundedTotalCommission = Math.round(totalCommission);
+              const roundedLeftAmount = roundedGrandTotal - roundedTotalCommission;
+
+              summaryText += `--------------------------\n`;
+              summaryText += `💰 ยอดรวมทั้งหมด: ฿${roundedGrandTotal.toLocaleString('th-TH')}\n`;
+              summaryText += `💸 ค่าคอม: ฿${roundedTotalCommission.toLocaleString('th-TH')}\n`;
+              summaryText += `💵 เหลือ: ฿${roundedLeftAmount.toLocaleString('th-TH')}`;
+
+              const flexMessage = {
+                "type": "flex",
+                "altText": summaryText,
+                "contents": {
+                  "type": "bubble",
+                  "size": "mega",
+                  "header": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#4A2E80",
+                    "paddingAll": "lg",
+                    "contents": headerContents
+                  },
+                  "body": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "paddingAll": "md",
+                    "contents": bubbleBodyContents
+                  },
+                  "footer": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [
+                      {
+                        "type": "box",
+                        "layout": "vertical",
+                        "backgroundColor": "#f8f9fa",
+                        "paddingAll": "md",
+                        "cornerRadius": "md",
+                        "contents": [
+                          {
+                            "type": "box",
+                            "layout": "horizontal",
+                            "contents": [
+                              {
+                                "type": "text",
+                                "text": "💰 ยอดรวมทั้งหมด:",
+                                "size": "sm",
+                                "color": "#555555"
+                              },
+                              {
+                                "type": "text",
+                                "text": `฿${roundedGrandTotal.toLocaleString('th-TH')}`,
+                                "size": "sm",
+                                "weight": "bold",
+                                "align": "end",
+                                "color": "#333333"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "box",
+                            "layout": "horizontal",
+                            "margin": "xs",
+                            "contents": [
+                              {
+                                "type": "text",
+                                "text": "💸 ค่าคอมรวม:",
+                                "size": "sm",
+                                "color": "#555555"
+                              },
+                              {
+                                "type": "text",
+                                "text": `฿${roundedTotalCommission.toLocaleString('th-TH')}`,
+                                "size": "sm",
+                                "weight": "bold",
+                                "align": "end",
+                                "color": "#666666"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "separator",
+                            "margin": "sm",
+                            "color": "#dddddd"
+                          },
+                          {
+                            "type": "box",
+                            "layout": "horizontal",
+                            "margin": "sm",
+                            "contents": [
+                              {
+                                "type": "text",
+                                "text": "💵 ยอดสุทธิคงเหลือ:",
+                                "size": "sm",
+                                "weight": "bold",
+                                "color": "#111111"
+                              },
+                              {
+                                "type": "text",
+                                "text": `฿${roundedLeftAmount.toLocaleString('th-TH')}`,
+                                "size": "sm",
+                                "weight": "bold",
+                                "align": "end",
+                                "color": "#4A2E80"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              };
+
+              await sendLineReply(replyToken, flexMessage);
+              continue;
+            }
+
+            // ─── COMMAND: /ยอดเกิน หรือ /excess ───
+            if (text === '/excess' || text === '/ยอดเกิน') {
+              if (!permissions.can_view_excess) {
+                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์เข้าถึงรายงานยอดเกินอั้น`);
+                continue;
+              }
+
+              const { data: activeRound } = await supabase
+                .from('lottery_rounds')
+                .select('id, round_date')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', groupLink.lottery_type)
+                .eq('status', 'open')
+                .maybeSingle();
+
+              if (!activeRound) {
+                await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงสำหรับหวยประเภท ${groupLink.lottery_type.toUpperCase()}`);
+                continue;
+              }
+
+              const excessItems = await calculateRoundExcess(activeRound.id);
+
+              const LABELS: Record<string, string> = {
+                '2_top': '2 ตัวบน',
+                '2_bottom': '2 ตัวล่าง',
+                '3_top': groupLink.lottery_type === 'lao' || groupLink.lottery_type === 'hanoi' ? '3 ตัวตรง' : '3 ตัวบน',
+                '3_tod': '3 ตัวโต๊ด',
+                '3_front': '3 ตัวหน้า',
+                '3_back': '3 ตัวหลัง',
+                '4_tod': '4 ตัวโต๊ด',
+                '4_set': '4 ตัวชุด',
+                '6_top': '6 ตัวบน',
+                '4_float': '4 ตัวลอยแพ',
+                '5_float': '5 ตัวลอยแพ',
+                'run_top': 'ลอยบน',
+                'run_bottom': 'ลอยล่าง'
+              };
+
+              let summaryText = `⚠️ รายการยอดเกินอั้น (${groupLink.lottery_type.toUpperCase()})\nงวดวันที่: ${activeRound.round_date}\n`;
+              summaryText += `--------------------------\n`;
+
+              let totalExcess = 0;
+              if (excessItems.length === 0) {
+                summaryText += `ไม่มียอดเกินอั้นค่ะ 🎉\n`;
+              } else {
+                excessItems.forEach((item) => {
+                  summaryText += `- [${LABELS[item.bet_type] || item.bet_type}] ${item.numbers}: เกิน ฿${item.amount.toLocaleString('th-TH')}\n`;
+                  totalExcess += item.amount;
+                });
+              }
+              summaryText += `--------------------------\n`;
+              summaryText += `รวมยอดเกินทั้งหมด: ฿${totalExcess.toLocaleString('th-TH')}`;
+
+              await sendLineReply(replyToken, summaryText);
+              continue;
+            }
+
+            // ─── COMMAND: /ตีออก ───
+            if (text.startsWith('/ตีออก') || text.startsWith('/transfer')) {
+              if (!permissions.can_transfer) {
+                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ในการสั่งตีออกตัวเลข`);
+                continue;
+              }
+
+              const { data: activeRound } = await supabase
+                .from('lottery_rounds')
+                .select('id, round_date')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', groupLink.lottery_type)
+                .eq('status', 'open')
+                .maybeSingle();
+
+              if (!activeRound) {
+                await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงสำหรับหวยประเภท ${groupLink.lottery_type.toUpperCase()}`);
+                continue;
+              }
+
+              let commandArg = '';
+              if (text.startsWith('/transfer')) {
+                commandArg = text.substring('/transfer'.length).trim();
+              } else if (text.startsWith('/ตีออก')) {
+                commandArg = text.substring('/ตีออก'.length).trim();
+              }
+
+              if (commandArg === 'เกิน' || commandArg === 'excess') {
+                const excessItems = await calculateRoundExcess(activeRound.id);
+                if (excessItems.length === 0) {
+                  await sendLineReply(replyToken, `ℹ️ ไม่มียอดเกินลิมิตให้ออกในงวดนี้ค่ะ`);
+                  continue;
+                }
+
+                const result = await performLayoff(dealerId, activeRound.id, groupLink.lottery_type, excessItems);
+                if (result.success && result.text) {
+                  await sendLineReply(replyToken, `✅ ทำรายการตีออกยอดเกินอั้นสำเร็จแล้วค่ะ!\n\n${result.text}`);
+                } else {
+                  await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาด: ${result.message}`);
+                }
+                continue;
+              } else {
+                const parsedBets = parseMultiLinePaste(commandArg, groupLink.lottery_type);
+                if (parsedBets.length === 0) {
+                  await sendLineReply(replyToken, `❌ รูปแบบคำสั่งตีออกไม่ถูกต้อง\n\n- ตีออกยอดเกิน:พิมพ์ /ตีออก เกิน\n- ตีออกเจาะจง: พิมพ์ /ตีออก [เลข] [ประเภท] [จำนวน]\n(เช่น /ตีออก 362 บน 200)`);
+                  continue;
+                }
+
+                const itemsToTransfer: ExcessItem[] = parsedBets.map((b) => ({
+                  bet_type: b.betType,
+                  numbers: b.numbers,
+                  amount: b.amount
+                }));
+
+                const result = await performLayoff(dealerId, activeRound.id, groupLink.lottery_type, itemsToTransfer);
+                if (result.success && result.text) {
+                  await sendLineReply(replyToken, `✅ ทำรายการตีออกเฉพาะเจาะจงสำเร็จแล้วค่ะ!\n\n${result.text}`);
+                } else {
+                  await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาด: ${result.message}`);
+                }
+                continue;
+              }
+            }
+          }
+
+          // ─── COMMAND 1: /bind ───
+        if (text.startsWith('/bind ')) {
+          const code = text.replace('/bind ', '').trim().toUpperCase();
+          
+          // Check binding code in DB
+          const { data: groupLink, error: fetchErr } = await supabase
+            .from('line_groups')
+            .select('*')
+            .eq('binding_code', code)
+            .single();
+
+          if (fetchErr || !groupLink) {
+            await sendLineReply(replyToken, `❌ ไม่พบรหัสผูกกลุ่ม "${code}" หรือรหัสถูกใช้งานไปแล้ว กรุณาตรวจสอบรหัสจากหน้าเว็บดีลเลอร์ของคุณค่ะ`);
+            continue;
+          }
+
+          // Update group linkage
+          const { data: dealerProfile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', groupLink.dealer_id)
+            .single();
+
+          const dealerName = dealerProfile?.full_name || 'Dealer';
+
+          // Fetch real group name from LINE summary API
+          const fetchedName = await fetchGroupName(groupId);
+
+          const { error: updateErr } = await supabase
+            .from('line_groups')
+            .update({
+              line_group_id: groupId,
+              binding_code: null, // Clear the code once bound
+              is_active: true,
+              group_name: fetchedName || 'กลุ่มไลน์รับยอด',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', groupLink.id);
+
+          if (updateErr) {
+            await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดทางเทคนิคในการผูกกลุ่ม กรุณาลองใหม่อีกครั้ง`);
+          } else {
+            await sendLineReply(replyToken, `✅ ผูกกลุ่มสำเร็จแล้วค่ะ!\n\nเจ้ามือหลัก: ${dealerName}\nประเภทหวยหลัก: ${groupLink.lottery_type.toUpperCase()}\n\nสมาชิกที่มีสิทธิ์สามารถส่งโพยหวยได้ในกลุ่มนี้ทันทีค่ะ 🎉`);
+          }
+          continue;
+        }
+
+        // ─── COMMAND 2: /link หรือ /id หรือ /myid ───
+        if (text === '/link' || text === '/id' || text === '/myid') {
+          const linkText = `รหัส LINE User ID ของคุณคือ:\n\n${userId}\n\nกรุณาคัดลอกรหัสนี้เพื่อนำไปเชื่อมต่อบัญชีหรือตั้งค่าสิทธิ์ผู้จัดการบนหน้าเว็บค่ะ`;
+          await sendLineReply(replyToken, linkText);
+          continue;
+        }
+
+        // ─── COMMAND 3: /bal หรือ /credit ───
+        if (text === '/bal' || text === '/credit' || text === '/ยอดเงิน') {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('id, full_name')
+            .eq('line_user_id', userId)
+            .single();
+
+          if (!profile) {
+            await sendLineReply(replyToken, `คุณยังไม่ได้เชื่อมต่อบัญชี LINE เข้ากับระบบค่ะ\n(พิมพ์ /link เพื่อคัดลอก User ID สำหรับใช้ผูกบัญชี)`);
+            continue;
+          }
+
+          // Fetch active memberships
+          const { data: memberships } = await supabase
+            .from('user_dealer_memberships')
+            .select(`
+              status,
+              profiles!user_dealer_memberships_dealer_id_fkey (
+                full_name
+              )
+            `)
+            .eq('user_id', profile.id)
+            .eq('status', 'active');
+
+          if (!memberships || memberships.length === 0) {
+            await sendLineReply(replyToken, `คุณ ${profile.full_name} เชื่อมต่อบัญชีแล้ว แต่ไม่มีเจ้ามือที่อนุมัติสถานะการซื้อขายในขณะนี้ค่ะ`);
+          } else {
+            const dealersStr = memberships.map((m: any) => `- ${m.profiles?.full_name || 'Dealer'}`).join('\n');
+            await sendLineReply(replyToken, `สวัสดีค่ะ คุณ ${profile.full_name} 😊\n\nสถานะการเชื่อมต่อบัญชี: อนุมัติสำเร็จ\n\nเจ้ามือของคุณที่พร้อมส่งโพย:\n${dealersStr}`);
+          }
+          continue;
+        }
+
+        // ─── COMMAND 4: /ยกเลิก หรือ /cancel ───
+        if (text.startsWith('/cancel') || text.startsWith('/ยกเลิก')) {
+          let cancelCode = '';
+          if (text.startsWith('/cancel')) {
+            cancelCode = text.substring('/cancel'.length).trim();
+          } else if (text.startsWith('/ยกเลิก')) {
+            cancelCode = text.substring('/ยกเลิก'.length).trim();
+          }
+
+          if (!cancelCode) {
+            await sendLineReply(replyToken, `❌ กรุณาระบุเลขใบโพยที่ต้องการยกเลิก\n(เช่น /ยกเลิก 829471)`);
+            continue;
+          }
+
+          // 1. Find the active submissions with this bill_id
+          const { data: subs, error: fetchErr } = await supabase
+            .from('submissions')
+            .select('id, user_id, amount, round_id')
+            .eq('bill_id', cancelCode)
+            .eq('is_deleted', false);
+
+          if (fetchErr || !subs || subs.length === 0) {
+            await sendLineReply(replyToken, `❌ ไม่พบใบโพยหมายเลข "${cancelCode}" หรือใบโพยนี้ถูกยกเลิกไปแล้ว`);
+            continue;
+          }
+
+          const submissionUserId = subs[0].user_id;
+          const targetRoundId = subs[0].round_id;
+
+          // Fetch dealer_id from round
+          const { data: roundData } = await supabase
+            .from('lottery_rounds')
+            .select('dealer_id')
+            .eq('id', targetRoundId)
+            .maybeSingle();
+
+          const targetDealerId = roundData?.dealer_id;
+
+          // 2. Identify the sender's profile
+          const { data: senderProfile } = await supabase
+            .from('profiles')
+            .select('id, role')
+            .eq('line_user_id', userId)
+            .maybeSingle();
+
+          let isAuthorized = false;
+
+          if (senderProfile) {
+            // Check if sender is the creator of the bill
+            if (senderProfile.id === submissionUserId) {
+              isAuthorized = true;
+            }
+            // Check if sender is the dealer themselves
+            if (senderProfile.id === targetDealerId) {
+              isAuthorized = true;
+            }
+          }
+
+          // If not authorized yet, check if sender is an active manager of the dealer
+          if (!isAuthorized && targetDealerId) {
+            const { data: manager } = await supabase
+              .from('line_managers')
+              .select('id')
+              .eq('dealer_id', targetDealerId)
+              .eq('line_user_id', userId)
+              .eq('is_active', true)
+              .maybeSingle();
+
+            if (manager) {
+              isAuthorized = true;
+            }
+          }
+
+          if (!isAuthorized) {
+            await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ในการยกเลิกใบโพยนี้ (เฉพาะผู้ส่งโพยเอง หรือผู้จัดการ/เจ้ามือของกลุ่มเท่านั้น)`);
+            continue;
+          }
+
+          // 3. Soft-delete the submissions
+          const timestamp = new Date().toISOString();
+          const { error: updateErr } = await supabase
+            .from('submissions')
+            .update({
+              is_deleted: true,
+              deleted_at: timestamp
+            })
+            .eq('bill_id', cancelCode);
+
+          if (updateErr) {
+            console.error("Failed to cancel bill:", updateErr);
+            await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดทางเทคนิคในการยกเลิกใบโพย`);
+          } else {
+            // Trigger Credit pending calculation update in background
+            if (targetDealerId) {
+              updatePendingDeduction(targetDealerId).catch(err => {
+                console.error("Failed updating credit pending:", err);
+              });
+            }
+
+            const totalCancelled = subs.reduce((sum, s) => sum + Number(s.amount || 0), 0);
+            await sendLineReply(replyToken, `✅ ยกเลิกใบโพยหมายเลข "${cancelCode}" สำเร็จเรียบร้อยแล้วค่ะ!\n(ยอดเดิมที่ถูกยกเลิก: ฿${totalCancelled.toLocaleString('th-TH')})`);
+          }
+          continue;
+        }
+
+        // ─── COMMAND 5: /โพย หรือ /bill ───
+        if (text.startsWith('/bill') || text.startsWith('/โพย')) {
+          try {
+            let billCode = '';
+            if (text.startsWith('/bill')) {
+              billCode = text.substring('/bill'.length).trim();
+            } else if (text.startsWith('/โพย')) {
+              billCode = text.substring('/โพย'.length).trim();
+            }
+
+            if (!billCode) {
+              await sendLineReply(replyToken, `❌ กรุณาระบุเลขใบโพยที่ต้องการดู\n(เช่น /โพย 824077)`);
+              continue;
+            }
+
+            // 1. Find the active submissions with this bill_id
+            const { data: subs, error: fetchErr } = await supabase
+              .from('submissions')
+              .select('id, amount, bet_type, numbers, user_id, round_id, entry_id, display_numbers, display_amount, display_bet_type')
+              .eq('bill_id', billCode)
+              .eq('is_deleted', false)
+              .order('created_at', { ascending: true })
+              .order('id', { ascending: true });
+
+            if (fetchErr || !subs || subs.length === 0) {
+              await sendLineReply(replyToken, `❌ ไม่พบใบโพยหมายเลข "${billCode}" หรือใบโพยนี้ถูกยกเลิกไปแล้ว`);
+              continue;
+            }
+
+            const userIdOfBill = subs[0].user_id;
+            const roundIdOfBill = subs[0].round_id;
+
+            // 2. Fetch user profile and round details
+            const [profileRes, roundRes] = await Promise.all([
+              supabase.from('profiles').select('full_name').eq('id', userIdOfBill).maybeSingle(),
+              supabase.from('lottery_rounds').select('lottery_type, round_date, dealer_id').eq('id', roundIdOfBill).maybeSingle()
+            ]);
+
+            const buyerName = profileRes.data?.full_name || 'Unknown User';
+            const roundData = roundRes.data;
+
+            if (!roundData) {
+              await sendLineReply(replyToken, `❌ ไม่พบข้อมูลรอบหวยที่เกี่ยวข้องกับใบโพยนี้`);
+              continue;
+            }
+
+            const targetDealerId = roundData.dealer_id;
+
+            // 3. Verify sender authorization
+            const { data: senderProfile } = await supabase
+              .from('profiles')
+              .select('id, role')
+              .eq('line_user_id', userId)
+              .maybeSingle();
+
+            let isAuthorized = false;
+            if (senderProfile) {
+              if (senderProfile.id === targetDealerId || senderProfile.id === userIdOfBill) {
+                isAuthorized = true;
+              } else {
+                const { data: membership } = await supabase
+                  .from('user_dealer_memberships')
+                  .select('id')
+                  .eq('user_id', senderProfile.id)
+                  .eq('dealer_id', targetDealerId)
+                  .eq('status', 'active')
+                  .maybeSingle();
+                if (membership) {
+                  isAuthorized = true;
+                }
+              }
+            }
+
+            if (!isAuthorized && targetDealerId) {
+              const { data: manager } = await supabase
+                .from('line_managers')
+                .select('id')
+                .eq('dealer_id', targetDealerId)
+                .eq('line_user_id', userId)
+                .eq('is_active', true)
+                .maybeSingle();
+              if (manager) {
+                isAuthorized = true;
+              }
+            }
+
+            if (!isAuthorized) {
+              await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์เข้าดูรายละเอียดใบโพยนี้`);
+              continue;
+            }
+
+            // 4. Format and reply with the list of purchases grouped by entry_id
+            const isLaoOrHanoi = roundData.lottery_type === 'lao' || roundData.lottery_type === 'hanoi';
+            const LABELS = {
+              '2_top': 'บน',
+              '2_bottom': 'ล่าง',
+              '3_top': isLaoOrHanoi ? 'ตรง' : 'บน',
+              '3_tod': 'โต๊ด',
+              '3_front': '3 ตัวหน้า',
+              '3_back': '3 ตัวหลัง',
+              '4_tod': '4 ตัวโต๊ด',
+              '4_set': '4 ตัวชุด',
+              '6_top': '6 ตัวบน',
+              '4_float': '4 ตัวลอยแพ',
+              '5_float': '5 ตัวลอยแพ',
+              'run_top': 'ลอยบน',
+              'run_bottom': 'ลอยล่าง'
+            };
+
+            // Grouping algorithm
+            const formattedLines = [];
+            let totalAmount = 0;
+
+            // Separate items by whether they have entry_id
+            const withEntryId = subs.filter(s => s.entry_id);
+            const withoutEntryId = subs.filter(s => !s.entry_id);
+
+            // Process items with entry_id
+            const entryGroups = new Map();
+            withEntryId.forEach(s => {
+              const gid = s.entry_id;
+              if (!entryGroups.has(gid)) {
+                entryGroups.set(gid, []);
+              }
+              entryGroups.get(gid).push(s);
+            });
+
+            entryGroups.forEach((group) => {
+              const first = group[0];
+              const count = group.length;
+              const groupSum = group.reduce((sum, s) => sum + Number(s.amount || 0), 0);
+              totalAmount += groupSum;
+
+              let disp = first.display_numbers;
+              if (!disp) {
+                const numStr = first.numbers || '';
+                const betTypeStr = first.bet_type || '';
+                const len = numStr.length;
+                if (len === 2 && count === 2 && betTypeStr.startsWith('2_')) {
+                  const label = betTypeStr === '2_top' ? 'บนกลับ' : 'ล่างกลับ';
+                  disp = `${numStr}=${first.amount}*${first.amount} ${label}`;
+                } else if (len === 3 && count > 1 && betTypeStr === '3_top') {
+                  disp = `${numStr}=${first.amount}*${count} คูณชุด`;
+                } else {
+                  const label = LABELS[betTypeStr] || betTypeStr;
+                  disp = `${numStr}=${first.amount} ${label}`;
+                }
+              }
+
+              const countSuffix = count > 1 ? ` (${count})` : '';
+              formattedLines.push(`${disp}${countSuffix}`);
+            });
+
+            // Process items without entry_id (historical/fallback grouping)
+            const visited = new Set();
+            for (let i = 0; i < withoutEntryId.length; i++) {
+              if (visited.has(i)) continue;
+              const current = withoutEntryId[i];
+              const numStr = current.numbers || '';
+              const betTypeStr = current.bet_type || '';
+              const len = numStr.length;
+
+              // A. 3-digit permutation grouping
+              if (len === 3 && betTypeStr === '3_top') {
+                const group = [current];
+                visited.add(i);
+                const currentSorted = numStr.split('').sort().join('');
+
+                for (let j = i + 1; j < withoutEntryId.length; j++) {
+                  if (visited.has(j)) continue;
+                  const other = withoutEntryId[j];
+                  const otherNumStr = other.numbers || '';
+                  if (otherNumStr.length === 3 && other.bet_type === '3_top' && other.amount === current.amount) {
+                    const otherSorted = otherNumStr.split('').sort().join('');
+                    if (currentSorted === otherSorted) {
+                      group.push(other);
+                      visited.add(j);
+                    }
+                  }
+                }
+
+                const groupSum = group.reduce((sum, s) => sum + Number(s.amount || 0), 0);
+                totalAmount += groupSum;
+
+                if (group.length > 1) {
+                  const count = group.length;
+                  formattedLines.push(`${numStr}=${current.amount}*${count} คูณชุด (${count})`);
+                } else {
+                  formattedLines.push(`${numStr}=${current.amount} ${isLaoOrHanoi ? 'ตรง' : 'บน'}`);
+                }
+              }
+              // B. 2-digit reverse grouping
+              else if (len === 2 && (betTypeStr === '2_top' || betTypeStr === '2_bottom')) {
+                const group = [current];
+                visited.add(i);
+                const reversed = numStr.split('').reverse().join('');
+
+                if (reversed !== numStr) {
+                  for (let j = i + 1; j < withoutEntryId.length; j++) {
+                    if (visited.has(j)) continue;
+                    const other = withoutEntryId[j];
+                    const otherNumStr = other.numbers || '';
+                    if (otherNumStr.length === 2 && other.bet_type === current.bet_type && other.amount === current.amount && otherNumStr === reversed) {
+                      group.push(other);
+                      visited.add(j);
+                      break;
+                    }
+                  }
+                }
+
+                const groupSum = group.reduce((sum, s) => sum + Number(s.amount || 0), 0);
+                totalAmount += groupSum;
+
+                if (group.length > 1) {
+                  const label = betTypeStr === '2_top' ? 'บนกลับ' : 'ล่างกลับ';
+                  formattedLines.push(`${numStr}=${current.amount}*${current.amount} ${label} (${group.length})`);
+                } else {
+                  const label = betTypeStr === '2_top' ? 'บน' : 'ล่าง';
+                  formattedLines.push(`${numStr}=${current.amount} ${label}`);
+                }
+              }
+              // C. Other items (singles, double 2-digits like 77, 4-digits, runners, etc.)
+              else {
+                visited.add(i);
+                totalAmount += Number(current.amount || 0);
+                const label = LABELS[betTypeStr] || betTypeStr;
+                formattedLines.push(`${numStr}=${current.amount} ${label}`);
+              }
+            }
+
+            let summaryText = `📄 ใบโพย: ${billCode}\n`;
+            summaryText += `ประเภท: ${roundData.lottery_type.toUpperCase()}\n`;
+            summaryText += `งวดวันที่: ${formatToThaiBudDate(roundData.round_date)}\n`;
+            summaryText += `ผู้ซื้อ: คุณ ${buyerName}\n`;
+            summaryText += `จำนวนรายการ: ${subs.length}\n`;
+            summaryText += `--------------------------\n`;
+
+            summaryText += formattedLines.join('\n') + '\n';
+
+            summaryText += `--------------------------\n`;
+            summaryText += `💰 ยอดรวม: ฿${totalAmount.toLocaleString('th-TH')}`;
+
+            await sendLineReply(replyToken, summaryText);
+          } catch (err) {
+            console.error("Error handling /โพย command:", err);
+            await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลใบโพย:\n${err.message}\n${err.stack || ''}`);
+          }
+          continue;
+        }
+
+// ─── NORMAL MESSAGE (Check if in a bound group for processing bets) ───
+        // Fetch group link information
+        const { data: groupLink } = await supabase
+          .from('line_groups')
+          .select('*')
+          .eq('line_group_id', groupId)
+          .eq('is_active', true)
+          .single();
+
+        if (!groupLink) {
+          // Message not in a registered group, ignore it
+          continue;
+        }
+
+        // Auto-heal group name if empty or missing
+        if (!groupLink.group_name && groupId.startsWith('C')) {
+          const fetchedName = await fetchGroupName(groupId);
+          if (fetchedName) {
+            await supabase
+              .from('line_groups')
+              .update({ group_name: fetchedName })
+              .eq('id', groupLink.id);
+            groupLink.group_name = fetchedName; // update local object reference
+          }
+        }
+
+        const dealerId = groupLink.dealer_id;
+        const lotteryType = groupLink.lottery_type;
+
+        // Verify if sender has a linked profile
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, full_name, is_active')
+          .eq('line_user_id', userId)
+          .eq('is_active', true)
+          .single();
+
+        // If not linked, check if the text contains a bet. If so, reply with warning
+        const parsedBets = parseMultiLinePaste(text, lotteryType);
+        if (parsedBets.length === 0) {
+          // Random chat message, ignore it
+          continue;
+        }
+
+        if (!profile) {
+          await sendLineReply(replyToken, `❌ บัญชี LINE ของคุณยังไม่ได้ผูกกับระบบ Big Lotto
+
+ให้พิมพ์: /id จะแสดง User ID ของคุณ
+แล้วเอา ID ของคุณไปผูกกับระบบที่ 
+เมนูโปรไฟล์ ในบัญชี Big Lotto 
+เพื่อทำให้คุณส่งเลขทางไลน์ได้`);
+          continue;
+        }
+
+        // Check active membership with the group's dealer
+        const { data: membership } = await supabase
+          .from('user_dealer_memberships')
+          .select('id, status')
+          .eq('user_id', profile.id)
+          .eq('dealer_id', dealerId)
+          .eq('status', 'active')
+          .single();
+
+        if (!membership) {
+          await sendLineReply(replyToken, `❌ ขออภัยค่ะ คุณ ${profile.full_name} ไม่มีสิทธิ์ส่งโพยกับดีลเลอร์กลุ่มนี้ หรือสิทธิ์ของท่านถูกระงับชั่วคราว`);
+          continue;
+        }
+
+        // Check active round for this dealer (must be open, is_active=true, and current time is within open/close times)
+        const { data: openRounds } = await supabase
+          .from('lottery_rounds')
+          .select('*')
+          .eq('dealer_id', dealerId)
+          .eq('lottery_type', lotteryType)
+          .eq('status', 'open');
+
+        const now = new Date();
+        const activeRound = (openRounds || []).find(round => {
+          if (!round.is_active) return false;
+          const openTime = new Date(round.open_time);
+          const closeTime = new Date(round.close_time);
+          return now >= openTime && now < closeTime;
+        });
+
+        if (!activeRound) {
+          await sendLineReply(
+            replyToken,
+            `❌ ขออภัยค่ะ ขณะนี้ยังไม่มีงวดหวยประเภท ${lotteryType.toUpperCase()} เปิดให้ป้อนข้อมูล หรือยังไม่ถึงเวลาเปิดรับแทงตามที่กลุ่มนี้ผูกอยู่ค่ะ`
+          );
+          continue;
+        }
+
+        // Calculate total bet amount
+        let totalBetAmount = 0;
+        const processedInserts = [];
+
+        // Generate a unique 6-digit numeric code for the bill_id
+        let billId = '';
+        let isUnique = false;
+        while (!isUnique) {
+          const randCode = Math.floor(100000 + Math.random() * 900000).toString();
+          // Check if this bill_id already exists in submissions
+          const { data: existing } = await supabase
+            .from('submissions')
+            .select('id')
+            .eq('bill_id', randCode)
+            .limit(1)
+            .maybeSingle();
+          if (!existing) {
+            billId = randCode;
+            isUnique = true;
+          }
+        }
+
+        const baseTimestamp = new Date();
+        let insertIndex = 0;
+        const buyerNote = extractBuyerNote(text, lotteryType);
+        const finalBillNote = buyerNote || `LINE Bot (${groupLink.group_name || 'Group'})`;
+
+        // Group bets to fetch commissions
+        for (const bet of parsedBets) {
+          const entryId = crypto.randomUUID(); // Group ID for all sub-bets of this single input line
+          let straightAmt = bet.amount;
+          let betType = bet.betType;
+
+          // display variables
+          const displayNumbers = bet.formattedLine || bet.numbers;
+          let displayAmount = bet.amount.toString();
+          let displayBetType = bet.typeLabel;
+
+          // 4 ตัวชุด price calculation
+          if (betType === '4_set') {
+            const setPrice = activeRound.set_prices?.['4_top'] || 120;
+            // amount field from parser represents set count
+            const setCount = bet.amount || 1;
+            straightAmt = setCount * setPrice;
+            displayAmount = `${straightAmt} บาท (${setCount} ชุด)`;
+            displayBetType = `4 ตัวชุด`;
+          }
+
+          let permsCount = 1;
+          if (bet.specialType && (bet.specialType === 'set3' || bet.specialType === 'set6' || bet.specialType.startsWith('set'))) {
+            permsCount = getPermutations(bet.numbers).length;
+            displayAmount = `${bet.amount} (${permsCount} ชุด)`;
+            displayBetType = `คูณชุด ${permsCount}`;
+          } else if (bet.specialType === '3xPerm' && bet.amount2) {
+            displayAmount = `${bet.amount}*${bet.amount2}`;
+            displayBetType = 'คูณชุด';
+          } else if (bet.specialType === 'tengTod' && bet.amount2) {
+            displayAmount = `${bet.amount}*${bet.amount2}`;
+            displayBetType = 'เต็งโต๊ด';
+          } else if (bet.specialType === 'reverse' && bet.amount2) {
+            displayAmount = `${bet.amount}*${bet.amount2}`;
+          }
+
+          // Retrieve commission settings for this specific user
+          const commInfo = await getCommissionInfo(profile.id, dealerId, betType, lotteryType);
+
+          if (bet.specialType && (bet.specialType === 'set3' || bet.specialType === 'set6' || bet.specialType.startsWith('set'))) {
+            // คูณชุด - 3 digits
+            const perms = getPermutations(bet.numbers);
+            const commissionAmount = commInfo.isFixed
+              ? commInfo.rate
+              : (bet.amount * commInfo.rate) / 100;
+
+            totalBetAmount += bet.amount * perms.length;
+
+            perms.forEach((perm) => {
+              const timestamp = new Date(baseTimestamp.getTime() + (insertIndex++)).toISOString();
+              processedInserts.push({
+                entry_id: entryId,
+                round_id: activeRound.id,
+                user_id: profile.id,
+                bill_id: billId,
+                bill_note: finalBillNote,
+                bet_type: betType,
+                numbers: perm,
+                amount: bet.amount,
+                commission_rate: commInfo.rate,
+                commission_amount: commissionAmount,
+                is_deleted: false,
+                is_paid: false,
+                source: 'user',
+                submitted_by: profile.id,
+                submitted_by_type: 'user',
+                display_numbers: displayNumbers,
+                display_amount: displayAmount,
+                display_bet_type: displayBetType,
+                created_at: timestamp,
+                updated_at: timestamp
+              });
+            });
+          } else if (bet.specialType === '3xPerm') {
+            // คูณชุด - 4 or 5 digits
+            let combos: string[] = [];
+            if (bet.numbers.length === 4) {
+              combos = getUnique3DigitPermsFrom4(bet.numbers);
+            } else if (bet.numbers.length === 5) {
+              combos = getUnique3DigitPermsFrom5(bet.numbers);
+            }
+
+            const commissionAmount = commInfo.isFixed
+              ? commInfo.rate
+              : (bet.amount * combos.length * commInfo.rate) / 100; // wait, let's keep it consistent: amount per combo is bet.amount, so commission for that combo row is (bet.amount * rate)/100
+
+            totalBetAmount += bet.amount * combos.length;
+
+            combos.forEach((combo) => {
+              const timestamp = new Date(baseTimestamp.getTime() + (insertIndex++)).toISOString();
+              processedInserts.push({
+                entry_id: entryId,
+                round_id: activeRound.id,
+                user_id: profile.id,
+                bill_id: billId,
+                bill_note: finalBillNote,
+                bet_type: betType,
+                numbers: combo,
+                amount: bet.amount,
+                commission_rate: commInfo.rate,
+                commission_amount: commInfo.isFixed ? commInfo.rate : (bet.amount * commInfo.rate) / 100,
+                is_deleted: false,
+                is_paid: false,
+                source: 'user',
+                submitted_by: profile.id,
+                submitted_by_type: 'user',
+                display_numbers: displayNumbers,
+                display_amount: displayAmount,
+                display_bet_type: displayBetType,
+                created_at: timestamp,
+                updated_at: timestamp
+              });
+            });
+          } else {
+            // Normal straight/single bet (including tengTod and reverse base part)
+            const commissionAmount = commInfo.isFixed
+              ? commInfo.rate * (betType === '4_set' ? bet.amount : 1)
+              : (straightAmt * commInfo.rate) / 100;
+
+            totalBetAmount += straightAmt;
+
+            const timestamp = new Date(baseTimestamp.getTime() + (insertIndex++)).toISOString();
+            processedInserts.push({
+              entry_id: entryId,
+              round_id: activeRound.id,
+              user_id: profile.id,
+              bill_id: billId,
+              bill_note: finalBillNote,
+              bet_type: betType,
+              numbers: bet.numbers,
+              amount: straightAmt,
+              commission_rate: commInfo.rate,
+              commission_amount: commissionAmount,
+              is_deleted: false,
+              is_paid: false,
+              source: 'user',
+              submitted_by: profile.id,
+              submitted_by_type: 'user',
+              display_numbers: displayNumbers,
+              display_amount: displayAmount,
+              display_bet_type: displayBetType,
+              created_at: timestamp,
+              updated_at: timestamp
+            });
+
+            // Special Type - เต็งโต๊ด (3_straight_tod): insert additional tod item
+            if (bet.specialType === 'tengTod' && bet.amount2) {
+              const todAmt = bet.amount2;
+              const sortedNumbers = bet.numbers.split('').sort().join('');
+              const todCommInfo = await getCommissionInfo(profile.id, dealerId, '3_tod', lotteryType);
+              const todCommAmt = todCommInfo.isFixed ? todCommInfo.rate : (todAmt * todCommInfo.rate) / 100;
+
+              totalBetAmount += todAmt;
+
+              const todTimestamp = new Date(baseTimestamp.getTime() + (insertIndex++)).toISOString();
+              processedInserts.push({
+                entry_id: entryId,
+                round_id: activeRound.id,
+                user_id: profile.id,
+                bill_id: billId,
+                bill_note: finalBillNote,
+                bet_type: '3_tod',
+                numbers: sortedNumbers,
+                amount: todAmt,
+                commission_rate: todCommInfo.rate,
+                commission_amount: todCommAmt,
+                is_deleted: false,
+                is_paid: false,
+                source: 'user',
+                submitted_by: profile.id,
+                submitted_by_type: 'user',
+                display_numbers: displayNumbers,
+                display_amount: displayAmount,
+                display_bet_type: displayBetType,
+                created_at: todTimestamp,
+                updated_at: todTimestamp
+              });
+            }
+
+            // Special Type - กลับ 2 ตัว (reverse): insert reversed number
+            if (bet.specialType === 'reverse' && bet.amount2) {
+              const revAmt = bet.amount2;
+              const reversedNumbers = bet.numbers.split('').reverse().join('');
+              
+              if (reversedNumbers !== bet.numbers) {
+                const revCommInfo = await getCommissionInfo(profile.id, dealerId, betType, lotteryType);
+                const revCommAmt = revCommInfo.isFixed ? revCommInfo.rate : (revAmt * revCommInfo.rate) / 100;
+
+                totalBetAmount += revAmt;
+
+                const revTimestamp = new Date(baseTimestamp.getTime() + (insertIndex++)).toISOString();
+                processedInserts.push({
+                  entry_id: entryId,
+                  round_id: activeRound.id,
+                  user_id: profile.id,
+                  bill_id: billId,
+                  bill_note: finalBillNote,
+                  bet_type: betType,
+                  numbers: reversedNumbers,
+                  amount: revAmt,
+                  commission_rate: revCommInfo.rate,
+                  commission_amount: revCommAmt,
+                  is_deleted: false,
+                  is_paid: false,
+                  source: 'user',
+                  submitted_by: profile.id,
+                  submitted_by_type: 'user',
+                  display_numbers: displayNumbers,
+                  display_amount: displayAmount,
+                  display_bet_type: displayBetType,
+                  created_at: revTimestamp,
+                  updated_at: revTimestamp
+                });
+              }
+            }
+          }
+        }
+
+        // Verify Credit Limit of Dealer
+        const creditCheck = await checkDealerCreditForBet(dealerId, totalBetAmount);
+        if (!creditCheck.allowed) {
+          await sendLineReply(replyToken, `❌ ส่งโพยไม่สำเร็จ: เครดิตห้องของเจ้ามือไม่เพียงพอกรุณาแจ้งเจ้ามือเพื่อเพิ่มเครดิตค่ะ\n(${creditCheck.message})`);
+          continue;
+        }
+
+        // Write Submissions to Database
+        const { error: insertErr } = await supabase
+          .from('submissions')
+          .insert(processedInserts);
+
+        if (insertErr) {
+          console.error("Submissions insert failed:", insertErr);
+          await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลโพย กรุณาส่งใหม่อีกครั้ง`);
+          continue;
+        }
+
+        // Trigger Credit pending calculation update in background
+        updatePendingDeduction(dealerId).catch(err => {
+          console.error("Failed updating credit pending:", err);
+        });
+
+        // Format and send confirmation ticket
+        let summaryText = `✅ บันทึกโพยสำเร็จ!🎉\n`;
+        summaryText += `เลขใบโพย: ${billId}\n`;
+        summaryText += `ประเภท: ${lotteryType.toUpperCase()}\n`;
+        summaryText += `งวดวันที่: ${formatToThaiBudDate(activeRound.round_date)}\n`;
+        summaryText += `ผู้ซื้อ: คุณ ${profile.full_name}\n`;
+        summaryText += `จำนวนรายการ: ${parsedBets.length}\n`;
+        summaryText += `--------------------------\n`;
+        
+        parsedBets.slice(0, 3).forEach((b) => {
+          if (b.specialType === 'tengTod' && b.amount2) {
+            summaryText += `${b.numbers}=${b.amount}*${b.amount2} เต็งโต๊ด\n`;
+          } else if (b.specialType === 'reverse' && b.amount2) {
+            summaryText += `${b.numbers}=${b.amount}*${b.amount2} ${b.typeLabel}\n`;
+          } else if ((b.specialType === '3xPerm' || (b.specialType && b.specialType.startsWith('set'))) && b.amount2) {
+            summaryText += `${b.numbers}=${b.amount}*${b.amount2} คูณชุด\n`;
+          } else if (b.betType === '4_set') {
+            const price = activeRound.set_prices?.['4_top'] || 120;
+            summaryText += `${b.numbers} = 4 ตัวชุด (${b.amount} ชุด = ${b.amount * price} บ.)\n`;
+          } else {
+            summaryText += `${b.numbers} = ${b.amount} บ. (${b.typeLabel})\n`;
+          }
+        });
+
+        if (parsedBets.length > 3) {
+          summaryText += `...\n`;
+        }
+
+        summaryText += `--------------------------\n`;
+        summaryText += `💰 ยอดรวม: ฿${totalBetAmount.toLocaleString('th-TH')}\n\n`;
+        summaryText += `ต้องการยกเลิกพิมพ์:\n/ยกเลิก ${billId}`;
+
+        await sendLineReply(replyToken, summaryText);
+      }
+      } catch (error: any) {
+        console.error('Error handling loop event:', error);
+        if (replyToken) {
+          try {
+            await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดของบอท: ${error.message || error}\n${error.stack || ''}`);
+          } catch (sendErr) {
+            console.error('Failed to send error reply:', sendErr);
+          }
+        }
+      }
+    }
+
+    return new Response(JSON.stringify({ success: true }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200
+    })
+
+  } catch (error: any) {
+    console.error('Error handling webhook event:', error);
+
+    return new Response(JSON.stringify({ success: false, message: error.message }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500
+    })
+  }
+})

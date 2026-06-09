@@ -43,7 +43,8 @@ import {
     FiLink,
     FiCreditCard,
     FiImage,
-    FiRefreshCw
+    FiRefreshCw,
+    FiMessageSquare
 } from 'react-icons/fi'
 import './Dealer.css'
 import './SettingsTabs.css'
@@ -72,6 +73,7 @@ import RoundAccordionItem from '../components/dealer/RoundAccordionItem'
 import ChangePasswordModal from '../components/ChangePasswordModal'
 import SubmissionsModal from '../components/dealer/SubmissionsModal'
 import DealerProfileTab from '../components/dealer/DealerProfileTab'
+import DealerLineBotTab from '../components/dealer/DealerLineBotTab'
 import QRScannerModal from '../components/dealer/QRScannerModal'
 import MemberAccordionItem from '../components/dealer/MemberAccordionItem'
 import UpstreamDealerSettingsInline from '../components/dealer/UpstreamDealerSettingsInline'
@@ -175,6 +177,8 @@ export default function Dealer() {
             setActiveTab('profile')
         } else if (tabParam === 'upstreamDealers') {
             setActiveTab('upstreamDealers')
+        } else if (tabParam === 'lineBot') {
+            setActiveTab('lineBot')
         }
     }, [searchParams])
 
@@ -2825,6 +2829,12 @@ export default function Dealer() {
                         <FiSend /> เจ้ามือตีออก ({upstreamDealers.length})
                     </button>
                     <button
+                        className={`tab-btn ${activeTab === 'lineBot' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('lineBot')}
+                    >
+                        <FiMessageSquare /> จัดการ LINE Bot
+                    </button>
+                    <button
                         className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
                         onClick={() => setActiveTab('profile')}
                     >
@@ -3601,6 +3611,10 @@ export default function Dealer() {
                             loadingUpstream={loadingUpstream}
                             setLoadingUpstream={setLoadingUpstream}
                         />
+                    )}
+
+                    {activeTab === 'lineBot' && (
+                        <DealerLineBotTab user={user} profile={profile} />
                     )}
 
                     {activeTab === 'profile' && (

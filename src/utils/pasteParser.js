@@ -25,7 +25,8 @@ export { get3DigitPermCount }
  * Converts various dash, multiplication, and full-width variants to standard ASCII.
  */
 function normalizeUnicode(str) {
-    return str
+    if (!str) return ''
+    let s = str
         // Remove zero-width and invisible characters that break regex matching
         .replace(/[\u200B\u200C\u200D\uFEFF\u00AD\u2060\u200E\u200F]/g, '')
         // Dashes: en-dash (–), em-dash (—), minus sign (−), figure dash (‒), horizontal bar (―) → hyphen-minus (-)
@@ -53,6 +54,10 @@ function normalizeUnicode(str) {
         // Smart quotes and other noise
         .replace(/[\u201C\u201D\u201E]/g, '"')
         .replace(/[\u2018\u2019\u201A]/g, "'")
+
+    // Replace ทุกประตู / ทุกประตุ / ทุกตู / ทุกตุ with ชุด
+    s = s.replace(/ทุกประตู|ทุกประตุ|ทุกตู|ทุกตุ/g, 'ชุด')
+    return s
 }
 
 /**
@@ -74,6 +79,7 @@ function expandLines(rawLines) {
     for (const rawLine of rawLines) {
         const trimmed = normalizeUnicode(rawLine.trim())
         if (!trimmed) { expanded.push(trimmed); continue }
+        if (isDateLine(trimmed)) continue
 
         // --- Step 1: Normalize "ต" / "t" between amounts to "*" ---
         // "123=50 ต 50" → "123=50*50", "456=20t20" → "456=20*20"
@@ -337,7 +343,11 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
  * Check if a line is a bare number (digits only, no amount, no separators)
  */
 function isBareNumberLine(line) {
-    return /^\d{1,5}$/.test(line.trim())
+    const trimmed = line.trim()
+    if (trimmed.length === 4 && /^\d{4}$/.test(trimmed)) {
+        return false
+    }
+    return /^\d{1,5}$/.test(trimmed)
 }
 
 /**
@@ -408,6 +418,19 @@ function extractAmountFromLine(line) {
         return { amountStr: eqInlineMatch[3].trim(), mode: 'both', number: eqInlineMatch[1] }
     }
 
+    // --- Context prefix followed by = and amount (no number before =): "บนล่าง=10บาท", "บล=10", "บน=20" ---
+    const ctxEqMatch = s.match(/^(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*=\s*(.+)$/)
+    if (ctxEqMatch) {
+        const ctxStr = ctxEqMatch[1]
+        const amt = ctxEqMatch[2].trim()
+        if (isAmountPattern(amt) || /^\d+$/.test(amt)) {
+            let mode = 'both'
+            if (/^(บน|บ)$/.test(ctxStr)) mode = 'top'
+            else if (/^(ล่าง|ล)$/.test(ctxStr)) mode = 'bottom'
+            return { amountStr: amt, mode, number: null }
+        }
+    }
+
     // --- Context prefix attached to amount (no =): "บล50*50", "89 บล50*50", "89=บล50*50" ---
     // "both" prefix variants: บล, ลบ, บนล่าง, ล่างบน, บ+ล, ล+บ, etc.
     const bothPrefixRe = /^(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(\d.+)$/
@@ -463,7 +486,7 @@ function extractAmountFromLine(line) {
     const eqOnlyMatch = s.match(/^=\s*(.+)$/)
     if (eqOnlyMatch) {
         const amt = eqOnlyMatch[1].trim()
-        if (isAmountPattern(amt)) return { amountStr: amt, mode, number: null }
+        if (isAmountPattern(amt) || /^\d+$/.test(amt)) return { amountStr: amt, mode, number: null }
         return null
     }
 
@@ -471,13 +494,13 @@ function extractAmountFromLine(line) {
     const eqMatch = s.match(/^(\d{1,5})\s*=\s*(.+)$/)
     if (eqMatch) {
         const amt = eqMatch[2].trim()
-        if (isAmountPattern(amt)) return { amountStr: amt, mode, number: eqMatch[1] }
+        if (isAmountPattern(amt) || /^\d+$/.test(amt)) return { amountStr: amt, mode, number: eqMatch[1] }
         return null
     }
     const spaceMatch = s.match(/^(\d{1,5})\s+(.+)$/)
     if (spaceMatch) {
         const amt = spaceMatch[2].trim()
-        if (isAmountPattern(amt)) return { amountStr: amt, mode, number: spaceMatch[1] }
+        if (isAmountPattern(amt) || /^\d+$/.test(amt)) return { amountStr: amt, mode, number: spaceMatch[1] }
         return null
     }
 
@@ -494,7 +517,7 @@ function extractAmountFromLine(line) {
 function isAmountPattern(s) {
     if (!s || !s.trim()) return false
     const t = s.trim()
-    // Must have at least one separator or ชุด to be an amount pattern
+    // Must have at least one separator or ชุด or currency suffix to be an amount pattern
     if (/^\d+$/.test(t)) return false // pure digits = bare number, not amount
     // Match common amount patterns:
     //   50*50, 20×20, 10x10, 10+10, 10-10
@@ -503,7 +526,8 @@ function isAmountPattern(s) {
     return /^\d+[*×xX\-+/](\d+|ชุด)$/.test(t) ||  // "50*50", "50/50", "15*ชุด"
            /^\d+[*×xX\-+/]\d+[*×xX\-+/]ชุด$/.test(t) ||  // "50*50*ชุด"
            /^\d+\s*[tTต]\s*\d+$/.test(t) ||  // "50 ต 50", "20t20"
-           /^\d+\s*ชุด$/.test(t)  // "20ชุด" or "20 ชุด"
+           /^\d+\s*ชุด$/.test(t) ||  // "20ชุด" or "20 ชุด"
+           /^\d+\s*(?:บาท|บ\.?)$/i.test(t) // "10บาท", "10บ", "10 บ."
 }
 
 /**
@@ -831,6 +855,7 @@ function extractInlineContext(line) {
 function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
     // Extract inline context
     const preClean = normalizeUnicode(line.trim())
+    if (isDateLine(preClean)) return null
     let inlineCtx = extractInlineContext(preClean)
     let normalized
     if (inlineCtx.mode) {
@@ -848,6 +873,7 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
     const parseContext = (effectiveContext === 'both') ? 'top' : effectiveContext
     // float_top and float_bottom pass through to determineBetType as-is
     if (!normalized) return null
+    if (isDateLine(normalized)) return null
 
     // Normalize separators:
     // Replace &, ×, · between amounts with *
@@ -1013,6 +1039,46 @@ function parseAmountPart(str) {
         amount3: (amount3 && amount3 > 0) ? amount3 : null,
         hasChud
     }
+}
+
+/**
+ * Helper to check if a string is a valid date (DD/MM/YYYY, DD-MM-YYYY, etc. or YYYY/MM/DD)
+ */
+function isDateLine(line) {
+    if (!line) return false
+    const s = line.trim()
+    // Pattern 1: DD/MM/YYYY or DD-MM-YYYY or DD\MM\YYYY (Day/Month/Year)
+    // Supports 1-2 digits for Day/Month, and 2 or 4 digits for Year
+    const dmyMatch = s.match(/^(\d{1,2})\s*[\/\-\\]\s*(\d{1,2})\s*[\/\-\\]\s*(\d{2,4})$/)
+    if (dmyMatch) {
+        const day = parseInt(dmyMatch[1], 10)
+        const month = parseInt(dmyMatch[2], 10)
+        if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+            return true
+        }
+    }
+    // Pattern 2: YYYY/MM/DD or YYYY-MM-DD or YYYY\MM\DD (Year/Month/Day)
+    const ymdMatch = s.match(/^(\d{4})\s*[\/\-\\]\s*(\d{1,2})\s*[\/\-\\]\s*(\d{1,2})$/)
+    if (ymdMatch) {
+        const month = parseInt(ymdMatch[2], 10)
+        const day = parseInt(ymdMatch[3], 10)
+        if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+            return true
+        }
+    }
+    return false
+}
+
+/**
+ * Helper to check if a line is a valid bare 4-digit number line.
+ * It removes the 4-digit number and checks if the remaining characters are only allowed keywords/separators.
+ */
+function isValidBare4DigitLine(rawLine, numbers) {
+    const trimmed = (rawLine || '').trim()
+    const remaining = trimmed.replace(numbers, '').trim()
+    if (!remaining) return true
+    const allowedRegex = /^[=\s]*(?:ชุด|ตัวชุด|ชุดลอยแพ|บน|ล่าง|บล|ลบ|บนล่าง|ล่างบน|บ\.?|ล\.?)?$/
+    return allowedRegex.test(remaining)
 }
 
 /**
@@ -1208,6 +1274,10 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
         // Bare 4-digit number (no amount) for lao/hanoi → 4_set=1
         if (amount1 === null) {
             if (isLaoOrHanoi) {
+                // Verify if the raw line is actually a bare 4-digit line and not conversational text
+                if (!isValidBare4DigitLine(rawLine, numbers)) {
+                    return null
+                }
                 results.push({
                     numbers,
                     amount: 1,
@@ -1320,4 +1390,45 @@ function get3DigitPermCount(numbers) {
     }
 
     return combinations.size
+}
+
+export function extractBuyerNote(text, lotteryType = 'lao') {
+    if (!text || !text.trim()) return ''
+    const rawLines = text.split('\n')
+    const nonEmptyLines = rawLines.map(l => l.trim()).filter(l => l.length > 0)
+    if (nonEmptyLines.length === 0) return ''
+
+    const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
+
+    const isNoteLine = (line) => {
+        const trimmed = line.trim()
+        if (!trimmed) return false
+        if (trimmed.startsWith('/')) return false
+        if (isDateLine(trimmed)) return false
+        if (parseContextLine(trimmed)) return false
+
+        const cleanLower = trimmed.toLowerCase()
+        const ignoreKeywords = ['รวม', 'ยอด', 'ทั้งหมด', 'total', 'net', 'sum', 'บ.', 'บาท']
+        if (ignoreKeywords.some(kw => cleanLower.includes(kw))) {
+            return false
+        }
+
+        // If it can be parsed as a valid bet line, it is not a note
+        const parsed = parseNumberLine(trimmed, 'top', isLaoOrHanoi, lotteryType)
+        if (parsed && parsed.length > 0) return false
+
+        return true
+    }
+
+    const first = nonEmptyLines[0]
+    const last = nonEmptyLines[nonEmptyLines.length - 1]
+
+    if (isNoteLine(first)) {
+        return first
+    }
+    if (isNoteLine(last)) {
+        return last
+    }
+
+    return ''
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { FiUser, FiEdit2, FiSave, FiCheck, FiLock, FiPlus, FiTrash2, FiStar, FiX } from 'react-icons/fi'
+import { FiUser, FiEdit2, FiSave, FiCheck, FiLock, FiPlus, FiTrash2, FiStar, FiX, FiMessageSquare } from 'react-icons/fi'
 import ChangePasswordModal from '../components/ChangePasswordModal'
 import CopyButton from '../components/CopyButton'
 import { confirmDialog } from '../utils/confirmDialog'
@@ -41,7 +41,8 @@ export default function Profile() {
     const [profileData, setProfileData] = useState({
         full_name: profile?.full_name || '',
         phone: profile?.phone || '',
-        role: profile?.role || 'user'
+        role: profile?.role || 'user',
+        line_user_id: profile?.line_user_id || ''
     })
 
     const [formData, setFormData] = useState({
@@ -49,19 +50,53 @@ export default function Profile() {
         phone: profile?.phone || ''
     })
 
+    // LINE Bot ID state
+    const [lineUserIdForm, setLineUserIdForm] = useState(profile?.line_user_id || '')
+    const [savingLine, setSavingLine] = useState(false)
+
     useEffect(() => {
         if (profile) {
             setProfileData({
                 full_name: profile.full_name || '',
                 phone: profile.phone || '',
-                role: profile.role || 'user'
+                role: profile.role || 'user',
+                line_user_id: profile.line_user_id || ''
             })
             setFormData({
                 full_name: profile.full_name || '',
                 phone: profile.phone || ''
             })
+            setLineUserIdForm(profile.line_user_id || '')
         }
     }, [profile])
+
+    const handleSaveLineId = async () => {
+        setSavingLine(true)
+        try {
+            const trimmedLineId = lineUserIdForm.trim()
+            const { error } = await supabase
+                .from('profiles')
+                .update({
+                    line_user_id: trimmedLineId || null
+                })
+                .eq('id', user.id)
+
+            if (error) throw error
+
+            setProfileData(prev => ({ ...prev, line_user_id: trimmedLineId }))
+            setToast({ type: 'success', message: 'บันทึก LINE User ID สำเร็จ!' })
+            
+            // Reload page to refresh profile in auth context cache
+            setTimeout(() => {
+                window.location.reload()
+            }, 1000)
+        } catch (error) {
+            console.error('Error saving LINE User ID:', error)
+            setToast({ type: 'error', message: 'เกิดข้อผิดพลาด: ' + error.message })
+        } finally {
+            setSavingLine(false)
+        }
+    }
 
     useEffect(() => {
         if (user?.id) fetchBankAccounts()
@@ -482,6 +517,80 @@ export default function Profile() {
                                 ))}
                             </div>
                         )}
+                    </div>
+
+                    {/* LINE Bot Connection */}
+                    <div className="profile-details card">
+                        <h3>การเชื่อมต่อ LINE Bot</h3>
+                        <div style={{ padding: '0.5rem 0' }}>
+                            {profileData.line_user_id ? (
+                                <div style={{
+                                    background: 'rgba(34, 197, 94, 0.08)',
+                                    border: '1px solid #22c55e',
+                                    borderRadius: 'var(--radius-md)',
+                                    padding: '1rem',
+                                    marginBottom: '1rem'
+                                }}>
+                                    <h4 style={{ margin: '0 0 0.5rem', color: '#22c55e', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <FiCheck /> เชื่อมต่อกับ LINE สำเร็จแล้ว
+                                    </h4>
+                                    <p style={{ margin: '0 0 0.5rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                                        รหัส LINE ID ที่ผูกในระบบ:
+                                    </p>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <code style={{ background: 'var(--color-bg)', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.9rem', color: 'var(--color-primary)' }}>
+                                            {profileData.line_user_id}
+                                        </code>
+                                        <CopyButton text={profileData.line_user_id} />
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{
+                                    background: 'rgba(212, 175, 55, 0.05)',
+                                    border: '1px solid var(--color-border)',
+                                    borderRadius: 'var(--radius-md)',
+                                    padding: '1rem',
+                                    marginBottom: '1rem'
+                                }}>
+                                    <h4 style={{ margin: '0 0 0.5rem', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <FiMessageSquare /> ยังไม่ได้ผูกบัญชี LINE
+                                    </h4>
+                                    <p style={{ margin: '0 0 0.5rem', fontSize: '0.85rem', color: 'var(--color-text-muted)', lineHeight: '1.4' }}>
+                                        ผูกบัญชี LINE เพื่อรับการแจ้งบิลโพยหวยในกลุ่มไลน์อัตโนมัติเมื่อทำการพิมพ์ส่งแทงเลข
+                                    </p>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0.75rem', borderRadius: '6px' }}>
+                                        <strong>ขั้นตอนการผูกบัญชี:</strong>
+                                        <ol style={{ margin: '0.25rem 0 0 1.25rem', padding: 0 }}>
+                                            <li>เพิ่มเพื่อน LINE Bot ของระบบ</li>
+                                            <li>พิมพ์คำสั่ง <code>/link</code> ในช่องแชทส่วนตัวของบอทเพื่อรับรหัส LINE User ID</li>
+                                            <li>นำรหัสที่ได้มาวางในช่องด้านล่างนี้และกดบันทึก</li>
+                                        </ol>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="profile-form" style={{ marginTop: '1rem' }}>
+                                <div className="form-group">
+                                    <label className="form-label">LINE User ID</label>
+                                    <input
+                                        type="text"
+                                        className="form-input"
+                                        value={lineUserIdForm}
+                                        onChange={e => setLineUserIdForm(e.target.value)}
+                                        placeholder="Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                                    />
+                                </div>
+                                <div className="form-actions" style={{ justifyContent: 'flex-end', marginTop: '1rem' }}>
+                                    <button
+                                        className="btn btn-primary"
+                                        onClick={handleSaveLineId}
+                                        disabled={savingLine}
+                                    >
+                                        {savingLine ? 'กำลังบันทึก...' : <><FiSave /> บันทึก LINE ID</>}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     {/* Security Settings */}
