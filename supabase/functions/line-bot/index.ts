@@ -3897,7 +3897,7 @@ serve(async (req) => {
 
               const { data: activeRound } = await supabase
                 .from('lottery_rounds')
-                .select('id, round_date')
+                .select('id, round_date, set_prices, lottery_type')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
                 .in('status', ['open', 'closed', 'announced'])
@@ -3928,7 +3928,7 @@ serve(async (req) => {
                 'run_bottom': 'ลอยล่าง'
               };
 
-              let summaryText = `⚠️ รายการยอดเกินอั้น (${groupLink.lottery_type.toUpperCase()})\nงวดวันที่: ${activeRound.round_date}\n`;
+              let summaryText = `รายการยอดเกินอั้น (${groupLink.lottery_type.toUpperCase()})\nงวดวันที่: ${activeRound.round_date}\n`;
               summaryText += `--------------------------\n`;
 
               let totalExcess = 0;
@@ -3936,12 +3936,18 @@ serve(async (req) => {
                 summaryText += `ไม่มียอดเกินอั้นค่ะ 🎉\n`;
               } else {
                 excessItems.forEach((item) => {
-                  summaryText += `- [${LABELS[item.bet_type] || item.bet_type}] ${item.numbers}: เกิน ฿${item.amount.toLocaleString('th-TH')}\n`;
+                  if (item.bet_type === '4_set') {
+                    const setPrice = activeRound.set_prices?.['4_top'] || 120;
+                    const numSets = Math.round(item.amount / setPrice);
+                    summaryText += `${item.numbers}=${numSets} ชุด [${LABELS[item.bet_type] || item.bet_type}]\n`;
+                  } else {
+                    summaryText += `${item.numbers}=${item.amount} [${LABELS[item.bet_type] || item.bet_type}]\n`;
+                  }
                   totalExcess += item.amount;
                 });
               }
               summaryText += `--------------------------\n`;
-              summaryText += `รวมยอดเกินทั้งหมด: ฿${totalExcess.toLocaleString('th-TH')}`;
+              summaryText += `รวมยอดเกิน: ฿${totalExcess.toLocaleString('th-TH')}`;
 
               await sendLineReply(replyToken, summaryText);
               continue;
@@ -4158,15 +4164,21 @@ serve(async (req) => {
                   'run_bottom': 'ลอยล่าง'
                 };
 
-                let summaryText = `⚠️ รายการยอดเกินอั้น (${groupLink.lottery_type.toUpperCase()})\nงวดวันที่: ${activeRound.round_date}\n`;
+                let summaryText = `รายการยอดเกินอั้น (${groupLink.lottery_type.toUpperCase()})\nงวดวันที่: ${activeRound.round_date}\n`;
                 summaryText += `--------------------------\n`;
                 let totalExcess = 0;
                 excessItems.forEach((item) => {
-                  summaryText += `- [${LABELS[item.bet_type] || item.bet_type}] ${item.numbers}: เกิน ฿${item.amount.toLocaleString('th-TH')}\n`;
+                  if (item.bet_type === '4_set') {
+                    const setPrice = activeRound.set_prices?.['4_top'] || 120;
+                    const numSets = Math.round(item.amount / setPrice);
+                    summaryText += `${item.numbers}=${numSets} ชุด [${LABELS[item.bet_type] || item.bet_type}]\n`;
+                  } else {
+                    summaryText += `${item.numbers}=${item.amount} [${LABELS[item.bet_type] || item.bet_type}]\n`;
+                  }
                   totalExcess += item.amount;
                 });
                 summaryText += `--------------------------\n`;
-                summaryText += `รวมยอดเกินทั้งหมด: ฿${totalExcess.toLocaleString('th-TH')}`;
+                summaryText += `รวมยอดเกิน: ฿${totalExcess.toLocaleString('th-TH')}`;
 
                 await sendLineReply(replyToken, {
                   type: "text",
