@@ -547,7 +547,6 @@ export default function UserDashboard() {
         if (!selectedDealer) return
         setLoading(true)
         try {
-            // Get open rounds from my dealer
             const { data, error } = await supabase
                 .from('lottery_rounds')
                 .select(`
@@ -557,6 +556,7 @@ export default function UserDashboard() {
                 .eq('dealer_id', selectedDealer.id)
                 .eq('is_active', true)
                 .in('status', ['open', 'closed'])
+                .eq('is_result_announced', false)
                 .order('round_date', { ascending: false })
                 .limit(50)
 
