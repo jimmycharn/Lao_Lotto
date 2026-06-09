@@ -144,7 +144,7 @@ export default function RoundAccordionItem({
     // Upstream summaries data (for outgoing tab)
     const [upstreamSummaries, setUpstreamSummaries] = useState({ loading: false, dealers: [] })
 
-    const isAnnounced = round.status === 'announced' && round.is_result_announced
+    const isAnnounced = round.is_result_announced === true
     const isClosed = round.status === 'closed' || (round.status !== 'announced' && new Date() > new Date(round.close_time))
 
     const isOpen = (() => {
@@ -477,7 +477,7 @@ export default function RoundAccordionItem({
                         .single()
 
                     dealer.upstreamRound = upstreamRound
-                    dealer.isAnnounced = upstreamRound?.status === 'announced' && upstreamRound?.is_result_announced
+                    dealer.isAnnounced = upstreamRound?.is_result_announced === true
                     dealer.currencySymbol = upstreamRound?.currency_symbol || round.currency_symbol
 
                     // Fetch user_settings for commission calculation

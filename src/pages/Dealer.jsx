@@ -2516,7 +2516,7 @@ export default function Dealer() {
         const openTime = new Date(round.open_time)
         const closeTime = new Date(round.close_time)
 
-        if (round.status === 'announced') {
+        if (round.status === 'announced' || round.is_result_announced) {
             return <span className="status-badge announced"><FiCheck /> ประกาศผลแล้ว</span>
         }
         // Check if round is closed by dealer (status = 'closed') OR by time
