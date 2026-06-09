@@ -2078,7 +2078,8 @@ serve(async (req) => {
             let memberProfileName = '';
 
             if (!manager) {
-              if (isTotalCommand || isSummaryCommand || isHelpCommand) {
+              const isOpenCloseCommand = text === '/เปิด' || text === '/ปิด';
+              if (isTotalCommand || isSummaryCommand || isHelpCommand || isOpenCloseCommand) {
                 // Not a manager, check if registered active member of this dealer
                 const { data: profile } = await supabase
                   .from('profiles')
@@ -2103,6 +2104,11 @@ serve(async (req) => {
 
                 if (!membership) {
                   // No active membership, ignore silently
+                  continue;
+                }
+
+                if (isOpenCloseCommand) {
+                  await sendLineReply(replyToken, `❌ สมาชิกไม่มีสิทธิ์ปิดรับหรือเปิดรับได้`);
                   continue;
                 }
 
@@ -2544,7 +2550,7 @@ serve(async (req) => {
             // ─── COMMAND: /ปิด (Close Round) ───
             if (text === '/ปิด') {
               if (showOwnOnly) {
-                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ปิดรับแทง`);
+                await sendLineReply(replyToken, `❌ สมาชิกไม่มีสิทธิ์ปิดรับหรือเปิดรับได้`);
                 continue;
               }
 
@@ -2661,7 +2667,7 @@ serve(async (req) => {
             // ─── COMMAND: /เปิด (Re-open Round) ───
             if (text === '/เปิด') {
               if (showOwnOnly) {
-                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์เปิดรับแทง`);
+                await sendLineReply(replyToken, `❌ สมาชิกไม่มีสิทธิ์ปิดรับหรือเปิดรับได้`);
                 continue;
               }
 
