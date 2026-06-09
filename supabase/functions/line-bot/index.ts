@@ -324,6 +324,33 @@ async function sendLineReply(replyToken: string, textOrPayload: string | Record<
   }
 }
 
+// Helper: Send LINE Push Message (proactive, no reply token needed)
+async function sendLinePush(to: string, textOrPayload: string | Record<string, any>): Promise<void> {
+  if (!LINE_CHANNEL_ACCESS_TOKEN) {
+    console.error("LINE_CHANNEL_ACCESS_TOKEN not configured");
+    return;
+  }
+  const message = typeof textOrPayload === "string"
+    ? { type: "text", text: textOrPayload }
+    : textOrPayload;
+
+  const response = await fetch("https://api.line.me/v2/bot/message/push", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`
+    },
+    body: JSON.stringify({
+      to,
+      messages: [message]
+    })
+  });
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error(`Failed to send LINE push: ${response.status} - ${errText}`);
+  }
+}
+
 // Helper: Fetch Group Name from LINE API
 async function fetchGroupName(groupId: string): Promise<string | null> {
   if (!LINE_CHANNEL_ACCESS_TOKEN || !groupId) return null;
@@ -2015,6 +2042,7 @@ serve(async (req) => {
             text.startsWith('/คนส่ง') || text.startsWith('/ใครส่ง') || text.startsWith('/ส่งเลข') ||
             text.startsWith('/summary') || text.startsWith('/สรุป') ||
             text.startsWith('/help') || text.startsWith('/คำสั่ง') ||
+            text === '/เปิด' || text === '/ปิด' ||
             text.toLowerCase() === 'y' || text === 'ยืนยัน';
 
           if (isManagerCommand) {
@@ -2139,7 +2167,7 @@ serve(async (req) => {
                 .select('id')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
-                .in('status', ['open', 'announced'])
+                .in('status', ['open', 'closed', 'announced'])
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
@@ -2192,7 +2220,7 @@ serve(async (req) => {
                 .select('id, round_date')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
-                .in('status', ['open', 'announced'])
+                .in('status', ['open', 'closed', 'announced'])
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
@@ -2513,6 +2541,164 @@ serve(async (req) => {
               continue;
             }
 
+            // ─── COMMAND: /ปิด (Close Round) ───
+            if (text === '/ปิด') {
+              if (showOwnOnly) {
+                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ปิดรับแทง`);
+                continue;
+              }
+
+              const { data: openRound } = await supabase
+                .from('lottery_rounds')
+                .select('*')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', groupLink.lottery_type)
+                .eq('status', 'open')
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (!openRound) {
+                await sendLineReply(replyToken, `❌ ไม่มีงวดหวย ${groupLink.lottery_type.toUpperCase()} ที่เปิดรับอยู่ในขณะนี้`);
+                continue;
+              }
+
+              const { error: closeErr } = await supabase
+                .from('lottery_rounds')
+                .update({ status: 'closed', updated_at: new Date().toISOString() })
+                .eq('id', openRound.id);
+
+              if (closeErr) {
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาด: ${closeErr.message}`);
+                continue;
+              }
+
+              // Build Flex Message for closing announcement
+              const closeFlexMessage = {
+                "type": "flex",
+                "altText": `🔴 ปิดรับแทง ${groupLink.lottery_type.toUpperCase()} งวดวันที่ ${formatToThaiBudDate(openRound.round_date)}`,
+                "contents": {
+                  "type": "bubble",
+                  "size": "mega",
+                  "body": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#dc2626",
+                    "paddingAll": "xxl",
+                    "justifyContent": "center",
+                    "alignItems": "center",
+                    "contents": [
+                      {
+                        "type": "box",
+                        "layout": "vertical",
+                        "backgroundColor": "#ffffff",
+                        "cornerRadius": "100px",
+                        "width": "140px",
+                        "height": "140px",
+                        "justifyContent": "center",
+                        "alignItems": "center",
+                        "contents": [
+                          {
+                            "type": "text",
+                            "text": "ปิด",
+                            "weight": "bold",
+                            "size": "3xl",
+                            "color": "#dc2626",
+                            "align": "center"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "text",
+                        "text": "ปิดรับแทงแล้ว",
+                        "weight": "bold",
+                        "size": "xl",
+                        "color": "#ffffff",
+                        "align": "center",
+                        "margin": "xl"
+                      },
+                      {
+                        "type": "text",
+                        "text": `${openRound.lottery_name || groupLink.lottery_type.toUpperCase()} - งวดวันที่ ${formatToThaiBudDate(openRound.round_date)}`,
+                        "size": "sm",
+                        "color": "#fecaca",
+                        "align": "center",
+                        "margin": "md",
+                        "wrap": true
+                      }
+                    ]
+                  }
+                }
+              };
+
+              // Send to ALL groups linked to this dealer with same lottery type
+              const { data: allGroups } = await supabase
+                .from('line_groups')
+                .select('line_group_id')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', groupLink.lottery_type)
+                .eq('is_active', true);
+
+              if (allGroups && allGroups.length > 0) {
+                for (const g of allGroups) {
+                  if (g.line_group_id === groupId) {
+                    // For the current group, use reply (more reliable)
+                    continue;
+                  }
+                  try {
+                    await sendLinePush(g.line_group_id, closeFlexMessage);
+                  } catch (e) {
+                    console.error(`Failed to push close message to group ${g.line_group_id}:`, e);
+                  }
+                }
+              }
+
+              // Reply to the current group
+              await sendLineReply(replyToken, closeFlexMessage);
+              continue;
+            }
+
+            // ─── COMMAND: /เปิด (Re-open Round) ───
+            if (text === '/เปิด') {
+              if (showOwnOnly) {
+                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์เปิดรับแทง`);
+                continue;
+              }
+
+              const { data: closedRound } = await supabase
+                .from('lottery_rounds')
+                .select('*')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', groupLink.lottery_type)
+                .eq('status', 'closed')
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (!closedRound) {
+                await sendLineReply(replyToken, `❌ ไม่มีงวดหวย ${groupLink.lottery_type.toUpperCase()} ที่ปิดรับอยู่ในขณะนี้`);
+                continue;
+              }
+
+              if (closedRound.is_result_announced) {
+                await sendLineReply(replyToken, `❌ ไม่สามารถเปิดรับแทงได้ เพราะงวดนี้ประกาศผลรางวัลไปแล้ว`);
+                continue;
+              }
+
+              const { error: openErr } = await supabase
+                .from('lottery_rounds')
+                .update({ status: 'open', updated_at: new Date().toISOString() })
+                .eq('id', closedRound.id);
+
+              if (openErr) {
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาด: ${openErr.message}`);
+                continue;
+              }
+
+              await sendLineReply(replyToken, `✅ เปิดรับแทง ${closedRound.lottery_name || groupLink.lottery_type.toUpperCase()} งวดวันที่ ${formatToThaiBudDate(closedRound.round_date)} เรียบร้อยแล้ว`);
+              continue;
+            }
+
             // ─── COMMAND: /สรุป หรือ /summary ───
             if (text.startsWith('/summary') || text.startsWith('/สรุป')) {
               console.log('[DEBUG /สรุป] ENTERED. showOwnOnly:', showOwnOnly, 'permissions:', JSON.stringify(permissions));
@@ -2526,7 +2712,7 @@ serve(async (req) => {
                 .select('*')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
-                .in('status', ['open', 'announced'])
+                .in('status', ['open', 'closed', 'announced'])
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
@@ -2544,6 +2730,11 @@ serve(async (req) => {
 
               if (param !== "") {
                 console.log('[DEBUG /สรุป] HAS PARAM. showOwnOnly:', showOwnOnly);
+                // ต้องปิดรับก่อนถึงจะประกาศผลได้
+                if (activeRound.status === 'open') {
+                  await sendLineReply(replyToken, `❌ ไม่สามารถประกาศผลได้ เพราะงวดนี้ยังเปิดรับแทงอยู่\nกรุณาปิดรับก่อนโดยใช้คำสั่ง /ปิด`);
+                  continue;
+                }
                 if (showOwnOnly) {
                   await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์บันทึกผลรางวัล`);
                   continue;
@@ -3426,7 +3617,7 @@ serve(async (req) => {
                 .select('id, round_date')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
-                .in('status', ['open', 'announced'])
+                .in('status', ['open', 'closed', 'announced'])
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
@@ -3714,7 +3905,7 @@ serve(async (req) => {
                 .select('id, round_date')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
-                .in('status', ['open', 'announced'])
+                .in('status', ['open', 'closed', 'announced'])
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
@@ -3773,7 +3964,7 @@ serve(async (req) => {
                 .select('id, round_date, set_prices, lottery_type')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
-                .in('status', ['open', 'announced'])
+                .in('status', ['open', 'closed', 'announced'])
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
@@ -4065,16 +4256,18 @@ serve(async (req) => {
                 helpText += `1. /สรุป - สรุปงวดหวย (ยอดรับ, ยอดส่ง, กำไร) และสรุปยอดที่ต้องเคลียร์ของสมาชิกแต่ละคน\n`;
                 helpText += `2. /ยอดรวม - รายงานยอดรับรวมแยกตามประเภทเลขและยอดรวมทั้งหมดของร้าน\n`;
                 helpText += `3. /คนส่ง - รายงานยอดรับแทงแยกตามสมาชิกแต่ละคน\n`;
-                helpText += `4. /สมาชิก [ชื่อ] - ค้นหายอดเงินคงเหลือและข้อมูลสมาชิก\n\n`;
+                helpText += `4. /สมาชิก [ชื่อ] - ค้นหายอดเงินคงเหลือและข้อมูลสมาชิก\n`;
+                helpText += `5. /ปิด - ปิดรับแทงงวดปัจจุบัน (แจ้งเตือนทุกห้อง)\n`;
+                helpText += `6. /เปิด - เปิดรับแทงงวดที่ปิดอยู่ (ต้องยังไม่ประกาศผล)\n\n`;
                 helpText += `💸 คำสั่งจัดการยอดเกิน/ตีออก:\n`;
-                helpText += `5. /ยอดเกิน - แสดงตัวเลขและยอดเงินที่เกินลิมิตอั้นในงวดนี้\n`;
-                helpText += `6. /ตีออก - แสดงสรุปประวัติประวัติและยอดเงินการตีออกทั้งหมดในงวดนี้\n`;
-                helpText += `7. /ตีออก เกิน - สั่งตีออกยอดเกินอั้นทั้งหมดไปยังเจ้ามือปลายทาง (จะมีบอทให้กดยืนยันอีกครั้ง)\n`;
-                helpText += `8. /ตีออก [เลข] [ประเภท] [จำนวน] - สั่งตีออกเลขแบบเจาะจง (เช่น /ตีออก 123 บน 100)\n\n`;
+                helpText += `7. /ยอดเกิน - แสดงตัวเลขและยอดเงินที่เกินลิมิตอั้นในงวดนี้\n`;
+                helpText += `8. /ตีออก - แสดงสรุปประวัติประวัติและยอดเงินการตีออกทั้งหมดในงวดนี้\n`;
+                helpText += `9. /ตีออก เกิน - สั่งตีออกยอดเกินอั้นทั้งหมดไปยังเจ้ามือปลายทาง (จะมีบอทให้กดยืนยันอีกครั้ง)\n`;
+                helpText += `10. /ตีออก [เลข] [ประเภท] [จำนวน] - สั่งตีออกเลขแบบเจาะจง (เช่น /ตีออก 123 บน 100)\n\n`;
                 helpText += `👤 คำสั่งทั่วไปสำหรับสมาชิก:\n`;
-                helpText += `9. /สรุป (พิมพ์โดยสมาชิก) - สรุปยอดและรางวัลเฉพาะของตัวสมาชิกเอง\n`;
-                helpText += `10. /ยอดรวม (พิมพ์โดยสมาชิก) - สรุปยอดแทงทั้งหมดเฉพาะของตัวสมาชิกเอง\n`;
-                helpText += `11. /คำสั่ง หรือ /help - แสดงรายการคำสั่งที่ใช้งานได้`;
+                helpText += `11. /สรุป (พิมพ์โดยสมาชิก) - สรุปยอดและรางวัลเฉพาะของตัวสมาชิกเอง\n`;
+                helpText += `12. /ยอดรวม (พิมพ์โดยสมาชิก) - สรุปยอดแทงทั้งหมดเฉพาะของตัวสมาชิกเอง\n`;
+                helpText += `13. /คำสั่ง หรือ /help - แสดงรายการคำสั่งที่ใช้งานได้`;
               }
 
               await sendLineReply(replyToken, helpText);
@@ -4092,7 +4285,7 @@ serve(async (req) => {
                 .select('id, round_date')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
-                .in('status', ['open', 'announced'])
+                .in('status', ['open', 'closed', 'announced'])
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
