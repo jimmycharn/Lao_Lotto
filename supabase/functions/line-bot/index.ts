@@ -2541,7 +2541,7 @@ serve(async (req) => {
         const baseTimestamp = new Date();
         let insertIndex = 0;
         const buyerNote = extractBuyerNote(text, lotteryType);
-        const finalBillNote = buyerNote || `LINE Bot (${groupLink.group_name || 'Group'})`;
+        const finalBillNote = buyerNote || 'LINE Bot';
 
         // Group bets to fetch commissions
         for (const bet of parsedBets) {
