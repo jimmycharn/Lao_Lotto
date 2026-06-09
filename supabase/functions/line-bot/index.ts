@@ -479,19 +479,21 @@ interface ExcessItem {
 
 // Helper: Calculate excess volume for a round
 async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
-  // Fetch active round to get set_prices
+  // Fetch active round to get set_prices and lottery_type
   const { data: roundData } = await supabase
     .from('lottery_rounds')
-    .select('set_prices')
+    .select('set_prices, lottery_type')
     .eq('id', roundId)
     .maybeSingle();
 
   const setPrices = roundData?.set_prices || {};
   const setPrice = Number(setPrices['4_top'] || 120);
+  const lotteryType = roundData?.lottery_type || '';
+  const isSetBasedLottery = ['lao', 'hanoi'].includes(lotteryType);
 
   const { data: submissions, error: subErr } = await supabase
     .from('submissions')
-    .select('bet_type, numbers, amount')
+    .select('id, bet_type, numbers, amount, created_at')
     .eq('round_id', roundId)
     .eq('is_deleted', false);
 
@@ -523,41 +525,172 @@ async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
     .select('bet_type, numbers, amount, status')
     .eq('round_id', roundId);
 
-  const transferredMap: Record<string, number> = {};
-  (transfers || []).forEach((t: any) => {
-    if (t.status !== 'returned') {
-      const key = `${t.bet_type}|${t.numbers}`;
-      transferredMap[key] = (transferredMap[key] || 0) + Number(t.amount);
-    }
-  });
-
-  const sumMap: Record<string, number> = {};
-  submissions.forEach((s: any) => {
-    const key = `${s.bet_type}|${s.numbers}`;
-    sumMap[key] = (sumMap[key] || 0) + Number(s.amount);
-  });
+  const transfersList = (transfers || []).filter((t: any) => t.status !== 'returned');
 
   const excessItems: ExcessItem[] = [];
 
-  for (const [key, totalAmt] of Object.entries(sumMap)) {
-    const [bet_type, numbers] = key.split('|');
-    const numLimit = numberLimitsMap[key];
-    const typeLimit = typeLimitsMap[bet_type];
-    let limit = numLimit !== undefined ? numLimit : (typeLimit !== undefined ? typeLimit : 999999999);
-    
-    if (bet_type === '4_set' || bet_type === '4_top') {
-      if (limit !== 999999999) {
-        limit = limit * setPrice;
-      }
+  // Group submissions
+  const grouped: Record<string, {
+    bet_type: string;
+    numbers: string;
+    totalAmt: number;
+    setCount: number;
+    submissions: any[];
+  }> = {};
+
+  submissions.forEach((sub: any) => {
+    const key = `${sub.bet_type}|${sub.numbers}`;
+    if (!grouped[key]) {
+      grouped[key] = {
+        bet_type: sub.bet_type,
+        numbers: sub.numbers,
+        totalAmt: 0,
+        setCount: 0,
+        submissions: []
+      };
     }
+    grouped[key].totalAmt += Number(sub.amount || 0);
+    grouped[key].submissions.push(sub);
+    if (isSetBasedLottery && (sub.bet_type === '4_set' || sub.bet_type === '4_top')) {
+      grouped[key].setCount += Math.ceil(Number(sub.amount || 0) / setPrice);
+    }
+  });
+
+  // Calculate set-based excess if Lao/Hanoi lottery
+  if (isSetBasedLottery) {
+    const limit3Set = typeLimitsMap['3_set'] !== undefined ? typeLimitsMap['3_set'] : 999999999;
+    const limit4Set = typeLimitsMap['4_set'] !== undefined ? typeLimitsMap['4_set'] : (typeLimitsMap['4_top'] !== undefined ? typeLimitsMap['4_top'] : 999999999);
+
+    // Group 4-digit submissions by their last 3 digits
+    const groupedByLast3: Record<string, {
+      last3Digits: string;
+      exactMatches: Record<string, {
+        numbers: string;
+        setCount: number;
+        submissions: any[];
+      }>;
+      totalSets: number;
+      submissions: any[];
+    }> = {};
+
+    Object.values(grouped).forEach(group => {
+      if ((group.bet_type === '4_set' || group.bet_type === '4_top') && group.numbers?.length === 4) {
+        const last3 = group.numbers.slice(-3);
+        if (!groupedByLast3[last3]) {
+          groupedByLast3[last3] = {
+            last3Digits: last3,
+            exactMatches: {},
+            totalSets: 0,
+            submissions: []
+          };
+        }
+
+        if (!groupedByLast3[last3].exactMatches[group.numbers]) {
+          groupedByLast3[last3].exactMatches[group.numbers] = {
+            numbers: group.numbers,
+            setCount: 0,
+            submissions: []
+          };
+        }
+        groupedByLast3[last3].exactMatches[group.numbers].setCount += group.setCount;
+        groupedByLast3[last3].exactMatches[group.numbers].submissions.push(...group.submissions);
+        groupedByLast3[last3].totalSets += group.setCount;
+        groupedByLast3[last3].submissions.push(...group.submissions);
+      }
+    });
+
+    const exactExcessSetsMap: Record<string, number> = {};
+
+    // Process each last-3-digit group
+    Object.values(groupedByLast3).forEach(group3 => {
+      const exactMatchGroups = Object.values(group3.exactMatches);
+
+      // Sort by earliest submission (FIFO)
+      exactMatchGroups.sort((a, b) => {
+        const aTime = Math.min(...a.submissions.map(s => new Date(s.created_at).getTime()));
+        const bTime = Math.min(...b.submissions.map(s => new Date(s.created_at).getTime()));
+        return aTime - bTime;
+      });
+
+      // 1. Process 4_set exact limit excess first
+      exactMatchGroups.forEach(exactGroup => {
+        exactGroup.submissions.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+        const exactTransferred = transfersList
+          .filter(t => (t.bet_type === '4_set' || t.bet_type === '4_top') && t.numbers === exactGroup.numbers)
+          .reduce((sum, t) => sum + Math.floor((Number(t.amount) || 0) / setPrice), 0);
+
+        const effectiveLimit = limit4Set + exactTransferred;
+
+        if (exactGroup.setCount > effectiveLimit) {
+          const excess4 = exactGroup.setCount - effectiveLimit;
+          exactExcessSetsMap[exactGroup.numbers] = excess4;
+        }
+      });
+
+      // 2. Process 3_digit_match limit excess (FIFO across same last 3 digits)
+      const uniqueNumbers = Object.keys(group3.exactMatches);
+      const sortedNumbers = uniqueNumbers.sort((a, b) => {
+        const aTime = Math.min(...group3.exactMatches[a].submissions.map(s => new Date(s.created_at).getTime()));
+        const bTime = Math.min(...group3.exactMatches[b].submissions.map(s => new Date(s.created_at).getTime()));
+        return aTime - bTime;
+      });
+
+      const totalTransferred3Set = transfersList
+        .filter(t => (t.bet_type === '4_set' || t.bet_type === '3_set') && t.numbers?.slice(-3) === group3.last3Digits)
+        .reduce((sum, t) => sum + Math.floor((Number(t.amount) || 0) / setPrice), 0);
+
+      let remaining3SetLimit = limit3Set + totalTransferred3Set;
+
+      sortedNumbers.forEach((num) => {
+        const exactGroup = group3.exactMatches[num];
+        const setsToKeep = Math.min(exactGroup.setCount, remaining3SetLimit);
+        remaining3SetLimit -= setsToKeep;
+
+        const excessSets3 = exactGroup.setCount - setsToKeep;
+        if (excessSets3 > 0) {
+          const prevExcess = exactExcessSetsMap[num] || 0;
+          exactExcessSetsMap[num] = Math.max(prevExcess, excessSets3);
+        }
+      });
+
+      // Push final excess items for this group
+      sortedNumbers.forEach((num) => {
+        const excessSets = exactExcessSetsMap[num] || 0;
+        if (excessSets > 0) {
+          excessItems.push({
+            bet_type: '4_set',
+            numbers: num,
+            amount: excessSets * setPrice
+          });
+        }
+      });
+    });
+  }
+
+  // Process other bet types normally
+  for (const group of Object.values(grouped)) {
+    if (isSetBasedLottery && (group.bet_type === '4_set' || group.bet_type === '4_top')) {
+      continue;
+    }
+
+    const limitLookupBetType = group.bet_type;
+    const key = `${group.bet_type}|${group.numbers}`;
     
-    const alreadyTransferred = transferredMap[key] || 0;
-    const currentExcess = totalAmt - limit - alreadyTransferred;
+    const numLimit = numberLimitsMap[key];
+    const typeLimit = typeLimitsMap[limitLookupBetType];
+    const limit = numLimit !== undefined ? numLimit : (typeLimit !== undefined ? typeLimit : 999999999);
+
+    const alreadyTransferred = transfersList
+      .filter(t => t.bet_type === limitLookupBetType && t.numbers === group.numbers)
+      .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+
+    const currentExcess = group.totalAmt - limit - alreadyTransferred;
 
     if (currentExcess > 0) {
       excessItems.push({
-        bet_type,
-        numbers,
+        bet_type: group.bet_type,
+        numbers: group.numbers,
         amount: currentExcess
       });
     }

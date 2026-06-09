@@ -646,6 +646,11 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
 
         setSavingTransfer(true)
         try {
+            const isSetBased = ['lao', 'hanoi'].includes(round.lottery_type) && 
+                (transferTarget.bet_type === '4_set' || transferTarget.bet_type === '4_top' || transferTarget.bet_type === '3_set')
+            const setPrice = round?.set_prices?.['4_top'] || 120
+            const finalAmount = isSetBased ? transferForm.amount * setPrice : transferForm.amount
+
             // Check upstream dealer's credit if linked
             if (selectedUpstreamDealer?.is_linked && selectedUpstreamDealer?.upstream_dealer_id) {
                 const upstreamRound = await findUpstreamRound(selectedUpstreamDealer.upstream_dealer_id)
@@ -653,7 +658,7 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
                     const creditCheck = await checkUpstreamDealerCredit(
                         selectedUpstreamDealer.upstream_dealer_id,
                         upstreamRound.id,
-                        transferForm.amount
+                        finalAmount
                     )
                     if (!creditCheck.allowed) {
                         toast.error(`ไม่สามารถตีออกได้: ${creditCheck.message}`)
@@ -680,7 +685,7 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
                             user_id: user.id, // The transferring dealer becomes the "user" in upstream round
                             bet_type: transferTarget.bet_type,
                             numbers: transferTarget.numbers,
-                            amount: transferForm.amount,
+                            amount: finalAmount,
                             commission_rate: 0,
                             commission_amount: 0
                         })
@@ -703,7 +708,7 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
                     round_id: round.id,
                     bet_type: transferTarget.bet_type,
                     numbers: transferTarget.numbers,
-                    amount: transferForm.amount,
+                    amount: finalAmount,
                     target_dealer_name: transferForm.target_dealer_name,
                     target_dealer_contact: transferForm.target_dealer_contact,
                     notes: transferForm.notes,
@@ -1089,7 +1094,7 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
                         user_id: user.id,
                         bet_type: item.bet_type,
                         numbers: item.numbers,
-                        amount: item.excess,
+                        amount: item.isSetBased ? item.excess * (round?.set_prices?.['4_top'] || 120) : item.excess,
                         commission_rate: 0,
                         commission_amount: 0
                     }))
@@ -1112,7 +1117,7 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
                 round_id: round.id,
                 bet_type: item.bet_type,
                 numbers: item.numbers,
-                amount: item.excess,
+                amount: item.isSetBased ? item.excess * (round?.set_prices?.['4_top'] || 120) : item.excess,
                 target_dealer_name: bulkTransferForm.target_dealer_name,
                 target_dealer_contact: bulkTransferForm.target_dealer_contact,
                 notes: bulkTransferForm.notes,
