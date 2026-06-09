@@ -1439,7 +1439,8 @@ serve(async (req) => {
             text.startsWith('/excess') || text.startsWith('/ยอดเกิน') ||
             text.startsWith('/transfer') || text.startsWith('/ตีออก') ||
             text.startsWith('/คนส่ง') || text.startsWith('/ใครส่ง') || text.startsWith('/ส่งเลข') ||
-            text.startsWith('/summary') || text.startsWith('/สรุป');
+            text.startsWith('/summary') || text.startsWith('/สรุป') ||
+            text.toLowerCase() === 'y' || text === 'ยืนยัน';
 
           if (isManagerCommand) {
             // 1. Fetch group link information to check dealer
@@ -3110,7 +3111,71 @@ serve(async (req) => {
                 commandArg = text.substring('/ตีออก'.length).trim();
               }
 
-              if (commandArg === 'เกิน' || commandArg === 'excess') {
+              const commandArgLower = commandArg.toLowerCase();
+              if (commandArgLower === 'เกิน' || commandArgLower === 'excess') {
+                const excessItems = await calculateRoundExcess(activeRound.id);
+                if (excessItems.length === 0) {
+                  await sendLineReply(replyToken, `ℹ️ ไม่มียอดเกินลิมิตให้ออกในงวดนี้ค่ะ`);
+                  continue;
+                }
+
+                const LABELS: Record<string, string> = {
+                  '2_top': '2 ตัวบน',
+                  '2_bottom': '2 ตัวล่าง',
+                  '3_top': groupLink.lottery_type === 'lao' || groupLink.lottery_type === 'hanoi' ? '3 ตัวตรง' : '3 ตัวบน',
+                  '3_tod': '3 ตัวโต๊ด',
+                  '3_front': '3 ตัวหน้า',
+                  '3_back': '3 ตัวหลัง',
+                  '4_tod': '4 ตัวโต๊ด',
+                  '4_set': '4 ตัวชุด',
+                  '6_top': '6 ตัวบน',
+                  '4_float': '4 ตัวลอยแพ',
+                  '5_float': '5 ตัวลอยแพ',
+                  'run_top': 'ลอยบน',
+                  'run_bottom': 'ลอยล่าง'
+                };
+
+                let summaryText = `⚠️ รายการยอดเกินอั้น (${groupLink.lottery_type.toUpperCase()})\nงวดวันที่: ${activeRound.round_date}\n`;
+                summaryText += `--------------------------\n`;
+                let totalExcess = 0;
+                excessItems.forEach((item) => {
+                  summaryText += `- [${LABELS[item.bet_type] || item.bet_type}] ${item.numbers}: เกิน ฿${item.amount.toLocaleString('th-TH')}\n`;
+                  totalExcess += item.amount;
+                });
+                summaryText += `--------------------------\n`;
+                summaryText += `รวมยอดเกินทั้งหมด: ฿${totalExcess.toLocaleString('th-TH')}`;
+
+                await sendLineReply(replyToken, {
+                  type: "text",
+                  text: summaryText + `\n\n⚠️ ต้องการตีออกยอดเกินอั้นทั้งหมดนี้หรือไม่?\n👉 พิมพ์ Y หรือกดปุ่มด้านล่างเพื่อยืนยันการทำรายการค่ะ`,
+                  quickReply: {
+                    items: [
+                      {
+                        type: "action",
+                        action: {
+                          type: "message",
+                          label: "Y (ยืนยัน)",
+                          text: "Y"
+                        }
+                      },
+                      {
+                        type: "action",
+                        action: {
+                          type: "message",
+                          label: "ยกเลิก",
+                          text: "ยกเลิก"
+                        }
+                      }
+                    ]
+                  }
+                });
+                continue;
+              } else if (
+                commandArgLower === 'เกิน y' || 
+                commandArgLower === 'เกิน yes' || 
+                commandArgLower === 'excess y' || 
+                commandArgLower === 'excess yes'
+              ) {
                 const excessItems = await calculateRoundExcess(activeRound.id);
                 if (excessItems.length === 0) {
                   await sendLineReply(replyToken, `ℹ️ ไม่มียอดเกินลิมิตให้ออกในงวดนี้ค่ะ`);
@@ -3145,6 +3210,40 @@ serve(async (req) => {
                 }
                 continue;
               }
+            }
+
+            // ─── COMMAND: Y / ยืนยัน ───
+            if (text.toLowerCase() === 'y' || text === 'ยืนยัน') {
+              if (!permissions.can_transfer) {
+                continue;
+              }
+
+              const { data: activeRound } = await supabase
+                .from('lottery_rounds')
+                .select('id, round_date')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', groupLink.lottery_type)
+                .in('status', ['open', 'announced'])
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (!activeRound) {
+                continue;
+              }
+
+              const excessItems = await calculateRoundExcess(activeRound.id);
+              if (excessItems.length === 0) {
+                continue;
+              }
+
+              const result = await performLayoff(dealerId, activeRound.id, groupLink.lottery_type, excessItems);
+              if (result.success && result.text) {
+                await sendLineReply(replyToken, `✅ ทำรายการตีออกยอดเกินอั้นสำเร็จแล้วค่ะ!\n\n${result.text}`);
+              } else {
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาด: ${result.message}`);
+              }
+              continue;
             }
           }
 
