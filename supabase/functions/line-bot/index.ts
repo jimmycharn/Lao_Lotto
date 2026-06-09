@@ -2109,11 +2109,11 @@ serve(async (req) => {
                 let netLabel = '';
                 let netColor = '#888888';
                 if (roundedNet > 0) {
-                  netLabel = `ต้องจ่าย ฿${roundedNet.toLocaleString('th-TH')}`;
-                  netColor = '#ef4444'; // Red (dealer pays member)
+                  netLabel = `ต้องเก็บ ฿${roundedNet.toLocaleString('th-TH')}`;
+                  netColor = '#10b981'; // Green (member collects from dealer)
                 } else if (roundedNet < 0) {
-                  netLabel = `ต้องเก็บ ฿${Math.abs(roundedNet).toLocaleString('th-TH')}`;
-                  netColor = '#10b981'; // Green (dealer collects from member)
+                  netLabel = `ต้องจ่าย ฿${Math.abs(roundedNet).toLocaleString('th-TH')}`;
+                  netColor = '#ef4444'; // Red (member pays dealer)
                 } else {
                   netLabel = 'เสมอ';
                   netColor = '#94a3b8';
