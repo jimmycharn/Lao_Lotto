@@ -1440,6 +1440,7 @@ serve(async (req) => {
             text.startsWith('/transfer') || text.startsWith('/ตีออก') ||
             text.startsWith('/คนส่ง') || text.startsWith('/ใครส่ง') || text.startsWith('/ส่งเลข') ||
             text.startsWith('/summary') || text.startsWith('/สรุป') ||
+            text.startsWith('/help') || text.startsWith('/คำสั่ง') ||
             text.toLowerCase() === 'y' || text === 'ยืนยัน';
 
           if (isManagerCommand) {
@@ -1469,12 +1470,13 @@ serve(async (req) => {
 
             const isTotalCommand = text.startsWith('/total') || text.startsWith('/ยอดรวม');
             const isSummaryCommand = text.startsWith('/summary') || text.startsWith('/สรุป');
+            const isHelpCommand = text.startsWith('/help') || text.startsWith('/คำสั่ง');
             let showOwnOnly = false;
             let targetUserId: string | null = null;
             let memberProfileName = '';
 
             if (!manager) {
-              if (isTotalCommand || isSummaryCommand) {
+              if (isTotalCommand || isSummaryCommand || isHelpCommand) {
                 // Not a manager, check if registered active member of this dealer
                 const { data: profile } = await supabase
                   .from('profiles')
@@ -3368,6 +3370,38 @@ serve(async (req) => {
                 }
                 continue;
               }
+            }
+
+            // ─── COMMAND: /คำสั่ง หรือ /help ───
+            if (text.startsWith('/คำสั่ง') || text.startsWith('/help')) {
+              let helpText = '';
+              if (showOwnOnly) {
+                helpText = `💡 คำสั่งบอทสำหรับสมาชิก (${groupLink.lottery_type.toUpperCase()})\n`;
+                helpText += `--------------------------\n`;
+                helpText += `1. /สรุป - สรุปงวดหวย ยอดแทง ส่วนลด ค่าคอม ถูกรางวัล และยอดสุทธิ (ต้องจ่าย/ต้องเก็บ) ของตัวเองในงวดนี้\n`;
+                helpText += `2. /ยอดรวม - สรุปยอดรวมแทงทั้งหมดของตัวเองในงวดนี้\n`;
+                helpText += `3. /คำสั่ง หรือ /help - แสดงคำสั่งที่สามารถใช้งานได้`;
+              } else {
+                helpText = `💡 คำสั่งบอททั้งหมดสำหรับร้านค้า (${groupLink.lottery_type.toUpperCase()})\n`;
+                helpText += `--------------------------\n`;
+                helpText += `👑 คำสั่งทั่วไปสำหรับร้านค้า:\n`;
+                helpText += `1. /สรุป - สรุปงวดหวย (ยอดรับ, ยอดส่ง, กำไร) และสรุปยอดที่ต้องเคลียร์ของสมาชิกแต่ละคน\n`;
+                helpText += `2. /ยอดรวม - รายงานยอดรับรวมแยกตามประเภทเลขและยอดรวมทั้งหมดของร้าน\n`;
+                helpText += `3. /คนส่ง - รายงานยอดรับแทงแยกตามสมาชิกแต่ละคน\n`;
+                helpText += `4. /สมาชิก [ชื่อ] - ค้นหายอดเงินคงเหลือและข้อมูลสมาชิก\n\n`;
+                helpText += `💸 คำสั่งจัดการยอดเกิน/ตีออก:\n`;
+                helpText += `5. /ยอดเกิน - แสดงตัวเลขและยอดเงินที่เกินลิมิตอั้นในงวดนี้\n`;
+                helpText += `6. /ตีออก - แสดงสรุปประวัติประวัติและยอดเงินการตีออกทั้งหมดในงวดนี้\n`;
+                helpText += `7. /ตีออก เกิน - สั่งตีออกยอดเกินอั้นทั้งหมดไปยังเจ้ามือปลายทาง (จะมีบอทให้กดยืนยันอีกครั้ง)\n`;
+                helpText += `8. /ตีออก [เลข] [ประเภท] [จำนวน] - สั่งตีออกเลขแบบเจาะจง (เช่น /ตีออก 123 บน 100)\n\n`;
+                helpText += `👤 คำสั่งทั่วไปสำหรับสมาชิก:\n`;
+                helpText += `9. /สรุป (พิมพ์โดยสมาชิก) - สรุปยอดและรางวัลเฉพาะของตัวสมาชิกเอง\n`;
+                helpText += `10. /ยอดรวม (พิมพ์โดยสมาชิก) - สรุปยอดแทงทั้งหมดเฉพาะของตัวสมาชิกเอง\n`;
+                helpText += `11. /คำสั่ง หรือ /help - แสดงรายการคำสั่งที่ใช้งานได้`;
+              }
+
+              await sendLineReply(replyToken, helpText);
+              continue;
             }
 
             // ─── COMMAND: Y / ยืนยัน ───
