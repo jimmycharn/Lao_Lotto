@@ -479,6 +479,16 @@ interface ExcessItem {
 
 // Helper: Calculate excess volume for a round
 async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
+  // Fetch active round to get set_prices
+  const { data: roundData } = await supabase
+    .from('lottery_rounds')
+    .select('set_prices')
+    .eq('id', roundId)
+    .maybeSingle();
+
+  const setPrices = roundData?.set_prices || {};
+  const setPrice = Number(setPrices['4_top'] || 120);
+
   const { data: submissions, error: subErr } = await supabase
     .from('submissions')
     .select('bet_type, numbers, amount')
@@ -533,7 +543,13 @@ async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
     const [bet_type, numbers] = key.split('|');
     const numLimit = numberLimitsMap[key];
     const typeLimit = typeLimitsMap[bet_type];
-    const limit = numLimit !== undefined ? numLimit : (typeLimit !== undefined ? typeLimit : 999999999);
+    let limit = numLimit !== undefined ? numLimit : (typeLimit !== undefined ? typeLimit : 999999999);
+    
+    if (bet_type === '4_set' || bet_type === '4_top') {
+      if (limit !== 999999999) {
+        limit = limit * setPrice;
+      }
+    }
     
     const alreadyTransferred = transferredMap[key] || 0;
     const currentExcess = totalAmt - limit - alreadyTransferred;
