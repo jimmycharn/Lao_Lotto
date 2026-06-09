@@ -2515,6 +2515,7 @@ serve(async (req) => {
 
             // ─── COMMAND: /สรุป หรือ /summary ───
             if (text.startsWith('/summary') || text.startsWith('/สรุป')) {
+              console.log('[DEBUG /สรุป] ENTERED. showOwnOnly:', showOwnOnly, 'permissions:', JSON.stringify(permissions));
               if (!showOwnOnly && !permissions.can_view_total) {
                 await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์เข้าถึงรายงานสรุปงวด`);
                 continue;
@@ -2539,14 +2540,17 @@ serve(async (req) => {
               const isSummaryTh = text.startsWith('/สรุป');
               const prefixLen = isSummaryTh ? '/สรุป'.length : '/summary'.length;
               const param = text.substring(prefixLen).trim();
+              console.log('[DEBUG /สรุป] param:', JSON.stringify(param), 'lottery_type:', activeRound.lottery_type, 'round_id:', activeRound.id);
 
               if (param !== "") {
+                console.log('[DEBUG /สรุป] HAS PARAM. showOwnOnly:', showOwnOnly);
                 if (showOwnOnly) {
                   await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์บันทึกผลรางวัล`);
                   continue;
                 }
 
                 const parsedWinning = parseWinningNumbers(param, activeRound.lottery_type);
+                console.log('[DEBUG /สรุป] parsedWinning:', JSON.stringify(parsedWinning));
                 if (!parsedWinning) {
                   let formatHelp = '';
                   if (activeRound.lottery_type === 'lao' || activeRound.lottery_type === 'hanoi') {
@@ -2573,9 +2577,11 @@ serve(async (req) => {
                   .eq('id', activeRound.id);
 
                 if (updateRoundErr) {
+                  console.error('[DEBUG /สรุป] updateRound ERROR:', JSON.stringify(updateRoundErr));
                   await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการบันทึกผลรางวัล: ${updateRoundErr.message}`);
                   continue;
                 }
+                console.log('[DEBUG /สรุป] Round updated successfully. Calling calculate_round_winners...');
 
                 // If editing, reset previous winners first
                 if (isEditing) {
@@ -2591,7 +2597,9 @@ serve(async (req) => {
                   .rpc('calculate_round_winners', { p_round_id: activeRound.id });
 
                 if (rpcErr) {
-                  console.error('Error running calculate_round_winners:', rpcErr);
+                  console.error('[DEBUG /สรุป] Error running calculate_round_winners:', JSON.stringify(rpcErr));
+                } else {
+                  console.log('[DEBUG /สรุป] calculate_round_winners completed successfully.');
                 }
 
                 // Deduct billing based on subscription package
@@ -2624,9 +2632,11 @@ serve(async (req) => {
                 activeRound.winning_numbers = parsedWinning;
                 activeRound.is_result_announced = true;
                 activeRound.status = 'announced';
+                console.log('[DEBUG /สรุป] PARAM PROCESSING DONE. Proceeding to summary generation...');
               }
 
               const isAnnounced = activeRound.status === 'announced' && activeRound.is_result_announced;
+              console.log('[DEBUG /สรุป] isAnnounced:', isAnnounced, 'status:', activeRound.status);
 
               // 1. Fetch Submissions (ยอดรับ)
               let subQuery = supabase
@@ -3398,7 +3408,9 @@ serve(async (req) => {
                 };
               }
 
+              console.log('[DEBUG /สรุป] About to send flexMessage. altText length:', flexMessage?.altText?.length || 'N/A', 'JSON size:', JSON.stringify(flexMessage).length);
               await sendLineReply(replyToken, flexMessage);
+              console.log('[DEBUG /สรุป] sendLineReply completed.');
               continue;
             }
 
