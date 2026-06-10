@@ -2540,7 +2540,7 @@ export default function Dealer() {
             if (error) throw error
 
             toast.success('เปิดรับงวดหวยใหม่แล้ว (ถึง 23:59 วันนี้)')
-            fetchRounds()
+            fetchData()
         } catch (error) {
             console.error('Error reopening round:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
