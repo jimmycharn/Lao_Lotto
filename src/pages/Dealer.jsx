@@ -184,7 +184,7 @@ export default function Dealer() {
 
     // Helper to check if a round is still open (not yet explicitly closed by dealer)
     const isRoundOpen = (round) => {
-        return round.status === 'open' || round.status === 'announced'
+        return round.status === 'open' || round.status === 'closed'
     }
 
     // Form state for creating round
@@ -1733,10 +1733,11 @@ export default function Dealer() {
 
     async function handleUpdateMemberLineUserId(member, lineUserId) {
         try {
+            const trimmedLineId = lineUserId ? lineUserId.trim() : null;
             // Update in profiles table
             const { data, error } = await supabase
                 .from('profiles')
-                .update({ line_user_id: lineUserId || null })
+                .update({ line_user_id: trimmedLineId })
                 .eq('id', member.id)
                 .select()
 
@@ -1746,16 +1747,16 @@ export default function Dealer() {
             const matchMember = (m) => m.id === member.id
 
             setMembers(prev => prev.map(m =>
-                matchMember(m) ? { ...m, line_user_id: lineUserId || null } : m
+                matchMember(m) ? { ...m, line_user_id: trimmedLineId } : m
             ))
             setPendingMembers(prev => prev.map(m =>
-                matchMember(m) ? { ...m, line_user_id: lineUserId || null } : m
+                matchMember(m) ? { ...m, line_user_id: trimmedLineId } : m
             ))
             setBlockedMembers(prev => prev.map(m =>
-                matchMember(m) ? { ...m, line_user_id: lineUserId || null } : m
+                matchMember(m) ? { ...m, line_user_id: trimmedLineId } : m
             ))
             setDownstreamDealers(prev => prev.map(m =>
-                matchMember(m) ? { ...m, line_user_id: lineUserId || null } : m
+                matchMember(m) ? { ...m, line_user_id: trimmedLineId } : m
             ))
 
             toast.success('อัปเดต Line User ID สำเร็จ')

@@ -1942,6 +1942,8 @@ serve(async (req) => {
         const groupId = event.source?.groupId || event.source?.roomId || userId
         const sourceType = event.source?.type || 'user'
 
+        console.log(`[LINE BOT EVENT] type: ${event.type}, userId: ${userId}, groupId: ${groupId}, text: ${event.message?.text || ''}`);
+
       // Automatically upsert group member details in the background if event comes from a group or room
       if (userId && (groupId.startsWith('C') || groupId.startsWith('R'))) {
         upsertGroupMember(groupId, userId, sourceType).catch(err => {
@@ -5226,22 +5228,28 @@ serve(async (req) => {
         const dealerId = groupLink.dealer_id;
         const lotteryType = groupLink.lottery_type;
 
+        console.log(`[LINE BOT MSG] Found groupLink for group: ${groupId}, dealerId: ${dealerId}`);
+
         // Verify if sender has a linked profile
-        const { data: profile } = await supabase
+        const { data: profile, error: profileErr } = await supabase
           .from('profiles')
           .select('id, full_name, is_active, role')
           .eq('line_user_id', userId)
           .eq('is_active', true)
           .maybeSingle();
 
+        console.log(`[LINE BOT MSG] profile lookup result:`, { profile, profileErr });
+
         // Check if sender is a manager for this dealer
-        const { data: managerRecord } = await supabase
+        const { data: managerRecord, error: managerErr } = await supabase
           .from('line_managers')
           .select('id')
           .eq('dealer_id', dealerId)
           .eq('line_user_id', userId)
           .eq('is_active', true)
           .maybeSingle();
+
+        console.log(`[LINE BOT MSG] managerRecord lookup result:`, { managerRecord, managerErr });
 
         const isDealer = profile?.role === 'dealer';
         const isAdmin = profile?.role === 'superadmin' || profile?.role === 'admin';
@@ -5288,26 +5296,35 @@ serve(async (req) => {
           continue;
         }
 
-        // Check active round for this dealer (must be open, is_active=true, and current time is within open/close times)
+        // Check active round for this dealer (must be open or closed, is_active=true, and current time is past open time)
         const { data: openRounds } = await supabase
           .from('lottery_rounds')
           .select('*')
           .eq('dealer_id', dealerId)
           .eq('lottery_type', lotteryType)
-          .eq('status', 'open');
+          .in('status', ['open', 'closed']);
 
         const now = new Date();
         const activeRound = (openRounds || []).find(round => {
           if (!round.is_active) return false;
           const openTime = new Date(round.open_time);
-          const closeTime = new Date(round.close_time);
-          return now >= openTime && now < closeTime;
+          return now >= openTime;
         });
 
         if (!activeRound) {
           await sendLineReply(
             replyToken,
             `❌ ขออภัยค่ะ ขณะนี้ยังไม่มีงวดหวยประเภท ${lotteryType.toUpperCase()} เปิดให้ป้อนข้อมูล หรือยังไม่ถึงเวลาเปิดรับแทงตามที่กลุ่มนี้ผูกอยู่ค่ะ`
+          );
+          continue;
+        }
+
+        // If round status is closed or past its close time, reject betting with specific message
+        const closeTime = new Date(activeRound.close_time);
+        if (activeRound.status === 'closed' || now >= closeTime) {
+          await sendLineReply(
+            replyToken,
+            `❌ ขออภัยค่ะ งวดหวยประเภท ${lotteryType.toUpperCase()} ปิดรับแทงแล้วค่ะ`
           );
           continue;
         }
