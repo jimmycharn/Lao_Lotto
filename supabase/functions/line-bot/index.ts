@@ -2057,6 +2057,7 @@ serve(async (req) => {
             text.startsWith('/คนส่ง') || text.startsWith('/ใครส่ง') || text.startsWith('/ส่งเลข') ||
             text.startsWith('/summary') || text.startsWith('/สรุป') ||
             text.startsWith('/help') || text.startsWith('/คำสั่ง') ||
+            text.startsWith('/แจ้งผล') ||
             text === '/เปิด' || text === '/ปิด' ||
             text.toLowerCase() === 'y' || text === 'ยืนยัน';
 
