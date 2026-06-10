@@ -2107,7 +2107,11 @@ serve(async (req) => {
               const isOpenCloseCommand = text === '/เปิด' || text === '/ปิด';
               if (isTotalCommand || isSummaryCommand || isHelpCommand || isOpenCloseCommand || isReportCommand) {
                 if (!profile) {
-                  // Not a registered active profile, ignore silently
+                  // If they typed a slash command but are not linked, notify them so they can copy their LINE User ID
+                  await sendLineReply(replyToken, [
+                    `❌ คุณยังไม่ได้เชื่อมบัญชี LINE ของคุณกับระบบ Big Lotto\nกรุณานำ LINE User ID ด้านล่างไปใส่ในเมนูโปรไฟล์บนเว็บเพื่อเชื่อมต่อ \nหรือแจ้ง admin เพื่อช่วยเหลือในการเชื่อมต่อ`,
+                    userId
+                  ]);
                   continue;
                 }
 
@@ -2121,7 +2125,7 @@ serve(async (req) => {
                   .maybeSingle();
 
                 if (!membership) {
-                  // No active membership, ignore silently
+                  await sendLineReply(replyToken, `❌ ขออภัยค่ะ คุณ ${profile.full_name} ไม่มีสิทธิ์ใช้งานกลุ่มนี้ หรือสิทธิ์ของท่านถูกระงับชั่วคราว`);
                   continue;
                 }
 
