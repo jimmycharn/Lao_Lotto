@@ -184,7 +184,7 @@ export default function Dealer() {
 
     // Helper to check if a round is still open (not yet explicitly closed by dealer)
     const isRoundOpen = (round) => {
-        return round.status === 'open' || round.status === 'closed'
+        return (round.status === 'open' || round.status === 'closed') && !round.is_result_announced
     }
 
     // Form state for creating round
