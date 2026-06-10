@@ -5226,13 +5226,6 @@ serve(async (req) => {
         const dealerId = groupLink.dealer_id;
         const lotteryType = groupLink.lottery_type;
 
-        // If not linked, check if the text contains a bet. If so, reply with warning
-        const parsedBets = parseMultiLinePaste(text, lotteryType);
-        if (parsedBets.length === 0) {
-          // Random chat message, ignore it
-          continue;
-        }
-
         // Verify if sender has a linked profile
         const { data: profile } = await supabase
           .from('profiles')
@@ -5254,16 +5247,30 @@ serve(async (req) => {
         const isAdmin = profile?.role === 'superadmin' || profile?.role === 'admin';
         const isManager = !!managerRecord;
 
-        if (isDealer || isAdmin || isManager) {
-          await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ ซื้อเลข(แทง)ในกลุ่มนี้`);
-          continue;
-        }
-
-        if (!profile) {
+        // If the user has NOT bound their ID and is not staff or manager
+        if (!profile && !isDealer && !isAdmin && !isManager) {
+          // Display their LINE User ID every time they perform any activity (send any message)
           await sendLineReply(replyToken, [
             `❌ คุณยังไม่ได้เชื่อมบัญชี LINE ของคุณกับระบบ Big Lotto\nกรุณานำ LINE User ID ด้านล่างไปใส่ในเมนูโปรไฟล์บนเว็บเพื่อเชื่อมต่อ \nหรือแจ้ง admin เพื่อช่วยเหลือในการเชื่อมต่อ`,
             userId
           ]);
+          continue;
+        }
+
+        // If sender is staff/manager, block them from buying/betting in this group
+        if (isDealer || isAdmin || isManager) {
+          // Only show warning if they actually typed a bet
+          const parsedBets = parseMultiLinePaste(text, lotteryType);
+          if (parsedBets.length > 0) {
+            await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ ซื้อเลข(แทง)ในกลุ่มนี้`);
+          }
+          continue;
+        }
+
+        // For linked members, check if the text contains a bet. If not, ignore silently
+        const parsedBets = parseMultiLinePaste(text, lotteryType);
+        if (parsedBets.length === 0) {
+          // Random chat message, ignore it
           continue;
         }
 
