@@ -190,4 +190,27 @@ describe('pasteParser - parseMultiLinePaste', () => {
       expect(note).toBe('')
     })
   })
+
+  describe('"ตัวละ" trailing amount line', () => {
+    it('should apply "ตัวละ10 บาท" amount to all buffered บน-ล่าง numbers', () => {
+      const text = 'พี่กิ๊ฟ\nบน-ล่าง\n00\n11\n22\n33\n44\n55\n66\n77\n88\n99\nตัวละ10 บาท'
+      const result = parseMultiLinePaste(text, 'lao')
+      // 10 numbers x (บน + ล่าง) = 20 entries
+      expect(result.length).toBe(20)
+      const tops = result.filter(r => r.betType === '2_top')
+      const bottoms = result.filter(r => r.betType === '2_bottom')
+      expect(tops.length).toBe(10)
+      expect(bottoms.length).toBe(10)
+      expect(result.every(r => r.amount === 10)).toBe(true)
+      expect(result[0]).toMatchObject({ numbers: '00', amount: 10, betType: '2_top', typeLabel: 'บน' })
+      expect(result[1]).toMatchObject({ numbers: '00', amount: 10, betType: '2_bottom', typeLabel: 'ล่าง' })
+    })
+
+    it('should treat "ตูละ" variant the same as "ตัวละ"', () => {
+      const text = 'บน\n12\n34\nตูละ20บาท'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(2)
+      expect(result.every(r => r.amount === 20 && r.betType === '2_top')).toBe(true)
+    })
+  })
 })

@@ -101,6 +101,11 @@ function normalizeUnicode(str: string): string {
 
     // Replace ทุกประตู / ทุกประตุ / ทุกตู / ทุกตุ with ชุด
     s = s.replace(/ทุกประตู|ทุกประตุ|ทุกตู|ทุกตุ/g, 'ชุด');
+
+    // "ตัวละ" / "ตูละ" (= per number) means "=" followed by the bet amount.
+    // e.g. a trailing line "ตัวละ10 บาท" applies amount 10 to all buffered bare numbers above.
+    s = s.replace(/ตัว\s*ละ|ตู\s*ละ/g, '=');
+
     return s;
 }
 
