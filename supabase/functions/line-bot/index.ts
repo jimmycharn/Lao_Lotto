@@ -2085,24 +2085,27 @@ serve(async (req) => {
               .eq('is_active', true)
               .maybeSingle();
 
+            // Verify sender profile to check role
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('id, full_name, is_active, role')
+              .eq('line_user_id', userId)
+              .eq('is_active', true)
+              .maybeSingle();
+
+            const isStaff = profile?.role === 'dealer' || profile?.role === 'superadmin' || profile?.role === 'admin';
+
             const isTotalCommand = text.startsWith('/total') || text.startsWith('/ยอดรวม');
             const isSummaryCommand = text.startsWith('/summary') || text.startsWith('/สรุป');
             const isHelpCommand = text.startsWith('/help') || text.startsWith('/คำสั่ง');
+            const isReportCommand = text.startsWith('/แจ้งผล');
             let showOwnOnly = false;
             let targetUserId: string | null = null;
             let memberProfileName = '';
 
-            if (!manager) {
+            if (!manager && !isStaff) {
               const isOpenCloseCommand = text === '/เปิด' || text === '/ปิด';
-              if (isTotalCommand || isSummaryCommand || isHelpCommand || isOpenCloseCommand) {
-                // Not a manager, check if registered active member of this dealer
-                const { data: profile } = await supabase
-                  .from('profiles')
-                  .select('id, full_name, is_active')
-                  .eq('line_user_id', userId)
-                  .eq('is_active', true)
-                  .maybeSingle();
-
+              if (isTotalCommand || isSummaryCommand || isHelpCommand || isOpenCloseCommand || isReportCommand) {
                 if (!profile) {
                   // Not a registered active profile, ignore silently
                   continue;
@@ -2122,8 +2125,8 @@ serve(async (req) => {
                   continue;
                 }
 
-                if (isOpenCloseCommand) {
-                  await sendLineReply(replyToken, `❌ สมาชิกไม่มีสิทธิ์ปิดรับหรือเปิดรับได้`);
+                if (isOpenCloseCommand || isReportCommand) {
+                  await sendLineReply(replyToken, isOpenCloseCommand ? `❌ สมาชิกไม่มีสิทธิ์ปิดรับหรือเปิดรับได้` : `❌ สมาชิกไม่มีสิทธิ์ใช้งานคำสั่งนี้`);
                   continue;
                 }
 
@@ -2131,12 +2134,14 @@ serve(async (req) => {
                 targetUserId = profile.id;
                 memberProfileName = profile.full_name || 'Member';
               } else {
-                // Not a manager and not a total or summary command, ignore silently
+                // Not a manager/staff and not a total/summary command, ignore silently
                 continue;
               }
             }
 
-            const permissions = manager?.permissions || {};
+            const permissions = isStaff
+              ? { can_view_stats: true, can_view_total: true }
+              : (manager?.permissions || {});
 
             // ─── COMMAND: /สมาชิก หรือ /stats ───
             if (text.startsWith('/stats') || text.startsWith('/สมาชิก') || text.startsWith('/ยอดสมาชิก')) {
@@ -2717,6 +2722,247 @@ serve(async (req) => {
               }
 
               await sendLineReply(replyToken, `✅ เปิดรับแทง ${closedRound.lottery_name || groupLink.lottery_type.toUpperCase()} งวดวันที่ ${formatToThaiBudDate(closedRound.round_date)} เรียบร้อยแล้ว`);
+              continue;
+            }
+
+            // ─── COMMAND: /แจ้งผล ───
+            if (text.startsWith('/แจ้งผล')) {
+              if (showOwnOnly) {
+                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ใช้งานคำสั่งนี้`);
+                continue;
+              }
+
+              const { data: activeRound } = await supabase
+                .from('lottery_rounds')
+                .select('*')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', groupLink.lottery_type)
+                .in('status', ['open', 'closed', 'announced'])
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (!activeRound) {
+                await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงหรือกำลังตรวจผลสำหรับหวยประเภท ${groupLink.lottery_type.toUpperCase()}`);
+                continue;
+              }
+
+              if (!activeRound.is_result_announced || activeRound.status !== 'announced') {
+                await sendLineReply(replyToken, `❌ ไม่สามารถแจ้งผลได้ เนื่องจากงวดนี้ยังไม่ได้ประกาศผลรางวัล`);
+                continue;
+              }
+
+              // Get all submissions in this group for this round
+              const { data: submissions, error: subErr } = await supabase
+                .from('submissions')
+                .select('amount, commission_amount, prize_amount, is_winner, user_id')
+                .eq('round_id', activeRound.id)
+                .eq('line_group_id', groupId)
+                .eq('is_deleted', false);
+
+              if (subErr) {
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลยอดรับ`);
+                continue;
+              }
+
+              if (!submissions || submissions.length === 0) {
+                await sendLineReply(replyToken, `👥 ไม่มีรายการส่งเลขในกลุ่มนี้สำหรับงวดนี้ค่ะ`);
+                continue;
+              }
+
+              // Group by user
+              const userSummaries: Record<string, {
+                userId: string;
+                totalBet: number;
+                totalCommission: number;
+                totalWin: number;
+                winCount: number;
+              }> = {};
+
+              submissions.forEach((sub: any) => {
+                const userId = sub.user_id;
+                if (!userId) return;
+                if (!userSummaries[userId]) {
+                  userSummaries[userId] = {
+                    userId,
+                    totalBet: 0,
+                    totalCommission: 0,
+                    totalWin: 0,
+                    winCount: 0
+                  };
+                }
+                userSummaries[userId].totalBet += Number(sub.amount || 0);
+                userSummaries[userId].totalCommission += Number(sub.commission_amount || 0);
+                userSummaries[userId].totalWin += Number(sub.prize_amount || 0);
+                if (sub.is_winner) {
+                  userSummaries[userId].winCount++;
+                }
+              });
+
+              const userIds = Object.keys(userSummaries);
+              const profilesMap: Record<string, string> = {};
+
+              if (userIds.length > 0) {
+                const { data: profiles } = await supabase
+                  .from('profiles')
+                  .select('id, full_name')
+                  .in('id', userIds);
+                (profiles || []).forEach((p: any) => {
+                  profilesMap[p.id] = p.full_name || 'ไม่ระบุชื่อ';
+                });
+              }
+
+              // Sort user summaries by net profit descending (so high winnings / payout first)
+              const sortedUserSummaries = Object.values(userSummaries).sort((a, b) => {
+                const netA = a.totalWin - (a.totalBet - a.totalCommission);
+                const netB = b.totalWin - (b.totalBet - b.totalCommission);
+                return netB - netA;
+              });
+
+              // Generate Flex bubble for each user
+              const bubbles = sortedUserSummaries.map((u) => {
+                const userName = profilesMap[u.userId] || 'ไม่ระบุชื่อ';
+                const roundedBet = Math.round(u.totalBet);
+                const roundedComm = Math.round(u.totalCommission);
+                const roundedWin = Math.round(u.totalWin);
+                const net = u.totalWin - (u.totalBet - u.totalCommission);
+                const roundedNet = Math.round(net);
+
+                let netLabel = '';
+                let netColor = '#888888';
+                if (roundedNet > 0) {
+                  netLabel = `ต้องเก็บ ฿${roundedNet.toLocaleString('th-TH')}`;
+                  netColor = '#10b981'; // Green
+                } else if (roundedNet < 0) {
+                  netLabel = `ต้องจ่าย ฿${Math.abs(roundedNet).toLocaleString('th-TH')}`;
+                  netColor = '#ef4444'; // Red
+                } else {
+                  netLabel = 'เสมอ';
+                  netColor = '#94a3b8';
+                }
+
+                return {
+                  "type": "bubble",
+                  "size": "mega",
+                  "header": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#4f46e5",
+                    "paddingAll": "lg",
+                    "contents": [
+                      {
+                        "type": "text",
+                        "text": `📊 ผลได้เสียการแทงของคุณ`,
+                        "weight": "bold",
+                        "size": "md",
+                        "color": "#ffffff"
+                      },
+                      {
+                        "type": "text",
+                        "text": `งวดวันที่: ${formatToThaiBudDate(activeRound.round_date)} (${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()})`,
+                        "size": "xs",
+                        "color": "#c7d2fe",
+                        "margin": "xs"
+                      },
+                      {
+                        "type": "text",
+                        "text": `🎉 ประกาศผลรางวัลแล้ว`,
+                        "size": "xs",
+                        "color": "#10b981",
+                        "margin": "xs",
+                        "weight": "bold"
+                      }
+                    ]
+                  },
+                  "body": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#f8fafc",
+                    "paddingAll": "md",
+                    "contents": [
+                      {
+                        "type": "box",
+                        "layout": "vertical",
+                        "backgroundColor": "#ffffff",
+                        "cornerRadius": "md",
+                        "paddingAll": "lg",
+                        "contents": [
+                          {
+                            "type": "text",
+                            "text": `คุณ ${userName}`,
+                            "weight": "bold",
+                            "size": "md",
+                            "color": "#0f172a"
+                          },
+                          {
+                            "type": "separator",
+                            "margin": "md",
+                            "color": "#e2e8f0"
+                          },
+                          {
+                            "type": "box",
+                            "layout": "horizontal",
+                            "margin": "md",
+                            "contents": [
+                              { "type": "text", "text": "ยอดส่งแทง:", "size": "sm", "color": "#64748b" },
+                              { "type": "text", "text": `฿${roundedBet.toLocaleString('th-TH')}`, "weight": "bold", "size": "sm", "color": "#0f172a", "align": "end" }
+                            ]
+                          },
+                          {
+                            "type": "box",
+                            "layout": "horizontal",
+                            "margin": "sm",
+                            "contents": [
+                              { "type": "text", "text": "ส่วนลด/ค่าคอม:", "size": "sm", "color": "#64748b" },
+                              { "type": "text", "text": `฿${roundedComm.toLocaleString('th-TH')}`, "weight": "bold", "size": "sm", "color": "#0f172a", "align": "end" }
+                            ]
+                          },
+                          {
+                            "type": "box",
+                            "layout": "horizontal",
+                            "margin": "sm",
+                            "contents": [
+                              { "type": "text", "text": "ยอดถูกรางวัล:", "size": "sm", "color": "#64748b" },
+                              { "type": "text", "text": `ถูก ${u.winCount} ครั้ง / ฿${roundedWin.toLocaleString('th-TH')}`, "weight": "bold", "size": "sm", "color": "#0f172a", "align": "end" }
+                            ]
+                          },
+                          {
+                            "type": "separator",
+                            "margin": "md",
+                            "color": "#e2e8f0"
+                          },
+                          {
+                            "type": "box",
+                            "layout": "horizontal",
+                            "margin": "md",
+                            "contents": [
+                              { "type": "text", "text": "สรุปยอดสุทธิ:", "weight": "bold", "size": "sm", "color": "#0f172a" },
+                              { "type": "text", "text": netLabel, "weight": "bold", "size": "sm", "color": netColor, "align": "end" }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                };
+              });
+
+              // Send in chunks of 10
+              const carouselMessages: any[] = [];
+              const chunkSize = 10;
+              for (let i = 0; i < bubbles.length; i += chunkSize) {
+                const chunk = bubbles.slice(i, i + chunkSize);
+                carouselMessages.push({
+                  "type": "flex",
+                  "altText": `📊 รายงานผลได้เสียสำหรับสมาชิกในกลุ่ม (${activeRound.lottery_type.toUpperCase()})`,
+                  "contents": {
+                    "type": "carousel",
+                    "contents": chunk
+                  }
+                });
+              }
+
+              await sendLineReply(replyToken, carouselMessages);
               continue;
             }
 
