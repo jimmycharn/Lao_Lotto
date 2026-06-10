@@ -2288,7 +2288,7 @@ serve(async (req) => {
 
               const { data: activeRound } = await supabase
                 .from('lottery_rounds')
-                .select('id, round_date')
+                .select('id, round_date, close_time')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
                 .in('status', ['open', 'closed', 'announced'])
@@ -2312,9 +2312,7 @@ serve(async (req) => {
               }
 
               let summaryText = `📊 รายงานยอดสมาชิก (${groupLink.lottery_type.toUpperCase()})\n`;
-              const roundDateStr = activeRound && activeRound.round_date
-                ? formatToThaiBudDate(activeRound.round_date).replace(/-/g, '/')
-                : '';
+              const roundDateStr = getRoundDisplayDate(activeRound, true);
               if (roundDateStr) {
                 summaryText += `      งวดวันที่ ${roundDateStr}\n`;
               }
