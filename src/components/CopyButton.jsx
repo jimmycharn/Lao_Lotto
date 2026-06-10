@@ -7,14 +7,14 @@ import { FiCopy, FiCheck } from 'react-icons/fi'
  * - text: string to copy
  * - size: icon size (default 13)
  */
-export default function CopyButton({ text, size = 13 }) {
+export default function CopyButton({ text, size = 13, keepSpace = false }) {
     const [copied, setCopied] = useState(false)
 
     async function handleCopy(e) {
         e.stopPropagation()
         e.preventDefault()
         if (!text) return
-        const cleanText = String(text).replace(/\s/g, '')
+        const cleanText = keepSpace ? String(text) : String(text).replace(/\s/g, '')
         let success = false
         try {
             if (navigator.clipboard && window.isSecureContext) {

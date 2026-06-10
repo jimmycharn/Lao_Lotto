@@ -386,7 +386,7 @@ export default function DealerLineBotTab({ user, profile }) {
                             }}>
                                 {pendingCodeObj.binding_code}
                             </code>
-                            <CopyButton text={`/bind ${pendingCodeObj.binding_code}`} />
+                            <CopyButton text={`/bind ${pendingCodeObj.binding_code}`} keepSpace={true} />
                         </div>
                         <button
                             className="btn btn-outline btn-sm"
