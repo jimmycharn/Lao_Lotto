@@ -305,7 +305,8 @@ export default function Dealer() {
                         phone,
                         created_at,
                         role,
-                        password_changed
+                        password_changed,
+                        line_user_id
                     )
                 `)
                 .eq('dealer_id', user.id)
@@ -1727,6 +1728,41 @@ export default function Dealer() {
         } catch (error) {
             console.error('Error updating member bank:', error)
             toast.error('เกิดข้อผิดพลาดในการอัปเดตบัญชีธนาคาร')
+        }
+    }
+
+    async function handleUpdateMemberLineUserId(member, lineUserId) {
+        try {
+            // Update in profiles table
+            const { data, error } = await supabase
+                .from('profiles')
+                .update({ line_user_id: lineUserId || null })
+                .eq('id', member.id)
+                .select()
+
+            if (error) throw error
+
+            // Update local state in all members categories
+            const matchMember = (m) => m.id === member.id
+
+            setMembers(prev => prev.map(m =>
+                matchMember(m) ? { ...m, line_user_id: lineUserId || null } : m
+            ))
+            setPendingMembers(prev => prev.map(m =>
+                matchMember(m) ? { ...m, line_user_id: lineUserId || null } : m
+            ))
+            setBlockedMembers(prev => prev.map(m =>
+                matchMember(m) ? { ...m, line_user_id: lineUserId || null } : m
+            ))
+            setDownstreamDealers(prev => prev.map(m =>
+                matchMember(m) ? { ...m, line_user_id: lineUserId || null } : m
+            ))
+
+            toast.success('อัปเดต Line User ID สำเร็จ')
+        } catch (error) {
+            console.error('Error updating member Line User ID:', error)
+            toast.error('เกิดข้อผิดพลาดในการอัปเดต Line User ID')
+            throw error
         }
     }
 
@@ -3518,6 +3554,7 @@ export default function Dealer() {
                                                 onDisconnect={member.is_dealer ? () => handleDisconnectDealer(member) : null}
                                                 dealerBankAccounts={dealerBankAccounts}
                                                 onUpdateBank={(bankAccountId) => handleUpdateMemberBank(member, bankAccountId)}
+                                                onUpdateLineUserId={(lineUserId) => handleUpdateMemberLineUserId(member, lineUserId)}
                                                 isDealer={member.is_dealer}
                                                 onCopyCredentials={copyMemberCredentials}
                                                 isPerUserYearly={isPerUserYearly()}

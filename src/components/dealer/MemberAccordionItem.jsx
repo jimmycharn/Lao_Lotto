@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import {
     FiSend,
@@ -20,7 +20,7 @@ import MemberSettings from './MemberSettings'
 import BankAccountCard from '../BankAccountCard'
 
 // Member Accordion Item Component
-export default function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock, onDelete, onDisconnect, dealerBankAccounts = [], onUpdateBank, isDealer = false, onCopyCredentials, isPerUserYearly = false, onRenew }) {
+export default function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock, onDelete, onDisconnect, dealerBankAccounts = [], onUpdateBank, isDealer = false, onCopyCredentials, isPerUserYearly = false, onRenew, onUpdateLineUserId }) {
     // Membership expiry helpers
     const membershipExpired = isPerUserYearly && !isDealer && member.membership_expires_at
         ? new Date(member.membership_expires_at) < new Date()
@@ -30,6 +30,12 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
         : false
     const { user } = useAuth()
     const [activeTab, setActiveTab] = useState('info') // 'info' | 'bank' | 'settings'
+    const [lineUserId, setLineUserId] = useState(member.line_user_id || '')
+    const [isSavingLineId, setIsSavingLineId] = useState(false)
+
+    useEffect(() => {
+        setLineUserId(member.line_user_id || '')
+    }, [member.line_user_id])
 
     return (
         <div className={`member-accordion-item ${isExpanded ? 'expanded' : ''}`} style={{
@@ -369,6 +375,65 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                                             <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{member.membership_years} ปี</div>
                                         </div>
                                     )}
+                                    <div className="info-item" style={{ gridColumn: 'span 2' }}>
+                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>ผูกบัญชี Line User ID</label>
+                                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                                            <input
+                                                type="text"
+                                                className="form-input"
+                                                placeholder="ระบุ Line User ID (เช่น U94906fc...)"
+                                                value={lineUserId}
+                                                onChange={(e) => setLineUserId(e.target.value)}
+                                                onClick={(e) => e.stopPropagation()}
+                                                disabled={isSavingLineId}
+                                                style={{
+                                                    flex: 1,
+                                                    background: 'var(--color-surface)',
+                                                    border: '1px solid var(--color-border)',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    padding: '0.5rem 0.75rem',
+                                                    color: 'var(--color-text)',
+                                                    fontSize: '0.95rem'
+                                                }}
+                                            />
+                                            <button
+                                                className="btn btn-primary"
+                                                onClick={async (e) => {
+                                                    e.stopPropagation();
+                                                    setIsSavingLineId(true);
+                                                    try {
+                                                        await onUpdateLineUserId(lineUserId);
+                                                    } catch (err) {
+                                                        // error toast shown by parent
+                                                    } finally {
+                                                        setIsSavingLineId(false);
+                                                    }
+                                                }}
+                                                disabled={isSavingLineId || lineUserId === (member.line_user_id || '')}
+                                                style={{
+                                                    padding: '0.5rem 1.25rem',
+                                                    fontSize: '0.95rem',
+                                                    fontWeight: '500',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    cursor: 'pointer',
+                                                    background: lineUserId === (member.line_user_id || '') ? 'var(--color-border)' : 'var(--color-primary)',
+                                                    borderColor: lineUserId === (member.line_user_id || '') ? 'var(--color-border)' : 'var(--color-primary)',
+                                                    color: '#fff',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                            >
+                                                {isSavingLineId ? 'กำลังบันทึก...' : 'บันทึก'}
+                                            </button>
+                                        </div>
+                                        <p style={{
+                                            fontSize: '0.8rem',
+                                            color: 'var(--color-text-muted)',
+                                            marginTop: '0.35rem',
+                                            opacity: 0.8
+                                        }}>
+                                            เมื่อผูกแล้ว สมาชิกจะสามารถส่งเลขทางไลน์ของกลุ่มร้านคุณได้ทันที
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         )}
