@@ -5574,36 +5574,12 @@ serve(async (req) => {
         });
 
         // Format and send confirmation ticket
-        let summaryText = `✅ บันทึกโพยสำเร็จ!🎉\n`;
-        summaryText += `เลขใบโพย: ${billId}\n`;
-        summaryText += `ประเภท: ${lotteryType.toUpperCase()}\n`;
-        summaryText += `งวดวันที่: ${formatToThaiBudDate(activeRound.round_date)}\n`;
-        summaryText += `ผู้ซื้อ: คุณ ${profile.full_name}\n`;
-        summaryText += `จำนวนรายการ: ${parsedBets.length}\n`;
-        summaryText += `--------------------------\n`;
-        
-        parsedBets.slice(0, 3).forEach((b) => {
-          if (b.specialType === 'tengTod' && b.amount2) {
-            summaryText += `${b.numbers}=${b.amount}*${b.amount2} เต็งโต๊ด\n`;
-          } else if (b.specialType === 'reverse' && b.amount2) {
-            summaryText += `${b.numbers}=${b.amount}*${b.amount2} ${b.typeLabel}\n`;
-          } else if ((b.specialType === '3xPerm' || (b.specialType && b.specialType.startsWith('set'))) && b.amount2) {
-            summaryText += `${b.numbers}=${b.amount}*${b.amount2} คูณชุด\n`;
-          } else if (b.betType === '4_set') {
-            const price = activeRound.set_prices?.['4_top'] || 120;
-            summaryText += `${b.numbers} = 4 ตัวชุด (${b.amount} ชุด = ${b.amount * price} บ.)\n`;
-          } else {
-            summaryText += `${b.numbers} = ${b.amount} บ. (${b.typeLabel})\n`;
-          }
-        });
-
-        if (parsedBets.length > 3) {
-          summaryText += `...\n`;
-        }
-
-        summaryText += `--------------------------\n`;
-        summaryText += `💰 ยอดรวม: ฿${totalBetAmount.toLocaleString('th-TH')}\n\n`;
-        summaryText += `ต้องการยกเลิกพิมพ์:\n/ยกเลิก ${billId}`;
+        let summaryText = `✅บันทึกโพยสำเร็จ!✅\n`;
+        summaryText += `------------------------\n`;
+        summaryText += `จำนวน: ${parsedBets.length} รายการ\n`;
+        summaryText += `ยอดรวม: ฿${totalBetAmount.toLocaleString('th-TH')}\n`;
+        summaryText += `------------------------\n`;
+        summaryText += `/ยกเลิก ${billId}`;
 
         await sendLineReply(replyToken, summaryText);
       }
