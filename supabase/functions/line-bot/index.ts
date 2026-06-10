@@ -2257,7 +2257,7 @@ serve(async (req) => {
 
               const { data: activeRound } = await supabase
                 .from('lottery_rounds')
-                .select('id')
+                .select('id, round_date')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
                 .in('status', ['open', 'closed', 'announced'])
@@ -2281,21 +2281,28 @@ serve(async (req) => {
               }
 
               let summaryText = `📊 รายงานยอดสมาชิก (${groupLink.lottery_type.toUpperCase()})\n`;
+              const roundDateStr = activeRound && activeRound.round_date
+                ? formatToThaiBudDate(activeRound.round_date).replace(/-/g, '/')
+                : '';
+              if (roundDateStr) {
+                summaryText += `      งวดวันที่ ${roundDateStr}\n`;
+              }
+              summaryText += `--------------------------\n`;
+              summaryText += `ยอด       คอม      เหลือ\n`;
               summaryText += `--------------------------\n`;
               
               filteredMembers.forEach((m: any) => {
                 const profile = m.profiles || {};
                 const name = profile.full_name || 'Unknown User';
-                const balance = Number(profile.balance || 0);
                 const betTotal = sumMap[m.user_id] || 0;
                 const commTotal = commMap[m.user_id] || 0;
                 const netTotal = betTotal - commTotal;
-                const isLinked = !!profile.line_user_id;
-                const linkStatus = isLinked ? '(ผูก)' : '(ไม่ผูก)';
-                summaryText += `- คุณ ${name} ${linkStatus}: ยอด ฿${betTotal.toLocaleString('th-TH')} | คอม ฿${commTotal.toLocaleString('th-TH')} | เหลือ ฿${netTotal.toLocaleString('th-TH')} (เครดิต ฿${balance.toLocaleString('th-TH')})\n`;
+                summaryText += `คุณ ${name}\n`;
+                summaryText += `฿${betTotal.toLocaleString('th-TH')}     ฿${commTotal.toLocaleString('th-TH')}      ฿${netTotal.toLocaleString('th-TH')}\n`;
+                summaryText += `--------------------------\n`;
               });
               
-              summaryText += `--------------------------`;
+              summaryText = summaryText.trimEnd();
 
               await sendLineReply(replyToken, summaryText);
               continue;
