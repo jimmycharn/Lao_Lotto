@@ -30,6 +30,37 @@ function formatToThaiBudDate(dateStr: string | null | undefined): string {
   return dateStr;
 }
 
+// Helper: Get round display date in Buddhist Era (using close_time/end date if available, otherwise round_date)
+function getRoundDisplayDate(round: any, useSlash = false): string {
+  if (!round) return '';
+  const separator = useSlash ? '/' : '-';
+  const targetTime = round.close_time || round.round_date;
+  if (!targetTime) return '';
+  
+  if (targetTime.includes('T') || (targetTime.includes('-') && targetTime.includes(':'))) {
+    try {
+      const dateObj = new Date(targetTime);
+      const day = dateObj.toLocaleDateString('en-US', { day: '2-digit', timeZone: 'Asia/Bangkok' });
+      const month = dateObj.toLocaleDateString('en-US', { month: '2-digit', timeZone: 'Asia/Bangkok' });
+      const year = dateObj.toLocaleDateString('en-US', { year: 'numeric', timeZone: 'Asia/Bangkok' });
+      const thYear = parseInt(year) + 543;
+      return `${day}${separator}${month}${separator}${thYear}`;
+    } catch (e) {
+      console.error('getRoundDisplayDate parsing error:', e);
+    }
+  }
+  
+  const match = targetTime.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const y = parseInt(match[1]);
+    const m = match[2];
+    const d = match[3];
+    const thYear = y + 543;
+    return `${d}${separator}${m}${separator}${thYear}`;
+  }
+  return targetTime;
+}
+
 // Helper: Format winning numbers for display
 function formatWinningNumbersForDisplay(winningNumbers: any, lotteryType: string): string {
   if (!winningNumbers) return 'ยังไม่มีผลรางวัล';
@@ -2317,7 +2348,7 @@ serve(async (req) => {
 
               const { data: activeRound } = await supabase
                 .from('lottery_rounds')
-                .select('id, round_date')
+                .select('id, round_date, close_time')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
                 .in('status', ['open', 'closed', 'announced'])
@@ -2376,7 +2407,7 @@ serve(async (req) => {
                 };
               });
 
-              let summaryText = `👥 สมาชิกที่ส่งเลขแล้ว (${groupLink.lottery_type.toUpperCase()})\nงวดวันที่: ${activeRound.round_date}\n`;
+              let summaryText = `👥 สมาชิกที่ส่งเลขแล้ว (${groupLink.lottery_type.toUpperCase()})\nงวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
               summaryText += `--------------------------\n`;
               summaryText += `ชื่อ | ยอดส่ง | ค่าคอม | คงเหลือส่ง\n`;
 
@@ -2517,7 +2548,7 @@ serve(async (req) => {
                       },
                       {
                         "type": "text",
-                        "text": `งวดวันที่: ${activeRound.round_date}`,
+                        "text": `งวดวันที่: ${getRoundDisplayDate(activeRound, false)}`,
                         "size": "xs",
                         "color": "#e1d9f0",
                         "margin": "xs"
@@ -2676,7 +2707,7 @@ serve(async (req) => {
               // Build Flex Message for closing announcement
               const closeFlexMessage = {
                 "type": "flex",
-                "altText": `🔴 ปิดรับแทง ${groupLink.lottery_type.toUpperCase()} งวดวันที่ ${formatToThaiBudDate(openRound.round_date)}`,
+                "altText": `🔴 ปิดรับแทง ${groupLink.lottery_type.toUpperCase()} งวดวันที่ ${getRoundDisplayDate(openRound, false)}`,
                 "contents": {
                   "type": "bubble",
                   "size": "mega",
@@ -2719,7 +2750,7 @@ serve(async (req) => {
                       },
                       {
                         "type": "text",
-                        "text": `${openRound.lottery_name || groupLink.lottery_type.toUpperCase()} - งวดวันที่ ${formatToThaiBudDate(openRound.round_date)}`,
+                        "text": `${openRound.lottery_name || groupLink.lottery_type.toUpperCase()} - งวดวันที่ ${getRoundDisplayDate(openRound, false)}`,
                         "size": "sm",
                         "color": "#fecaca",
                         "align": "center",
@@ -2795,7 +2826,7 @@ serve(async (req) => {
                 continue;
               }
 
-              await sendLineReply(replyToken, `✅ เปิดรับแทง ${closedRound.lottery_name || groupLink.lottery_type.toUpperCase()} งวดวันที่ ${formatToThaiBudDate(closedRound.round_date)} เรียบร้อยแล้ว`);
+              await sendLineReply(replyToken, `✅ เปิดรับแทง ${closedRound.lottery_name || groupLink.lottery_type.toUpperCase()} งวดวันที่ ${getRoundDisplayDate(closedRound, false)} เรียบร้อยแล้ว`);
               continue;
             }
 
@@ -3021,7 +3052,7 @@ serve(async (req) => {
                         },
                         {
                           "type": "text",
-                          "text": `งวดวันที่: ${formatToThaiBudDate(activeRound.round_date)} (${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()})`,
+                          "text": `งวดวันที่: ${getRoundDisplayDate(activeRound, false)} (${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()})`,
                           "size": "xs",
                           "color": "#c7d2fe",
                           "margin": "xs"
@@ -3582,7 +3613,7 @@ serve(async (req) => {
                 }
 
                 summaryText = `📊 สรุปยอดส่งของคุณ ${u.userName}\n`;
-                summaryText += `งวดวันที่: ${formatToThaiBudDate(activeRound.round_date)} (${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()})\n`;
+                summaryText += `งวดวันที่: ${getRoundDisplayDate(activeRound, false)} (${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()})\n`;
                 summaryText += `--------------------------\n`;
                 summaryText += `- ยอดส่ง: ฿${roundedBet.toLocaleString('th-TH')}\n`;
                 summaryText += `- ค่าคอม: ฿${roundedComm.toLocaleString('th-TH')}\n`;
@@ -3611,7 +3642,7 @@ serve(async (req) => {
                         },
                         {
                           "type": "text",
-                          "text": `งวดวันที่: ${formatToThaiBudDate(activeRound.round_date)} (${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()})`,
+                          "text": `งวดวันที่: ${getRoundDisplayDate(activeRound, false)} (${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()})`,
                           "size": "xs",
                           "color": "#c7d2fe", // Indigo-200
                           "margin": "xs"
@@ -3749,7 +3780,7 @@ serve(async (req) => {
                 };
 
               } else {
-                summaryText = `📊 สรุปงวดวันที่: ${formatToThaiBudDate(activeRound.round_date)} (${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()})\n`;
+                summaryText = `📊 สรุปงวดวันที่: ${getRoundDisplayDate(activeRound, false)} (${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()})\n`;
                 summaryText += `--------------------------\n`;
                 summaryText += `1. ภาพรวม\n`;
                 summaryText += `🟢 ยอดรับ ${submissions?.length || 0} รายการ\n`;
@@ -3990,7 +4021,7 @@ serve(async (req) => {
                         },
                         {
                           "type": "text",
-                          "text": `งวดวันที่: ${formatToThaiBudDate(activeRound.round_date)}`,
+                          "text": `งวดวันที่: ${getRoundDisplayDate(activeRound, false)}`,
                           "size": "xs",
                           "color": "#c7d2fe", // Indigo-200
                           "margin": "xs"
@@ -4056,7 +4087,7 @@ serve(async (req) => {
 
               const { data: activeRound } = await supabase
                 .from('lottery_rounds')
-                .select('id, round_date')
+                .select('id, round_date, close_time')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
                 .in('status', ['open', 'closed', 'announced'])
@@ -4122,7 +4153,7 @@ serve(async (req) => {
               if (showOwnOnly) {
                 headerTitle = `📈 ยอดรวมส่งโพยของคุณ (${groupLink.lottery_type.toUpperCase()})`;
                 summaryText = `${headerTitle}\n`;
-                summaryText += `งวดวันที่: ${formatToThaiBudDate(activeRound.round_date)}\n`;
+                summaryText += `งวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
                 summaryText += `ผู้ซื้อ: คุณ ${memberProfileName}\n`;
 
                 headerContents.push(
@@ -4135,7 +4166,7 @@ serve(async (req) => {
                   },
                   {
                     "type": "text",
-                    "text": `งวดวันที่: ${formatToThaiBudDate(activeRound.round_date)}`,
+                    "text": `งวดวันที่: ${getRoundDisplayDate(activeRound, false)}`,
                     "size": "xs",
                     "color": "#e1d9f0",
                     "margin": "xs"
@@ -4151,7 +4182,7 @@ serve(async (req) => {
               } else {
                 headerTitle = `📈 ยอดรวมส่งโพย (${groupLink.lottery_type.toUpperCase()})`;
                 summaryText = `${headerTitle}\n`;
-                summaryText += `งวดวันที่: ${formatToThaiBudDate(activeRound.round_date)}\n`;
+                summaryText += `งวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
 
                 headerContents.push(
                   {
@@ -4163,7 +4194,7 @@ serve(async (req) => {
                   },
                   {
                     "type": "text",
-                    "text": `งวดวันที่: ${formatToThaiBudDate(activeRound.round_date)}`,
+                    "text": `งวดวันที่: ${getRoundDisplayDate(activeRound, false)}`,
                     "size": "xs",
                     "color": "#e1d9f0",
                     "margin": "xs"
@@ -4344,7 +4375,7 @@ serve(async (req) => {
 
               const { data: activeRound } = await supabase
                 .from('lottery_rounds')
-                .select('id, round_date, set_prices, lottery_type')
+                .select('id, round_date, close_time, set_prices, lottery_type')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
                 .in('status', ['open', 'closed', 'announced'])
@@ -4375,7 +4406,7 @@ serve(async (req) => {
                 'run_bottom': 'ลอยล่าง'
               };
 
-              let summaryText = `รายการยอดเกินอั้น (${groupLink.lottery_type.toUpperCase()})\nงวดวันที่: ${activeRound.round_date}\n`;
+              let summaryText = `รายการยอดเกินอั้น (${groupLink.lottery_type.toUpperCase()})\nงวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
               summaryText += `--------------------------\n`;
 
               let totalExcess = 0;
@@ -4409,7 +4440,7 @@ serve(async (req) => {
 
               const { data: activeRound } = await supabase
                 .from('lottery_rounds')
-                .select('id, round_date, set_prices, lottery_type')
+                .select('id, round_date, close_time, set_prices, lottery_type')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
                 .in('status', ['open', 'closed', 'announced'])
@@ -4611,7 +4642,7 @@ serve(async (req) => {
                   'run_bottom': 'ลอยล่าง'
                 };
 
-                let summaryText = `รายการยอดเกินอั้น (${groupLink.lottery_type.toUpperCase()})\nงวดวันที่: ${activeRound.round_date}\n`;
+                let summaryText = `รายการยอดเกินอั้น (${groupLink.lottery_type.toUpperCase()})\nงวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
                 summaryText += `--------------------------\n`;
                 let totalExcess = 0;
                 excessItems.forEach((item) => {
@@ -4991,7 +5022,7 @@ serve(async (req) => {
             // 2. Fetch user profile and round details
             const [profileRes, roundRes] = await Promise.all([
               supabase.from('profiles').select('full_name').eq('id', userIdOfBill).maybeSingle(),
-              supabase.from('lottery_rounds').select('lottery_type, round_date, dealer_id').eq('id', roundIdOfBill).maybeSingle()
+              supabase.from('lottery_rounds').select('lottery_type, round_date, close_time, dealer_id').eq('id', roundIdOfBill).maybeSingle()
             ]);
 
             const buyerName = profileRes.data?.full_name || 'Unknown User';
@@ -5188,7 +5219,7 @@ serve(async (req) => {
 
             let summaryText = `📄 ใบโพย: ${billCode}\n`;
             summaryText += `ประเภท: ${roundData.lottery_type.toUpperCase()}\n`;
-            summaryText += `งวดวันที่: ${formatToThaiBudDate(roundData.round_date)}\n`;
+            summaryText += `งวดวันที่: ${getRoundDisplayDate(roundData, false)}\n`;
             summaryText += `ผู้ซื้อ: คุณ ${buyerName}\n`;
             summaryText += `จำนวนรายการ: ${subs.length}\n`;
             summaryText += `--------------------------\n`;
