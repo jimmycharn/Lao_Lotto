@@ -5302,7 +5302,8 @@ serve(async (req) => {
           .select('*')
           .eq('dealer_id', dealerId)
           .eq('lottery_type', lotteryType)
-          .in('status', ['open', 'closed']);
+          .in('status', ['open', 'closed'])
+          .order('open_time', { ascending: false });
 
         const now = new Date();
         const activeRound = (openRounds || []).find(round => {
