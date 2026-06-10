@@ -270,17 +270,32 @@ async function verifySignature(body: string, signature: string, channelSecret: s
 }
 
 // Helper: Send Reply Message to LINE
-async function sendLineReply(replyToken: string, textOrPayload: string | Record<string, any>): Promise<void> {
+async function sendLineReply(
+  replyToken: string,
+  textOrPayload: string | Record<string, any> | Array<string | Record<string, any>>
+): Promise<void> {
   if (!LINE_CHANNEL_ACCESS_TOKEN) {
     console.error("LINE_CHANNEL_ACCESS_TOKEN not configured");
     return;
   }
-  const message = typeof textOrPayload === "string"
-    ? {
-        type: "text",
-        text: textOrPayload
+
+  let messages: Array<any> = [];
+  if (Array.isArray(textOrPayload)) {
+    messages = textOrPayload.map(item => {
+      if (typeof item === "string") {
+        return { type: "text", text: item };
       }
-    : textOrPayload;
+      return item;
+    });
+  } else {
+    const message = typeof textOrPayload === "string"
+      ? {
+          type: "text",
+          text: textOrPayload
+        }
+      : textOrPayload;
+    messages = [message];
+  }
 
   const response = await fetch("https://api.line.me/v2/bot/message/reply", {
     method: "POST",
@@ -290,7 +305,7 @@ async function sendLineReply(replyToken: string, textOrPayload: string | Record<
     },
     body: JSON.stringify({
       replyToken,
-      messages: [message]
+      messages
     })
   });
   if (!response.ok) {
@@ -4788,14 +4803,6 @@ serve(async (req) => {
         const dealerId = groupLink.dealer_id;
         const lotteryType = groupLink.lottery_type;
 
-        // Verify if sender has a linked profile
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('id, full_name, is_active')
-          .eq('line_user_id', userId)
-          .eq('is_active', true)
-          .single();
-
         // If not linked, check if the text contains a bet. If so, reply with warning
         const parsedBets = parseMultiLinePaste(text, lotteryType);
         if (parsedBets.length === 0) {
@@ -4803,13 +4810,37 @@ serve(async (req) => {
           continue;
         }
 
-        if (!profile) {
-          await sendLineReply(replyToken, `❌ บัญชี LINE ของคุณยังไม่ได้ผูกกับระบบ Big Lotto
+        // Verify if sender has a linked profile
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, full_name, is_active, role')
+          .eq('line_user_id', userId)
+          .eq('is_active', true)
+          .maybeSingle();
 
-ให้พิมพ์: /id จะแสดง User ID ของคุณ
-แล้วเอา ID ของคุณไปผูกกับระบบที่ 
-เมนูโปรไฟล์ ในบัญชี Big Lotto 
-เพื่อทำให้คุณส่งเลขทางไลน์ได้`);
+        // Check if sender is a manager for this dealer
+        const { data: managerRecord } = await supabase
+          .from('line_managers')
+          .select('id')
+          .eq('dealer_id', dealerId)
+          .eq('line_user_id', userId)
+          .eq('is_active', true)
+          .maybeSingle();
+
+        const isDealer = profile?.role === 'dealer';
+        const isAdmin = profile?.role === 'superadmin' || profile?.role === 'admin';
+        const isManager = !!managerRecord;
+
+        if (isDealer || isAdmin || isManager) {
+          await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ ซื้อเลข(แทง)ในกลุ่มนี้`);
+          continue;
+        }
+
+        if (!profile) {
+          await sendLineReply(replyToken, [
+            `❌ คุณยังไม่ได้เชื่อมบัญชี LINE ของคุณกับระบบ Big Lotto\nกรุณานำ LINE User ID ด้านล่างไปใส่ในเมนูโปรไฟล์บนเว็บเพื่อเชื่อมต่อ \nหรือแจ้ง admin เพื่อช่วยเหลือในการเชื่อมต่อ`,
+            userId
+          ]);
           continue;
         }
 

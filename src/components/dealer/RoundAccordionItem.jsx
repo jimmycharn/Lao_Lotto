@@ -2511,7 +2511,7 @@ export default function RoundAccordionItem({
         <div className={`round-accordion-item ${round.lottery_type} ${isExpanded ? 'expanded' : ''}`}>
             <div className="round-accordion-header card" onClick={handleHeaderClick} style={{ cursor: 'pointer' }}>
                 {/* New Layout for Closed/Announced Rounds */}
-                {(isClosed || isAnnounced) && !isOpen ? (
+                {(round.status === 'closed' || round.status === 'announced') ? (
                     <div className="closed-round-layout">
                         {/* Top Row: Logo, Name, Status + Delete at top-right */}
                         <div className="closed-round-top">
