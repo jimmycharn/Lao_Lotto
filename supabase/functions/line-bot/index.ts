@@ -30,6 +30,48 @@ function formatToThaiBudDate(dateStr: string | null | undefined): string {
   return dateStr;
 }
 
+// Helper: Parse report date and type params (e.g. ล/9/5/2026, ล/9/5/26, ล/9/5/69, ล/9/5/2569)
+function parseReportParams(param: string): { lotteryType: string; dateStr: string } | null {
+  const clean = param.replace(/\s+/g, '').toLowerCase();
+  const match = clean.match(/^(ล|ท|ฮ|ห|lao|thai|hanoi|stock|l|t|h|s)\/(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (!match) return null;
+  
+  const typeChar = match[1];
+  const day = parseInt(match[2], 10);
+  const month = parseInt(match[3], 10);
+  let year = parseInt(match[4], 10);
+  
+  let lotteryType = '';
+  if (typeChar === 'ล' || typeChar === 'lao' || typeChar === 'l') {
+    lotteryType = 'lao';
+  } else if (typeChar === 'ท' || typeChar === 'thai' || typeChar === 't') {
+    lotteryType = 'thai';
+  } else if (typeChar === 'ฮ' || typeChar === 'hanoi' || typeChar === 'h') {
+    lotteryType = 'hanoi';
+  } else if (typeChar === 'ห' || typeChar === 'stock' || typeChar === 's') {
+    lotteryType = 'stock';
+  } else {
+    return null;
+  }
+  
+  if (year >= 2500) {
+    year = year - 543;
+  } else if (year >= 50 && year < 100) {
+    year = (2500 + year) - 543;
+  } else if (year < 50) {
+    year = 2000 + year;
+  }
+  
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > 31) return null;
+  
+  const yStr = year.toString();
+  const mStr = month.toString().padStart(2, '0');
+  const dStr = day.toString().padStart(2, '0');
+  
+  return { lotteryType, dateStr: `${yStr}-${mStr}-${dStr}` };
+}
+
 // --- LOTTERY CONSTANTS & WINNERS CHECKER FOR TRANSFER WIN CALCULATIONS ---
 const DEFAULT_COMMISSIONS: Record<string, number> = {
   'run_top': 15, 'run_bottom': 15,
@@ -2737,24 +2779,52 @@ serve(async (req) => {
                 continue;
               }
 
-              const { data: activeRound } = await supabase
-                .from('lottery_rounds')
-                .select('*')
-                .eq('dealer_id', dealerId)
-                .eq('lottery_type', groupLink.lottery_type)
-                .in('status', ['open', 'closed', 'announced'])
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
+              const param = text.substring('/แจ้งผล'.length).trim();
+              let activeRound: any = null;
 
-              if (!activeRound) {
-                await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงหรือกำลังตรวจผลสำหรับหวยประเภท ${groupLink.lottery_type.toUpperCase()}`);
-                continue;
-              }
+              if (param !== "") {
+                const parsed = parseReportParams(param);
+                if (!parsed) {
+                  await sendLineReply(replyToken, `❌ รูปแบบระบุงวดหวยไม่ถูกต้อง\nกรุณาระบุในรูปแบบ /แจ้งผล [ประเภทหวย]/[วัน]/[เดือน]/[ปี]\nตัวอย่างเช่น:\n- /แจ้งผล ล/9/5/2026\n- /แจ้งผล ล/9/5/26`);
+                  continue;
+                }
 
-              if (!activeRound.is_result_announced || activeRound.status !== 'announced') {
-                await sendLineReply(replyToken, `❌ ไม่สามารถแจ้งผลได้ เนื่องจากงวดนี้ยังไม่ได้ประกาศผลรางวัล`);
-                continue;
+                const { data: targetRound } = await supabase
+                  .from('lottery_rounds')
+                  .select('*')
+                  .eq('dealer_id', dealerId)
+                  .eq('lottery_type', parsed.lotteryType)
+                  .eq('round_date', parsed.dateStr)
+                  .maybeSingle();
+
+                if (!targetRound || !targetRound.is_result_announced || targetRound.status !== 'announced') {
+                  await sendLineReply(replyToken, `❌ ไม่มีงวดหวยที่ท่านต้องการให้แจ้งผล`);
+                  continue;
+                }
+
+                activeRound = targetRound;
+              } else {
+                const { data: latestRound } = await supabase
+                  .from('lottery_rounds')
+                  .select('*')
+                  .eq('dealer_id', dealerId)
+                  .eq('lottery_type', groupLink.lottery_type)
+                  .in('status', ['open', 'closed', 'announced'])
+                  .order('created_at', { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+
+                if (!latestRound) {
+                  await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงหรือกำลังตรวจผลสำหรับหวยประเภท ${groupLink.lottery_type.toUpperCase()}`);
+                  continue;
+                }
+
+                if (!latestRound.is_result_announced || latestRound.status !== 'announced') {
+                  await sendLineReply(replyToken, `❌ ไม่สามารถแจ้งผลได้ เนื่องจากงวดนี้ยังไม่ได้ประกาศผลรางวัล`);
+                  continue;
+                }
+
+                activeRound = latestRound;
               }
 
               // Get all submissions in this group for this round
