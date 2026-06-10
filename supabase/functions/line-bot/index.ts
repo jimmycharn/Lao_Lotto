@@ -2797,7 +2797,7 @@ serve(async (req) => {
                   .eq('round_date', parsed.dateStr)
                   .maybeSingle();
 
-                if (!targetRound || !targetRound.is_result_announced || targetRound.status !== 'announced') {
+                if (!targetRound || !targetRound.is_result_announced || (targetRound.status !== 'announced' && targetRound.status !== 'closed')) {
                   await sendLineReply(replyToken, `❌ ไม่มีงวดหวยที่ท่านต้องการให้แจ้งผล`);
                   continue;
                 }
@@ -2819,7 +2819,7 @@ serve(async (req) => {
                   continue;
                 }
 
-                if (!latestRound.is_result_announced || latestRound.status !== 'announced') {
+                if (!latestRound.is_result_announced || (latestRound.status !== 'announced' && latestRound.status !== 'closed')) {
                   await sendLineReply(replyToken, `❌ ไม่สามารถแจ้งผลได้ เนื่องจากงวดนี้ยังไม่ได้ประกาศผลรางวัล`);
                   continue;
                 }
