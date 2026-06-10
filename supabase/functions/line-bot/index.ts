@@ -30,6 +30,24 @@ function formatToThaiBudDate(dateStr: string | null | undefined): string {
   return dateStr;
 }
 
+// Helper: Format winning numbers for display
+function formatWinningNumbersForDisplay(winningNumbers: any, lotteryType: string): string {
+  if (!winningNumbers) return 'ยังไม่มีผลรางวัล';
+  const typeLower = lotteryType.toLowerCase();
+  if (typeLower === 'lao' || typeLower === 'hanoi') {
+    return winningNumbers['4_set'] || '-';
+  } else if (typeLower === 'thai') {
+    const top6 = winningNumbers['6_top'] || '-';
+    const bot2 = winningNumbers['2_bottom'] || '-';
+    return `${top6} / ${bot2}`;
+  } else if (typeLower === 'stock') {
+    const top2 = winningNumbers['2_top'] || '-';
+    const bot2 = winningNumbers['2_bottom'] || '-';
+    return `${top2} / ${bot2}`;
+  }
+  return typeof winningNumbers === 'string' ? winningNumbers : JSON.stringify(winningNumbers);
+}
+
 // Helper: Parse report date and type params (e.g. ล/9/5/2026, ล/9/5/26, ล/9/5/69, ล/9/5/2569)
 function parseReportParams(param: string): { lotteryType: string; dateStr: string } | null {
   const clean = param.replace(/\s+/g, '').toLowerCase();
@@ -2952,6 +2970,8 @@ serve(async (req) => {
                   return netB - netA;
                 });
 
+                const winNumStr = formatWinningNumbersForDisplay(activeRound.winning_numbers, activeRound.lottery_type);
+
                 // Generate Flex bubble for each user
                 const bubbles = sortedUserSummaries.map((u) => {
                   const userName = profilesMap[u.userId] || 'ไม่ระบุชื่อ';
@@ -2996,6 +3016,14 @@ serve(async (req) => {
                           "size": "xs",
                           "color": "#c7d2fe",
                           "margin": "xs"
+                        },
+                        {
+                          "type": "text",
+                          "text": `🏆 ผลรางวัล: ${winNumStr}`,
+                          "size": "sm",
+                          "color": "#fbbf24",
+                          "margin": "xs",
+                          "weight": "bold"
                         },
                         {
                           "type": "text",
