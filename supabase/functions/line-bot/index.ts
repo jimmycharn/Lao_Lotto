@@ -5267,7 +5267,7 @@ serve(async (req) => {
         console.log(`[LINE BOT MSG] Found groupLink for group: ${groupId}, dealerId: ${dealerId}`);
 
         // Verify if sender has a linked profile
-        const { data: profile, error: profileErr } = await supabase
+        let { data: profile, error: profileErr } = await supabase
           .from('profiles')
           .select('id, full_name, is_active, role')
           .eq('line_user_id', userId)
@@ -5301,22 +5301,46 @@ serve(async (req) => {
           continue;
         }
 
-        // If sender is staff/manager, block them from buying/betting in this group
-        if (isDealer || isAdmin || isManager) {
-          // Only show warning if they actually typed a bet
-          const parsedBets = parseMultiLinePaste(text, lotteryType);
+        const parsedBets = parseMultiLinePaste(text, lotteryType);
+        const isStaffSender = isDealer || isAdmin || isManager;
+        let originalSenderId = profile?.id || null;
+
+        if (isStaffSender) {
           if (parsedBets.length > 0) {
-            await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ ซื้อเลข(แทง)ในกลุ่มนี้`);
+            // Check if group settings allow staff betting and have a valid representative member
+            if (!groupLink.allow_staff_bet || !groupLink.staff_member_id) {
+              await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ ซื้อเลข(แทง)ในกลุ่มนี้`);
+              continue;
+            }
+
+            // Fetch representative member profile
+            const { data: repProfile } = await supabase
+              .from('profiles')
+              .select('id, full_name, role, is_active')
+              .eq('id', groupLink.staff_member_id)
+              .eq('is_active', true)
+              .maybeSingle();
+
+            if (!repProfile) {
+              await sendLineReply(replyToken, `❌ ไม่พบหรือไม่สามารถใช้งานบัญชีสมาชิกตัวแทนที่เจ้ามือตั้งค่าไว้ได้`);
+              continue;
+            }
+
+            // Override profile with the representative profile for the bet process
+            profile = repProfile;
+          } else {
+            // It's not a bet format, ignore
+            continue;
           }
-          continue;
+        } else {
+          // For linked members, check if the text contains a bet. If not, ignore silently
+          if (parsedBets.length === 0) {
+            // Random chat message, ignore it
+            continue;
+          }
         }
 
-        // For linked members, check if the text contains a bet. If not, ignore silently
-        const parsedBets = parseMultiLinePaste(text, lotteryType);
-        if (parsedBets.length === 0) {
-          // Random chat message, ignore it
-          continue;
-        }
+        const submittedById = originalSenderId || (profile ? profile.id : null);
 
         // Check active membership with the group's dealer
         const { data: membership } = await supabase
@@ -5457,7 +5481,7 @@ serve(async (req) => {
                 is_deleted: false,
                 is_paid: false,
                 source: 'user',
-                submitted_by: profile.id,
+                submitted_by: submittedById,
                 submitted_by_type: 'user',
                 display_numbers: displayNumbers,
                 display_amount: displayAmount,
@@ -5497,7 +5521,7 @@ serve(async (req) => {
                 is_deleted: false,
                 is_paid: false,
                 source: 'user',
-                submitted_by: profile.id,
+                submitted_by: submittedById,
                 submitted_by_type: 'user',
                 display_numbers: displayNumbers,
                 display_amount: displayAmount,
@@ -5529,7 +5553,7 @@ serve(async (req) => {
               is_deleted: false,
               is_paid: false,
               source: 'user',
-              submitted_by: profile.id,
+              submitted_by: submittedById,
               submitted_by_type: 'user',
               display_numbers: displayNumbers,
               display_amount: displayAmount,
@@ -5562,7 +5586,7 @@ serve(async (req) => {
                 is_deleted: false,
                 is_paid: false,
                 source: 'user',
-                submitted_by: profile.id,
+                submitted_by: submittedById,
                 submitted_by_type: 'user',
                 display_numbers: displayNumbers,
                 display_amount: displayAmount,
@@ -5598,7 +5622,7 @@ serve(async (req) => {
                   is_deleted: false,
                   is_paid: false,
                   source: 'user',
-                  submitted_by: profile.id,
+                  submitted_by: submittedById,
                   submitted_by_type: 'user',
                   display_numbers: displayNumbers,
                   display_amount: displayAmount,

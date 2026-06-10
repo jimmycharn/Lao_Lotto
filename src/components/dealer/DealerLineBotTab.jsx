@@ -35,6 +35,9 @@ export default function DealerLineBotTab({ user, profile }) {
     const [groupMembers, setGroupMembers] = useState({})
     const [loadingGroupMembers, setLoadingGroupMembers] = useState({})
     const [selectedGroupId, setSelectedGroupId] = useState(null)
+    const [activeMembers, setActiveMembers] = useState([])
+
+    const isOwnerOrSuper = profile?.role === 'dealer' || profile?.role === 'superadmin'
 
     // Call Edge Function to sync/refresh real LINE group names from the LINE API
     const refreshGroupNames = async () => {
@@ -63,6 +66,34 @@ export default function DealerLineBotTab({ user, profile }) {
         } catch (error) {
             console.error('Error fetching managers:', error)
             toast.error('ไม่สามารถดึงข้อมูลผู้จัดการกลุ่มได้')
+        }
+    }
+
+    const fetchActiveMembers = async () => {
+        if (!user?.id) return
+        try {
+            const { data, error } = await supabase
+                .from('user_dealer_memberships')
+                .select(`
+                    user_id,
+                    profiles:user_id (
+                        id,
+                        full_name
+                    )
+                `)
+                .eq('dealer_id', user.id)
+                .eq('status', 'active')
+            
+            if (error) throw error
+
+            const formatted = (data || [])
+                .map(m => m.profiles)
+                .filter(Boolean)
+            
+            setActiveMembers(formatted)
+        } catch (error) {
+            console.error('Error fetching active members:', error)
+            toast.error('ไม่สามารถดึงข้อมูลสมาชิกได้')
         }
     }
 
@@ -168,6 +199,7 @@ export default function DealerLineBotTab({ user, profile }) {
             setLoading(true)
             await refreshGroupNames()
             await fetchLineGroups()
+            await fetchActiveMembers()
             await fetchManagers()
         }
         load()
@@ -218,6 +250,7 @@ export default function DealerLineBotTab({ user, profile }) {
         setLoading(true)
         await refreshGroupNames()
         await fetchLineGroups()
+        await fetchActiveMembers()
         await fetchManagers()
     }
 
@@ -307,6 +340,53 @@ export default function DealerLineBotTab({ user, profile }) {
             console.error('Error updating lottery type:', error)
             toast.error('ไม่สามารถแก้ไขประเภทหวยหลักได้')
             // Revert by re-fetching
+            fetchLineGroups()
+        }
+    }
+
+    const handleToggleAllowStaffBet = async (groupId, allowed) => {
+        // Optimistic update for instant UI feedback
+        setLineGroups(prev => prev.map(g => g.id === groupId ? { ...g, allow_staff_bet: allowed } : g))
+
+        try {
+            const { error } = await supabase
+                .from('line_groups')
+                .update({
+                    allow_staff_bet: allowed,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', groupId)
+
+            if (error) throw error
+
+            toast.success('อัปเดตสิทธิ์การส่งเลขของเจ้ามือ/แอดมินสำเร็จ!')
+        } catch (error) {
+            console.error('Error toggling staff bet permission:', error)
+            toast.error('ไม่สามารถอัปเดตสิทธิ์ได้')
+            fetchLineGroups()
+        }
+    }
+
+    const handleUpdateStaffMember = async (groupId, staffMemberId) => {
+        const value = staffMemberId === '' ? null : staffMemberId
+        // Optimistic update
+        setLineGroups(prev => prev.map(g => g.id === groupId ? { ...g, staff_member_id: value } : g))
+
+        try {
+            const { error } = await supabase
+                .from('line_groups')
+                .update({
+                    staff_member_id: value,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', groupId)
+
+            if (error) throw error
+
+            toast.success('ตั้งค่าบัญชีสมาชิกตัวแทนสำเร็จ!')
+        } catch (error) {
+            console.error('Error updating staff member representative:', error)
+            toast.error('ไม่สามารถบันทึกบัญชีสมาชิกตัวแทนได้')
             fetchLineGroups()
         }
     }
@@ -439,7 +519,8 @@ export default function DealerLineBotTab({ user, profile }) {
                             <thead>
                                 <tr style={{ borderBottom: '2px solid var(--color-border)' }}>
                                     <th style={{ textAlign: 'left', padding: '0.75rem' }}>ชื่อกลุ่ม / กลุ่ม ID</th>
-                                    <th style={{ textAlign: 'center', padding: '0.75rem', width: '180px' }}>ประเภทหวยหลัก</th>
+                                    <th style={{ textAlign: 'center', padding: '0.75rem', width: '150px' }}>ประเภทหวยหลัก</th>
+                                    <th style={{ textAlign: 'center', padding: '0.75rem', width: '220px' }}>เจ้ามือ/แอดมินส่งเลขได้</th>
                                     <th style={{ textAlign: 'center', padding: '0.75rem', width: '120px' }}>สถานะ</th>
                                     <th style={{ textAlign: 'center', padding: '0.75rem', width: '80px' }}>การจัดการ</th>
                                 </tr>
@@ -486,6 +567,7 @@ export default function DealerLineBotTab({ user, profile }) {
                                                     <select
                                                         className="form-input"
                                                         value={group.lottery_type}
+                                                        disabled={!isOwnerOrSuper}
                                                         onChange={e => handleUpdateLotteryType(group.id, e.target.value)}
                                                         style={{ padding: '0.25rem 0.5rem', width: '100%', fontSize: '0.85rem' }}
                                                     >
@@ -493,6 +575,33 @@ export default function DealerLineBotTab({ user, profile }) {
                                                             <option key={typeKey} value={typeKey}>{label}</option>
                                                         ))}
                                                     </select>
+                                                </td>
+                                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                                                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed', margin: 0 }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={group.allow_staff_bet || false}
+                                                                disabled={!isOwnerOrSuper}
+                                                                onChange={e => handleToggleAllowStaffBet(group.id, e.target.checked)}
+                                                            />
+                                                            <span style={{ fontSize: '0.85rem', color: 'var(--color-text)' }}>อนุญาตส่งเลข</span>
+                                                        </label>
+                                                        {group.allow_staff_bet && (
+                                                            <select
+                                                                className="form-input"
+                                                                value={group.staff_member_id || ''}
+                                                                disabled={!isOwnerOrSuper}
+                                                                onChange={e => handleUpdateStaffMember(group.id, e.target.value)}
+                                                                style={{ padding: '0.25rem 0.5rem', width: '100%', maxWidth: '200px', fontSize: '0.85rem' }}
+                                                            >
+                                                                <option value="">-- เลือกบัญชีตัวแทน --</option>
+                                                                {activeMembers.map(m => (
+                                                                    <option key={m.id} value={m.id}>{m.full_name}</option>
+                                                                ))}
+                                                            </select>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td style={{ padding: '0.75rem', textAlign: 'center' }}>
                                                     {isOpen ? (
@@ -531,6 +640,7 @@ export default function DealerLineBotTab({ user, profile }) {
                                                         onClick={() => handleDeleteGroup(group.id, null)}
                                                         title="ยกเลิกการผูกกลุ่ม"
                                                         style={{ padding: '0.25rem 0.5rem' }}
+                                                        disabled={!isOwnerOrSuper}
                                                     >
                                                         <FiTrash2 />
                                                     </button>
@@ -538,7 +648,7 @@ export default function DealerLineBotTab({ user, profile }) {
                                             </tr>
                                             {isExpanded && (
                                                 <tr style={{ background: 'rgba(0,0,0,0.15)' }}>
-                                                    <td colSpan={4} style={{ padding: '1rem' }}>
+                                                    <td colSpan={5} style={{ padding: '1rem' }}>
                                                         <div style={{
                                                             background: 'var(--color-background-dark)',
                                                             borderRadius: '8px',
