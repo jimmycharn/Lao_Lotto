@@ -28,6 +28,7 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
     const isLinked = dealer.is_linked
     const isBlocked = dealer.is_blocked
     const isPending = isLinked && dealer.status === 'pending'
+    const isActive = !isLinked && dealer.status === 'active' && !isBlocked
 
     // Bank account state (for external dealers)
     const [bankAccounts, setBankAccounts] = useState([])
@@ -345,6 +346,33 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
                                     <FiSlash size={10} /> บล็อก
                                 </span>
                             )}
+                            {isActive && (
+                                <span style={{
+                                    background: '#10b981',
+                                    color: '#fff',
+                                    padding: '0.15rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: '600',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.2rem'
+                                }}>
+                                    <FiCheck size={10} /> ใช้ตีออกอัตโนมัติ
+                                </span>
+                            )}
+                            {!isLinked && !isActive && (
+                                <span style={{
+                                    background: 'var(--color-text-muted)',
+                                    color: '#fff',
+                                    padding: '0.15rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: '600'
+                                }}>
+                                    ไม่ได้ใช้งาน
+                                </span>
+                            )}
                         </div>
                         <span className="dealer-contact" style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
                             {isLinked && dealer.upstream_profile ? dealer.upstream_profile.email : (dealer.upstream_contact || 'ไม่มีข้อมูลติดต่อ')}
@@ -464,6 +492,17 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
                                         <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>สถานะ</label>
                                         <div style={{ fontSize: '1.1rem', color: isBlocked ? 'var(--color-danger)' : 'var(--color-success)' }}>
                                             {isBlocked ? 'ถูกบล็อก' : 'ปกติ'}
+                                        </div>
+                                    </div>
+                                )}
+                                {!isLinked && (
+                                    <div className="info-item">
+                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>สถานะการใช้งาน</label>
+                                        <div style={{ fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem', color: isActive ? '#10b981' : 'var(--color-text-muted)' }}>
+                                            {isActive
+                                                ? <><FiCheck size={14} /> <span style={{ color: '#10b981', fontWeight: '600' }}>ใช้ตีออกอัตโนมัติ</span><span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>(Bot จะตีออกมาที่นี่)</span></>
+                                                : <><FiSlash size={14} /> ไม่ได้ใช้งาน</>
+                                            }
                                         </div>
                                     </div>
                                 )}
