@@ -3539,7 +3539,7 @@ serve(async (req) => {
               // 1. Fetch Submissions (ยอดรับ)
               let subQuery = supabase
                 .from('submissions')
-                .select('amount, commission_amount, prize_amount, is_winner, user_id')
+                .select('amount, commission_amount, prize_amount, is_winner, user_id, bet_type, numbers')
                 .eq('round_id', activeRound.id)
                 .eq('is_deleted', false);
 
@@ -3607,10 +3607,40 @@ serve(async (req) => {
 
               const userSummaries: Record<string, UserSummary> = {};
 
+              const setPrice = activeRound?.set_prices?.['4_top'] || 120;
+
               (submissions || []).forEach((sub: any) => {
                 const amt = Number(sub.amount || 0);
                 const comm = Number(sub.commission_amount || 0);
-                const win = isAnnounced ? Number(sub.prize_amount || 0) : 0;
+
+                // Use DB prize_amount as the primary source (same as web app getExpectedPayout).
+                // For 4_set, DB stores per-set prize so we must multiply by numSets.
+                // Fallback to checkTransferWin only when prize_amount is null (e.g.
+                // calculate_round_winners was never run for this submission).
+                let win = 0;
+                if (isAnnounced && sub.is_winner) {
+                  if (sub.bet_type === '4_set') {
+                    const numSets = Math.max(1, Math.floor(amt / setPrice));
+                    win = (sub.prize_amount != null ? Number(sub.prize_amount) : 0) * numSets;
+                  } else {
+                    win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
+                  }
+                  // Fallback to realtime calculation when DB prize_amount is null
+                  if (win === 0 && sub.prize_amount == null) {
+                    const winResult = checkTransferWin(
+                      sub.bet_type,
+                      sub.numbers,
+                      activeRound.winning_numbers,
+                      activeRound.lottery_type,
+                      amt,
+                      setPrice,
+                      DEFAULT_4_SET_SETTINGS.prizes
+                    );
+                    if (winResult.wins) {
+                      win = winResult.payout;
+                    }
+                  }
+                }
                 
                 grandTotalBet += amt;
                 grandTotalCommission += comm;
