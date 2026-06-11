@@ -3458,7 +3458,10 @@ serve(async (req) => {
                 activeRound.status = 'announced';
               }
 
-              const isAnnounced = activeRound.status === 'announced' && activeRound.is_result_announced;
+              // Treat is_result_announced (+ winning_numbers) as the source of truth,
+              // matching the web app. status may drift (e.g. closed/re-opened) but
+              // results should still display once announced.
+              const isAnnounced = activeRound.is_result_announced === true && !!activeRound.winning_numbers;
 
               // 1. Fetch Submissions (ยอดรับ)
               let subQuery = supabase
