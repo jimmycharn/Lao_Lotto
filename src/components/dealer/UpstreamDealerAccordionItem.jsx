@@ -23,7 +23,7 @@ import CopyButton from '../CopyButton'
 import { confirmDialog } from '../../utils/confirmDialog'
 
 // Upstream Dealer Accordion Item Component
-export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onToggle, onEdit, onDelete, onToggleBlock, onSaveSettings }) {
+export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onToggle, onEdit, onDelete, onToggleBlock, onSetDefault, onSaveSettings }) {
     const [activeTab, setActiveTab] = useState('info') // 'info' | 'settings' | 'bank'
     const isLinked = dealer.is_linked
     const isBlocked = dealer.is_blocked

@@ -1045,6 +1045,60 @@ async function performLayoff(
   return { success: true, message: 'ตีออกสำเร็จ', text: detailText };
 }
 
+// Helper: Return (เอาคืน) a previously transferred batch back from the upstream dealer
+async function performReturnBatch(
+  batchTransfers: any[]
+): Promise<{ success: boolean; message: string }> {
+  if (!batchTransfers || batchTransfers.length === 0) {
+    return { success: false, message: 'ไม่พบรายการตีออกที่ต้องการเอาคืน' };
+  }
+
+  const now = new Date().toISOString();
+  const transferIds = batchTransfers.map((t) => t.id);
+  const upstreamSubIds = batchTransfers
+    .map((t) => t.target_submission_id)
+    .filter(Boolean);
+  const upstreamDealerIds = [
+    ...new Set(batchTransfers.map((t) => t.upstream_dealer_id).filter(Boolean))
+  ];
+
+  // 1. Soft-delete the submissions that were created in the upstream dealer's round
+  if (upstreamSubIds.length > 0) {
+    const { error: subErr } = await supabase
+      .from('submissions')
+      .update({ is_deleted: true, updated_at: now })
+      .in('id', upstreamSubIds);
+
+    if (subErr) {
+      console.error('Failed to soft-delete upstream submissions on return:', subErr);
+    }
+  }
+
+  // 2. Delete the bet_transfers rows entirely (matches the web app's
+  //    handleRevertTransfers / handleReclaimReturnedTransfers behaviour for the
+  //    SENDER reclaiming their own layoff). Using delete (not status='returned')
+  //    avoids the web UI treating it as "returned by upstream" and restores the
+  //    excess cleanly.
+  const { error: delErr } = await supabase
+    .from('bet_transfers')
+    .delete()
+    .in('id', transferIds);
+
+  if (delErr) {
+    console.error('Failed to delete bet transfers on return:', delErr);
+    return { success: false, message: 'เกิดข้อผิดพลาดทางเทคนิคในการเอาคืนยอดตีออก' };
+  }
+
+  // 3. Refresh the upstream dealer's pending credit deduction in the background
+  for (const uid of upstreamDealerIds) {
+    updatePendingDeduction(uid).catch((err) => {
+      console.error('Failed updating upstream pending deduction on return:', err);
+    });
+  }
+
+  return { success: true, message: 'เอาคืนสำเร็จ' };
+}
+
 // Helper: Check Dealer Credit for Bet (Deno port of creditCheck.js)
 async function checkDealerCreditForBet(dealerId: string, newBetAmount: number): Promise<{ allowed: boolean; message: string }> {
   try {
@@ -2299,6 +2353,7 @@ serve(async (req) => {
             text.startsWith('/total') || text.startsWith('/ยอดรวม') ||
             text.startsWith('/excess') || text.startsWith('/ยอดเกิน') ||
             text.startsWith('/transfer') || text.startsWith('/ตีออก') ||
+            text.startsWith('/เอาคืน') || text.startsWith('/return') ||
             text.startsWith('/คนส่ง') || text.startsWith('/ใครส่ง') || text.startsWith('/ส่งเลข') ||
             text.startsWith('/summary') || text.startsWith('/สรุป') ||
             text.startsWith('/help') || text.startsWith('/คำสั่ง') ||
@@ -4902,6 +4957,199 @@ serve(async (req) => {
               }
             }
 
+            // ─── COMMAND: /เอาคืน [ครั้งที่ตีออก] ───
+            if (text.startsWith('/เอาคืน') || text.startsWith('/return')) {
+              if (!permissions.can_transfer) {
+                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ในการเอาคืนยอดตีออก`);
+                continue;
+              }
+
+              const { data: activeRound } = await supabase
+                .from('lottery_rounds')
+                .select('id, round_date, close_time, set_prices, lottery_type')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', groupLink.lottery_type)
+                .in('status', ['open', 'closed', 'announced'])
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (!activeRound) {
+                await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงสำหรับหวยประเภท ${groupLink.lottery_type.toUpperCase()}`);
+                continue;
+              }
+
+              let returnArg = '';
+              if (text.startsWith('/return')) {
+                returnArg = text.substring('/return'.length).trim();
+              } else {
+                returnArg = text.substring('/เอาคืน'.length).trim();
+              }
+
+              const { data: transfers, error: trErr } = await supabase
+                .from('bet_transfers')
+                .select('*')
+                .eq('round_id', activeRound.id);
+
+              if (trErr) {
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลรายการตีออก`);
+                continue;
+              }
+
+              const activeTransfers = (transfers || []).filter((t: any) => t.status !== 'returned');
+
+              if (activeTransfers.length === 0) {
+                await sendLineReply(replyToken, `ℹ️ ยังไม่มีรายการตีออกที่สามารถเอาคืนได้ในงวดนี้ค่ะ`);
+                continue;
+              }
+
+              // Group by batch using the SAME numbering as the /ตีออก listing
+              const batchesMap: Record<string, {
+                batchId: string;
+                createdAt: string;
+                targetDealer: string;
+                transfers: any[];
+                totalAmount: number;
+              }> = {};
+
+              activeTransfers.forEach((t: any) => {
+                const bId = t.transfer_batch_id || `single_${t.id}`;
+                if (!batchesMap[bId]) {
+                  batchesMap[bId] = {
+                    batchId: bId,
+                    createdAt: t.created_at || new Date().toISOString(),
+                    targetDealer: t.target_dealer_name || 'ไม่ระบุชื่อ',
+                    transfers: [],
+                    totalAmount: 0
+                  };
+                }
+                batchesMap[bId].transfers.push(t);
+                batchesMap[bId].totalAmount += Number(t.amount || 0);
+              });
+
+              // Sort ascending by time so ครั้งที่ 1 = ตีออกครั้งแรก, ครั้งล่าสุด = เลขสูงสุด
+              const sortedBatches = Object.values(batchesMap).sort((a, b) =>
+                new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+              );
+
+              const LABELS: Record<string, string> = {
+                '2_top': '2 ตัวบน',
+                '2_bottom': '2 ตัวล่าง',
+                '3_top': groupLink.lottery_type === 'lao' || groupLink.lottery_type === 'hanoi' ? '3 ตัวตรง' : '3 ตัวบน',
+                '3_tod': '3 ตัวโต๊ด',
+                '3_front': '3 ตัวหน้า',
+                '3_back': '3 ตัวหลัง',
+                '4_tod': '4 ตัวโต๊ด',
+                '4_set': '4 ตัวชุด',
+                '6_top': '6 ตัวบน',
+                '4_float': '4 ตัวลอยแพ',
+                '5_float': '5 ตัวลอยแพ',
+                'run_top': 'ลอยบน',
+                'run_bottom': 'ลอยล่าง'
+              };
+
+              const setPrice = activeRound.set_prices?.['4_top'] || 120;
+              const formatBatchItems = (batch: any): string => {
+                let s = '';
+                batch.transfers.forEach((t: any) => {
+                  if (t.bet_type === '4_set') {
+                    const numSets = Math.round(Number(t.amount) / setPrice);
+                    s += `${t.numbers}=${numSets} ชุด [${LABELS[t.bet_type] || t.bet_type}]\n`;
+                  } else {
+                    s += `${t.numbers}=${Number(t.amount)} [${LABELS[t.bet_type] || t.bet_type}]\n`;
+                  }
+                });
+                return s;
+              };
+
+              const argParts = returnArg.split(/\s+/).filter(Boolean);
+
+              // No number provided → list the batches that can be returned
+              if (argParts.length === 0) {
+                let listText = `📋 รายการตีออกที่เอาคืนได้ (${groupLink.lottery_type.toUpperCase()})\n`;
+                listText += `งวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
+                listText += `--------------------------\n`;
+                sortedBatches.forEach((batch, index) => {
+                  const dateObj = new Date(batch.createdAt);
+                  const timeStr = dateObj.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }) + ' น.';
+                  listText += `ครั้งที่ ${index + 1} (${timeStr}) → ${batch.targetDealer}\n`;
+                  listText += `ยอดส่ง: ฿${Math.round(batch.totalAmount).toLocaleString('th-TH')}\n`;
+                  listText += `--------------------------\n`;
+                });
+                listText += `👉 พิมพ์ /เอาคืน [ครั้งที่] เพื่อเลือกเอาคืน เช่น /เอาคืน ${sortedBatches.length}`;
+                await sendLineReply(replyToken, listText);
+                continue;
+              }
+
+              const batchNumber = parseInt(argParts[0], 10);
+              if (isNaN(batchNumber) || batchNumber < 1 || batchNumber > sortedBatches.length) {
+                await sendLineReply(replyToken, `❌ หมายเลขครั้งที่ตีออกไม่ถูกต้อง (มีทั้งหมด ${sortedBatches.length} ครั้ง)\n👉 พิมพ์ /เอาคืน เพื่อดูรายการทั้งหมดค่ะ`);
+                continue;
+              }
+
+              const targetBatch = sortedBatches[batchNumber - 1];
+              const confirmToken = (argParts[1] || '').toLowerCase();
+              const isConfirmed = confirmToken === 'ยืนยัน' || confirmToken === 'y' || confirmToken === 'yes';
+              const isCancelled = confirmToken === 'ยกเลิก' || confirmToken === 'n' || confirmToken === 'no';
+
+              // Cancelled → abort the return
+              if (isCancelled) {
+                await sendLineReply(replyToken, `❌ ยกเลิกการเอาคืน ครั้งที่ ${batchNumber} เรียบร้อยแล้วค่ะ (ยังไม่มีการเปลี่ยนแปลงใด ๆ)`);
+                continue;
+              }
+
+              // Not confirmed yet → ask Yes/No
+              if (!isConfirmed) {
+                let confirmText = `⚠️ ต้องการเอาคืนยอดตีออก ครั้งที่ ${batchNumber} นี้หรือไม่?\n`;
+                confirmText += `ส่งให้: ${targetBatch.targetDealer}\n`;
+                confirmText += `--------------------------\n`;
+                confirmText += formatBatchItems(targetBatch);
+                confirmText += `--------------------------\n`;
+                confirmText += `ยอดรวม: ฿${Math.round(targetBatch.totalAmount).toLocaleString('th-TH')}\n\n`;
+                confirmText += `👉 กดปุ่มด้านล่าง หรือพิมพ์ "/เอาคืน ${batchNumber} ยืนยัน" เพื่อยืนยัน / "/เอาคืน ${batchNumber} ยกเลิก" เพื่อยกเลิกค่ะ`;
+
+                await sendLineReply(replyToken, {
+                  type: "text",
+                  text: confirmText,
+                  quickReply: {
+                    items: [
+                      {
+                        type: "action",
+                        action: {
+                          type: "message",
+                          label: `ยืนยัน (Yes)`,
+                          text: `/เอาคืน ${batchNumber} ยืนยัน`
+                        }
+                      },
+                      {
+                        type: "action",
+                        action: {
+                          type: "message",
+                          label: `ยกเลิก (No)`,
+                          text: `/เอาคืน ${batchNumber} ยกเลิก`
+                        }
+                      }
+                    ]
+                  }
+                });
+                continue;
+              }
+
+              // Confirmed → perform the return
+              const result = await performReturnBatch(targetBatch.transfers);
+              if (result.success) {
+                let okText = `✅ เอาคืนยอดตีออก ครั้งที่ ${batchNumber} สำเร็จแล้วค่ะ!\n`;
+                okText += `--------------------------\n`;
+                okText += formatBatchItems(targetBatch);
+                okText += `--------------------------\n`;
+                okText += `ยอดที่เอาคืน: ฿${Math.round(targetBatch.totalAmount).toLocaleString('th-TH')}`;
+                await sendLineReply(replyToken, okText);
+              } else {
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาด: ${result.message}`);
+              }
+              continue;
+            }
+
             // ─── COMMAND: /คำสั่ง หรือ /help ───
             if (text.startsWith('/คำสั่ง') || text.startsWith('/help')) {
               let helpText = '';
@@ -4928,11 +5176,13 @@ serve(async (req) => {
                 helpText += `7. /ยอดเกิน - แสดงตัวเลขและยอดเงินที่เกินลิมิตอั้นในงวดนี้\n`;
                 helpText += `8. /ตีออก - แสดงสรุปประวัติประวัติและยอดเงินการตีออกทั้งหมดในงวดนี้\n`;
                 helpText += `9. /ตีออก เกิน - สั่งตีออกยอดเกินอั้นทั้งหมดไปยังเจ้ามือปลายทาง (จะมีบอทให้กดยืนยันอีกครั้ง)\n`;
-                helpText += `10. /ตีออก [เลข] [ประเภท] [จำนวน] - สั่งตีออกเลขแบบเจาะจง (เช่น /ตีออก 123 บน 100)\n\n`;
+                helpText += `10. /ตีออก [เลข] [ประเภท] [จำนวน] - สั่งตีออกเลขแบบเจาะจง (เช่น /ตีออก 123 บน 100)\n`;
+                helpText += `11. /เอาคืน - แสดงรายการครั้งที่ตีออกที่สามารถเอาคืนได้\n`;
+                helpText += `12. /เอาคืน [ครั้งที่] - เอาคืนยอดที่ตีออกไปตามครั้งที่ระบุ (เช่น /เอาคืน 3 จะมีบอทให้กดยืนยันอีกครั้ง)\n\n`;
                 helpText += `👤 คำสั่งทั่วไปสำหรับสมาชิก:\n`;
-                helpText += `11. /สรุป (พิมพ์โดยสมาชิก) - สรุปยอดและรางวัลเฉพาะของตัวสมาชิกเอง\n`;
-                helpText += `12. /ยอดรวม (พิมพ์โดยสมาชิก) - สรุปยอดแทงทั้งหมดเฉพาะของตัวสมาชิกเอง\n`;
-                helpText += `13. /คำสั่ง หรือ /help - แสดงรายการคำสั่งที่ใช้งานได้`;
+                helpText += `13. /สรุป (พิมพ์โดยสมาชิก) - สรุปยอดและรางวัลเฉพาะของตัวสมาชิกเอง\n`;
+                helpText += `14. /ยอดรวม (พิมพ์โดยสมาชิก) - สรุปยอดแทงทั้งหมดเฉพาะของตัวสมาชิกเอง\n`;
+                helpText += `15. /คำสั่ง หรือ /help - แสดงรายการคำสั่งที่ใช้งานได้`;
               }
 
               await sendLineReply(replyToken, helpText);
