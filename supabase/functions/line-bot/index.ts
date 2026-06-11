@@ -1863,6 +1863,46 @@ async function deductProfitBasedCreditDeno(dealerId: string, roundId: string, pr
   }
 }
 
+// Helper: Build the red "ปิดรับแทงแล้ว" Flex message for a round
+function buildCloseFlexMessage(round: any): Record<string, any> {
+  const lotteryType = (round?.lottery_type || '').toString()
+  const dateText = getRoundDisplayDate(round, false)
+  const titleLine = `${round?.lottery_name || lotteryType.toUpperCase()} - งวดวันที่ ${dateText}`
+  return {
+    "type": "flex",
+    "altText": `🔴 ปิดรับแทง ${lotteryType.toUpperCase()} งวดวันที่ ${dateText}`,
+    "contents": {
+      "type": "bubble",
+      "size": "mega",
+      "body": {
+        "type": "box",
+        "layout": "vertical",
+        "backgroundColor": "#dc2626",
+        "paddingAll": "xxl",
+        "justifyContent": "center",
+        "alignItems": "center",
+        "contents": [
+          {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#ffffff",
+            "cornerRadius": "100px",
+            "width": "140px",
+            "height": "140px",
+            "justifyContent": "center",
+            "alignItems": "center",
+            "contents": [
+              { "type": "text", "text": "ปิด", "weight": "bold", "size": "3xl", "color": "#dc2626", "align": "center" }
+            ]
+          },
+          { "type": "text", "text": "ปิดรับแทงแล้ว", "weight": "bold", "size": "xl", "color": "#ffffff", "align": "center", "margin": "xl" },
+          { "type": "text", "text": titleLine, "size": "sm", "color": "#fecaca", "align": "center", "margin": "md", "wrap": true }
+        ]
+      }
+    }
+  }
+}
+
 serve(async (req) => {
   // CORS Preflight
   if (req.method === 'OPTIONS') {
@@ -1887,6 +1927,69 @@ serve(async (req) => {
       }
     } catch (e) {
       // not JSON or not the action we want
+    }
+
+    // ─── CRON CALLBACK: auto-close round + notify groups ───
+    // Triggered by the pg_cron worker (process_due_round_closures) via pg_net.
+    // Authorized by a shared secret stored in app_settings (no JWT needed).
+    if (apiPayload && apiPayload.action === 'auto_close_notify') {
+      const { data: secretRow } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'line_bot_cron_secret')
+        .maybeSingle()
+
+      const expectedSecret = secretRow?.value || ''
+      if (!expectedSecret || apiPayload.secret !== expectedSecret) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      const roundId = apiPayload.round_id
+      if (!roundId) {
+        return new Response(JSON.stringify({ error: 'Missing round_id' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      const { data: round } = await supabase
+        .from('lottery_rounds')
+        .select('id, dealer_id, lottery_type, lottery_name, round_date, close_time')
+        .eq('id', roundId)
+        .maybeSingle()
+
+      if (!round) {
+        return new Response(JSON.stringify({ error: 'Round not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      const { data: groups } = await supabase
+        .from('line_groups')
+        .select('line_group_id')
+        .eq('dealer_id', round.dealer_id)
+        .eq('lottery_type', round.lottery_type)
+        .eq('is_active', true)
+
+      const closeFlexMessage = buildCloseFlexMessage(round)
+      let sent = 0
+      for (const g of (groups || [])) {
+        try {
+          await sendLinePush(g.line_group_id, closeFlexMessage)
+          sent++
+        } catch (e) {
+          console.error(`auto_close_notify: failed pushing to group ${g.line_group_id}:`, e)
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, round_id: roundId, groups_notified: sent }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
     }
 
     if (isApiCall) {
@@ -4996,7 +5099,121 @@ serve(async (req) => {
             }
 
             if (!billCode) {
-              await sendLineReply(replyToken, `❌ กรุณาระบุเลขใบโพยที่ต้องการดู\n(เช่น /โพย 824077)`);
+              // ─── /โพย (no argument): show ALL of the sender's bills for the active round ───
+              // 1. Group must be bound to a dealer
+              const { data: groupLink } = await supabase
+                .from('line_groups')
+                .select('dealer_id, lottery_type')
+                .eq('line_group_id', groupId)
+                .eq('is_active', true)
+                .maybeSingle();
+
+              if (!groupLink) {
+                await sendLineReply(replyToken, `❌ กลุ่มนี้ยังไม่ได้ผูกกับเจ้ามือ ไม่สามารถเรียกดูใบโพยได้`);
+                continue;
+              }
+
+              const listDealerId = groupLink.dealer_id;
+              const listLotteryType = groupLink.lottery_type;
+
+              // 2. Identify the sender's linked profile
+              const { data: senderProfile } = await supabase
+                .from('profiles')
+                .select('id, full_name')
+                .eq('line_user_id', userId)
+                .eq('is_active', true)
+                .maybeSingle();
+
+              if (!senderProfile) {
+                await sendLineReply(replyToken, [
+                  `❌ คุณยังไม่ได้เชื่อมบัญชี LINE ของคุณกับระบบ Big Lotto\nกรุณานำ LINE User ID ด้านล่างไปใส่ในเมนูโปรไฟล์บนเว็บเพื่อเชื่อมต่อ`,
+                  userId
+                ]);
+                continue;
+              }
+
+              // 3. Find the active round for this dealer + lottery type
+              const { data: listOpenRounds } = await supabase
+                .from('lottery_rounds')
+                .select('*')
+                .eq('dealer_id', listDealerId)
+                .eq('lottery_type', listLotteryType)
+                .in('status', ['open', 'closed'])
+                .order('open_time', { ascending: false });
+
+              const nowList = new Date();
+              const listActiveRound = (listOpenRounds || []).find((round: any) => {
+                if (!round.is_active) return false;
+                return nowList >= new Date(round.open_time);
+              });
+
+              if (!listActiveRound) {
+                await sendLineReply(replyToken, `❌ ขณะนี้ยังไม่มีงวดหวยประเภท ${listLotteryType.toUpperCase()} ที่เปิดอยู่ค่ะ`);
+                continue;
+              }
+
+              // 4. Fetch all of this member's submissions in this round
+              const { data: mySubs } = await supabase
+                .from('submissions')
+                .select('bill_id, bill_note, amount, commission_amount, entry_id, created_at')
+                .eq('round_id', listActiveRound.id)
+                .eq('user_id', senderProfile.id)
+                .eq('is_deleted', false)
+                .order('created_at', { ascending: true });
+
+              if (!mySubs || mySubs.length === 0) {
+                await sendLineReply(replyToken, `📭 คุณ ${senderProfile.full_name} ยังไม่มีใบโพยในงวดนี้ค่ะ`);
+                continue;
+              }
+
+              // 5. Group submissions by bill_id (preserve first-seen order).
+              // "รายการซื้อ" counts the number of typed lines, i.e. distinct entry_id groups
+              // (each input line shares one entry_id). Legacy rows without entry_id count as 1 each.
+              const billOrder: string[] = [];
+              const billMap = new Map<string, { billId: string; note: string; lineKeys: Set<string>; total: number; commission: number }>();
+              mySubs.forEach((s: any, rowIdx: number) => {
+                const bid = s.bill_id || '-';
+                if (!billMap.has(bid)) {
+                  billMap.set(bid, { billId: bid, note: s.bill_note || '-', lineKeys: new Set<string>(), total: 0, commission: 0 });
+                  billOrder.push(bid);
+                }
+                const b = billMap.get(bid)!;
+                b.lineKeys.add(s.entry_id || `__row_${rowIdx}`);
+                b.total += Number(s.amount || 0);
+                b.commission += Number(s.commission_amount || 0);
+              });
+
+              // 6. Build output
+              const TYPE_NAMES: Record<string, string> = {
+                lao: 'หวยลาว', thai: 'หวยไทย', hanoi: 'หวยฮานอย', stock: 'หวยหุ้น', yeekee: 'หวยยี่กี'
+              };
+              const typeName = TYPE_NAMES[listLotteryType] || listLotteryType;
+
+              let grandTotal = 0;
+              let grandCommission = 0;
+
+              let out = `ประเภท: ${typeName}(${listLotteryType.toUpperCase()})\n`;
+              out += `งวดวันที่: ${getRoundDisplayDate(listActiveRound, false)}\n`;
+              out += `----------------------\n`;
+
+              billOrder.forEach((bid, idx) => {
+                const b = billMap.get(bid)!;
+                grandTotal += b.total;
+                grandCommission += b.commission;
+                out += `${idx + 1}. ใบโพยเลขที่: ${b.billId}\n`;
+                out += `บันทึกโน๊ต: ${b.note}\n`;
+                out += `รายการซื้อ: ${b.lineKeys.size} รายการ\n`;
+                out += `รวมเงิน: ฿${b.total.toLocaleString('th-TH')}\n`;
+                out += `----------------------\n`;
+              });
+
+              const remaining = grandTotal - grandCommission;
+              out += `รวมใบโพย: ${billOrder.length} ใบ\n`;
+              out += `ยอดรวม: ฿${grandTotal.toLocaleString('th-TH')}\n`;
+              out += `ค่าคอม: ฿${grandCommission.toLocaleString('th-TH')}\n`;
+              out += `เหลือส่ง: ฿${remaining.toLocaleString('th-TH')}`;
+
+              await sendLineReply(replyToken, out);
               continue;
             }
 

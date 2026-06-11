@@ -199,6 +199,7 @@ export default function Dealer() {
         delete_after_submit_minutes: 0, // 0 = ไม่จำกัดเวลาหลังป้อน (ใช้แค่ delete_before_minutes)
         currency_symbol: '฿',
         currency_name: 'บาท',
+        notify_close_to_groups: true,
         type_limits: getDefaultLimitsForType('lao'),
         set_prices: getDefaultSetPricesForType('lao')
     })
@@ -1844,6 +1845,7 @@ export default function Dealer() {
                     currency_symbol: roundForm.currency_symbol,
                     currency_name: roundForm.currency_name,
                     set_prices: roundForm.set_prices,
+                    notify_close_to_groups: roundForm.notify_close_to_groups,
                     is_active: false
                 })
                 .select()
@@ -2408,7 +2410,8 @@ export default function Dealer() {
             currency_symbol: round.currency_symbol || '฿',
             currency_name: round.currency_name || 'บาท',
             type_limits: { ...getDefaultLimitsForType(round.lottery_type), ...limitsObj },
-            set_prices: { ...getDefaultSetPricesForType(round.lottery_type), ...setPricesObj }
+            set_prices: { ...getDefaultSetPricesForType(round.lottery_type), ...setPricesObj },
+            notify_close_to_groups: round.notify_close_to_groups ?? false
         })
 
         setEditingRound(round)
@@ -2454,7 +2457,8 @@ export default function Dealer() {
                     delete_after_submit_minutes: roundForm.delete_after_submit_minutes,
                     currency_symbol: roundForm.currency_symbol,
                     currency_name: roundForm.currency_name,
-                    set_prices: roundForm.set_prices
+                    set_prices: roundForm.set_prices,
+                    notify_close_to_groups: roundForm.notify_close_to_groups
                 })
                 .eq('id', editingRound.id)
 
@@ -3749,6 +3753,22 @@ export default function Dealer() {
                                 </div>
                             </div>
 
+                            {/* Notify close to groups */}
+                            <div className="form-group">
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={roundForm.notify_close_to_groups}
+                                        onChange={e => setRoundForm({ ...roundForm, notify_close_to_groups: e.target.checked })}
+                                        style={{ width: '1.1rem', height: '1.1rem', cursor: 'pointer' }}
+                                    />
+                                    <span>ส่งการแจ้งปิดไปยังกลุ่ม</span>
+                                </label>
+                                <p className="form-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
+                                    เมื่อถึงเวลาปิด ระบบจะส่งข้อความแจ้งปิดรับไปยังกลุ่ม LINE ที่ผูกไว้โดยอัตโนมัติ
+                                </p>
+                            </div>
+
                             {/* Delete After Submit */}
                             <div className="form-row">
                                 <div className="form-group" style={{ flex: 1 }}>
@@ -3957,6 +3977,22 @@ export default function Dealer() {
                                         onKeyDown={handleInputKeyDown}
                                     />
                                 </div>
+                            </div>
+
+                            {/* Notify close to groups */}
+                            <div className="form-group">
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={roundForm.notify_close_to_groups}
+                                        onChange={e => setRoundForm({ ...roundForm, notify_close_to_groups: e.target.checked })}
+                                        style={{ width: '1.1rem', height: '1.1rem', cursor: 'pointer' }}
+                                    />
+                                    <span>ส่งการแจ้งปิดไปยังกลุ่ม</span>
+                                </label>
+                                <p className="form-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
+                                    เมื่อถึงเวลาปิด ระบบจะส่งข้อความแจ้งปิดรับไปยังกลุ่ม LINE ที่ผูกไว้โดยอัตโนมัติ
+                                </p>
                             </div>
 
                             {/* Delete After Submit */}
