@@ -1,0 +1,10 @@
+const targetTime = "2026-06-10 16:59:59+00";
+console.log('includes T:', targetTime.includes('T'));
+console.log('includes - and ::', targetTime.includes('-') && targetTime.includes(':'));
+const dateObj = new Date(targetTime);
+console.log('parsed Date:', dateObj.toString());
+const day = dateObj.toLocaleDateString('en-US', { day: '2-digit', timeZone: 'Asia/Bangkok' });
+const month = dateObj.toLocaleDateString('en-US', { month: '2-digit', timeZone: 'Asia/Bangkok' });
+const year = dateObj.toLocaleDateString('en-US', { year: 'numeric', timeZone: 'Asia/Bangkok' });
+const thYear = parseInt(year) + 543;
+console.log('Result:', `${day}/${month}/${thYear}`);

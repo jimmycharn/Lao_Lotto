@@ -252,6 +252,38 @@ export default function UpstreamDealersTab({ user, upstreamDealers, setUpstreamD
         }
     }
 
+    // Set as default upstream dealer for auto layoff
+    async function handleSetDefault(dealer) {
+        try {
+            // Clear all defaults for this dealer first
+            const { error: clearErr } = await supabase
+                .from('dealer_upstream_connections')
+                .update({ is_default: false, updated_at: new Date().toISOString() })
+                .eq('dealer_id', user.id)
+
+            if (clearErr) throw clearErr
+
+            // Set the selected one as default
+            const { error: setErr } = await supabase
+                .from('dealer_upstream_connections')
+                .update({ is_default: true, status: 'active', updated_at: new Date().toISOString() })
+                .eq('id', dealer.id)
+
+            if (setErr) throw setErr
+
+            // Update local state immediately
+            setUpstreamDealers(prev => prev.map(d => ({
+                ...d,
+                is_default: d.id === dealer.id
+            })))
+
+            toast.success(`ตั้ง "ระบบจะตีออกไปหา ${dealer.upstream_name}" สำเร็จ!`)
+        } catch (error) {
+            console.error('Error setting default dealer:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+
     // Open settings modal
     function handleOpenSettings(dealer) {
         setSettingsDealer(dealer)
@@ -352,6 +384,7 @@ export default function UpstreamDealersTab({ user, upstreamDealers, setUpstreamD
                                         onEdit={() => handleEditDealer(dealer)}
                                         onDelete={() => handleDelete(dealer)}
                                         onToggleBlock={() => handleToggleBlock(dealer)}
+                                        onSetDefault={() => handleSetDefault(dealer)}
                                         onSaveSettings={fetchUpstreamDealers}
                                     />
                                 ))}

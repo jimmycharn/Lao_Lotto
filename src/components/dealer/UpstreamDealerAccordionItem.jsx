@@ -28,7 +28,7 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
     const isLinked = dealer.is_linked
     const isBlocked = dealer.is_blocked
     const isPending = isLinked && dealer.status === 'pending'
-    const isActive = !isLinked && dealer.status === 'active' && !isBlocked
+    const isActive = !isLinked && dealer.status === 'active' && !isBlocked && dealer.is_default === true
 
     // Bank account state (for external dealers)
     const [bankAccounts, setBankAccounts] = useState([])
@@ -523,6 +523,24 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
                                         style={{ color: isBlocked ? 'var(--color-success)' : 'var(--color-warning)', borderColor: isBlocked ? 'var(--color-success)' : 'var(--color-warning)' }}
                                     >
                                         {isBlocked ? <><FiCheck /> ปลดบล็อก</> : <><FiSlash /> บล็อก</>}
+                                    </button>
+                                )}
+                                {!isLinked && !isActive && (
+                                    <button
+                                        className="btn btn-primary btn-sm"
+                                        onClick={(e) => { e.stopPropagation(); onSetDefault(dealer); }}
+                                        style={{ background: '#10b981', borderColor: '#10b981' }}
+                                    >
+                                        <FiStar /> ตั้งเป็นเจ้ามือหลัก
+                                    </button>
+                                )}
+                                {!isLinked && isActive && (
+                                    <button
+                                        className="btn btn-outline btn-sm"
+                                        disabled
+                                        style={{ color: '#10b981', borderColor: '#10b981', cursor: 'default' }}
+                                    >
+                                        <FiCheck /> ตีออกอัตโนมัติ (เป็นหลักอยู่แล้ว)
                                     </button>
                                 )}
                                 {!isLinked && (

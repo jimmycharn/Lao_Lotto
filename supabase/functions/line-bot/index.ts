@@ -874,17 +874,35 @@ async function performLayoff(
     return { success: true, message: 'ไม่มีรายการให้ตีออก' };
   }
 
-  const { data: connection, error: connErr } = await supabase
+  // Try to get the default upstream dealer first, fallback to first active one
+  let connection: any = null;
+  const { data: defaultConn, error: defaultErr } = await supabase
     .from('dealer_upstream_connections')
     .select('*')
     .eq('dealer_id', dealerId)
     .eq('status', 'active')
     .eq('is_blocked', false)
+    .eq('is_default', true)
     .limit(1)
     .maybeSingle();
 
-  if (connErr || !connection) {
-    return { success: false, message: 'กรุณาตั้งค่าเจ้ามือปลายทาง (Upstream Connection) บนหน้าเว็บก่อน' };
+  if (!defaultErr && defaultConn) {
+    connection = defaultConn;
+  } else {
+    // Fallback: pick first active non-blocked connection
+    const { data: fallbackConn, error: fallbackErr } = await supabase
+      .from('dealer_upstream_connections')
+      .select('*')
+      .eq('dealer_id', dealerId)
+      .eq('status', 'active')
+      .eq('is_blocked', false)
+      .limit(1)
+      .maybeSingle();
+    connection = fallbackConn;
+  }
+
+  if (!connection) {
+    return { success: false, message: 'กรุณาตั้งค่าเจ้ามือปลายทาง (Upstream Connection) บนหน้าเว็บก่อน\nไปที่ แดชบอร์ดเจ้ามือ → แท็บ "เจ้ามือตีออก" → กดปุ่ม "ตั้งเป็นเจ้ามือหลัก"' };
   }
 
   const upstreamDealerId = connection.upstream_dealer_id;
@@ -3808,9 +3826,9 @@ serve(async (req) => {
                         },
                         {
                           "type": "text",
-                          "text": isAnnounced ? `🎉 ประกาศผลรางวัลแล้ว` : `⏳ รอประกาศผลรางวัล`,
-                          "size": "xs",
-                          "color": isAnnounced ? "#10b981" : "#f59e0b",
+                          "text": isAnnounced ? `🎉 เลขที่ออก: ${formatWinningNumbersForDisplay(activeRound.winning_numbers, activeRound.lottery_type)}` : `⏳ รอประกาศผลรางวัล`,
+                          "size": isAnnounced ? "sm" : "xs",
+                          "color": isAnnounced ? "#ffffff" : "#f59e0b",
                           "margin": "xs",
                           "weight": "bold"
                         }
@@ -4187,9 +4205,9 @@ serve(async (req) => {
                         },
                         {
                           "type": "text",
-                          "text": isAnnounced ? `🎉 ประกาศผลรางวัลแล้ว` : `⏳ รอประกาศผลรางวัล`,
-                          "size": "xs",
-                          "color": isAnnounced ? "#10b981" : "#f59e0b",
+                          "text": isAnnounced ? `🎉 เลขที่ออก: ${formatWinningNumbersForDisplay(activeRound.winning_numbers, activeRound.lottery_type)}` : `⏳ รอประกาศผลรางวัล`,
+                          "size": isAnnounced ? "sm" : "xs",
+                          "color": isAnnounced ? "#ffffff" : "#f59e0b",
                           "margin": "xs",
                           "weight": "bold"
                         }
