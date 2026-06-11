@@ -3117,7 +3117,7 @@ serve(async (req) => {
                 // 1. Fetch member user IDs for this specific group
                 const { data: groupMembers, error: memErr } = await supabase
                   .from('line_group_members')
-                  .select('user_id')
+                  .select('user_id, line_user_id, display_name')
                   .eq('line_group_id', targetGroupId);
 
                 if (memErr) {
@@ -3136,12 +3136,15 @@ serve(async (req) => {
                 // 1a. Exclude LINE managers from this dealer
                 const { data: managerData } = await supabase
                   .from('line_managers')
-                  .select('line_user_id')
+                  .select('line_user_id, nickname')
                   .eq('dealer_id', dealerId)
                   .eq('is_active', true);
                 const managerLineUserIds = new Set((managerData || []).map((m: any) => m.line_user_id));
+                console.log(`[DEBUG /แจ้งผล] group=${targetGroupId} managers=${JSON.stringify(managerData || [])} managerIds=${[...managerLineUserIds].join(',')}`);
+                console.log(`[DEBUG /แจ้งผล] allMembers=${(groupMembers || []).map((m: any) => `${m.display_name}:${m.line_user_id}:${m.user_id}`).join(', ')}`);
                 const nonManagerMembers = (groupMembers || [])
                   .filter((m: any) => !managerLineUserIds.has(m.line_user_id));
+                console.log(`[DEBUG /แจ้งผล] afterManagerFilter=${nonManagerMembers.map((m: any) => `${m.display_name}:${m.user_id}`).join(', ')}`);
                 memberUserIds = nonManagerMembers
                   .map((m: any) => m.user_id)
                   .filter(Boolean);
@@ -3155,7 +3158,9 @@ serve(async (req) => {
                     .eq('status', 'active')
                     .in('user_id', memberUserIds);
                   const activeUserIds = new Set((activeMemberships || []).map((m: any) => m.user_id));
+                  console.log(`[DEBUG /แจ้งผล] activeMemberships=${(activeMemberships || []).map((m: any) => m.user_id).join(', ')} activeIds=${[...activeUserIds].join(',')}`);
                   memberUserIds = memberUserIds.filter((id: string) => activeUserIds.has(id));
+                  console.log(`[DEBUG /แจ้งผล] finalMemberIds=${memberUserIds.join(',')}`);
                 }
 
                 if (memberUserIds.length === 0) {
