@@ -156,6 +156,7 @@ export default function UpstreamDealersTab({ user, upstreamDealers, setUpstreamD
                         upstream_name: formData.upstream_name,
                         upstream_contact: formData.upstream_contact,
                         notes: formData.notes,
+                        status: editingDealer.is_linked ? (editingDealer.status || 'active') : 'active',
                         updated_at: new Date().toISOString()
                     })
                     .eq('id', editingDealer.id)
@@ -171,7 +172,8 @@ export default function UpstreamDealersTab({ user, upstreamDealers, setUpstreamD
                         upstream_name: formData.upstream_name,
                         upstream_contact: formData.upstream_contact,
                         notes: formData.notes,
-                        is_linked: false
+                        is_linked: false,
+                        status: 'active'
                     })
 
                 if (error) throw error
