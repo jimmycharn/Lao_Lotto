@@ -3133,18 +3133,29 @@ serve(async (req) => {
                   .map((m: any) => m.user_id)
                   .filter(Boolean);
 
-                // Filter out managers/dealers: only include users with role='user'
+                // 1a. Exclude LINE managers from this dealer
+                const { data: managerData } = await supabase
+                  .from('line_managers')
+                  .select('line_user_id')
+                  .eq('dealer_id', dealerId)
+                  .eq('is_active', true);
+                const managerLineUserIds = new Set((managerData || []).map((m: any) => m.line_user_id));
+                const nonManagerMembers = (groupMembers || [])
+                  .filter((m: any) => !managerLineUserIds.has(m.line_user_id));
+                memberUserIds = nonManagerMembers
+                  .map((m: any) => m.user_id)
+                  .filter(Boolean);
+
+                // 1b. Only include users with active dealer membership
                 if (memberUserIds.length > 0) {
-                  const { data: memberProfiles } = await supabase
-                    .from('profiles')
-                    .select('id, role')
-                    .in('id', memberUserIds);
-                  const userRoleIds = new Set(
-                    (memberProfiles || [])
-                      .filter((p: any) => p.role === 'user')
-                      .map((p: any) => p.id)
-                  );
-                  memberUserIds = memberUserIds.filter((id: string) => userRoleIds.has(id));
+                  const { data: activeMemberships } = await supabase
+                    .from('user_dealer_memberships')
+                    .select('user_id')
+                    .eq('dealer_id', dealerId)
+                    .eq('status', 'active')
+                    .in('user_id', memberUserIds);
+                  const activeUserIds = new Set((activeMemberships || []).map((m: any) => m.user_id));
+                  memberUserIds = memberUserIds.filter((id: string) => activeUserIds.has(id));
                 }
 
                 if (memberUserIds.length === 0) {
