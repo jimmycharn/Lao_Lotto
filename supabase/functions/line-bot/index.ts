@@ -121,6 +121,37 @@ function parseReportParams(param: string): { lotteryType: string; dateStr: strin
   return { lotteryType, dateStr: `${yStr}-${mStr}-${dStr}` };
 }
 
+// Helper: Parse a round-date param (e.g. 10-6-26, 10-6-2026, 10-6-69, 10-6-2569).
+// Accepts '-' or '/' separators. Returns Gregorian 'YYYY-MM-DD' or null.
+// Distinct from winning numbers (which never use a D-M-Y 3-part format).
+function parseRoundDateParam(param: string): string | null {
+  const clean = param.replace(/\s+/g, '');
+  const match = clean.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
+  if (!match) return null;
+
+  const day = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  let year = parseInt(match[3], 10);
+
+  // Year normalization (same convention as parseReportParams)
+  if (year >= 2500) {
+    year = year - 543;                 // 4-digit Buddhist (2569 -> 2026)
+  } else if (year >= 50 && year < 100) {
+    year = (2500 + year) - 543;        // 2-digit Buddhist (69 -> 2569 -> 2026)
+  } else if (year < 50) {
+    year = 2000 + year;                // 2-digit Gregorian (26 -> 2026)
+  }
+  // 4-digit Gregorian (e.g. 2026) passes through unchanged
+
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > 31) return null;
+
+  const yStr = year.toString();
+  const mStr = month.toString().padStart(2, '0');
+  const dStr = day.toString().padStart(2, '0');
+  return `${yStr}-${mStr}-${dStr}`;
+}
+
 // --- LOTTERY CONSTANTS & WINNERS CHECKER FOR TRANSFER WIN CALCULATIONS ---
 const DEFAULT_COMMISSIONS: Record<string, number> = {
   'run_top': 15, 'run_bottom': 15,
@@ -3291,27 +3322,51 @@ serve(async (req) => {
                 continue;
               }
 
-              const { data: activeRound } = await supabase
-                .from('lottery_rounds')
-                .select('*')
-                .eq('dealer_id', dealerId)
-                .eq('lottery_type', groupLink.lottery_type)
-                .in('status', ['open', 'closed', 'announced'])
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-
-              if (!activeRound) {
-                await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงหรือกำลังตรวจผลสำหรับหวยประเภท ${groupLink.lottery_type.toUpperCase()}`);
-                continue;
-              }
-
-              // --- PARAM CHECK FOR WINNING NUMBERS ---
+              // --- PARSE PARAM: winning numbers (announce) OR a past round date ---
               const isSummaryTh = text.startsWith('/สรุป');
               const prefixLen = isSummaryTh ? '/สรุป'.length : '/summary'.length;
               const param = text.substring(prefixLen).trim();
 
-              if (param !== "") {
+              // A date param (e.g. 10-6-26, 10-6-2569) selects a past round for read-only summary
+              const requestedRoundDate = param !== "" ? parseRoundDateParam(param) : null;
+
+              let activeRound: any;
+              if (requestedRoundDate) {
+                const { data: dateRound } = await supabase
+                  .from('lottery_rounds')
+                  .select('*')
+                  .eq('dealer_id', dealerId)
+                  .eq('lottery_type', groupLink.lottery_type)
+                  .eq('round_date', requestedRoundDate)
+                  .order('created_at', { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+
+                if (!dateRound) {
+                  await sendLineReply(replyToken, `❌ ไม่พบงวดหวย ${groupLink.lottery_type.toUpperCase()} ของวันที่ ${param}\n(งวดอาจถูกลบไปแล้ว หรือยังไม่ได้สร้างงวดของวันนั้น)`);
+                  continue;
+                }
+                activeRound = dateRound;
+              } else {
+                const { data: latestRound } = await supabase
+                  .from('lottery_rounds')
+                  .select('*')
+                  .eq('dealer_id', dealerId)
+                  .eq('lottery_type', groupLink.lottery_type)
+                  .in('status', ['open', 'closed', 'announced'])
+                  .order('created_at', { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+
+                if (!latestRound) {
+                  await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงหรือกำลังตรวจผลสำหรับหวยประเภท ${groupLink.lottery_type.toUpperCase()}`);
+                  continue;
+                }
+                activeRound = latestRound;
+              }
+
+              // Winning-number announcement only when param is provided AND is NOT a date
+              if (param !== "" && !requestedRoundDate) {
                 // ต้องปิดรับก่อนถึงจะประกาศผลได้
                 if (activeRound.status === 'open') {
                   await sendLineReply(replyToken, `❌ ไม่สามารถประกาศผลได้ เพราะงวดนี้ยังเปิดรับแทงอยู่\nกรุณาปิดรับก่อนโดยใช้คำสั่ง /ปิด`);
@@ -4833,6 +4888,7 @@ serve(async (req) => {
                 helpText = `💡 คำสั่งบอทสำหรับสมาชิก (${groupLink.lottery_type.toUpperCase()})\n`;
                 helpText += `--------------------------\n`;
                 helpText += `1. /สรุป - สรุปงวดหวย ยอดแทง ส่วนลด ค่าคอม ถูกรางวัล และยอดสุทธิ (ต้องจ่าย/ต้องเก็บ) ของตัวเองในงวดนี้\n`;
+                helpText += `   • /สรุป [งวดวันที่] - ดูสรุปของตัวเองในงวดวันที่ระบุ เช่น /สรุป 10-6-69 หรือ /สรุป 10-6-2569 (เฉพาะงวดที่ยังไม่ถูกลบ)\n`;
                 helpText += `2. /ยอดรวม - สรุปยอดรวมแทงทั้งหมดของตัวเองในงวดนี้\n`;
                 helpText += `3. /คำสั่ง หรือ /help - แสดงคำสั่งที่สามารถใช้งานได้`;
               } else {
@@ -4840,6 +4896,8 @@ serve(async (req) => {
                 helpText += `--------------------------\n`;
                 helpText += `👑 คำสั่งทั่วไปสำหรับร้านค้า:\n`;
                 helpText += `1. /สรุป - สรุปงวดหวย (ยอดรับ, ยอดส่ง, กำไร) และสรุปยอดที่ต้องเคลียร์ของสมาชิกแต่ละคน\n`;
+                helpText += `   • /สรุป [เลขที่ออก] - ประกาศผลและสรุปงวดปัจจุบัน เช่น /สรุป 1234\n`;
+                helpText += `   • /สรุป [งวดวันที่] - ดูสรุปย้อนหลังของงวดวันที่ระบุ เช่น /สรุป 10-6-69 หรือ /สรุป 10-6-2569 (เฉพาะงวดที่ยังไม่ถูกลบ)\n`;
                 helpText += `2. /ยอดรวม - รายงานยอดรับรวมแยกตามประเภทเลขและยอดรวมทั้งหมดของร้าน\n`;
                 helpText += `3. /คนส่ง - รายงานยอดรับแทงแยกตามสมาชิกแต่ละคน\n`;
                 helpText += `4. /สมาชิก [ชื่อ] - ค้นหายอดเงินคงเหลือและข้อมูลสมาชิก\n`;
