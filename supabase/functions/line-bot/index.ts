@@ -3129,9 +3129,23 @@ serve(async (req) => {
                   continue;
                 }
 
-                const memberUserIds = (groupMembers || [])
+                let memberUserIds = (groupMembers || [])
                   .map((m: any) => m.user_id)
                   .filter(Boolean);
+
+                // Filter out managers/dealers: only include users with role='user'
+                if (memberUserIds.length > 0) {
+                  const { data: memberProfiles } = await supabase
+                    .from('profiles')
+                    .select('id, role')
+                    .in('id', memberUserIds);
+                  const userRoleIds = new Set(
+                    (memberProfiles || [])
+                      .filter((p: any) => p.role === 'user')
+                      .map((p: any) => p.id)
+                  );
+                  memberUserIds = memberUserIds.filter((id: string) => userRoleIds.has(id));
+                }
 
                 if (memberUserIds.length === 0) {
                   if (targetGroupId === groupId) {
