@@ -3046,9 +3046,9 @@ serve(async (req) => {
               let activeRound: any = null;
 
               if (param !== "") {
-                const parsed = parseReportParams(param);
-                if (!parsed) {
-                  await sendLineReply(replyToken, `❌ รูปแบบระบุงวดหวยไม่ถูกต้อง\nกรุณาระบุในรูปแบบ /แจ้งผล [ประเภทหวย]/[วัน]/[เดือน]/[ปี]\nตัวอย่างเช่น:\n- /แจ้งผล ล/9/5/2026\n- /แจ้งผล ล/9/5/26`);
+                const dateStr = parseRoundDateParam(param);
+                if (!dateStr) {
+                  await sendLineReply(replyToken, `❌ รูปแบบระบุงวดหวยไม่ถูกต้อง\nกรุณาระบุในรูปแบบ /แจ้งผล [วัน]-[เดือน]-[ปี]\nตัวอย่างเช่น:\n- /แจ้งผล 10-05-2026\n- /แจ้งผล 10-05-26\n- /แจ้งผล 10-05-69\n- /แจ้งผล 10-05-2569`);
                   continue;
                 }
 
@@ -3056,8 +3056,8 @@ serve(async (req) => {
                   .from('lottery_rounds')
                   .select('*')
                   .eq('dealer_id', dealerId)
-                  .eq('lottery_type', parsed.lotteryType)
-                  .eq('round_date', parsed.dateStr)
+                  .eq('lottery_type', groupLink.lottery_type)
+                  .eq('round_date', dateStr)
                   .maybeSingle();
 
                 if (!targetRound || !targetRound.is_result_announced || (targetRound.status !== 'announced' && targetRound.status !== 'closed')) {
@@ -3615,8 +3615,8 @@ serve(async (req) => {
 
                 // Use DB prize_amount as the primary source (same as web app getExpectedPayout).
                 // For 4_set, DB stores per-set prize so we must multiply by numSets.
-                // Fallback to checkTransferWin only when prize_amount is null (e.g.
-                // calculate_round_winners was never run for this submission).
+                // Fallback to checkTransferWin when is_winner=true but win=0
+                // (handles both null and zero prize_amount from DB).
                 let win = 0;
                 if (isAnnounced && sub.is_winner) {
                   if (sub.bet_type === '4_set') {
@@ -3625,8 +3625,8 @@ serve(async (req) => {
                   } else {
                     win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
                   }
-                  // Fallback to realtime calculation when DB prize_amount is null
-                  if (win === 0 && sub.prize_amount == null) {
+                  // Fallback to realtime calculation when DB prize_amount is missing or zero
+                  if (win === 0) {
                     const winResult = checkTransferWin(
                       sub.bet_type,
                       sub.numbers,
