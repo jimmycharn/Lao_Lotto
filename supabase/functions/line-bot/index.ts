@@ -6481,8 +6481,9 @@ serve(async (req) => {
           totalBetAmount = processedInserts.reduce((sum, insert) => sum + insert.amount, 0);
 
           if (processedInserts.length === 0) {
+            const setPrice = activeRound?.set_prices?.['4_top'] || 120;
             // Group and summarize returned bets
-            const groupedReturned = new Map<string, { numbers: string; typeLabel: string; amount: number }>();
+            const groupedReturned = new Map<string, { numbers: string; betType: string; typeLabel: string; amount: number }>();
             returnedBets.forEach(rb => {
               const key = `${rb.numbers}|${rb.typeLabel}`;
               const existing = groupedReturned.get(key);
@@ -6494,9 +6495,15 @@ serve(async (req) => {
             });
 
             let summaryText = `❌ ส่งโพยไม่สำเร็จ: เลขทุกตัวที่ส่งมามีมูลค่าเกินลิมิตของงวดนี้แล้ว จึงถูกตีคืนทั้งหมดค่ะ\n\n`;
-            summaryText += `⚠️ รายการที่เกินลิมิต (คืนสมาชิก):\n`;
+            summaryText += `⚠️ ยอดที่คืนสมาชิก:\n`;
             for (const rb of groupedReturned.values()) {
-              summaryText += `- ${rb.numbers} (${rb.typeLabel}) คืน ฿${rb.amount.toLocaleString('th-TH')}\n`;
+              const cleanTypeLabel = rb.typeLabel.replace(/\s+/g, '');
+              if (isSetBasedLottery && (rb.betType === '4_set' || rb.betType === '4_top')) {
+                const sets = Math.round(rb.amount / setPrice);
+                summaryText += `${rb.numbers} (${cleanTypeLabel}) คืน: ${sets} ชุด=฿${rb.amount.toLocaleString('th-TH')}\n`;
+              } else {
+                summaryText += `${rb.numbers} (${cleanTypeLabel}) คืน: ฿${rb.amount.toLocaleString('th-TH')}\n`;
+              }
             }
             await sendLineReply(replyToken, summaryText.trim());
             continue;
@@ -6529,14 +6536,29 @@ serve(async (req) => {
         // Format and send confirmation ticket
         let summaryText = `✅บันทึกโพยสำเร็จ!✅\n`;
         summaryText += `------------------------\n`;
-        summaryText += `จำนวน: ${parsedBets.length} รายการ\n`;
-        summaryText += `ยอดรวม: ฿${totalBetAmount.toLocaleString('th-TH')}\n`;
-        summaryText += `------------------------\n`;
-        summaryText += `/ยกเลิก ${billId}`;
 
         if (returnedBets && returnedBets.length > 0) {
+          const setPrice = activeRound?.set_prices?.['4_top'] || 120;
+          const totalReturnedAmount = returnedBets.reduce((sum, rb) => sum + rb.amount, 0);
+          const totalReturnedCount = returnedBets.reduce((sum, rb) => {
+            if (isSetBasedLottery && (rb.betType === '4_set' || rb.betType === '4_top')) {
+              return sum + Math.round(rb.amount / setPrice);
+            }
+            return sum + 1;
+          }, 0);
+          const originalTotalAmount = totalBetAmount + totalReturnedAmount;
+
+          summaryText += `จำนวน: ${parsedBets.length} รายการ\n`;
+          summaryText += `ยอดรวม: ฿${originalTotalAmount.toLocaleString('th-TH')}\n`;
+          summaryText += `คืนยอด: ${totalReturnedCount} รายการ\n`;
+          summaryText += `ยอดคืน: ฿${totalReturnedAmount.toLocaleString('th-TH')}\n`;
+          summaryText += `------------------------\n`;
+          summaryText += `คงเหลือยอดส่ง: ฿${totalBetAmount.toLocaleString('th-TH')}\n`;
+          summaryText += `------------------------\n`;
+          summaryText += `/ยกเลิก ${billId}\n\n`;
+
           // Group and summarize returned bets
-          const groupedReturned = new Map<string, { numbers: string; typeLabel: string; amount: number }>();
+          const groupedReturned = new Map<string, { numbers: string; betType: string; typeLabel: string; amount: number }>();
           returnedBets.forEach(rb => {
             const key = `${rb.numbers}|${rb.typeLabel}`;
             const existing = groupedReturned.get(key);
@@ -6547,11 +6569,22 @@ serve(async (req) => {
             }
           });
 
-          summaryText += `\n\n⚠️ ยอดที่เกินลิมิต (คืนสมาชิก):\n`;
+          summaryText += `⚠️ ยอดที่คืนสมาชิก:\n`;
           for (const rb of groupedReturned.values()) {
-            summaryText += `- ${rb.numbers} (${rb.typeLabel}) คืน ฿${rb.amount.toLocaleString('th-TH')}\n`;
+            const cleanTypeLabel = rb.typeLabel.replace(/\s+/g, '');
+            if (isSetBasedLottery && (rb.betType === '4_set' || rb.betType === '4_top')) {
+              const sets = Math.round(rb.amount / setPrice);
+              summaryText += `${rb.numbers} (${cleanTypeLabel}) คืน: ${sets} ชุด=฿${rb.amount.toLocaleString('th-TH')}\n`;
+            } else {
+              summaryText += `${rb.numbers} (${cleanTypeLabel}) คืน: ฿${rb.amount.toLocaleString('th-TH')}\n`;
+            }
           }
           summaryText = summaryText.trimEnd();
+        } else {
+          summaryText += `จำนวน: ${parsedBets.length} รายการ\n`;
+          summaryText += `ยอดรวม: ฿${totalBetAmount.toLocaleString('th-TH')}\n`;
+          summaryText += `------------------------\n`;
+          summaryText += `/ยกเลิก ${billId}`;
         }
 
         await sendLineReply(replyToken, summaryText);
