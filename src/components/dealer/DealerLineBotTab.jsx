@@ -11,7 +11,8 @@ import {
     FiCopy,
     FiAlertCircle,
     FiSettings,
-    FiRefreshCw
+    FiRefreshCw,
+    FiTerminal
 } from 'react-icons/fi'
 import CopyButton from '../CopyButton'
 import { LOTTERY_TYPES } from '../../constants/lotteryTypes'
@@ -879,6 +880,192 @@ export default function DealerLineBotTab({ user, profile }) {
                         </table>
                     </div>
                 )}
+            </div>
+
+            {/* LINE Bot Commands & Permissions Guide */}
+            <div className="card" style={{ padding: '1.5rem', marginTop: '1.5rem' }}>
+                <h3 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <FiTerminal /> รายการคำสั่งและสิทธิ์การใช้งาน LINE Bot
+                </h3>
+                <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem' }}>
+                    ตารางสรุปคำสั่งงานทางห้องแชท LINE และสิทธิ์ประเภทผู้ใช้งานที่สามารถทำรายการได้
+                </p>
+                <div className="table-responsive">
+                    <table className="table" style={{ width: '100%', minWidth: '700px', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                        <thead>
+                            <tr style={{ borderBottom: '2px solid var(--color-border)' }}>
+                                <th style={{ textAlign: 'left', padding: '0.75rem', width: '220px' }}>คำสั่ง (Command)</th>
+                                <th style={{ textAlign: 'left', padding: '0.75rem' }}>รายละเอียดการทำงาน</th>
+                                <th style={{ textAlign: 'center', padding: '0.75rem', width: '100px' }}>แอดมิน</th>
+                                <th style={{ textAlign: 'center', padding: '0.75rem', width: '150px' }}>ผู้จัดการ</th>
+                                <th style={{ textAlign: 'center', padding: '0.75rem', width: '120px' }}>สมาชิก</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        ตัวเลข=ยอดแทง (เช่น 123=100)
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>ส่งโพยเข้าระบบเพื่อวิเคราะห์และบันทึกบิลแทง</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /เลขรวม [น-ม / ม-น]
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>แสดงรายการตัวเลขที่ขายได้ทั้งหมด (น-ม = เรียงจากยอดน้อยไปมาก, ม-น = เรียงจากยอดมากไปน้อย)</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                    <span style={{ color: 'var(--color-primary)', fontSize: '0.75rem', background: 'rgba(212,175,55,0.1)', padding: '0.15rem 0.35rem', borderRadius: '4px', fontWeight: 600 }}>
+                                        🔑 สิทธิ์ดูยอดรวม / สมาชิก
+                                    </span>
+                                </td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /เลขเหลือ [น-ม / ม-น]
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>แสดงยอดคงเหลือแต่ละตัวเลข หลังหักยอดตีออกไปแล้ว (น-ม = น้อยไปมาก, ม-น = มากไปน้อย)</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                    <span style={{ color: 'var(--color-primary)', fontSize: '0.75rem', background: 'rgba(212,175,55,0.1)', padding: '0.15rem 0.35rem', borderRadius: '4px', fontWeight: 600 }}>
+                                        🔑 สิทธิ์ดูยอดรวม / สมาชิก
+                                    </span>
+                                </td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /เลขตี [น-ม / ม-น]
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>แสดงรายการตัวเลขและยอดเงินที่กดส่งตีออกไปแล้ว (น-ม = น้อยไปมาก, ม-น = มากไปน้อย)</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                    <span style={{ color: 'var(--color-primary)', fontSize: '0.75rem', background: 'rgba(212,175,55,0.1)', padding: '0.15rem 0.35rem', borderRadius: '4px', fontWeight: 600 }}>
+                                        🔑 สิทธิ์ดูยอดรวม / สมาชิก
+                                    </span>
+                                </td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /ยอดรวม หรือ /total
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>สรุปยอดส่งแทงแยกตามประเภทตัวเลขสะสมทั้งหมดของร้าน</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้ทั้งหมด</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                    <span style={{ color: '#36a2eb', fontSize: '0.75rem', background: 'rgba(54,162,235,0.1)', padding: '0.15rem 0.35rem', borderRadius: '4px', fontWeight: 600 }}>
+                                        🔑 สิทธิ์ดูยอดรวม
+                                    </span>
+                                </td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                    <span style={{ color: '#36a2eb', fontSize: '0.75rem', background: 'rgba(54,162,235,0.1)', padding: '0.15rem 0.35rem', borderRadius: '4px', fontWeight: 600 }}>
+                                        👤 เฉพาะของตนเอง
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /ยอดเกิน หรือ /excess
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>ตรวจสอบรายการโพยที่ยอดซื้อเกินขีดจำกัดลิมิต (ยอดที่เตรียมตีออก)</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                    <span style={{ color: '#ff9f40', fontSize: '0.75rem', background: 'rgba(255,159,64,0.1)', padding: '0.15rem 0.35rem', borderRadius: '4px', fontWeight: 600 }}>
+                                        🔑 สิทธิ์ดูยอดเกิน
+                                    </span>
+                                </td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /ตีออก เกิน
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>สั่งส่งต่อยอดอั้นเกินลิมิตทั้งหมดไปยังเจ้ามือปลายทางเพื่อลดความเสี่ยง</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                    <span style={{ color: '#9966ff', fontSize: '0.75rem', background: 'rgba(153,102,255,0.1)', padding: '0.15rem 0.35rem', borderRadius: '4px', fontWeight: 600 }}>
+                                        🔑 สิทธิ์ตีออก
+                                    </span>
+                                </td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        Y หรือ ยืนยัน
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>ยืนยันทำรายการตีออกยอดอั้นเกินลิมิต หลังได้รับยอดคำนวณจาก /ตีออก เกิน</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                    <span style={{ color: '#9966ff', fontSize: '0.75rem', background: 'rgba(153,102,255,0.1)', padding: '0.15rem 0.35rem', borderRadius: '4px', fontWeight: 600 }}>
+                                        🔑 สิทธิ์ตีออก
+                                    </span>
+                                </td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /สมาชิก [ชื่อหรือ LINE ID]
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>ดูข้อมูลสรุป ยอดค้าง และสิทธิ์การใช้งาน ของสมาชิกในกลุ่มรายบุคคล</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                    <span style={{ color: 'var(--color-primary)', fontSize: '0.75rem', background: 'rgba(212,175,55,0.1)', padding: '0.15rem 0.35rem', borderRadius: '4px', fontWeight: 600 }}>
+                                        🔑 สิทธิ์ดูสมาชิก
+                                    </span>
+                                </td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /ยกเลิก [เลขที่บิล]
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>ยกเลิกบิลโพยใบที่ส่งเข้ามาล่าสุด (พิมพ์แค่ /ยกเลิก เพื่อยกเลิกบิลล่าสุดได้)</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้ (ของทุกคน)</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้ (ของทุกคน)</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                    <span style={{ color: '#36a2eb', fontSize: '0.75rem', background: 'rgba(54,162,235,0.1)', padding: '0.15rem 0.35rem', borderRadius: '4px', fontWeight: 600 }}>
+                                        👤 เฉพาะบิลตนเอง
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /link
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>ขอลิงก์เข้าดูข้อมูลรหัส LINE User ID ส่วนตัว เพื่อนำไปผูกบัญชีใช้งานในเว็บบอร์ด</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     )

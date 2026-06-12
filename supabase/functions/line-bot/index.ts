@@ -1424,7 +1424,7 @@ function getThaiBetTypeLabel(betType: string, lotteryType: string): string {
       'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
       'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
       '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
-      '3_top': '3 ตัวบน', '3_straight': '3 ตัวตรง', '3_tod': '3 ตัวโต๊ด', '3_tod_single': '3 ตัวโต๊ด',
+      '3_top': '3 ตัวตรง', '3_straight': '3 ตัวตรง', '3_tod': '3 ตัวโต๊ด', '3_tod_single': '3 ตัวโต๊ด',
       '4_float': '4 ตัวลอย', '5_float': '5 ตัวลอย'
     };
     return labels[betType] || betType;
@@ -2395,6 +2395,8 @@ serve(async (req) => {
           const isManagerCommand = 
             text.startsWith('/stats') || text.startsWith('/สมาชิก') || text.startsWith('/ยอดสมาชิก') ||
             text.startsWith('/total') || text.startsWith('/ยอดรวม') ||
+            text.startsWith('/เลขรวม') || text.startsWith('/เลขเหลือ') ||
+            text.startsWith('/เลขตี') || text.startsWith('/เลขตีออก') ||
             text.startsWith('/excess') || text.startsWith('/ยอดเกิน') ||
             text.startsWith('/transfer') || text.startsWith('/ตีออก') ||
             text.startsWith('/เอาคืน') || text.startsWith('/return') ||
@@ -2489,7 +2491,7 @@ serve(async (req) => {
             }
 
             const permissions = isStaff
-              ? { can_view_stats: true, can_view_total: true }
+              ? { can_view_stats: true, can_view_total: true, can_view_excess: true, can_transfer: true }
               : (manager?.permissions || {});
 
             // ─── COMMAND: /สมาชิก หรือ /stats ───
@@ -4793,6 +4795,406 @@ serve(async (req) => {
               continue;
             }
 
+            // Helper to split text by character limit without cutting lines
+            function splitTextByLimit(textStr: string, limit = 4000): string[] {
+              if (textStr.length <= limit) return [textStr];
+              const lines = textStr.split('\n');
+              const chunks: string[] = [];
+              let currentChunk = '';
+              for (const line of lines) {
+                if ((currentChunk + '\n' + line).length > limit) {
+                  if (currentChunk) chunks.push(currentChunk);
+                  currentChunk = line;
+                } else {
+                  currentChunk = currentChunk === '' ? line : currentChunk + '\n' + line;
+                }
+              }
+              if (currentChunk) chunks.push(currentChunk);
+              return chunks;
+            }
+
+            const typeRanks: Record<string, number> = {
+              'run_top': 100, 'run_bottom': 101, 'pak_top': 102, 'pak_bottom': 103,
+              'front_top_1': 104, 'middle_top_1': 105, 'back_top_1': 106,
+              'front_bottom_1': 107, 'back_bottom_1': 108,
+              '2_top': 200, '2_bottom': 201, '2_front': 202, '2_center': 203, '2_run': 204, '2_spread': 205,
+              '3_top': 300, '3_tod': 301, '3_front': 302, '3_back': 303, '3_bottom': 304,
+              '4_set': 400, '4_tod': 401, '4_float': 402, '5_float': 403, '6_top': 404
+            };
+
+            // ─── COMMAND: /เลขรวม ───
+            if (text.startsWith('/เลขรวม')) {
+              if (!permissions.can_view_total && !permissions.can_view_stats) {
+                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์เข้าถึงรายงานข้อมูลตัวเลข`);
+                continue;
+              }
+
+              let sortByAmount: 'asc' | 'desc' | null = null;
+              if (text.includes('น-ม')) {
+                sortByAmount = 'asc';
+              } else if (text.includes('ม-น')) {
+                sortByAmount = 'desc';
+              }
+
+              const { data: activeRound } = await supabase
+                .from('lottery_rounds')
+                .select('id, round_date, close_time, lottery_type')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', groupLink.lottery_type)
+                .in('status', ['open', 'closed', 'announced'])
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (!activeRound) {
+                await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงสำหรับหวยประเภท ${groupLink.lottery_type.toUpperCase()}`);
+                continue;
+              }
+
+              const { data: submissions, error: sumErr } = await supabase
+                .from('submissions')
+                .select('bet_type, numbers, amount')
+                .eq('round_id', activeRound.id)
+                .eq('is_deleted', false);
+
+              if (sumErr) {
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลเลขรวม`);
+                continue;
+              }
+
+              const soldMap = new Map<string, Map<string, number>>();
+              let grandTotal = 0;
+              (submissions || []).forEach((s: any) => {
+                const amt = Number(s.amount || 0);
+                if (amt <= 0) return;
+                if (!soldMap.has(s.bet_type)) {
+                  soldMap.set(s.bet_type, new Map<string, number>());
+                }
+                const typeMap = soldMap.get(s.bet_type)!;
+                typeMap.set(s.numbers, (typeMap.get(s.numbers) || 0) + amt);
+                grandTotal += amt;
+              });
+
+              const sortedTypes = Array.from(soldMap.keys()).sort((a, b) => {
+                const rankA = typeRanks[a] !== undefined ? typeRanks[a] : 500;
+                const rankB = typeRanks[b] !== undefined ? typeRanks[b] : 500;
+                if (rankA !== rankB) return rankA - rankB;
+                return a.localeCompare(b);
+              });
+
+              const LOTTERY_TYPE_NAMES: Record<string, string> = {
+                lao: 'หวยลาว',
+                thai: 'หวยไทย',
+                hanoi: 'หวยฮานอย',
+                stock: 'หวยหุ้น',
+                yeekee: 'หวยยี่กี'
+              };
+              const typeNameInThai = LOTTERY_TYPE_NAMES[groupLink.lottery_type] || `หวย${groupLink.lottery_type.toUpperCase()}`;
+
+              let summaryText = `รายงานเลขรวม (${typeNameInThai})\n`;
+              const roundDateStr = getRoundDisplayDate(activeRound, false);
+              if (roundDateStr) {
+                summaryText += `งวดวันที่: ${roundDateStr}\n`;
+              }
+              summaryText += `รวมยอดรวม: ฿${grandTotal.toLocaleString('th-TH')}\n`;
+              summaryText += `--------------------------\n`;
+
+              if (soldMap.size === 0) {
+                summaryText += `ยังไม่มียอดขายเข้ามาค่ะ\n`;
+              } else {
+                const categories: string[] = [];
+                for (const type of sortedTypes) {
+                  const label = getThaiBetTypeLabel(type, groupLink.lottery_type);
+                  const typeMap = soldMap.get(type)!;
+                  const sortedNums = Array.from(typeMap.keys()).sort((a, b) => {
+                    if (sortByAmount) {
+                      const amtA = typeMap.get(a)!;
+                      const amtB = typeMap.get(b)!;
+                      if (amtA !== amtB) {
+                        return sortByAmount === 'asc' ? amtA - amtB : amtB - amtA;
+                      }
+                    }
+                    const numA = parseInt(a, 10);
+                    const numB = parseInt(b, 10);
+                    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                    return a.localeCompare(b);
+                  });
+
+                  const betItemsStr = sortedNums.map(num => {
+                    const amt = typeMap.get(num)!;
+                    return `${num}=${amt}`;
+                  }).join('\n');
+
+                  categories.push(`${label}\n${betItemsStr}`);
+                }
+                summaryText += categories.join('\n----------------\n') + '\n';
+              }
+              summaryText += `--------------------------`;
+
+              await sendLineReply(replyToken, splitTextByLimit(summaryText));
+              continue;
+            }
+
+            // ─── COMMAND: /เลขตี หรือ /เลขตีออก ───
+            if (text.startsWith('/เลขตี') || text.startsWith('/เลขตีออก')) {
+              if (!permissions.can_view_total && !permissions.can_view_stats) {
+                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์เข้าถึงรายงานข้อมูลตัวเลข`);
+                continue;
+              }
+
+              let sortByAmount: 'asc' | 'desc' | null = null;
+              if (text.includes('น-ม')) {
+                sortByAmount = 'asc';
+              } else if (text.includes('ม-น')) {
+                sortByAmount = 'desc';
+              }
+
+              const { data: activeRound } = await supabase
+                .from('lottery_rounds')
+                .select('id, round_date, close_time, lottery_type')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', groupLink.lottery_type)
+                .in('status', ['open', 'closed', 'announced'])
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (!activeRound) {
+                await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงสำหรับหวยประเภท ${groupLink.lottery_type.toUpperCase()}`);
+                continue;
+              }
+
+              const { data: transfers, error: trErr } = await supabase
+                .from('bet_transfers')
+                .select('bet_type, numbers, amount, status')
+                .eq('round_id', activeRound.id);
+
+              if (trErr) {
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลเลขตีออก`);
+                continue;
+              }
+
+              const activeTransfers = (transfers || []).filter((t: any) => t.status !== 'returned');
+
+              const transferMap = new Map<string, Map<string, number>>();
+              let grandTotal = 0;
+              activeTransfers.forEach((t: any) => {
+                const amt = Number(t.amount || 0);
+                if (amt <= 0) return;
+                if (!transferMap.has(t.bet_type)) {
+                  transferMap.set(t.bet_type, new Map<string, number>());
+                }
+                const typeMap = transferMap.get(t.bet_type)!;
+                typeMap.set(t.numbers, (typeMap.get(t.numbers) || 0) + amt);
+                grandTotal += amt;
+              });
+
+              const sortedTypes = Array.from(transferMap.keys()).sort((a, b) => {
+                const rankA = typeRanks[a] !== undefined ? typeRanks[a] : 500;
+                const rankB = typeRanks[b] !== undefined ? typeRanks[b] : 500;
+                if (rankA !== rankB) return rankA - rankB;
+                return a.localeCompare(b);
+              });
+
+              const LOTTERY_TYPE_NAMES: Record<string, string> = {
+                lao: 'หวยลาว',
+                thai: 'หวยไทย',
+                hanoi: 'หวยฮานอย',
+                stock: 'หวยหุ้น',
+                yeekee: 'หวยยี่กี'
+              };
+              const typeNameInThai = LOTTERY_TYPE_NAMES[groupLink.lottery_type] || `หวย${groupLink.lottery_type.toUpperCase()}`;
+
+              let summaryText = `รายงานเลขตีออก (${typeNameInThai})\n`;
+              const roundDateStr = getRoundDisplayDate(activeRound, false);
+              if (roundDateStr) {
+                summaryText += `งวดวันที่: ${roundDateStr}\n`;
+              }
+              summaryText += `รวมยอดตีออก: ฿${grandTotal.toLocaleString('th-TH')}\n`;
+              summaryText += `--------------------------\n`;
+
+              if (transferMap.size === 0) {
+                summaryText += `ยังไม่มีรายการตีออกในงวดนี้ค่ะ\n`;
+              } else {
+                const categories: string[] = [];
+                for (const type of sortedTypes) {
+                  const label = getThaiBetTypeLabel(type, groupLink.lottery_type);
+                  const typeMap = transferMap.get(type)!;
+                  const sortedNums = Array.from(typeMap.keys()).sort((a, b) => {
+                    if (sortByAmount) {
+                      const amtA = typeMap.get(a)!;
+                      const amtB = typeMap.get(b)!;
+                      if (amtA !== amtB) {
+                        return sortByAmount === 'asc' ? amtA - amtB : amtB - amtA;
+                      }
+                    }
+                    const numA = parseInt(a, 10);
+                    const numB = parseInt(b, 10);
+                    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                    return a.localeCompare(b);
+                  });
+
+                  const betItemsStr = sortedNums.map(num => {
+                    const amt = typeMap.get(num)!;
+                    return `${num}=${amt}`;
+                  }).join('\n');
+
+                  categories.push(`${label}\n${betItemsStr}`);
+                }
+                summaryText += categories.join('\n----------------\n') + '\n';
+              }
+              summaryText += `--------------------------`;
+
+              await sendLineReply(replyToken, splitTextByLimit(summaryText));
+              continue;
+            }
+
+            // ─── COMMAND: /เลขเหลือ ───
+            if (text.startsWith('/เลขเหลือ')) {
+              if (!permissions.can_view_total && !permissions.can_view_stats) {
+                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์เข้าถึงรายงานข้อมูลตัวเลข`);
+                continue;
+              }
+
+              let sortByAmount: 'asc' | 'desc' | null = null;
+              if (text.includes('น-ม')) {
+                sortByAmount = 'asc';
+              } else if (text.includes('ม-น')) {
+                sortByAmount = 'desc';
+              }
+
+              const { data: activeRound } = await supabase
+                .from('lottery_rounds')
+                .select('id, round_date, close_time, lottery_type')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', groupLink.lottery_type)
+                .in('status', ['open', 'closed', 'announced'])
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (!activeRound) {
+                await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงสำหรับหวยประเภท ${groupLink.lottery_type.toUpperCase()}`);
+                continue;
+              }
+
+              const { data: submissions, error: sumErr } = await supabase
+                .from('submissions')
+                .select('bet_type, numbers, amount')
+                .eq('round_id', activeRound.id)
+                .eq('is_deleted', false);
+
+              const { data: transfers, error: trErr } = await supabase
+                .from('bet_transfers')
+                .select('bet_type, numbers, amount, status')
+                .eq('round_id', activeRound.id);
+
+              if (sumErr || trErr) {
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลตัวเลข`);
+                continue;
+              }
+
+              const soldMap = new Map<string, Map<string, number>>();
+              (submissions || []).forEach((s: any) => {
+                const amt = Number(s.amount || 0);
+                if (amt <= 0) return;
+                if (!soldMap.has(s.bet_type)) {
+                  soldMap.set(s.bet_type, new Map<string, number>());
+                }
+                const typeMap = soldMap.get(s.bet_type)!;
+                typeMap.set(s.numbers, (typeMap.get(s.numbers) || 0) + amt);
+              });
+
+              const transferMap = new Map<string, Map<string, number>>();
+              const activeTransfers = (transfers || []).filter((t: any) => t.status !== 'returned');
+              activeTransfers.forEach((t: any) => {
+                const amt = Number(t.amount || 0);
+                if (amt <= 0) return;
+                if (!transferMap.has(t.bet_type)) {
+                  transferMap.set(t.bet_type, new Map<string, number>());
+                }
+                const typeMap = transferMap.get(t.bet_type)!;
+                typeMap.set(t.numbers, (typeMap.get(t.numbers) || 0) + amt);
+              });
+
+              const remainingMap = new Map<string, Map<string, number>>();
+              let grandRemainingTotal = 0;
+
+              for (const [type, soldTypeMap] of soldMap.entries()) {
+                const transferTypeMap = transferMap.get(type);
+                for (const [num, soldAmt] of soldTypeMap.entries()) {
+                  const trAmt = transferTypeMap?.get(num) || 0;
+                  const remainingAmt = soldAmt - trAmt;
+                  if (remainingAmt > 0) {
+                    if (!remainingMap.has(type)) {
+                      remainingMap.set(type, new Map<string, number>());
+                    }
+                    remainingMap.get(type)!.set(num, remainingAmt);
+                    grandRemainingTotal += remainingAmt;
+                  }
+                }
+              }
+
+              const sortedTypes = Array.from(remainingMap.keys()).sort((a, b) => {
+                const rankA = typeRanks[a] !== undefined ? typeRanks[a] : 500;
+                const rankB = typeRanks[b] !== undefined ? typeRanks[b] : 500;
+                if (rankA !== rankB) return rankA - rankB;
+                return a.localeCompare(b);
+              });
+
+              const LOTTERY_TYPE_NAMES: Record<string, string> = {
+                lao: 'หวยลาว',
+                thai: 'หวยไทย',
+                hanoi: 'หวยฮานอย',
+                stock: 'หวยหุ้น',
+                yeekee: 'หวยยี่กี'
+              };
+              const typeNameInThai = LOTTERY_TYPE_NAMES[groupLink.lottery_type] || `หวย${groupLink.lottery_type.toUpperCase()}`;
+
+              let summaryText = `รายงานเลขเหลือ (${typeNameInThai})\n`;
+              const roundDateStr = getRoundDisplayDate(activeRound, false);
+              if (roundDateStr) {
+                summaryText += `งวดวันที่: ${roundDateStr}\n`;
+              }
+              summaryText += `รวมยอดเหลือ: ฿${grandRemainingTotal.toLocaleString('th-TH')}\n`;
+              summaryText += `--------------------------\n`;
+
+              if (remainingMap.size === 0) {
+                summaryText += `ไม่มีเลขคงเหลือในงวดนี้ค่ะ\n`;
+              } else {
+                const categories: string[] = [];
+                for (const type of sortedTypes) {
+                  const label = getThaiBetTypeLabel(type, groupLink.lottery_type);
+                  const typeMap = remainingMap.get(type)!;
+                  const sortedNums = Array.from(typeMap.keys()).sort((a, b) => {
+                    if (sortByAmount) {
+                      const amtA = typeMap.get(a)!;
+                      const amtB = typeMap.get(b)!;
+                      if (amtA !== amtB) {
+                        return sortByAmount === 'asc' ? amtA - amtB : amtB - amtA;
+                      }
+                    }
+                    const numA = parseInt(a, 10);
+                    const numB = parseInt(b, 10);
+                    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                    return a.localeCompare(b);
+                  });
+
+                  const betItemsStr = sortedNums.map(num => {
+                    const amt = typeMap.get(num)!;
+                    return `${num}=${amt}`;
+                  }).join('\n');
+
+                  categories.push(`${label}\n${betItemsStr}`);
+                }
+                summaryText += categories.join('\n----------------\n') + '\n';
+              }
+              summaryText += `--------------------------`;
+
+              await sendLineReply(replyToken, splitTextByLimit(summaryText));
+              continue;
+            }
+
             // ─── COMMAND: /ตีออก ───
             if (text.startsWith('/ตีออก') || text.startsWith('/transfer')) {
               if (!permissions.can_transfer) {
@@ -5322,6 +5724,7 @@ serve(async (req) => {
             // ─── COMMAND: Y / ยืนยัน ───
             if (text.toLowerCase() === 'y' || text === 'ยืนยัน') {
               if (!permissions.can_transfer) {
+                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ในการสั่งตีออกตัวเลข`);
                 continue;
               }
 
@@ -5336,11 +5739,13 @@ serve(async (req) => {
                 .maybeSingle();
 
               if (!activeRound) {
+                await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงสำหรับหวยประเภท ${groupLink.lottery_type.toUpperCase()}`);
                 continue;
               }
 
               const excessItems = await calculateRoundExcess(activeRound.id);
               if (excessItems.length === 0) {
+                await sendLineReply(replyToken, `ℹ️ ไม่มียอดเกินลิมิตให้ออกในงวดนี้ค่ะ`);
                 continue;
               }
 

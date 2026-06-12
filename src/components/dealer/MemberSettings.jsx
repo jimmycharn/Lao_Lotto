@@ -523,7 +523,7 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                                 </thead>
                                 <tbody>
                                     {Object.entries(settings[activeTab] || {})
-                                        .filter(([key]) => key !== '4_set' && key !== 'bonusEnabled')
+                                        .filter(([key]) => key !== '4_set' && key !== 'bonusEnabled' && key !== 'returnExcessOnOverflow')
                                         .map(([key, value]) => (
                                             <tr key={key}>
                                                 <td className="type-cell">
