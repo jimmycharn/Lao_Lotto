@@ -1392,6 +1392,50 @@ async function getCommissionInfo(userId: string, dealerId: string, betType: stri
   return { rate: DEFAULT_COMMISSIONS[betType] || 15, isFixed: false };
 }
 
+function findMatchingLimit(numberLimits: any[], betType: string, numbers: string) {
+  const directMatch = numberLimits.find(
+    (nl: any) => nl.bet_type === betType && nl.numbers === numbers
+  );
+  if (directMatch) return directMatch;
+
+  const reversedMatch = numberLimits.find(
+    (nl: any) => nl.bet_type === betType &&
+      nl.include_reversed &&
+      Array.isArray(nl.reversed_numbers) &&
+      nl.reversed_numbers.includes(numbers)
+  );
+  return reversedMatch || null;
+}
+
+function getThaiBetTypeLabel(betType: string, lotteryType: string): string {
+  const typeLower = lotteryType.toLowerCase();
+  if (typeLower === 'thai') {
+    const labels: Record<string, string> = {
+      'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
+      'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
+      '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
+      '3_top': '3 ตัวบน', '3_tod': '3 ตัวโต๊ด', '3_bottom': '3 ตัวล่าง',
+      '4_float': '4 ตัวลอย', '5_float': '5 ตัวลอย'
+    };
+    return labels[betType] || betType;
+  } else if (typeLower === 'lao' || typeLower === 'hanoi') {
+    const labels: Record<string, string> = {
+      '4_set': '4 ตัวชุด',
+      'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
+      'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
+      '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
+      '3_top': '3 ตัวบน', '3_straight': '3 ตัวตรง', '3_tod': '3 ตัวโต๊ด', '3_tod_single': '3 ตัวโต๊ด',
+      '4_float': '4 ตัวลอย', '5_float': '5 ตัวลอย'
+    };
+    return labels[betType] || betType;
+  } else {
+    const labels: Record<string, string> = {
+      '2_top': '2 ตัวบน', '2_bottom': '2 ตัวล่าง'
+    };
+    return labels[betType] || betType;
+  }
+}
+
 function parseWinningNumbers(param: string, lotteryType: string): any | null {
   const clean = param.replace(/\s+/g, ''); // Remove spaces
   const typeLower = lotteryType.toLowerCase();
@@ -3108,7 +3152,18 @@ serve(async (req) => {
                 continue;
               }
 
+              // Pre-fetch all managers for this dealer
+              const { data: managerData } = await supabase
+                .from('line_managers')
+                .select('*')
+                .eq('dealer_id', dealerId)
+                .eq('is_active', true);
+              console.log('[แจ้งผล] line_managers schema sample=', JSON.stringify((managerData || []).slice(0,1)));
+              const managerLineUserIds = new Set((managerData || []).map((m: any) => m.line_user_id));
+
               let currentGroupProcessed = false;
+              const groupList = (allGroups || []).map((g: any) => g.line_group_id?.slice(-6)).join(', ');
+              console.log(`[แจ้งผล] allGroups=${allGroups.length} groups=[${groupList}] managerLineIds=${[...managerLineUserIds].join(',')}`);
 
               // Loop through each group to calculate and broadcast results
               for (const g of allGroups) {
@@ -3121,7 +3176,7 @@ serve(async (req) => {
                   .eq('line_group_id', targetGroupId);
 
                 if (memErr) {
-                  console.error(`Error fetching members for group ${targetGroupId}:`, memErr);
+                  console.error(`[แจ้งผล] SKIP group=${targetGroupId} reason=memError msg=${memErr.message}`);
                   if (targetGroupId === groupId) {
                     await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลสมาชิกในกลุ่ม: ${memErr.message}`);
                     currentGroupProcessed = true;
@@ -3129,41 +3184,18 @@ serve(async (req) => {
                   continue;
                 }
 
-                let memberUserIds = (groupMembers || [])
-                  .map((m: any) => m.user_id)
-                  .filter(Boolean);
-
-                // 1a. Exclude LINE managers from this dealer
-                const { data: managerData } = await supabase
-                  .from('line_managers')
-                  .select('line_user_id, nickname')
-                  .eq('dealer_id', dealerId)
-                  .eq('is_active', true);
-                const managerLineUserIds = new Set((managerData || []).map((m: any) => m.line_user_id));
-                console.log(`[DEBUG /แจ้งผล] group=${targetGroupId} managers=${JSON.stringify(managerData || [])} managerIds=${[...managerLineUserIds].join(',')}`);
-                console.log(`[DEBUG /แจ้งผล] allMembers=${(groupMembers || []).map((m: any) => `${m.display_name}:${m.line_user_id}:${m.user_id}`).join(', ')}`);
+                // Filter out managers from line_managers table
                 const nonManagerMembers = (groupMembers || [])
                   .filter((m: any) => !managerLineUserIds.has(m.line_user_id));
-                console.log(`[DEBUG /แจ้งผล] afterManagerFilter=${nonManagerMembers.map((m: any) => `${m.display_name}:${m.user_id}`).join(', ')}`);
-                memberUserIds = nonManagerMembers
+                const memberUserIds = nonManagerMembers
                   .map((m: any) => m.user_id)
                   .filter(Boolean);
-
-                // 1b. Only include users with active dealer membership
-                if (memberUserIds.length > 0) {
-                  const { data: activeMemberships } = await supabase
-                    .from('user_dealer_memberships')
-                    .select('user_id')
-                    .eq('dealer_id', dealerId)
-                    .eq('status', 'active')
-                    .in('user_id', memberUserIds);
-                  const activeUserIds = new Set((activeMemberships || []).map((m: any) => m.user_id));
-                  console.log(`[DEBUG /แจ้งผล] activeMemberships=${(activeMemberships || []).map((m: any) => m.user_id).join(', ')} activeIds=${[...activeUserIds].join(',')}`);
-                  memberUserIds = memberUserIds.filter((id: string) => activeUserIds.has(id));
-                  console.log(`[DEBUG /แจ้งผล] finalMemberIds=${memberUserIds.join(',')}`);
-                }
-
+                const managerNames = (groupMembers || [])
+                  .filter((m: any) => managerLineUserIds.has(m.line_user_id))
+                  .map((m: any) => m.display_name || m.line_user_id);
+                console.log(`[แจ้งผล] group=${targetGroupId} total=${groupMembers?.length || 0} managers=[${managerNames.join(',')}] members=${memberUserIds.length}`);
                 if (memberUserIds.length === 0) {
+                  console.log(`[แจ้งผล] SKIP group=${targetGroupId} reason=noMembersAfterFilter`);
                   if (targetGroupId === groupId) {
                     await sendLineReply(replyToken, `👥 ไม่มีรายการส่งเลขในกลุ่มนี้สำหรับงวดนี้ค่ะ`);
                     currentGroupProcessed = true;
@@ -3174,13 +3206,13 @@ serve(async (req) => {
                 // 2. Fetch submissions for these group members in this round
                 const { data: submissions, error: subErr } = await supabase
                   .from('submissions')
-                  .select('amount, commission_amount, prize_amount, is_winner, user_id')
+                  .select('amount, commission_amount, prize_amount, is_winner, user_id, bet_type, numbers')
                   .eq('round_id', activeRound.id)
                   .in('user_id', memberUserIds)
                   .eq('is_deleted', false);
 
                 if (subErr) {
-                  console.error(`Error fetching submissions for group ${targetGroupId}:`, subErr);
+                  console.error(`[แจ้งผล] SKIP group=${targetGroupId} reason=subError msg=${subErr.message}`);
                   if (targetGroupId === groupId) {
                     await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลยอดรับ: ${subErr.message}`);
                     currentGroupProcessed = true;
@@ -3188,7 +3220,10 @@ serve(async (req) => {
                   continue;
                 }
 
+                console.log(`[แจ้งผล] group=${targetGroupId} members=${memberUserIds.length} submissions=${submissions?.length || 0}`);
+
                 if (!submissions || submissions.length === 0) {
+                  console.log(`[แจ้งผล] SKIP group=${targetGroupId} reason=noSubmissions`);
                   if (targetGroupId === groupId) {
                     await sendLineReply(replyToken, `👥 ไม่มีรายการส่งเลขในกลุ่มนี้สำหรับงวดนี้ค่ะ`);
                     currentGroupProcessed = true;
@@ -3196,7 +3231,7 @@ serve(async (req) => {
                   continue;
                 }
 
-                // 3. Group by user
+                // 3. Group by user (calculate win same as admin view)
                 const userSummaries: Record<string, {
                   userId: string;
                   totalBet: number;
@@ -3205,9 +3240,42 @@ serve(async (req) => {
                   winCount: number;
                 }> = {};
 
+                const setPrice = activeRound?.set_prices?.['4_top'] || 120;
+                const isAnnounced = !!activeRound.winning_numbers;
+
                 submissions.forEach((sub: any) => {
                   const userId = sub.user_id;
                   if (!userId) return;
+
+                  const amt = Number(sub.amount || 0);
+                  const comm = Number(sub.commission_amount || 0);
+
+                  // Calculate win same as admin view
+                  let win = 0;
+                  if (isAnnounced && sub.is_winner) {
+                    if (sub.bet_type === '4_set') {
+                      const numSets = Math.max(1, Math.floor(amt / setPrice));
+                      win = (sub.prize_amount != null ? Number(sub.prize_amount) : 0) * numSets;
+                    } else {
+                      win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
+                    }
+                    // Fallback when DB prize_amount is missing or zero
+                    if (win === 0) {
+                      const winResult = checkTransferWin(
+                        sub.bet_type,
+                        sub.numbers,
+                        activeRound.winning_numbers,
+                        activeRound.lottery_type,
+                        amt,
+                        setPrice,
+                        DEFAULT_4_SET_SETTINGS.prizes
+                      );
+                      if (winResult.wins) {
+                        win = winResult.payout;
+                      }
+                    }
+                  }
+
                   if (!userSummaries[userId]) {
                     userSummaries[userId] = {
                       userId,
@@ -3217,9 +3285,9 @@ serve(async (req) => {
                       winCount: 0
                     };
                   }
-                  userSummaries[userId].totalBet += Number(sub.amount || 0);
-                  userSummaries[userId].totalCommission += Number(sub.commission_amount || 0);
-                  userSummaries[userId].totalWin += Number(sub.prize_amount || 0);
+                  userSummaries[userId].totalBet += amt;
+                  userSummaries[userId].totalCommission += comm;
+                  userSummaries[userId].totalWin += win;
                   if (sub.is_winner) {
                     userSummaries[userId].winCount++;
                   }
@@ -3402,9 +3470,11 @@ serve(async (req) => {
                   await sendLineReply(replyToken, carouselMessages);
                   currentGroupProcessed = true;
                 } else {
+                  console.log(`[แจ้งผล] pushing ${carouselMessages.length} messages to group=${targetGroupId}`);
                   for (const msg of carouselMessages) {
                     try {
                       await sendLinePush(targetGroupId, msg);
+                      console.log(`[แจ้งผล] push success to group=${targetGroupId}`);
                     } catch (pushErr) {
                       console.error(`Failed to push results message to group ${targetGroupId}:`, pushErr);
                     }
@@ -5996,6 +6066,58 @@ serve(async (req) => {
           continue;
         }
 
+        // Retrieve returnExcessOnOverflow setting for the member
+        const { data: userSettings } = await supabase
+          .from('user_settings')
+          .select('lottery_settings')
+          .eq('user_id', profile.id)
+          .eq('dealer_id', dealerId)
+          .maybeSingle();
+
+        const returnExcess = !!userSettings?.lottery_settings?.[lotteryType]?.returnExcessOnOverflow;
+
+        let typeLimitsMap: Record<string, number> = {};
+        let numberLimits: any[] = [];
+        const currentTotals = new Map<string, number>();
+        let transfersList: any[] = [];
+        const isSetBasedLottery = ['lao', 'hanoi'].includes(lotteryType);
+
+        if (returnExcess) {
+          // Fetch type limits
+          const { data: typeLimitsData } = await supabase
+            .from('type_limits')
+            .select('bet_type, max_per_number')
+            .eq('round_id', activeRound.id);
+          (typeLimitsData || []).forEach((tl: any) => {
+            typeLimitsMap[tl.bet_type] = Number(tl.max_per_number);
+          });
+
+          // Fetch number limits
+          const { data: numberLimitsData } = await supabase
+            .from('number_limits')
+            .select('bet_type, numbers, max_amount, is_active, limit_type, include_reversed, reversed_numbers')
+            .eq('round_id', activeRound.id);
+          numberLimits = (numberLimitsData || []).filter((nl: any) => nl.is_active === undefined || nl.is_active === true);
+
+          // Fetch submissions totals
+          const { data: submissionsData } = await supabase
+            .from('submissions')
+            .select('bet_type, numbers, amount')
+            .eq('round_id', activeRound.id)
+            .eq('is_deleted', false);
+          (submissionsData || []).forEach((s: any) => {
+            const key = `${s.bet_type}|${s.numbers}`;
+            currentTotals.set(key, (currentTotals.get(key) || 0) + Number(s.amount || 0));
+          });
+
+          // Fetch layoffs
+          const { data: transfersData } = await supabase
+            .from('bet_transfers')
+            .select('bet_type, numbers, amount, status')
+            .eq('round_id', activeRound.id);
+          transfersList = (transfersData || []).filter((t: any) => t.status !== 'returned');
+        }
+
         // Calculate total bet amount
         let totalBetAmount = 0;
         const processedInserts = [];
@@ -6241,6 +6363,146 @@ serve(async (req) => {
           }
         }
 
+        const finalInserts = [];
+        const returnedBets: { numbers: string; betType: string; amount: number; typeLabel: string }[] = [];
+
+        if (returnExcess) {
+          const currentExactSetsMap = new Map<string, number>();
+          const current3SetTotalMap = new Map<string, number>();
+          const setPrice = activeRound.set_prices?.['4_top'] || 120;
+
+          if (isSetBasedLottery) {
+            for (const [key, val] of currentTotals.entries()) {
+              const [bt, num] = key.split('|');
+              if ((bt === '4_set' || bt === '4_top') && num?.length === 4) {
+                const sets = Math.ceil(val / setPrice);
+                currentExactSetsMap.set(num, (currentExactSetsMap.get(num) || 0) + sets);
+
+                const last3 = num.slice(-3);
+                current3SetTotalMap.set(last3, (current3SetTotalMap.get(last3) || 0) + sets);
+              }
+            }
+          }
+
+          for (const insert of processedInserts) {
+            const betType = insert.bet_type;
+            const numbers = insert.numbers;
+            const amount = insert.amount;
+
+            if (isSetBasedLottery && (betType === '4_set' || betType === '4_top') && numbers?.length === 4) {
+              const proposedSets = amount / setPrice;
+              const last3 = numbers.slice(-3);
+
+              const limit4Set = typeLimitsMap['4_set'] !== undefined ? typeLimitsMap['4_set'] : (typeLimitsMap['4_top'] !== undefined ? typeLimitsMap['4_top'] : 999999999);
+              const exactTransferred = transfersList
+                .filter(t => (t.bet_type === '4_set' || t.bet_type === '4_top') && t.numbers === numbers)
+                .reduce((sum, t) => sum + Math.floor((Number(t.amount) || 0) / setPrice), 0);
+              const effectiveLimit4Set = limit4Set + exactTransferred;
+              const currentExactSets = currentExactSetsMap.get(numbers) || 0;
+              const remaining4Set = Math.max(0, effectiveLimit4Set - currentExactSets);
+
+              const limit3Set = typeLimitsMap['3_set'] !== undefined ? typeLimitsMap['3_set'] : 999999999;
+              const totalTransferred3Set = transfersList
+                .filter(t => (t.bet_type === '4_set' || t.bet_type === '3_set') && t.numbers?.slice(-3) === last3)
+                .reduce((sum, t) => sum + Math.floor((Number(t.amount) || 0) / setPrice), 0);
+              const effectiveLimit3Set = limit3Set + totalTransferred3Set;
+              const current3SetTotal = current3SetTotalMap.get(last3) || 0;
+              const remaining3Set = Math.max(0, effectiveLimit3Set - current3SetTotal);
+
+              const acceptedSets = Math.min(proposedSets, remaining4Set, remaining3Set);
+              const acceptedAmount = acceptedSets * setPrice;
+              const excessAmount = (proposedSets - acceptedSets) * setPrice;
+
+              if (acceptedSets > 0) {
+                insert.amount = acceptedAmount;
+                const commInfo = await getCommissionInfo(profile.id, dealerId, betType, lotteryType);
+                insert.commission_amount = commInfo.isFixed ? commInfo.rate * acceptedSets : (acceptedAmount * commInfo.rate) / 100;
+                insert.display_amount = `${acceptedAmount} บาท (${acceptedSets} ชุด)`;
+                finalInserts.push(insert);
+
+                currentExactSetsMap.set(numbers, currentExactSets + acceptedSets);
+                current3SetTotalMap.set(last3, current3SetTotal + acceptedSets);
+              }
+
+              if (excessAmount > 0) {
+                returnedBets.push({
+                  numbers,
+                  betType,
+                  amount: excessAmount,
+                  typeLabel: '4 ตัวชุด'
+                });
+              }
+            } else {
+              const matchingLimit = findMatchingLimit(numberLimits, betType, numbers);
+              let limit = 999999999;
+              if (matchingLimit) {
+                limit = Number(matchingLimit.max_amount);
+              } else {
+                const typeLimit = typeLimitsMap[betType];
+                if (typeLimit !== undefined) {
+                  limit = typeLimit;
+                }
+              }
+
+              const alreadyTransferred = transfersList
+                .filter(t => t.bet_type === betType && t.numbers === numbers)
+                .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+              const effectiveLimit = limit + alreadyTransferred;
+              const currentTotal = currentTotals.get(`${betType}|${numbers}`) || 0;
+              const remaining = Math.max(0, effectiveLimit - currentTotal);
+
+              const acceptedAmount = Math.min(amount, remaining);
+              const excessAmount = amount - acceptedAmount;
+
+              if (acceptedAmount > 0) {
+                insert.amount = acceptedAmount;
+                const commInfo = await getCommissionInfo(profile.id, dealerId, betType, lotteryType);
+                insert.commission_amount = commInfo.isFixed ? commInfo.rate : (acceptedAmount * commInfo.rate) / 100;
+                insert.display_amount = acceptedAmount.toString();
+                finalInserts.push(insert);
+
+                currentTotals.set(`${betType}|${numbers}`, currentTotal + acceptedAmount);
+              }
+
+              if (excessAmount > 0) {
+                returnedBets.push({
+                  numbers,
+                  betType,
+                  amount: excessAmount,
+                  typeLabel: getThaiBetTypeLabel(betType, lotteryType)
+                });
+              }
+            }
+          }
+
+          // Replace processedInserts with finalInserts
+          processedInserts.length = 0;
+          processedInserts.push(...finalInserts);
+          totalBetAmount = processedInserts.reduce((sum, insert) => sum + insert.amount, 0);
+
+          if (processedInserts.length === 0) {
+            // Group and summarize returned bets
+            const groupedReturned = new Map<string, { numbers: string; typeLabel: string; amount: number }>();
+            returnedBets.forEach(rb => {
+              const key = `${rb.numbers}|${rb.typeLabel}`;
+              const existing = groupedReturned.get(key);
+              if (existing) {
+                existing.amount += rb.amount;
+              } else {
+                groupedReturned.set(key, { ...rb });
+              }
+            });
+
+            let summaryText = `❌ ส่งโพยไม่สำเร็จ: เลขทุกตัวที่ส่งมามีมูลค่าเกินลิมิตของงวดนี้แล้ว จึงถูกตีคืนทั้งหมดค่ะ\n\n`;
+            summaryText += `⚠️ รายการที่เกินลิมิต (คืนสมาชิก):\n`;
+            for (const rb of groupedReturned.values()) {
+              summaryText += `- ${rb.numbers} (${rb.typeLabel}) คืน ฿${rb.amount.toLocaleString('th-TH')}\n`;
+            }
+            await sendLineReply(replyToken, summaryText.trim());
+            continue;
+          }
+        }
+
         // Verify Credit Limit of Dealer
         const creditCheck = await checkDealerCreditForBet(dealerId, totalBetAmount);
         if (!creditCheck.allowed) {
@@ -6271,6 +6533,26 @@ serve(async (req) => {
         summaryText += `ยอดรวม: ฿${totalBetAmount.toLocaleString('th-TH')}\n`;
         summaryText += `------------------------\n`;
         summaryText += `/ยกเลิก ${billId}`;
+
+        if (returnedBets && returnedBets.length > 0) {
+          // Group and summarize returned bets
+          const groupedReturned = new Map<string, { numbers: string; typeLabel: string; amount: number }>();
+          returnedBets.forEach(rb => {
+            const key = `${rb.numbers}|${rb.typeLabel}`;
+            const existing = groupedReturned.get(key);
+            if (existing) {
+              existing.amount += rb.amount;
+            } else {
+              groupedReturned.set(key, { ...rb });
+            }
+          });
+
+          summaryText += `\n\n⚠️ ยอดที่เกินลิมิต (คืนสมาชิก):\n`;
+          for (const rb of groupedReturned.values()) {
+            summaryText += `- ${rb.numbers} (${rb.typeLabel}) คืน ฿${rb.amount.toLocaleString('th-TH')}\n`;
+          }
+          summaryText = summaryText.trimEnd();
+        }
 
         await sendLineReply(replyToken, summaryText);
       }

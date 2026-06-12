@@ -25,6 +25,7 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
     const getDefaultSettings = () => ({
         thai: {
             bonusEnabled: false,
+            returnExcessOnOverflow: false,
             'run_top': { commission: 15, payout: 3, bonus: 0 },
             'run_bottom': { commission: 15, payout: 4, bonus: 0 },
             'pak_top': { commission: 15, payout: 8, bonus: 0 },
@@ -42,6 +43,7 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
         },
         lao: {
             bonusEnabled: false,
+            returnExcessOnOverflow: false,
             '4_set': {
                 commission: 25,
                 setPrice: 120,
@@ -71,6 +73,7 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
         },
         hanoi: {
             bonusEnabled: false,
+            returnExcessOnOverflow: false,
             '4_set': {
                 commission: 25,
                 setPrice: 120,
@@ -100,6 +103,7 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
         },
         stock: {
             bonusEnabled: false,
+            returnExcessOnOverflow: false,
             '2_top': { commission: 15, payout: 65, bonus: 0 },
             '2_bottom': { commission: 15, payout: 65, bonus: 0 }
         }
@@ -195,6 +199,10 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                         // Merge bonusEnabled flag
                         if (data.lottery_settings[tab].bonusEnabled !== undefined) {
                             merged[tab].bonusEnabled = data.lottery_settings[tab].bonusEnabled
+                        }
+                        // Merge returnExcessOnOverflow flag
+                        if (data.lottery_settings[tab].returnExcessOnOverflow !== undefined) {
+                            merged[tab].returnExcessOnOverflow = data.lottery_settings[tab].returnExcessOnOverflow
                         }
                         Object.keys(data.lottery_settings[tab]).forEach(key => {
                             if (key === 'bonusEnabled') return
@@ -360,6 +368,35 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                             />
                             <FiGift style={{ color: settings[activeTab]?.bonusEnabled ? '#22c55e' : 'var(--color-text-muted)' }} />
                             <span style={{ fontWeight: 500 }}>เปิดแถมเงินแทง</span>
+                        </label>
+
+                        {/* คืนเลขเกินลิมิต Checkbox */}
+                        <label
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                margin: '0.5rem 0 0.5rem',
+                                cursor: 'pointer',
+                                fontSize: '0.95rem',
+                                color: settings[activeTab]?.returnExcessOnOverflow ? '#eab308' : 'var(--color-text)'
+                            }}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={settings[activeTab]?.returnExcessOnOverflow || false}
+                                onChange={(e) => {
+                                    setSettings(prev => ({
+                                        ...prev,
+                                        [activeTab]: {
+                                            ...prev[activeTab],
+                                            returnExcessOnOverflow: e.target.checked
+                                        }
+                                    }))
+                                }}
+                                style={{ width: '18px', height: '18px', accentColor: '#eab308', cursor: 'pointer' }}
+                            />
+                            <span style={{ fontWeight: 500 }}>คืนเลขเกินลิมิต (ไม่รับยอดเกิน)</span>
                         </label>
 
                         {/* ไม่อนุญาตส่งโพย Checkbox */}
