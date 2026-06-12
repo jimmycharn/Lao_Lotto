@@ -2391,6 +2391,18 @@ serve(async (req) => {
         if (event.type === 'message' && event.message?.type === 'text') {
           const text = event.message.text.trim();
 
+          // Fetch group link details if in a group or room
+          let groupLink = null;
+          if (groupId && (groupId.startsWith('C') || groupId.startsWith('R'))) {
+            const { data: gl } = await supabase
+              .from('line_groups')
+              .select('*')
+              .eq('line_group_id', groupId)
+              .eq('is_active', true)
+              .maybeSingle();
+            groupLink = gl;
+          }
+
           // ─── MANAGER COMMANDS ROUTER ───
           const isManagerCommand = 
             text.startsWith('/stats') || text.startsWith('/สมาชิก') || text.startsWith('/ยอดสมาชิก') ||
@@ -2408,14 +2420,6 @@ serve(async (req) => {
             text.toLowerCase() === 'y' || text === 'ยืนยัน';
 
           if (isManagerCommand) {
-            // 1. Fetch group link information to check dealer
-            const { data: groupLink } = await supabase
-              .from('line_groups')
-              .select('*')
-              .eq('line_group_id', groupId)
-              .eq('is_active', true)
-              .maybeSingle();
-
             if (!groupLink) {
               // Not a registered group, ignore it
               continue;
@@ -2453,6 +2457,24 @@ serve(async (req) => {
             if (!manager && !isStaff) {
               const isOpenCloseCommand = text === '/เปิด' || text === '/ปิด';
               if (isTotalCommand || isSummaryCommand || isHelpCommand || isOpenCloseCommand || isReportCommand) {
+                // Check member permissions toggles
+                const memberPerms = groupLink.member_permissions || {};
+
+                if (isTotalCommand && memberPerms.total === false) {
+                  await sendLineReply(replyToken, `❌ ดีลเลอร์ปิดการใช้งานรายงานยอดรวมสำหรับสมาชิกในกลุ่มนี้`);
+                  continue;
+                }
+
+                if (isSummaryCommand && memberPerms.summary === false) {
+                  await sendLineReply(replyToken, `❌ ดีลเลอร์ปิดการใช้งานสรุปยอดและรางวัลสำหรับสมาชิกในกลุ่มนี้`);
+                  continue;
+                }
+
+                if (isHelpCommand && memberPerms.help === false) {
+                  await sendLineReply(replyToken, `❌ ดีลเลอร์ปิดการใช้งานคู่มือคำสั่งในกลุ่มนี้`);
+                  continue;
+                }
+
                 if (!profile) {
                   // If they typed a slash command but are not linked, notify them so they can copy their LINE User ID
                   await sendLineReply(replyToken, [
@@ -5808,6 +5830,31 @@ serve(async (req) => {
 
         // ─── COMMAND 2: /link หรือ /id หรือ /myid ───
         if (text === '/link' || text === '/id' || text === '/myid') {
+          if (groupLink && groupLink.member_permissions?.link === false) {
+            const { data: senderProfile } = await supabase
+              .from('profiles')
+              .select('id, role')
+              .eq('line_user_id', userId)
+              .maybeSingle();
+            const targetDealerId = groupLink.dealer_id;
+            const isStaffSender = senderProfile?.id === targetDealerId || senderProfile?.role === 'superadmin' || senderProfile?.role === 'admin';
+            let isManagerSender = false;
+            if (!isStaffSender && targetDealerId) {
+              const { data: mgr } = await supabase
+                .from('line_managers')
+                .select('id')
+                .eq('dealer_id', targetDealerId)
+                .eq('line_user_id', userId)
+                .eq('is_active', true)
+                .maybeSingle();
+              isManagerSender = !!mgr;
+            }
+            if (!isStaffSender && !isManagerSender) {
+              await sendLineReply(replyToken, `❌ ดีลเลอร์ปิดการใช้งานคำสั่งนี้สำหรับสมาชิกในกลุ่มนี้`);
+              continue;
+            }
+          }
+
           const linkText = `รหัส LINE User ID ของคุณคือ:\n\n${userId}\n\nกรุณาคัดลอกรหัสนี้เพื่อนำไปเชื่อมต่อบัญชีหรือตั้งค่าสิทธิ์ผู้จัดการบนหน้าเว็บค่ะ`;
           await sendLineReply(replyToken, linkText);
           continue;
@@ -5815,6 +5862,31 @@ serve(async (req) => {
 
         // ─── COMMAND 3: /bal หรือ /credit ───
         if (text === '/bal' || text === '/credit' || text === '/ยอดเงิน') {
+          if (groupLink && groupLink.member_permissions?.link === false) {
+            const { data: senderProfile } = await supabase
+              .from('profiles')
+              .select('id, role')
+              .eq('line_user_id', userId)
+              .maybeSingle();
+            const targetDealerId = groupLink.dealer_id;
+            const isStaffSender = senderProfile?.id === targetDealerId || senderProfile?.role === 'superadmin' || senderProfile?.role === 'admin';
+            let isManagerSender = false;
+            if (!isStaffSender && targetDealerId) {
+              const { data: mgr } = await supabase
+                .from('line_managers')
+                .select('id')
+                .eq('dealer_id', targetDealerId)
+                .eq('line_user_id', userId)
+                .eq('is_active', true)
+                .maybeSingle();
+              isManagerSender = !!mgr;
+            }
+            if (!isStaffSender && !isManagerSender) {
+              await sendLineReply(replyToken, `❌ ดีลเลอร์ปิดการใช้งานคำสั่งนี้สำหรับสมาชิกในกลุ่มนี้`);
+              continue;
+            }
+          }
+
           const { data: profile } = await supabase
             .from('profiles')
             .select('id, full_name')
@@ -5849,6 +5921,31 @@ serve(async (req) => {
 
         // ─── COMMAND 4: /ยกเลิก หรือ /cancel ───
         if (text.startsWith('/cancel') || text.startsWith('/ยกเลิก')) {
+          if (groupLink && groupLink.member_permissions?.cancel === false) {
+            const { data: senderProfile } = await supabase
+              .from('profiles')
+              .select('id, role')
+              .eq('line_user_id', userId)
+              .maybeSingle();
+            const targetDealerId = groupLink.dealer_id;
+            const isStaffSender = senderProfile?.id === targetDealerId || senderProfile?.role === 'superadmin' || senderProfile?.role === 'admin';
+            let isManagerSender = false;
+            if (!isStaffSender && targetDealerId) {
+              const { data: mgr } = await supabase
+                .from('line_managers')
+                .select('id')
+                .eq('dealer_id', targetDealerId)
+                .eq('line_user_id', userId)
+                .eq('is_active', true)
+                .maybeSingle();
+              isManagerSender = !!mgr;
+            }
+            if (!isStaffSender && !isManagerSender) {
+              await sendLineReply(replyToken, `❌ ดีลเลอร์ปิดการใช้งานยกเลิกใบโพยสำหรับสมาชิกในกลุ่มนี้`);
+              continue;
+            }
+          }
+
           let cancelCode = '';
           if (text.startsWith('/cancel')) {
             cancelCode = text.substring('/cancel'.length).trim();
@@ -5954,6 +6051,31 @@ serve(async (req) => {
 
         // ─── COMMAND 5: /โพย หรือ /bill ───
         if (text.startsWith('/bill') || text.startsWith('/โพย')) {
+          if (groupLink && groupLink.member_permissions?.bill === false) {
+            const { data: senderProfile } = await supabase
+              .from('profiles')
+              .select('id, role')
+              .eq('line_user_id', userId)
+              .maybeSingle();
+            const targetDealerId = groupLink.dealer_id;
+            const isStaffSender = senderProfile?.id === targetDealerId || senderProfile?.role === 'superadmin' || senderProfile?.role === 'admin';
+            let isManagerSender = false;
+            if (!isStaffSender && targetDealerId) {
+              const { data: mgr } = await supabase
+                .from('line_managers')
+                .select('id')
+                .eq('dealer_id', targetDealerId)
+                .eq('line_user_id', userId)
+                .eq('is_active', true)
+                .maybeSingle();
+              isManagerSender = !!mgr;
+            }
+            if (!isStaffSender && !isManagerSender) {
+              await sendLineReply(replyToken, `❌ ดีลเลอร์ปิดการใช้งานเรียกดูใบโพยสำหรับสมาชิกในกลุ่มนี้`);
+              continue;
+            }
+          }
+
           try {
             let billCode = '';
             if (text.startsWith('/bill')) {
@@ -6317,14 +6439,6 @@ serve(async (req) => {
         }
 
 // ─── NORMAL MESSAGE (Check if in a bound group for processing bets) ───
-        // Fetch group link information
-        const { data: groupLink } = await supabase
-          .from('line_groups')
-          .select('*')
-          .eq('line_group_id', groupId)
-          .eq('is_active', true)
-          .single();
-
         if (!groupLink) {
           // Message not in a registered group, ignore it
           continue;
@@ -6417,6 +6531,12 @@ serve(async (req) => {
           // For linked members, check if the text contains a bet. If not, ignore silently
           if (parsedBets.length === 0) {
             // Random chat message, ignore it
+            continue;
+          }
+
+          // Check if bets are allowed for members
+          if (groupLink.member_permissions?.bet === false) {
+            await sendLineReply(replyToken, `❌ ดีลเลอร์ปิดการรับยอดแทงผ่านแชท LINE ในกลุ่มนี้สำหรับสมาชิกทั่วไป`);
             continue;
           }
         }
