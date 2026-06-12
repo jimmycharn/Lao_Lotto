@@ -6548,12 +6548,17 @@ serve(async (req) => {
           }, 0);
           const originalTotalAmount = totalBetAmount + totalReturnedAmount;
 
+          const totalCommission = processedInserts.reduce((sum, insert) => sum + (Number(insert.commission_amount) || 0), 0);
+          const netAmount = totalBetAmount - totalCommission;
+
           summaryText += `จำนวน: ${parsedBets.length} รายการ\n`;
           summaryText += `ยอดรวม: ฿${originalTotalAmount.toLocaleString('th-TH')}\n`;
           summaryText += `คืนยอด: ${totalReturnedCount} รายการ\n`;
           summaryText += `ยอดคืน: ฿${totalReturnedAmount.toLocaleString('th-TH')}\n`;
           summaryText += `------------------------\n`;
           summaryText += `คงเหลือยอดส่ง: ฿${totalBetAmount.toLocaleString('th-TH')}\n`;
+          summaryText += `ค่าคอม: ฿${totalCommission.toLocaleString('th-TH')}\n`;
+          summaryText += `คงเหลือ: ฿${netAmount.toLocaleString('th-TH')}\n`;
           summaryText += `------------------------\n`;
           summaryText += `/ยกเลิก ${billId}\n\n`;
 
