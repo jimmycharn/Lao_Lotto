@@ -231,6 +231,40 @@ describe('pasteParser - parseMultiLinePaste', () => {
     expect(result[6]).toMatchObject({ numbers: '150', amount: 10, amount2: 10, betType: '3_top', specialType: 'tengTod' })
   })
 
+  it('should parse abbreviations ช and ซ as ชุด correctly (e.g., 10*ช, 10ช, 10ซ, 10 * ซ)', () => {
+    const cases = [
+      '453 10*ช',
+      '453 10ช',
+      '453 10ซ',
+      '453 10 * ซ'
+    ]
+    for (const text of cases) {
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({ numbers: '453', amount: 10, amount2: 6, betType: '3_top', specialType: 'set6' })
+    }
+  })
+
+  it('should parse the exact Mim paste correctly with 10*ช abbreviation', () => {
+    const text = `868
+874
+186
+881
+643
+739
+712
+253
+870
+453 10*ช
+มิม`
+    const result = parseMultiLinePaste(text, 'lao')
+    console.log('Result for Mim:', result)
+    expect(result.length).toBe(10)
+    expect(result[0]).toMatchObject({ numbers: '868', amount: 10, amount2: 3, betType: '3_top', specialType: 'set3' })
+    expect(result[1]).toMatchObject({ numbers: '874', amount: 10, amount2: 6, betType: '3_top', specialType: 'set6' })
+    expect(result[9]).toMatchObject({ numbers: '453', amount: 10, amount2: 6, betType: '3_top', specialType: 'set6' })
+  })
+
   it('should not parse last number as amount if it has same length (e.g. 12/34/56/10), falling back to legacy parser behavior', () => {
     const text = '12/34/56/10'
     const result = parseMultiLinePaste(text, 'lao')
