@@ -641,7 +641,7 @@ function stripPrefixNoise(line) {
 
     // Remove leading Thai text (and parenthesized text) until we hit a digit
     // Keep stripping Thai chars, spaces, parens, punctuation until a digit block
-    s = s.replace(/^[^\d]*(?=[\d])/, '')
+    s = s.replace(/^[^=\d]*(?=[\d])/, '')
 
     return s.trim()
 }

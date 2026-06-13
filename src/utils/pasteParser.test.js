@@ -185,6 +185,13 @@ describe('pasteParser - parseMultiLinePaste', () => {
     expect(result[1]).toMatchObject({ numbers: '887', amount: 10, betType: '3_top' })
   })
 
+  it('should parse bare numbers followed by ตัวละ30 (e.g. 237\n377\n560\n490\n192\nตัวละ30\nป้าเปลื้อง)', () => {
+    const text = '237\n377\n560\n490\n192\nตัวละ30\nป้าเปลื้อง'
+    const result = parseMultiLinePaste(text, 'lao')
+    console.log('Result for Pa Pleung:', result)
+    expect(result.length).toBe(5)
+  })
+
   it('should not parse last number as amount if it has same length (e.g. 12/34/56/10), falling back to legacy parser behavior', () => {
     const text = '12/34/56/10'
     const result = parseMultiLinePaste(text, 'lao')
