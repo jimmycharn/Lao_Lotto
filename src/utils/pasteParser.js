@@ -129,9 +129,12 @@ function expandLines(rawLines) {
         if (!trimmed) { expanded.push(trimmed); continue }
         if (isDateLine(trimmed)) continue
 
+        // --- Step 0: Strip leading list index prefix like "1) ", "2. " (1-2 digits followed by . or ) and space) ---
+        let line = trimmed.replace(/^\s*\d{1,2}[\.)]\s+/, '')
+
         // --- Step 1: Normalize "ต" / "t" between amounts to "*" ---
         // "123=50 ต 50" → "123=50*50", "456=20t20" → "456=20*20"
-        let line = trimmed.replace(/(\d)\s*[tTตt]\s*(\d)/g, '$1*$2')
+        line = line.replace(/(\d)\s*[tTตt]\s*(\d)/g, '$1*$2')
 
         // --- Step 1.5: If line has slashes but no =, try to detect trailing amount ---
         if (!line.includes('=') && line.includes('/')) {
@@ -158,20 +161,28 @@ function expandLines(rawLines) {
             line = beforeEq + '=' + afterEq
         }
 
-        // --- Step 3: Check for comma/slash-separated numbers BEFORE = or space+amount ---
+        // --- Step 2.5: If the line is a bare list of numbers (only digits, spaces, and separators , ) )
+        // split them into individual bare numbers so they can be buffered properly!
+        if (!line.includes('=') && /^[\d,\s)]+$/.test(line)) {
+            const numTokens = line.split(/[,)]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s))
+            if (numTokens.length >= 2) {
+                expanded.push(...numTokens)
+                continue
+            }
+        }
+
+        // --- Step 3: Check for comma/slash/parenthesis-separated numbers BEFORE = or space+amount ---
         // "123,456,712=10*ชุด" → ["123=10*ชุด", "456=10*ชุด", "712=10*ชุด"]
         // "145/237/201/308=20*20" → ["145=20*20", "237=20*20", ...]
-        // "123, 456 20*20" → ["123=20*20", "456=20*20"]
-        // Strategy: find the numbers portion (before = or before space+amount),
-        // check if it contains comma or slash separating multiple digit groups.
+        // "305)307)=50*ชุด" → ["305=50*ชุด", "307=50*ชุด"]
         let didExpand = false
         if (line.includes('=')) {
             const eqIdx = line.indexOf('=')
             const numsPart = line.substring(0, eqIdx).trim()
             const amtPart = line.substring(eqIdx + 1).trim()
-            // Check if numsPart has comma or slash separating digit groups
-            if (/[,/]/.test(numsPart)) {
-                const numTokens = numsPart.split(/[,/]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s))
+            // Check if numsPart has comma, slash, or parenthesis separating digit groups
+            if (/[,/)]/.test(numsPart)) {
+                const numTokens = numsPart.split(/[,/)]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s))
                 if (numTokens.length >= 2) {
                     for (const num of numTokens) {
                         expanded.push(`${num}=${amtPart}`)
@@ -182,12 +193,12 @@ function expandLines(rawLines) {
         } else {
             // No = sign: check for "nums space amount" pattern
             // e.g., "123,456 20*20" or "123/456 20*20"
-            const spaceAmtMatch = line.match(/^([\d,/\s]+?)\s+(\d+[*]\d+.*)$/)
+            const spaceAmtMatch = line.match(/^([\d,/\s)]+?)\s+(\d+[*]\d+.*)$/)
             if (spaceAmtMatch) {
                 const numsPart = spaceAmtMatch[1].trim()
                 const amtPart = spaceAmtMatch[2].trim()
-                if (/[,/]/.test(numsPart)) {
-                    const numTokens = numsPart.split(/[,/]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s))
+                if (/[,/)]/.test(numsPart)) {
+                    const numTokens = numsPart.split(/[,/)]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s))
                     if (numTokens.length >= 2) {
                         for (const num of numTokens) {
                             expanded.push(`${num}=${amtPart}`)
@@ -1463,15 +1474,33 @@ export function extractBuyerNote(text, lotteryType = 'lao') {
 
     const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
 
+    function getTrailingNote(line) {
+        const cleaned = cleanNoteText(line)
+        if (cleaned && cleaned !== line) {
+            if (!isAmountPattern(cleaned) && !/^[\d/,\s\-+*xX×=\(\)]+$/.test(cleaned)) {
+                const cleanLower = cleaned.toLowerCase()
+                const ignoreKeywords = ['รวม', 'ยอด', 'ทั้งหมด', 'total', 'net', 'sum', 'บ.', 'บาท']
+                if (!ignoreKeywords.some(kw => cleanLower.includes(kw))) {
+                    return cleaned
+                }
+            }
+        }
+        return null
+    }
+
     const isNoteLine = (line) => {
         const trimmed = line.trim()
         if (!trimmed) return false
-        if (/^[\d/,\s\-+*xX×=]+$/.test(trimmed)) return false // ignore lottery numbers and operators
+        if (/^[\d/,\s\-+*xX×=\(\)]+$/.test(trimmed)) return false // ignore lottery numbers and operators
         if (trimmed.startsWith('/')) return false
         if (isDateLine(trimmed)) return false
         if (parseContextLine(trimmed)) return false
 
-        const cleanLower = trimmed.toLowerCase()
+        const cleaned = cleanNoteText(trimmed)
+        if (!cleaned) return false
+        if (isAmountPattern(cleaned) || /^[\d/,\s\-+*xX×=\(\)]+$/.test(cleaned)) return false
+
+        const cleanLower = cleaned.toLowerCase()
         const ignoreKeywords = ['รวม', 'ยอด', 'ทั้งหมด', 'total', 'net', 'sum', 'บ.', 'บาท']
         if (ignoreKeywords.some(kw => cleanLower.includes(kw))) {
             return false
@@ -1487,11 +1516,21 @@ export function extractBuyerNote(text, lotteryType = 'lao') {
     const first = nonEmptyLines[0]
     const last = nonEmptyLines[nonEmptyLines.length - 1]
 
-    if (isNoteLine(first)) {
-        return cleanNoteText(first)
+    const lastTrailing = getTrailingNote(last)
+    if (lastTrailing) {
+        return lastTrailing
     }
+
+    const firstTrailing = getTrailingNote(first)
+    if (firstTrailing) {
+        return firstTrailing
+    }
+
     if (isNoteLine(last)) {
         return cleanNoteText(last)
+    }
+    if (isNoteLine(first)) {
+        return cleanNoteText(first)
     }
 
     return ''
@@ -1523,10 +1562,24 @@ function splitAmountAndTrailingText(line) {
 }
 
 function cleanNoteText(str) {
-    const s = str.trim()
+    let s = str.trim()
+    // Remove leading number list prefix if present (e.g. "123=", "123 ", "305)307)=")
+    const prefixMatch = s.match(/^([\d,/\s)]+?)\s*(?:=|\s)\s*(\d.+)$/)
+    if (prefixMatch) {
+        s = prefixMatch[2].trim()
+    }
+
     const split = splitAmountAndTrailingText(s)
     if (split && split.trailingText) {
         return split.trailingText
     }
+
+    // Check if s is just digits followed by text (e.g. "20 พี่รี" or "50 พี่รี")
+    const spaceMatch = s.match(/^(\d+)(?:\s+(.+))?$/)
+    if (spaceMatch && spaceMatch[2]) {
+        return spaceMatch[2].trim()
+    }
+
     return s
 }
+

@@ -280,6 +280,40 @@ describe('pasteParser - parseMultiLinePaste', () => {
     expect(note).toBe('น้องโบว์')
   })
 
+  it('should parse parenthesis-separated list with trailing amount and name (e.g. 305)307)=50xชุด พี่รี)', () => {
+    const text = '305)307)=50xชุด พี่รี'
+    const result = parseMultiLinePaste(text, 'lao')
+    console.log('Result for Pee Ree:', result)
+    expect(result.length).toBe(2)
+    expect(result[0]).toMatchObject({ numbers: '305', amount: 50, amount2: 6, betType: '3_top', specialType: 'set6' })
+    expect(result[1]).toMatchObject({ numbers: '307', amount: 50, amount2: 6, betType: '3_top', specialType: 'set6' })
+    
+    const note = extractBuyerNote(text, 'lao')
+    expect(note).toBe('พี่รี')
+  })
+
+  it('should parse parenthesis-separated bare list followed by trailing amount line', () => {
+    const text = '305)307)\nตัวละ50\nพี่รี'
+    const result = parseMultiLinePaste(text, 'lao')
+    expect(result.length).toBe(2)
+    expect(result[0]).toMatchObject({ numbers: '305', amount: 50, betType: '3_top' })
+    expect(result[1]).toMatchObject({ numbers: '307', amount: 50, betType: '3_top' })
+    
+    const note = extractBuyerNote(text, 'lao')
+    expect(note).toBe('พี่รี')
+  })
+
+  it('should strip leading list index prefixes like 1) 305 and 2. 307', () => {
+    const text = '1) 305=50\n2. 307=50\nพี่รี'
+    const result = parseMultiLinePaste(text, 'lao')
+    expect(result.length).toBe(2)
+    expect(result[0]).toMatchObject({ numbers: '305', amount: 50, betType: '3_top' })
+    expect(result[1]).toMatchObject({ numbers: '307', amount: 50, betType: '3_top' })
+    
+    const note = extractBuyerNote(text, 'lao')
+    expect(note).toBe('พี่รี')
+  })
+
   it('should not parse last number as amount if it has same length (e.g. 12/34/56/10), falling back to legacy parser behavior', () => {
     const text = '12/34/56/10'
     const result = parseMultiLinePaste(text, 'lao')
