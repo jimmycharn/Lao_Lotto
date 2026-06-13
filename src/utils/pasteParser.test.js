@@ -164,6 +164,33 @@ describe('pasteParser - parseMultiLinePaste', () => {
     expect(result[2]).toMatchObject({ numbers: '5678', amount: 10, amount2: 24, betType: '3_top', specialType: '3xPerm' })
     expect(result[3]).toMatchObject({ numbers: '9012', amount: 30, amount2: 24, betType: '3_top', specialType: '3xPerm' })
   })
+ 
+  it('should parse slash-separated numbers with trailing slash amount (e.g. 879/887/989/778/974/142/10×ชุด/แม่)', () => {
+    const text = '879/887/989/778/974/142/10×ชุด/แม่'
+    const result = parseMultiLinePaste(text, 'lao')
+    expect(result.length).toBe(6)
+    expect(result[0]).toMatchObject({ numbers: '879', amount: 10, betType: '3_top', typeLabel: 'คูณชุด' })
+    expect(result[1]).toMatchObject({ numbers: '887', amount: 10, betType: '3_top', typeLabel: 'คูณชุด' })
+    expect(result[2]).toMatchObject({ numbers: '989', amount: 10, betType: '3_top', typeLabel: 'คูณชุด' })
+    expect(result[3]).toMatchObject({ numbers: '778', amount: 10, betType: '3_top', typeLabel: 'คูณชุด' })
+    expect(result[4]).toMatchObject({ numbers: '974', amount: 10, betType: '3_top', typeLabel: 'คูณชุด' })
+    expect(result[5]).toMatchObject({ numbers: '142', amount: 10, betType: '3_top', typeLabel: 'คูณชุด' })
+  })
+
+  it('should parse simple slash-separated numbers with trailing slash pure number amount (e.g. 879/887/10)', () => {
+    const text = '879/887/10'
+    const result = parseMultiLinePaste(text, 'lao')
+    expect(result.length).toBe(2)
+    expect(result[0]).toMatchObject({ numbers: '879', amount: 10, betType: '3_top' })
+    expect(result[1]).toMatchObject({ numbers: '887', amount: 10, betType: '3_top' })
+  })
+
+  it('should not parse last number as amount if it has same length (e.g. 12/34/56/10), falling back to legacy parser behavior', () => {
+    const text = '12/34/56/10'
+    const result = parseMultiLinePaste(text, 'lao')
+    expect(result.length).toBe(1)
+    expect(result[0]).toMatchObject({ numbers: '12', amount: 34, amount2: 56 })
+  })
 
   describe('extractBuyerNote', () => {
     it('should extract buyer note from first line', () => {

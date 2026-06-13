@@ -65,6 +65,39 @@ function normalizeUnicode(str) {
     return s
 }
 
+function findAmountIndex(tokens) {
+    let rightmostCandidateIdx = -1;
+    for (let i = tokens.length - 1; i >= 0; i--) {
+        const tok = tokens[i].trim();
+        if (isAmountPattern(tok) || /^\d+$/.test(tok)) {
+            rightmostCandidateIdx = i;
+            break;
+        }
+    }
+    
+    if (rightmostCandidateIdx === -1) return -1;
+    
+    const candidate = tokens[rightmostCandidateIdx].trim();
+    
+    if (isAmountPattern(candidate)) {
+        return rightmostCandidateIdx;
+    }
+    
+    if (/^\d+$/.test(candidate) && rightmostCandidateIdx > 0) {
+        const preceding = tokens.slice(0, rightmostCandidateIdx).map(t => t.trim());
+        const allPrecedingAreNumbers = preceding.every(t => /^\d+$/.test(t));
+        if (allPrecedingAreNumbers && preceding.length > 0) {
+            const firstLen = preceding[0].length;
+            const allPrecedingSameLen = preceding.every(t => t.length === firstLen);
+            if (allPrecedingSameLen && candidate.length !== firstLen) {
+                return rightmostCandidateIdx;
+            }
+        }
+    }
+    
+    return -1;
+}
+
 /**
  * Pre-process lines: expand comma/slash-separated numbers and normalize formatted amounts.
  * 
@@ -89,6 +122,17 @@ function expandLines(rawLines) {
         // --- Step 1: Normalize "ต" / "t" between amounts to "*" ---
         // "123=50 ต 50" → "123=50*50", "456=20t20" → "456=20*20"
         let line = trimmed.replace(/(\d)\s*[tTตt]\s*(\d)/g, '$1*$2')
+
+        // --- Step 1.5: If line has slashes but no =, try to detect trailing amount ---
+        if (!line.includes('=') && line.includes('/')) {
+            const tokens = line.split('/')
+            const amountIdx = findAmountIndex(tokens)
+            if (amountIdx > 0) {
+                const numsPart = tokens.slice(0, amountIdx).join('/')
+                const amtPart = tokens.slice(amountIdx).join('/')
+                line = `${numsPart}=${amtPart}`
+            }
+        }
 
         // --- Step 2: Normalize "/" and "+" between amounts to "*" ---
         // Only AFTER = sign: "789=50/50" → "789=50*50", "587=20+20" → "587=20*20"
