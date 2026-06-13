@@ -200,6 +200,37 @@ describe('pasteParser - parseMultiLinePaste', () => {
     expect(result[0]).toMatchObject({ numbers: '237', amount: 30, betType: '3_top' })
   })
 
+  it('should parse space-separated amount operators like 150=10 x10, 150=10 x 10, 150=10 * 10', () => {
+    const cases = [
+      '150=10 x10',
+      '150=10 x 10',
+      '150=10 * 10'
+    ]
+    for (const text of cases) {
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({ numbers: '150', amount: 10, amount2: 10, betType: '3_top', specialType: 'tengTod' })
+    }
+  })
+
+  it('should parse the exact Jack Kra Pao Rua paste correctly', () => {
+    const text = `723
+891
+339
+330
+500
+100
+=10xชุด
+150=10 x10
+
+ไก่`
+    const result = parseMultiLinePaste(text, 'lao')
+    console.log('Result for Jack Kra Pao Rua:', result)
+    expect(result.length).toBe(7)
+    expect(result[0]).toMatchObject({ numbers: '723', amount: 10, betType: '3_top', specialType: 'set6' })
+    expect(result[6]).toMatchObject({ numbers: '150', amount: 10, amount2: 10, betType: '3_top', specialType: 'tengTod' })
+  })
+
   it('should not parse last number as amount if it has same length (e.g. 12/34/56/10), falling back to legacy parser behavior', () => {
     const text = '12/34/56/10'
     const result = parseMultiLinePaste(text, 'lao')

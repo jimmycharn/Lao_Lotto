@@ -106,6 +106,13 @@ function normalizeUnicode(str: string): string {
     // e.g. a trailing line "ตัวละ10 บาท" applies amount 10 to all buffered bare numbers above.
     s = s.replace(/ตัว\s*ละ|ตู\s*ละ/g, '=');
 
+    // Normalize x and X between digits (with optional spaces) to *
+    s = s.replace(/(\d)\s*[xX]\s*(\d)/g, '$1*$2');
+    // Normalize spaces around standard operators (*, -, +, /) between digits
+    s = s.replace(/(\d)\s*([*\-+/\/])\s*(\d)/g, '$1$2$3');
+    // Normalize t, T, ต between digits (with optional spaces) to *
+    s = s.replace(/(\d)\s*[tTต]\s*(\d)/g, '$1*$2');
+
     return s;
 }
 
