@@ -525,7 +525,7 @@ function emitBoth(rawLine: string, isLaoOrHanoi: boolean, lotteryType: string): 
 function stripPrefixNoise(line: string): string {
     let s = line.trim();
     s = s.replace(/^\d{1,2}[:.:]\d{2}([:.:]\d{2})?\s*/, '');
-    s = s.replace(/^[^=\d]*(?=[\d])/, '');
+    s = s.replace(/^[^=\d]*(?=[=\d])/, '');
     return s.trim();
 }
 

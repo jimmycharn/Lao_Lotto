@@ -192,6 +192,14 @@ describe('pasteParser - parseMultiLinePaste', () => {
     expect(result.length).toBe(5)
   })
 
+  it('should parse bare numbers followed by ตัวตรง ตัวละ30 (e.g. 237\n377\n560\n490\n192\nตัวตรง ตัวละ30\nป้าเปลื้อง)', () => {
+    const text = '237\n377\n560\n490\n192\nตัวตรง ตัวละ30\nป้าเปลื้อง'
+    const result = parseMultiLinePaste(text, 'lao')
+    console.log('Result for Pa Pleung with ตัวตรง:', result)
+    expect(result.length).toBe(5)
+    expect(result[0]).toMatchObject({ numbers: '237', amount: 30, betType: '3_top' })
+  })
+
   it('should not parse last number as amount if it has same length (e.g. 12/34/56/10), falling back to legacy parser behavior', () => {
     const text = '12/34/56/10'
     const result = parseMultiLinePaste(text, 'lao')
