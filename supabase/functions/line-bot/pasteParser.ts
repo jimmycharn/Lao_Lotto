@@ -374,6 +374,10 @@ interface AmountInfo {
 
 function extractAmountFromLine(line: string): AmountInfo | null {
     let s = normalizeUnicode(line.trim());
+    const split = splitAmountAndTrailingText(s);
+    if (split) {
+        s = split.amountStr;
+    }
     s = s.replace(/(\d+)\s*[*×xX\-+]?\s*ชุด/g, '$1*ชุด');
     s = s.replace(/(\d)\s*[tTต]\s*(\d)/g, '$1*$2');
     s = s.replace(/(\d)\s*[/+]\s*(\d)/g, '$1*$2');
@@ -1120,6 +1124,7 @@ export function extractBuyerNote(text: string, lotteryType = 'lao'): string {
     const isNoteLine = (line: string): boolean => {
         const trimmed = line.trim();
         if (!trimmed) return false;
+        if (/^[\d/,\s\-+*xX×=]+$/.test(trimmed)) return false; // ignore lottery numbers and operators
         if (trimmed.startsWith('/')) return false;
         if (isDateLine(trimmed)) return false;
         if (parseContextLine(trimmed)) return false;
@@ -1141,11 +1146,50 @@ export function extractBuyerNote(text: string, lotteryType = 'lao'): string {
     const last = nonEmptyLines[nonEmptyLines.length - 1];
 
     if (isNoteLine(first)) {
-        return first;
+        return cleanNoteText(first);
     }
     if (isNoteLine(last)) {
-        return last;
+        return cleanNoteText(last);
     }
 
     return '';
+}
+
+interface SplitResult {
+    amountStr: string;
+    trailingText: string;
+}
+
+function splitAmountAndTrailingText(line: string): SplitResult | null {
+    let s = normalizeUnicode(line.trim());
+    const pat1 = s.match(/^(\d+[*×xX\-+/](?:\d+|ชุด)(?:[*×xX\-+/]ชุด)?)(?:\s+(.+))?$/);
+    if (pat1) {
+        return { amountStr: pat1[1].trim(), trailingText: pat1[2] ? pat1[2].trim() : '' };
+    }
+    const pat2 = s.match(/^(\d+\s*[tTต]\s*\d+)(?:\s+(.+))?$/);
+    if (pat2) {
+        return { amountStr: pat2[1].trim(), trailingText: pat2[2] ? pat2[2].trim() : '' };
+    }
+    const pat3 = s.match(/^(\d+\s*ชุด)(?:\s+(.+))?$/);
+    if (pat3) {
+        return { amountStr: pat3[1].trim(), trailingText: pat3[2] ? pat3[2].trim() : '' };
+    }
+    const pat4 = s.match(/^(\d+\s*(?:บาท|บ\.?))(?:\s+(.+))?$/i);
+    if (pat4) {
+        return { amountStr: pat4[1].trim(), trailingText: pat4[2] ? pat4[2].trim() : '' };
+    }
+    const pat5 = s.match(/^(=[^=\s]+)(?:\s+(.+))?$/);
+    if (pat5) {
+        return { amountStr: pat5[1].trim(), trailingText: pat5[2] ? pat5[2].trim() : '' };
+    }
+    return null;
+}
+
+function cleanNoteText(str: string): string {
+    const s = str.trim();
+    const split = splitAmountAndTrailingText(s);
+    if (split && split.trailingText) {
+        return split.trailingText;
+    }
+    return s;
 }

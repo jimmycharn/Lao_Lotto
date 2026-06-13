@@ -265,6 +265,21 @@ describe('pasteParser - parseMultiLinePaste', () => {
     expect(result[9]).toMatchObject({ numbers: '453', amount: 10, amount2: 6, betType: '3_top', specialType: 'set6' })
   })
 
+  it('should parse the exact Nong Bow paste correctly with trailing note on amount line', () => {
+    const text = `140
+418
+409
+10xชุด น้องโบว์`
+    const result = parseMultiLinePaste(text, 'lao')
+    console.log('Result for Nong Bow:', result)
+    expect(result.length).toBe(3)
+    expect(result[0]).toMatchObject({ numbers: '140', amount: 10, amount2: 6, betType: '3_top', specialType: 'set6' })
+    expect(result[2]).toMatchObject({ numbers: '409', amount: 10, amount2: 6, betType: '3_top', specialType: 'set6' })
+    
+    const note = extractBuyerNote(text, 'lao')
+    expect(note).toBe('น้องโบว์')
+  })
+
   it('should not parse last number as amount if it has same length (e.g. 12/34/56/10), falling back to legacy parser behavior', () => {
     const text = '12/34/56/10'
     const result = parseMultiLinePaste(text, 'lao')
@@ -295,6 +310,12 @@ describe('pasteParser - parseMultiLinePaste', () => {
       const text = '409=30*6\n412=30*6'
       const note = extractBuyerNote(text, 'lao')
       expect(note).toBe('')
+    })
+
+    it('should extract buyer note from amount line with trailing note (e.g. 10xชุด น้องโบว์)', () => {
+      const text = '140\n418\n409\n10xชุด น้องโบว์'
+      const note = extractBuyerNote(text, 'lao')
+      expect(note).toBe('น้องโบว์')
     })
   })
 
