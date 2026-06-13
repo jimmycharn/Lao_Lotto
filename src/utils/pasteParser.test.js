@@ -292,6 +292,17 @@ describe('pasteParser - parseMultiLinePaste', () => {
     expect(note).toBe('พี่รี')
   })
 
+  it('should parse colon-separated number and amount (e.g. 610:10*10 and 510:100*100)', () => {
+    const text = '610:10*10\n510:100*100\nพี่สา'
+    const result = parseMultiLinePaste(text, 'lao')
+    expect(result.length).toBe(2) // 1 entry per line, with teng (amount) and tod (amount2)
+    expect(result[0]).toMatchObject({ numbers: '610', amount: 10, amount2: 10, betType: '3_top', specialType: 'tengTod' })
+    expect(result[1]).toMatchObject({ numbers: '510', amount: 100, amount2: 100, betType: '3_top', specialType: 'tengTod' })
+    
+    const note = extractBuyerNote(text, 'lao')
+    expect(note).toBe('พี่สา')
+  })
+
   it('should parse parenthesis-separated bare list followed by trailing amount line', () => {
     const text = '305)307)\nตัวละ50\nพี่รี'
     const result = parseMultiLinePaste(text, 'lao')

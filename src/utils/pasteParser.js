@@ -72,6 +72,12 @@ function normalizeUnicode(str) {
     // Normalize t, T, ต between digits (with optional spaces) to *
     s = s.replace(/(\d)\s*[tTต]\s*(\d)/g, '$1*$2')
 
+    // Normalize colons to equals when they act as bet separators:
+    // Case 1: 3-5 digit number followed by colon and digits (e.g. 610:10)
+    s = s.replace(/(\b\d{3,5})\s*:\s*(\d+)/g, '$1=$2')
+    // Case 2: 1-5 digit number followed by colon and amount with operator/suffix (e.g. 12:10*10, 12:10ช)
+    s = s.replace(/(\b\d{1,5})\s*:\s*(\d+(?:\s*[*×xX\-+/]|\s*ชุด|\s*บาท|\s*บ\.?|\s*[ชซ](?![ก-๛a-zA-Z0-9])))/g, '$1=$2')
+
     return s
 }
 
