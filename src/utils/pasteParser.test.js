@@ -324,6 +324,31 @@ describe('pasteParser - parseMultiLinePaste', () => {
     const note = extractBuyerNote(text, 'lao')
     expect(note).toBe('พี่รี')
   })
+  it('should parse 3-digit reverse bets with perm-1 indicator in the middle or end (e.g. 852=1000*5*500 and 852=1000*500*5)', () => {
+    const text1 = '852=1000*5*500'
+    const result1 = parseMultiLinePaste(text1, 'lao')
+    expect(result1.length).toBe(1)
+    expect(result1[0]).toMatchObject({
+      numbers: '852',
+      amount: 1000,
+      amount2: 500,
+      betType: '3_top',
+      specialType: 'reverse',
+      typeLabel: 'กลับ'
+    })
+
+    const text2 = '852=1000*500*5'
+    const result2 = parseMultiLinePaste(text2, 'lao')
+    expect(result2.length).toBe(1)
+    expect(result2[0]).toMatchObject({
+      numbers: '852',
+      amount: 1000,
+      amount2: 500,
+      betType: '3_top',
+      specialType: 'reverse',
+      typeLabel: 'กลับ'
+    })
+  })
 
   it('should not parse last number as amount if it has same length (e.g. 12/34/56/10), falling back to legacy parser behavior', () => {
     const text = '12/34/56/10'
