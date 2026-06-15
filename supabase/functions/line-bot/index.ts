@@ -6849,12 +6849,12 @@ serve(async (req) => {
               });
             }
 
-            // Special Type - กลับ 2 ตัว (reverse): insert reversed number
+            // Special Type - กลับ (reverse): insert other unique permuted numbers
             if (bet.specialType === 'reverse' && bet.amount2) {
               const revAmt = bet.amount2;
-              const reversedNumbers = bet.numbers.split('').reverse().join('');
+              const perms = getPermutations(bet.numbers).filter(p => p !== bet.numbers);
               
-              if (reversedNumbers !== bet.numbers) {
+              for (const permNum of perms) {
                 const revCommInfo = await getCommissionInfo(profile.id, dealerId, betType, lotteryType);
                 const revCommAmt = revCommInfo.isFixed ? revCommInfo.rate : (revAmt * revCommInfo.rate) / 100;
 
@@ -6868,7 +6868,7 @@ serve(async (req) => {
                   bill_id: billId,
                   bill_note: finalBillNote,
                   bet_type: betType,
-                  numbers: reversedNumbers,
+                  numbers: permNum,
                   amount: revAmt,
                   commission_rate: revCommInfo.rate,
                   commission_amount: revCommAmt,
