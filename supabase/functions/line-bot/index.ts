@@ -3129,7 +3129,9 @@ serve(async (req) => {
               if (openRound.close_time) {
                 try {
                   const dateObj = new Date(openRound.close_time);
-                  closeTimeStr = dateObj.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }) + ' น.';
+                  const displayDate = getRoundDisplayDate(openRound, false);
+                  const timeStr = dateObj.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }) + ' น.';
+                  closeTimeStr = `${displayDate} เวลา ${timeStr}`;
                 } catch (e) {
                   closeTimeStr = 'เวลาปิดรับที่งวดหวยกำหนด';
                 }
