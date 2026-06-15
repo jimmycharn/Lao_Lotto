@@ -2416,7 +2416,7 @@ serve(async (req) => {
             text.startsWith('/summary') || text.startsWith('/สรุป') ||
             text.startsWith('/help') || text.startsWith('/คำสั่ง') ||
             text.startsWith('/แจ้งผล') ||
-            text === '/เปิด' || text === '/ปิด' ||
+            text === '/เปิด' || text === '/ปิด' || text === '/เริ่มขาย' ||
             text.toLowerCase() === 'y' || text === 'ยืนยัน';
 
           if (isManagerCommand) {
@@ -2455,7 +2455,7 @@ serve(async (req) => {
             let memberProfileName = '';
 
             if (!manager && !isStaff) {
-              const isOpenCloseCommand = text === '/เปิด' || text === '/ปิด';
+              const isOpenCloseCommand = text === '/เปิด' || text === '/ปิด' || text === '/เริ่มขาย';
               if (isTotalCommand || isSummaryCommand || isHelpCommand || isOpenCloseCommand || isReportCommand) {
                 // Check member permissions toggles
                 const memberPerms = groupLink.member_permissions || {};
@@ -3100,6 +3100,76 @@ serve(async (req) => {
               }
 
               await sendLineReply(replyToken, `✅ เปิดรับแทง ${closedRound.lottery_name || groupLink.lottery_type.toUpperCase()} งวดวันที่ ${getRoundDisplayDate(closedRound, false)} เรียบร้อยแล้ว`);
+              continue;
+            }
+
+            // ─── COMMAND: /เริ่มขาย (Start Selling / Announce Round) ───
+            if (text === '/เริ่มขาย') {
+              if (showOwnOnly) {
+                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ใช้งานคำสั่งนี้`);
+                continue;
+              }
+
+              const { data: openRound } = await supabase
+                .from('lottery_rounds')
+                .select('*')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', groupLink.lottery_type)
+                .eq('status', 'open')
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (!openRound) {
+                await sendLineReply(replyToken, `❌ ไม่มีงวดหวย ${groupLink.lottery_type.toUpperCase()} ที่กำลังเปิดรับแทงอยู่ในขณะนี้`);
+                continue;
+              }
+
+              let closeTimeStr = '';
+              if (openRound.close_time) {
+                try {
+                  const dateObj = new Date(openRound.close_time);
+                  closeTimeStr = dateObj.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }) + ' น.';
+                } catch (e) {
+                  closeTimeStr = 'เวลาปิดรับที่งวดหวยกำหนด';
+                }
+              } else {
+                closeTimeStr = 'เวลาปิดรับที่งวดหวยกำหนด';
+              }
+
+              let announceMsg = `📢 เปิดรับแทง: ${openRound.lottery_name || groupLink.lottery_type.toUpperCase()}\n`;
+              announceMsg += `📅 งวดวันที่: ${getRoundDisplayDate(openRound, false)}\n`;
+              announceMsg += `--------------------------\n`;
+              announceMsg += `⚠️ ตัวปิดติดมาจ่ายครึ่ง ตัวไหนมามากเกินไป คืนได้ตลอดเวลา\n`;
+              announceMsg += `✍️ ได้เสียกันตามที่บอทรับมา ตรวจสอบและยกเลิกได้ตามเวลา\n`;
+              announceMsg += `⏰ เปิดรับแทงตั้งแต่บัดนี้ จนถึง ${closeTimeStr}\n`;
+              announceMsg += `--------------------------\n`;
+              announceMsg += `🎉 ขอให้ทุกท่านโชคดีมีชัยกับการเสี่ยงดวงครั้งนี้กันทุกคน`;
+
+              // Send to ALL groups linked to this dealer with same lottery type
+              const { data: allGroups } = await supabase
+                .from('line_groups')
+                .select('line_group_id')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', groupLink.lottery_type)
+                .eq('is_active', true);
+
+              if (allGroups && allGroups.length > 0) {
+                for (const g of allGroups) {
+                  if (g.line_group_id === groupId) {
+                    // For the current group, we reply directly
+                    continue;
+                  }
+                  try {
+                    await sendLinePush(g.line_group_id, announceMsg);
+                  } catch (e) {
+                    console.error(`Failed to push announce message to group ${g.line_group_id}:`, e);
+                  }
+                }
+              }
+
+              // Reply to the current group
+              await sendLineReply(replyToken, announceMsg);
               continue;
             }
 
@@ -5725,18 +5795,19 @@ serve(async (req) => {
                 helpText += `3. /คนส่ง - รายงานยอดรับแทงแยกตามสมาชิกแต่ละคน\n`;
                 helpText += `4. /สมาชิก [ชื่อ] - ค้นหายอดเงินคงเหลือและข้อมูลสมาชิก\n`;
                 helpText += `5. /ปิด - ปิดรับแทงงวดปัจจุบัน (แจ้งเตือนทุกห้อง)\n`;
-                helpText += `6. /เปิด - เปิดรับแทงงวดที่ปิดอยู่ (ต้องยังไม่ประกาศผล)\n\n`;
+                helpText += `6. /เปิด - เปิดรับแทงงวดที่ปิดอยู่ (ต้องยังไม่ประกาศผล)\n`;
+                helpText += `7. /เริ่มขาย - แจ้งเปิดรับแทงงวดปัจจุบันไปยังทุกกลุ่มไลน์ที่เชื่อมโยง\n\n`;
                 helpText += `💸 คำสั่งจัดการยอดเกิน/ตีออก:\n`;
-                helpText += `7. /ยอดเกิน - แสดงตัวเลขและยอดเงินที่เกินลิมิตอั้นในงวดนี้\n`;
-                helpText += `8. /ตีออก - แสดงสรุปประวัติประวัติและยอดเงินการตีออกทั้งหมดในงวดนี้\n`;
-                helpText += `9. /ตีออก เกิน - สั่งตีออกยอดเกินอั้นทั้งหมดไปยังเจ้ามือปลายทาง (จะมีบอทให้กดยืนยันอีกครั้ง)\n`;
-                helpText += `10. /ตีออก [เลข] [ประเภท] [จำนวน] - สั่งตีออกเลขแบบเจาะจง (เช่น /ตีออก 123 บน 100)\n`;
-                helpText += `11. /เอาคืน - แสดงรายการครั้งที่ตีออกที่สามารถเอาคืนได้\n`;
-                helpText += `12. /เอาคืน [ครั้งที่] - เอาคืนยอดที่ตีออกไปตามครั้งที่ระบุ (เช่น /เอาคืน 3 จะมีบอทให้กดยืนยันอีกครั้ง)\n\n`;
+                helpText += `8. /ยอดเกิน - แสดงตัวเลขและยอดเงินที่เกินลิมิตอั้นในงวดนี้\n`;
+                helpText += `9. /ตีออก - แสดงสรุปประวัติประวัติและยอดเงินการตีออกทั้งหมดในงวดนี้\n`;
+                helpText += `10. /ตีออก เกิน - สั่งตีออกยอดเกินอั้นทั้งหมดไปยังเจ้ามือปลายทาง (จะมีบอทให้กดยืนยันอีกครั้ง)\n`;
+                helpText += `11. /ตีออก [เลข] [ประเภท] [จำนวน] - สั่งตีออกเลขแบบเจาะจง (เช่น /ตีออก 123 บน 100)\n`;
+                helpText += `12. /เอาคืน - แสดงรายการครั้งที่ตีออกที่สามารถเอาคืนได้\n`;
+                helpText += `13. /เอาคืน [ครั้งที่] - เอาคืนยอดที่ตีออกไปตามครั้งที่ระบุ (เช่น /เอาคืน 3 จะมีบอทให้กดยืนยันอีกครั้ง)\n\n`;
                 helpText += `👤 คำสั่งทั่วไปสำหรับสมาชิก:\n`;
-                helpText += `13. /สรุป (พิมพ์โดยสมาชิก) - สรุปยอดและรางวัลเฉพาะของตัวสมาชิกเอง\n`;
-                helpText += `14. /ยอดรวม (พิมพ์โดยสมาชิก) - สรุปยอดแทงทั้งหมดเฉพาะของตัวสมาชิกเอง\n`;
-                helpText += `15. /คำสั่ง หรือ /help - แสดงรายการคำสั่งที่ใช้งานได้`;
+                helpText += `14. /สรุป (พิมพ์โดยสมาชิก) - สรุปยอดและรางวัลเฉพาะของตัวสมาชิกเอง\n`;
+                helpText += `15. /ยอดรวม (พิมพ์โดยสมาชิก) - สรุปยอดแทงทั้งหมดเฉพาะของตัวสมาชิกเอง\n`;
+                helpText += `16. /คำสั่ง หรือ /help - แสดงรายการคำสั่งที่ใช้งานได้`;
               }
 
               await sendLineReply(replyToken, helpText);
