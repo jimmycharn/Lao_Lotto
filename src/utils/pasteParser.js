@@ -925,6 +925,25 @@ function extractInlineContext(line) {
         const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
         return { cleaned: `${numCtxEqSingle[1]}=${numCtxEqSingle[3].trim()}`, mode }
     }
+    // --- NO SPACE MIDDLE patterns (e.g. "79ล่าง100", "79บน100", "79บล100", "123โต๊ด50", "2วิ่ง10") ---
+    const noSpaceBoth = s.match(/^(\d+)(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?([=\d].*)$/)
+    if (noSpaceBoth) {
+        return { cleaned: `${noSpaceBoth[1]} ${noSpaceBoth[3].trim()}`, mode: 'both' }
+    }
+
+    const noSpaceSingle = s.match(/^(\d+)(บน|บ|ล่าง|ล)\.?([=\d].*)$/)
+    if (noSpaceSingle) {
+        const modeStr = noSpaceSingle[2]
+        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
+        return { cleaned: `${noSpaceSingle[1]} ${noSpaceSingle[3].trim()}`, mode }
+    }
+
+    const noSpaceFloat = s.match(/^(\d+)(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|มี)\.?([=\d].*)$/)
+    if (noSpaceFloat) {
+        const kw = noSpaceFloat[2]
+        const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top'
+        return { cleaned: `${noSpaceFloat[1]}=${noSpaceFloat[3].trim()}`, mode }
+    }
 
     return { cleaned: s, mode: null }
 }
@@ -1239,6 +1258,19 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
     if (numLen === 3) {
         if (amount1 === null) return null
 
+        if (isFloat) {
+            results.push({
+                numbers,
+                amount: amount1,
+                amount2: null,
+                betType: '3_tod',
+                typeLabel: 'โต๊ด',
+                rawLine,
+                formattedLine: `${numbers}=${amount1} โต๊ด`
+            })
+            return results
+        }
+
         // --- 4-group pattern: num=A*B*C (3-digit number with 3 amount parts) ---
         // One of amt2/amt3 is a permutation indicator (permCount or permCount-1).
         // The OTHER non-indicator value is the reverse bet amount (otherAmt).
@@ -1334,8 +1366,8 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
             }
         } else {
             // Single amount → ตรง/บน (for lao/hanoi → ตรง, for thai → บน)
-            const betType = '3_top'
-            const typeLabel = isLaoOrHanoi ? 'ตรง' : 'บน'
+            const betType = isLaoOrHanoi ? '3_top' : (isTop ? '3_top' : '3_bottom')
+            const typeLabel = isLaoOrHanoi ? 'ตรง' : (isTop ? 'บน' : 'ล่าง')
             results.push({
                 numbers,
                 amount: amount1,

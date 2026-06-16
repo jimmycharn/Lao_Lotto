@@ -717,6 +717,27 @@ function extractInlineContext(line: string): InlineContextInfo {
     if (eqInline) {
         return { cleaned: `${eqInline[1]}${eqInline[3]}`.trim(), mode: 'both' };
     }
+
+    // --- NO SPACE MIDDLE patterns (e.g. "79ล่าง100", "79บน100", "79บล100", "123โต๊ด50", "2วิ่ง10") ---
+    const noSpaceBoth = s.match(/^(\d+)(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?([=\d].*)$/);
+    if (noSpaceBoth) {
+        return { cleaned: `${noSpaceBoth[1]} ${noSpaceBoth[3].trim()}`, mode: 'both' };
+    }
+
+    const noSpaceSingle = s.match(/^(\d+)(บน|บ|ล่าง|ล)\.?([=\d].*)$/);
+    if (noSpaceSingle) {
+        const modeStr = noSpaceSingle[2];
+        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom';
+        return { cleaned: `${noSpaceSingle[1]} ${noSpaceSingle[3].trim()}`, mode };
+    }
+
+    const noSpaceFloat = s.match(/^(\d+)(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|มี)\.?([=\d].*)$/);
+    if (noSpaceFloat) {
+        const kw = noSpaceFloat[2];
+        const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
+        return { cleaned: `${noSpaceFloat[1]}=${noSpaceFloat[3].trim()}`, mode };
+    }
+
     return { cleaned: line, mode: null };
 }
 
@@ -963,6 +984,19 @@ function determineBetType(
     if (numLen === 3) {
         if (amount1 === null) return null;
 
+        if (isFloat) {
+            results.push({
+                numbers,
+                amount: amount1,
+                amount2: null,
+                betType: '3_tod',
+                typeLabel: 'โต๊ด',
+                rawLine,
+                formattedLine: `${numbers}=${amount1} โต๊ด`
+            });
+            return results;
+        }
+
         if (amount3 !== null && amount1 !== null && amount2 !== null) {
             const isAmt2PermMinusOne = (amount2 === permCount - 1);
             const isAmt2Perm = (amount2 === permCount);
@@ -1036,8 +1070,8 @@ function determineBetType(
                 });
             }
         } else {
-            const betType = '3_top';
-            const typeLabel = isLaoOrHanoi ? 'ตรง' : 'บน';
+            const betType = isLaoOrHanoi ? '3_top' : (isTop ? '3_top' : '3_bottom');
+            const typeLabel = isLaoOrHanoi ? 'ตรง' : (isTop ? 'บน' : 'ล่าง');
             results.push({
                 numbers,
                 amount: amount1,

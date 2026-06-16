@@ -411,4 +411,91 @@ describe('pasteParser - parseMultiLinePaste', () => {
       expect(result.every(r => r.amount === 20 && r.betType === '2_top')).toBe(true)
     })
   })
+
+  describe('No-space inline context', () => {
+    it('should parse 79ล่าง100 correctly', () => {
+      const text = '79ล่าง100\nพี่ดาว'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '79',
+        amount: 100,
+        betType: '2_bottom',
+        typeLabel: 'ล่าง'
+      })
+      expect(extractBuyerNote(text, 'lao')).toBe('พี่ดาว')
+    })
+
+    it('should parse 79บน100 correctly', () => {
+      const text = '79บน100'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '79',
+        amount: 100,
+        betType: '2_top',
+        typeLabel: 'บน'
+      })
+    })
+
+    it('should parse 79บล100 correctly', () => {
+      const text = '79บล100'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(2)
+      expect(result[0]).toMatchObject({
+        numbers: '79',
+        amount: 100,
+        betType: '2_top'
+      })
+      expect(result[1]).toMatchObject({
+        numbers: '79',
+        amount: 100,
+        betType: '2_bottom'
+      })
+    })
+
+    it('should parse 123โต๊ด50 correctly', () => {
+      const text = '123โต๊ด50'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '123',
+        amount: 50,
+        betType: '3_tod',
+        typeLabel: 'โต๊ด'
+      })
+    })
+
+    it('should parse 123บน100ล่าง50 correctly for Lao (no 3_bottom, defaults to 3_top/ตรง)', () => {
+      const text = '123บน100\n456ล่าง50'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(2)
+      expect(result[0]).toMatchObject({
+        numbers: '123',
+        amount: 100,
+        betType: '3_top'
+      })
+      expect(result[1]).toMatchObject({
+        numbers: '456',
+        amount: 50,
+        betType: '3_top'
+      })
+    })
+
+    it('should parse 123บน100ล่าง50 correctly for Thai (supports 3_bottom)', () => {
+      const text = '123บน100\n456ล่าง50'
+      const result = parseMultiLinePaste(text, 'thai')
+      expect(result.length).toBe(2)
+      expect(result[0]).toMatchObject({
+        numbers: '123',
+        amount: 100,
+        betType: '3_top'
+      })
+      expect(result[1]).toMatchObject({
+        numbers: '456',
+        amount: 50,
+        betType: '3_bottom'
+      })
+    })
+  })
 })
