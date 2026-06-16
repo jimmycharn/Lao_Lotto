@@ -116,6 +116,10 @@ function normalizeUnicode(str: string): string {
     // Normalize t, T, ต between digits (with optional spaces) to *
     s = s.replace(/(\d)\s*[tTต]\s*(\d)/g, '$1*$2');
 
+    // Replace dash connecting digit and Thai keyword with a space (e.g. "47-ล่าง" -> "47 ล่าง", "บน-47" -> "บน 47")
+    s = s.replace(/(\d)\s*-\s*(?=[ก-๛])/g, '$1 ');
+    s = s.replace(/([ก-๛])\s*-\s*(?=\d)/g, '$1 ');
+
     // Normalize colons to equals when they act as bet separators:
     // Case 1: 3-5 digit number followed by colon and digits (e.g. 610:10)
     s = s.replace(/(\b\d{3,5})\s*:\s*(\d+)/g, '$1=$2');
@@ -1269,11 +1273,17 @@ function splitAmountAndTrailingText(line: string): SplitResult | null {
 }
 
 function cleanNoteText(str: string): string {
-    let s = str.trim();
-    // Remove leading number list prefix if present (e.g. "123=", "123 ", "305)307)=")
-    const prefixMatch = s.match(/^([\d,/\s)]+?)\s*(?:=|\s)\s*(\d.+)$/);
-    if (prefixMatch) {
-        s = prefixMatch[2].trim();
+    let s = normalizeUnicode(str.trim());
+    // Remove leading number and context prefix if present (e.g. "47-ล่าง 50*50 น้ำค้าง" -> "50*50 น้ำค้าง")
+    const startCtxMatch = s.match(/^(\d{1,5})\s*[-/]?\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล|วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด)\.?\s*(?:=|\s+)?\s*(\d.+)$/i);
+    if (startCtxMatch) {
+        s = startCtxMatch[3].trim();
+    } else {
+        // Remove leading number list prefix if present (e.g. "123=", "123 ", "305)307)=")
+        const prefixMatch = s.match(/^([\d,/\s)]+?)\s*(?:=|\s)\s*(\d.+)$/);
+        if (prefixMatch) {
+            s = prefixMatch[2].trim();
+        }
     }
 
     const split = splitAmountAndTrailingText(s);

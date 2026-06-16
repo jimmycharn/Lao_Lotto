@@ -497,5 +497,20 @@ describe('pasteParser - parseMultiLinePaste', () => {
         betType: '3_bottom'
       })
     })
+
+    it('should parse 47-ล่าง 50*50 correctly', () => {
+      const text = '47-ล่าง 50*50 น้ำค้าง'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '47',
+        amount: 50,
+        amount2: 50,
+        betType: '2_bottom',
+        specialType: 'reverse',
+        typeLabel: 'ล่างกลับ'
+      })
+      expect(extractBuyerNote(text, 'lao')).toBe('น้ำค้าง')
+    })
   })
 })
