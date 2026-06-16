@@ -569,5 +569,21 @@ describe('pasteParser - parseMultiLinePaste', () => {
         typeLabel: 'กลับ'
       })
     })
+
+    it('should auto-reset float context to top when transitioning to 3-digit from non-3-digit', () => {
+      const text = 'ลอย\n74310=50\n74219=100\n74210=50\n7594=50\n7594=100\n759=20*6'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(6)
+      const entry759 = result.find(r => r.numbers === '759')
+      expect(entry759).toBeDefined()
+      expect(entry759).toMatchObject({
+        numbers: '759',
+        amount: 20,
+        amount2: 6,
+        betType: '3_top',
+        specialType: 'set6',
+        typeLabel: 'คูณชุด'
+      })
+    })
   })
 })

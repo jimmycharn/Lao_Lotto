@@ -268,6 +268,7 @@ export function parseMultiLinePaste(text: string, lotteryType = 'lao'): ParsedBe
     const results: ParsedBet[] = [];
     let contextMode = 'top'; // default: บน
     let bareNumberBuffer: string[] = [];
+    let lastProcessedNumLen: number | null = null; // track length of last processed number
 
     function flushBareBuffer() {
         for (const bareNum of bareNumberBuffer) {
@@ -310,6 +311,13 @@ export function parseMultiLinePaste(text: string, lotteryType = 'lao'): ParsedBe
         }
 
         if (isBareNumberLine(trimmed)) {
+            const currentNumLen = trimmed.length;
+            if (currentNumLen === 3 && lastProcessedNumLen !== null && lastProcessedNumLen !== 3) {
+                if (['float_top', 'float_bottom'].includes(contextMode)) {
+                    contextMode = 'top';
+                }
+            }
+            lastProcessedNumLen = currentNumLen;
             bareNumberBuffer.push(trimmed);
             continue;
         }
@@ -331,6 +339,13 @@ export function parseMultiLinePaste(text: string, lotteryType = 'lao'): ParsedBe
         }
 
         if (stripped && isBareNumberLine(stripped)) {
+            const currentNumLen = stripped.length;
+            if (currentNumLen === 3 && lastProcessedNumLen !== null && lastProcessedNumLen !== 3) {
+                if (['float_top', 'float_bottom'].includes(contextMode)) {
+                    contextMode = 'top';
+                }
+            }
+            lastProcessedNumLen = currentNumLen;
             bareNumberBuffer.push(stripped);
             continue;
         }
@@ -339,6 +354,13 @@ export function parseMultiLinePaste(text: string, lotteryType = 'lao'): ParsedBe
             const amountInfo = extractAmountFromLine(trimmed) || extractAmountFromLine(lineToProcess);
             if (amountInfo) {
                 if (amountInfo.number) {
+                    const currentNumLen = amountInfo.number.length;
+                    if (currentNumLen === 3 && lastProcessedNumLen !== null && lastProcessedNumLen !== 3) {
+                        if (['float_top', 'float_bottom'].includes(contextMode)) {
+                            contextMode = 'top';
+                        }
+                    }
+                    lastProcessedNumLen = currentNumLen;
                     bareNumberBuffer.push(amountInfo.number);
                 }
                 applyAmountToBuffer(amountInfo.amountStr, amountInfo.mode);
@@ -354,6 +376,19 @@ export function parseMultiLinePaste(text: string, lotteryType = 'lao'): ParsedBe
             if (numMatch && numMatch[1].length >= 3) {
                 contextMode = 'top';
             }
+        }
+
+        // Auto-reset context from float to 'top' when encountering a 3-digit number
+        // and the previous processed number was NOT 3-digit.
+        const numMatch = (processLine || '').match(/^(\d+)/);
+        if (numMatch) {
+            const currentNumLen = numMatch[1].length;
+            if (currentNumLen === 3 && lastProcessedNumLen !== null && lastProcessedNumLen !== 3) {
+                if (['float_top', 'float_bottom'].includes(contextMode)) {
+                    contextMode = 'top';
+                }
+            }
+            lastProcessedNumLen = currentNumLen;
         }
 
         let lineCtx = getLineEffectiveContext(processLine, contextMode);

@@ -254,6 +254,7 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
     const results = []
     let contextMode = 'top' // default: บน
     let bareNumberBuffer = [] // accumulate bare numbers waiting for a trailing amount line
+    let lastProcessedNumLen = null // track length of last processed number
 
     /**
      * Flush bare number buffer: process each number individually (no trailing amount found).
@@ -312,6 +313,13 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
         // Check if this is a bare number line (digits only, 1-5 digits)
         if (isBareNumberLine(trimmed)) {
             if (DEBUG_PASTE) console.log(`[pasteParser]   → bare number, added to buffer`)
+            const currentNumLen = trimmed.length
+            if (currentNumLen === 3 && lastProcessedNumLen !== null && lastProcessedNumLen !== 3) {
+                if (['float_top', 'float_bottom'].includes(contextMode)) {
+                    contextMode = 'top'
+                }
+            }
+            lastProcessedNumLen = currentNumLen
             bareNumberBuffer.push(trimmed)
             continue
         }
@@ -342,6 +350,13 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
         // After stripping noise, the cleaned line might be a bare number
         if (stripped && isBareNumberLine(stripped)) {
             if (DEBUG_PASTE) console.log(`[pasteParser]   → stripped to bare number, added to buffer`)
+            const currentNumLen = stripped.length
+            if (currentNumLen === 3 && lastProcessedNumLen !== null && lastProcessedNumLen !== 3) {
+                if (['float_top', 'float_bottom'].includes(contextMode)) {
+                    contextMode = 'top'
+                }
+            }
+            lastProcessedNumLen = currentNumLen
             bareNumberBuffer.push(stripped)
             continue
         }
@@ -354,6 +369,13 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
             if (amountInfo) {
                 // If this line also has its own number, add it to the buffer first
                 if (amountInfo.number) {
+                    const currentNumLen = amountInfo.number.length
+                    if (currentNumLen === 3 && lastProcessedNumLen !== null && lastProcessedNumLen !== 3) {
+                        if (['float_top', 'float_bottom'].includes(contextMode)) {
+                            contextMode = 'top'
+                        }
+                    }
+                    lastProcessedNumLen = currentNumLen
                     bareNumberBuffer.push(amountInfo.number)
                 }
                 applyAmountToBuffer(amountInfo.amountStr, amountInfo.mode)
@@ -379,6 +401,20 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
                 if (DEBUG_PASTE) console.log(`[pasteParser]   → auto-reset context from '${contextMode}' to 'top' (${numMatch[1].length}-digit number)`)
                 contextMode = 'top'
             }
+        }
+
+        // Auto-reset context from float to 'top' when encountering a 3-digit number
+        // and the previous processed number was NOT 3-digit.
+        const numMatch = (processLine || '').match(/^(\d+)/)
+        if (numMatch) {
+            const currentNumLen = numMatch[1].length
+            if (currentNumLen === 3 && lastProcessedNumLen !== null && lastProcessedNumLen !== 3) {
+                if (['float_top', 'float_bottom'].includes(contextMode)) {
+                    if (DEBUG_PASTE) console.log(`[pasteParser]   → auto-reset context from '${contextMode}' to 'top' (3-digit number after non-3-digit)`)
+                    contextMode = 'top'
+                }
+            }
+            lastProcessedNumLen = currentNumLen
         }
 
         let lineCtx = getLineEffectiveContext(processLine, contextMode)
