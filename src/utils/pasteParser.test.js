@@ -513,4 +513,61 @@ describe('pasteParser - parseMultiLinePaste', () => {
       expect(extractBuyerNote(text, 'lao')).toBe('น้ำค้าง')
     })
   })
+
+  describe('Parenthetical multipliers', () => {
+    it('should parse 742 = 20(10x5) correctly', () => {
+      const text = '742 = 20(10x5) พี่แดง'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '742',
+        amount: 20,
+        amount2: 10,
+        betType: '3_top',
+        specialType: 'reverse',
+        typeLabel: 'กลับ'
+      })
+      expect(extractBuyerNote(text, 'lao')).toBe('พี่แดง')
+    })
+
+    it('should parse 728 = 20(10*5) correctly', () => {
+      const text = '728 = 20(10*5)'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '728',
+        amount: 20,
+        amount2: 10,
+        betType: '3_top',
+        specialType: 'reverse'
+      })
+    })
+
+    it('should parse 748 = 20 (10 x 5) with spaces correctly', () => {
+      const text = '748 = 20 (10 x 5)'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '748',
+        amount: 20,
+        amount2: 10,
+        betType: '3_top',
+        specialType: 'reverse'
+      })
+    })
+
+    it('should parse duplicate digit number 334 = 20(10x2) correctly', () => {
+      const text = '334 = 20(10x2)'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '334',
+        amount: 20,
+        amount2: 10,
+        betType: '3_top',
+        specialType: 'reverse',
+        typeLabel: 'กลับ'
+      })
+    })
+  })
 })

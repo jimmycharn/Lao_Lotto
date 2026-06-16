@@ -126,6 +126,9 @@ function normalizeUnicode(str: string): string {
     // Case 2: 1-5 digit number followed by colon and amount with operator/suffix (e.g. 12:10*10, 12:10ช)
     s = s.replace(/(\b\d{1,5})\s*:\s*(\d+(?:\s*[*×xX\-+/]|\s*ชุด|\s*บาท|\s*บ\.?|\s*[ชซ](?![ก-๛a-zA-Z0-9])))/g, '$1=$2');
 
+    // Convert parenthetical multipliers like "20(10x5)" or "20(10*5)" or "20 (10 x 5)" to "*"-separated format "20*10*5"
+    s = s.replace(/(\d+)\s*\(\s*(\d+)\s*[*×xX\-+/tTต\s]\s*(\d+)\s*\)/g, '$1*$2*$3');
+
     return s;
 }
 
@@ -525,6 +528,7 @@ function isAmountPattern(s: string): boolean {
     const t = s.trim();
     if (/^\d+$/.test(t)) return false;
     return /^\d+[*×xX\-+/](\d+|ชุด)$/.test(t) ||
+           /^\d+[*×xX\-+/]\d+[*×xX\-+/]\d+$/.test(t) || // "20*10*5" (normalized from parenthetical)
            /^\d+[*×xX\-+/]\d+[*×xX\-+/]ชุด$/.test(t) ||
            /^\d+\s*[tTต]\s*\d+$/.test(t) ||
            /^\d+\s*ชุด$/.test(t) ||
@@ -1249,6 +1253,10 @@ interface SplitResult {
 
 function splitAmountAndTrailingText(line: string): SplitResult | null {
     let s = normalizeUnicode(line.trim());
+    const pat0 = s.match(/^(\d+[*×xX\-+/]\d+[*×xX\-+/]\d+)(?:\s+(.+))?$/);
+    if (pat0) {
+        return { amountStr: pat0[1].trim(), trailingText: pat0[2] ? pat0[2].trim() : '' };
+    }
     const pat1 = s.match(/^(\d+[*×xX\-+/](?:\d+|ชุด)(?:[*×xX\-+/]ชุด)?)(?:\s+(.+))?$/);
     if (pat1) {
         return { amountStr: pat1[1].trim(), trailingText: pat1[2] ? pat1[2].trim() : '' };
