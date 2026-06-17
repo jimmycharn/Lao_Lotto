@@ -1,11 +1,46 @@
-const s = '/สรุป';
-console.log('length:', s.length);
-const text = '/สรุป 1234';
-const param = text.substring(s.length).trim();
-console.log('param:', JSON.stringify(param));
+function isConversationalSingleNumberLine(line) {
+    const trimmed = line.trim()
+    const digitMatches = trimmed.match(/\d+/g) || []
+    console.log('digitMatches:', digitMatches);
+    if (digitMatches.length !== 1) {
+        return false
+    }
 
-// Also test what lottery_type might be
-const lotteryType = 'lao';
-const clean = param.replace(/\s+/g, '');
-console.log('clean:', JSON.stringify(clean));
-console.log('is 4 digit:', /^\d{4}$/.test(clean));
+    const numStr = digitMatches[0]
+    const textOnly = trimmed.replace(numStr, '').trim()
+    console.log('textOnly:', JSON.stringify(textOnly));
+    if (textOnly.length === 0) {
+        return false
+    }
+
+    let cleaned = textOnly.toLowerCase()
+    cleaned = cleaned.replace(/[\s.+\-*×xX\/=\(\)\[\]{}]/g, '')
+    cleaned = cleaned.replace(/ตัวละ|ตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บ\.?|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|ช|ซ/g, '')
+    console.log('cleaned:', JSON.stringify(cleaned));
+
+    if (cleaned.length === 0) {
+        return false
+    }
+
+    const conversationalKeywords = [
+        'โอน', 'จ่าย', 'ส่ง', 'เงิน', 'สลิป', 'แจ้ง', 'กิน', 'กาแฟ', 
+        'รวม', 'ยอด', 'คะ', 'ค่ะ', 'ครับ', 'จ้า', 'ลูกค้า', 'ขอบคุณ', 
+        'ทะลุ', 'ออก', 'นั้น', 'นี้', 'แล้ว', 'ได้', 'มี', 'ไป', 'มา'
+    ]
+
+    const hasConversationalKeyword = conversationalKeywords.some(kw => {
+        const contains = cleaned.includes(kw);
+        if (contains) {
+            console.log(`Matched keyword "${kw}" in "${cleaned}"`);
+        }
+        return contains;
+    })
+    console.log('hasConversationalKeyword:', hasConversationalKeyword);
+    if (hasConversationalKeyword || cleaned.length > 10) {
+        return true
+    }
+
+    return false
+}
+
+console.log('20 พี่รี:', isConversationalSingleNumberLine('20 พี่รี'));

@@ -2564,6 +2564,29 @@ export default function RoundAccordionItem({
                                     <polyline points="6 9 12 15 18 9"></polyline>
                                 </svg>
                             </div>
+                            <div className="open-round-extra-actions">
+                                {keyableMembers.length > 0 && (
+                                    <button
+                                        className="extra-action-btn write-bet-btn"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            setSelectedMemberForBet(keyableMembers[0])
+                                            setEditingBillData(null)
+                                            setShowWriteBetModal(true)
+                                        }}
+                                        title="เขียนโพย"
+                                    >
+                                        <FiFileText /> เขียนโพย
+                                    </button>
+                                )}
+                                <button
+                                    className="extra-action-btn ai-btn"
+                                    onClick={(e) => { e.stopPropagation(); handleOpenAIAnalysis(); }}
+                                    title="AI วิเคราะห์ตีออก"
+                                >
+                                    🤖 AI วิเคราะห์
+                                </button>
+                            </div>
                         </div>
                         
                         {/* Stats Section */}

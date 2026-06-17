@@ -170,6 +170,7 @@ function expandLines(rawLines: string[]): string[] {
     for (const rawLine of rawLines) {
         const trimmed = normalizeUnicode(rawLine.trim());
         if (!trimmed) { expanded.push(trimmed); continue; }
+        if (isConversationalSingleNumberLine(trimmed)) continue;
         if (isDateLine(trimmed)) continue;
 
         // --- Step 0: Strip leading list index prefix like "1) ", "2. " (1-2 digits followed by . or ) and space) ---
@@ -419,6 +420,41 @@ export function parseMultiLinePaste(text: string, lotteryType = 'lao'): ParsedBe
     if (bareNumberBuffer.length > 0) flushBareBuffer();
 
     return results;
+}
+
+function isConversationalSingleNumberLine(line: string): boolean {
+    const trimmed = line.trim();
+    const digitMatches = trimmed.match(/\d+/g) || [];
+    if (digitMatches.length !== 1) {
+        return false;
+    }
+
+    const numStr = digitMatches[0];
+    const textOnly = trimmed.replace(numStr, '').trim();
+    if (textOnly.length === 0) {
+        return false;
+    }
+
+    let cleaned = textOnly.toLowerCase();
+    cleaned = cleaned.replace(/[\s.+\-*×xX\/=\(\)\[\]{}]/g, '');
+    cleaned = cleaned.replace(/ตัวละ|ตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บ\.?|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|ช|ซ/g, '');
+
+    if (cleaned.length === 0) {
+        return false;
+    }
+
+    const conversationalKeywords = [
+        'โอน', 'จ่าย', 'ส่ง', 'เงิน', 'สลิป', 'แจ้ง', 'กิน', 'กาแฟ', 
+        'รวม', 'ยอด', 'คะ', 'ค่ะ', 'ครับ', 'จ้า', 'ลูกค้า', 'ขอบคุณ', 
+        'ทะลุ', 'ออก', 'นั้น', 'นี้', 'แล้ว', 'ได้', 'มี', 'ไป', 'มา'
+    ];
+
+    const hasConversationalKeyword = conversationalKeywords.some(kw => cleaned.includes(kw));
+    if (hasConversationalKeyword || cleaned.length > 10) {
+        return true;
+    }
+
+    return false;
 }
 
 function isBareNumberLine(line: string): boolean {
@@ -1214,7 +1250,7 @@ function determineBetType(
 export function extractBuyerNote(text: string, lotteryType = 'lao'): string {
     if (!text || !text.trim()) return '';
     const rawLines = text.split('\n');
-    const nonEmptyLines = rawLines.map(l => l.trim()).filter(l => l.length > 0);
+    const nonEmptyLines = rawLines.map(l => l.trim()).filter(l => l.length > 0 && !isConversationalSingleNumberLine(l));
     if (nonEmptyLines.length === 0) return '';
 
     const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType);

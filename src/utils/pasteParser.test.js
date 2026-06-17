@@ -585,5 +585,53 @@ describe('pasteParser - parseMultiLinePaste', () => {
         typeLabel: 'คูณชุด'
       })
     })
+
+    it('should ignore conversational lines with a single set of numbers (e.g. มีลูกค้าโอนทะลุไปออกนั้น200)', () => {
+      const text = 'มีลูกค้าโอนทะลุไปออกนั้น200'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(0)
+    })
+
+    it('should ignore short conversational single number lines like โอน 200, ยอด 500, สลิป 200', () => {
+      const cases = ['โอน 200', 'ยอด 500', 'สลิป 200', 'โอนแล้ว 200', 'จ่ายแล้ว 150']
+      for (const text of cases) {
+        const result = parseMultiLinePaste(text, 'lao')
+        expect(result.length).toBe(0)
+      }
+    })
+
+    it('should not ignore multiple number sets or valid lottery formats in text (e.g. ซื้อ 23 20*20 บน)', () => {
+      const text = 'ซื้อ 23 20*20 บน'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '23',
+        amount: 20,
+        amount2: 20,
+        betType: '2_top',
+        specialType: 'reverse'
+      })
+    })
+
+    it('should not ignore bare number with names or trailing notes (e.g. 20 พี่รี, 10xชุด น้องโบว์)', () => {
+      // พี่รี 20 should be treated as bare number 20
+      const text1 = 'พี่รี 20\n=100'
+      const result1 = parseMultiLinePaste(text1, 'lao')
+      expect(result1.length).toBe(1)
+      expect(result1[0]).toMatchObject({
+        numbers: '20',
+        amount: 100
+      })
+
+      // 10xชุด น้องโบว์ should be trailing amount line
+      const text2 = '140\n10xชุด น้องโบว์'
+      const result2 = parseMultiLinePaste(text2, 'lao')
+      expect(result2.length).toBe(1)
+      expect(result2[0]).toMatchObject({
+        numbers: '140',
+        amount: 10,
+        amount2: 6
+      })
+    })
   })
 })

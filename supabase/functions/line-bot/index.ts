@@ -3634,8 +3634,62 @@ serve(async (req) => {
                 activeRound = latestRound;
               }
 
-              // Winning-number announcement only when param is provided AND is NOT a date
-              if (param !== "" && !requestedRoundDate) {
+              // Check if the param is a valid winning number format
+              const isValidWinningNum = param !== "" && !requestedRoundDate && !!parseWinningNumbers(param, activeRound.lottery_type);
+
+              let targetMember: any = null;
+              if (param !== "" && !requestedRoundDate && !isValidWinningNum && !showOwnOnly) {
+                // Look up member by name or user_id
+                const { data: memberships } = await supabase
+                  .from('user_dealer_memberships')
+                  .select(`
+                    user_id,
+                    profiles:user_id (
+                      id,
+                      full_name,
+                      line_user_id
+                    )
+                  `)
+                  .eq('dealer_id', dealerId)
+                  .eq('status', 'active');
+
+                if (memberships && memberships.length > 0) {
+                  const searchNormalized = param.trim().toLowerCase();
+                  // Try exact ID match first
+                  let matches = memberships.filter((m: any) => 
+                    m.user_id === param || m.profiles?.id === param
+                  );
+                  // Fallback to name search
+                  if (matches.length === 0) {
+                    matches = memberships.filter((m: any) => 
+                      m.profiles?.full_name?.toLowerCase().includes(searchNormalized)
+                    );
+                  }
+                  if (matches.length === 1) {
+                    targetMember = matches[0];
+                  } else if (matches.length > 1) {
+                    await sendLineReply(replyToken, `⚠️ พบสมาชิกมากกว่า 1 คนที่สอดคล้องกับ "${param}":\n` + 
+                      matches.map((m: any) => `- ${m.profiles?.full_name} (ID: ${m.user_id})`).join('\n') + 
+                      `\nกรุณาระบุชื่อที่เจาะจงขึ้น หรือใช้ ID แทนค่ะ`);
+                    continue;
+                  } else {
+                    await sendLineReply(replyToken, `❌ ไม่พบสมาชิกที่มีชื่อหรือ ID สอดคล้องกับ "${param}"`);
+                    continue;
+                  }
+                } else {
+                  await sendLineReply(replyToken, `❌ ไม่พบข้อมูลสมาชิกในระบบดีลเลอร์นี้`);
+                  continue;
+                }
+              }
+
+              if (targetMember) {
+                showOwnOnly = true;
+                targetUserId = targetMember.user_id;
+                memberProfileName = targetMember.profiles?.full_name || 'Member';
+              }
+
+              // Winning-number announcement only when param is provided AND is NOT a date AND is a valid winning number
+              if (param !== "" && !requestedRoundDate && isValidWinningNum) {
                 // ต้องปิดรับก่อนถึงจะประกาศผลได้
                 if (activeRound.status === 'open') {
                   await sendLineReply(replyToken, `❌ ไม่สามารถประกาศผลได้ เพราะงวดนี้ยังเปิดรับแทงอยู่\nกรุณาปิดรับก่อนโดยใช้คำสั่ง /ปิด`);
@@ -4070,7 +4124,9 @@ serve(async (req) => {
                   netColor = '#94a3b8';
                 }
 
-                summaryText = `📊 สรุปยอดส่งของคุณ ${u.userName}\n`;
+                summaryText = showOwnOnly && targetUserId !== profile?.id 
+                  ? `📊 สรุปยอดส่งของสมาชิก ${u.userName}\n`
+                  : `📊 สรุปยอดส่งของคุณ ${u.userName}\n`;
                 summaryText += `งวดวันที่: ${getRoundDisplayDate(activeRound, false)} (${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()})\n`;
                 summaryText += `--------------------------\n`;
                 summaryText += `- ยอดส่ง: ฿${roundedBet.toLocaleString('th-TH')}\n`;
@@ -4093,7 +4149,7 @@ serve(async (req) => {
                       "contents": [
                         {
                           "type": "text",
-                          "text": `📊 สรุปยอดส่งของคุณ`,
+                          "text": showOwnOnly && targetUserId !== profile?.id ? `📊 สรุปยอดส่งของสมาชิก` : `📊 สรุปยอดส่งของคุณ`,
                           "weight": "bold",
                           "size": "md",
                           "color": "#ffffff"
