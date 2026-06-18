@@ -132,6 +132,9 @@ function normalizeUnicode(str: string): string {
     // Convert typos like -= or =- (with optional spacing and multiple dashes) to =
     s = s.replace(/\s*-+\s*=/g, '=').replace(/=\s*-+\s*/g, '=');
 
+    // Convert typos like .= or =. (with optional spacing and multiple dots) to =
+    s = s.replace(/\s*\.+\s*=/g, '=').replace(/=\s*\.+\s*/g, '=');
+
     // Strip optional lottery type prefixes (ท, ฮ, ห, and ล when followed by context)
     s = s.replace(/^([ทฮห]\.?\s*|ล\.?\s+|ล\.?(?=ลอย|วิ่ง|โต๊ด|ล่าง|บนล่าง|บล|ลบ))/i, '');
 
