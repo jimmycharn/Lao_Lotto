@@ -42,6 +42,29 @@ import { checkBetWin, deriveWinningNumbers } from '../../utils/scenarioCalculato
 import DealerWriteSubmissionWrapper from './DealerWriteSubmissionWrapper'
 import AIAnalysisModal from './AIAnalysisModal'
 
+// Helper: chunked Supabase update to avoid URL query string overflow (max ~100 IDs per batch)
+const CHUNK_SIZE = 100
+async function chunkedUpdate(table, updateData, ids) {
+    for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+        const chunk = ids.slice(i, i + CHUNK_SIZE)
+        const { error } = await supabase
+            .from(table)
+            .update(updateData)
+            .in('id', chunk)
+        if (error) throw error
+    }
+}
+async function chunkedDelete(table, ids) {
+    for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+        const chunk = ids.slice(i, i + CHUNK_SIZE)
+        const { error } = await supabase
+            .from(table)
+            .delete()
+            .in('id', chunk)
+        if (error) throw error
+    }
+}
+
 export default function RoundAccordionItem({ 
     round, 
     isSelected, 
@@ -1551,8 +1574,7 @@ export default function RoundAccordionItem({
                 .filter(t => selectedBatchIds.includes(t.transfer_batch_id || t.id))
                 .map(t => t.id)
 
-            const { error } = await supabase.from('bet_transfers').delete().in('id', transferIdsToDelete)
-            if (error) throw error
+            await chunkedDelete('bet_transfers', transferIdsToDelete)
 
             await fetchInlineSubmissions(true)
             setSelectedTransferBatches({})
@@ -1580,12 +1602,7 @@ export default function RoundAccordionItem({
             const submissionsToReturn = inlineSubmissions.filter(s => selectedIds.includes(s.id))
             
             // Soft delete the submissions (mark as deleted)
-            const { error: subError } = await supabase
-                .from('submissions')
-                .update({ is_deleted: true })
-                .in('id', selectedIds)
-
-            if (subError) throw subError
+            await chunkedUpdate('submissions', { is_deleted: true }, selectedIds)
 
             // Update bet_transfers to mark them as returned
             // Try multiple methods to find matching transfers
@@ -1892,12 +1909,7 @@ export default function RoundAccordionItem({
 
         setDeletingItems(true)
         try {
-            const { error } = await supabase
-                .from('submissions')
-                .update({ is_deleted: true })
-                .in('id', selectedIds)
-
-            if (error) throw error
+            await chunkedUpdate('submissions', { is_deleted: true }, selectedIds)
 
             toast.success(`ลบ ${selectedIds.length} รายการสำเร็จ`)
             setSelectedItems({})
@@ -1919,12 +1931,7 @@ export default function RoundAccordionItem({
             // Support both single id and array of ids (for summary mode groups)
             const ids = Array.isArray(idOrIds) ? idOrIds : [idOrIds]
             
-            const { error } = await supabase
-                .from('submissions')
-                .update({ is_deleted: true })
-                .in('id', ids)
-
-            if (error) throw error
+            await chunkedUpdate('submissions', { is_deleted: true }, ids)
 
             toast.success('ลบรายการสำเร็จ')
             await fetchInlineSubmissions(true)
@@ -1984,12 +1991,7 @@ export default function RoundAccordionItem({
             const currentPaid = billItems[0]?.is_paid || false
             const newPaid = !currentPaid
             const ids = billItems.map(i => i.id)
-            const { error } = await supabase
-                .from('submissions')
-                .update({ is_paid: newPaid })
-                .in('id', ids)
-
-            if (error) throw error
+            await chunkedUpdate('submissions', { is_paid: newPaid }, ids)
 
             toast.success(newPaid ? 'ทำเครื่องหมายชำระเงินแล้ว' : 'ยกเลิกเครื่องหมายชำระเงิน')
             await fetchInlineSubmissions(true)
@@ -2006,12 +2008,7 @@ export default function RoundAccordionItem({
         setDeletingItems(true)
         try {
             const ids = billItems.map(i => i.id)
-            const { error } = await supabase
-                .from('submissions')
-                .update({ is_deleted: true })
-                .in('id', ids)
-
-            if (error) throw error
+            await chunkedUpdate('submissions', { is_deleted: true }, ids)
 
             toast.success(`ลบใบโพย ${billItems.length} รายการสำเร็จ`)
             await fetchInlineSubmissions(true)
@@ -2028,12 +2025,7 @@ export default function RoundAccordionItem({
     const handleDeleteMultipleItems = async (ids) => {
         setDeletingItems(true)
         try {
-            const { error } = await supabase
-                .from('submissions')
-                .update({ is_deleted: true })
-                .in('id', ids)
-
-            if (error) throw error
+            await chunkedUpdate('submissions', { is_deleted: true }, ids)
 
             toast.success(`ลบ ${ids.length} รายการสำเร็จ`)
             await fetchInlineSubmissions(true)
@@ -2058,12 +2050,7 @@ export default function RoundAccordionItem({
         try {
             // Delete the bet_transfers records (this effectively "reclaims" them)
             const transferIds = transferItems.map(t => t.id)
-            const { error } = await supabase
-                .from('bet_transfers')
-                .delete()
-                .in('id', transferIds)
-
-            if (error) throw error
+            await chunkedDelete('bet_transfers', transferIds)
 
             await fetchInlineSubmissions(true)
             toast.success(`เอาคืนสำเร็จ ${transferItems.length} รายการ!`)
