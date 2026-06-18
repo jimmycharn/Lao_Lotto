@@ -33,8 +33,8 @@ function normalizeUnicode(str) {
         .replace(/[\u2013\u2014\u2212\u2012\u2015]/g, '-')
         // Multiplication/asterisk variants: × (U+00D7), ✕ (U+2715), ✖ (U+2716), ⨉ (U+2A09),
         // ﹡ (U+FE61), ・ (U+30FB), ∗ (U+2217), ⁎ (U+204E), ✱ (U+2731), ✲ (U+2732),
-        // ✳ (U+2733), ٭ (U+066D), ＊ (U+FF0A), ⋆ (U+22C6), ★ (U+2605), ☆ (U+2606) → *
-        .replace(/[\u00D7\u2715\u2716\u2A09\uFE61\u30FB\u2217\u204E\u2731\u2732\u2733\u066D\uFF0A\u22C6]/g, '*')
+        // ✳ (U+2733), ٭ (U+066D), ＊ (U+FF0A), ⋆ (U+22C6), ★ (U+2605), ☆ (U+2606), ❌ (U+274C) → *
+        .replace(/[\u00D7\u2715\u2716\u2A09\uFE61\u30FB\u2217\u204E\u2731\u2732\u2733\u066D\uFF0A\u22C6\u274C]/g, '*')
         // Solidus variants: ∕ (U+2215), ⁄ (U+2044) → /
         .replace(/[\u2215\u2044]/g, '/')
         // Full-width digits → ASCII digits
@@ -87,6 +87,9 @@ function normalizeUnicode(str) {
 
     // Convert typos like -= or =- (with optional spacing and multiple dashes) to =
     s = s.replace(/\s*-+\s*=/g, '=').replace(/=\s*-+\s*/g, '=')
+
+    // Strip optional lottery type prefixes (ท, ฮ, ห, and ล when followed by context)
+    s = s.replace(/^([ทฮห]\.?\s*|ล\.?\s+|ล\.?(?=ลอย|วิ่ง|โต๊ด|ล่าง|บนล่าง|บล|ลบ))/i, '')
 
     return s
 }
@@ -254,9 +257,9 @@ function expandLines(rawLines) {
             if (slashTriple) {
                 line = `${slashTriple[1]}=${slashTriple[2]}*${slashTriple[3]}`
             } else {
-                // Normalize -, /, + between amounts in space-separated format:
-                // "736 11-10" → "736 11*10", "52 20/20" → "52 20*20", "87 20+20" → "87 20*20"
-                line = line.replace(/^(\d{1,5}\.?\s+\d+)\s*[\-/+]\s*(\d+)/, '$1*$2')
+                // Normalize -, /, +, : between amounts in space-separated format:
+                // "736 11-10" → "736 11*10", "52 20/20" → "52 20*20", "87 20+20" → "87 20*20", "713 33:20" → "713 33*20"
+                line = line.replace(/^(\d{1,5}\.?\s+\d+)\s*[\-/+:]\s*(\d+)/, '$1*$2')
             }
         }
 
@@ -793,7 +796,9 @@ function isBothContext(line) {
     // Quick check: must not contain digits (context-only line)
     if (/\d/.test(s)) return false
     // Remove all non-Thai characters to get just Thai letters
-    const thaiOnly = s.replace(/[^ก-๛]/g, '')
+    let thaiOnly = s.replace(/[^ก-๛]/g, '')
+    // Remove non-lottery-abbreviation Thai characters containing 'ล' to prevent false positives (e.g. ลอย, เล่น, เลข)
+    thaiOnly = thaiOnly.replace(/ลอย|เล่น|เลข|ลูกค้า|แล้ว|ละ|สลิป/g, '')
     // Check known combined patterns: บล, ลบ, บนล่าง, ล่างบน
     if (/^(บนล่าง|ล่างบน|บล|ลบ)$/.test(thaiOnly)) return true
     // Check if the string contains both a บน-variant and a ล่าง-variant somewhere
@@ -1225,8 +1230,8 @@ function parseAmountPart(str) {
 
     // Strip commas in formatted amounts: "1,000" → "1000"
     cleaned = cleaned.replace(/(\d),(\d{3})/g, '$1$2')
-    // Normalize /, +, t/ต between digit amounts to *
-    cleaned = cleaned.replace(/(\d)\s*[/+tTต]\s*(\d)/g, '$1*$2')
+    // Normalize /, +, :, t/ต between digit amounts to *
+    cleaned = cleaned.replace(/(\d)\s*[/+:tTต]\s*(\d)/g, '$1*$2')
 
     // Split by * or - (amount separators)
     const parts = cleaned.split(/[*\-]/).map(s => s.trim()).filter(s => s)

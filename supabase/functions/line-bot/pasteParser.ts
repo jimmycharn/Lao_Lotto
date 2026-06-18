@@ -84,7 +84,7 @@ function normalizeUnicode(str: string): string {
     let s = str
         .replace(/[\u200B\u200C\u200D\uFEFF\u00AD\u2060\u200E\u200F]/g, '')
         .replace(/[\u2013\u2014\u2212\u2012\u2015]/g, '-')
-        .replace(/[\u00D7\u2715\u2716\u2A09\uFE61\u30FB\u2217\u204E\u2731\u2732\u2733\u066D\uFF0A\u22C6]/g, '*')
+        .replace(/[\u00D7\u2715\u2716\u2A09\uFE61\u30FB\u2217\u204E\u2731\u2732\u2733\u066D\uFF0A\u22C6\u274C]/g, '*')
         .replace(/[\u2215\u2044]/g, '/')
         .replace(/[\uFF10-\uFF19]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFF10 + 0x30))
         .replace(/[\uFF21-\uFF3A]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFF21 + 0x41))
@@ -131,6 +131,9 @@ function normalizeUnicode(str: string): string {
 
     // Convert typos like -= or =- (with optional spacing and multiple dashes) to =
     s = s.replace(/\s*-+\s*=/g, '=').replace(/=\s*-+\s*/g, '=');
+
+    // Strip optional lottery type prefixes (ท, ฮ, ห, and ล when followed by context)
+    s = s.replace(/^([ทฮห]\.?\s*|ล\.?\s+|ล\.?(?=ลอย|วิ่ง|โต๊ด|ล่าง|บนล่าง|บล|ลบ))/i, '');
 
     return s;
 }
@@ -270,7 +273,7 @@ function expandLines(rawLines: string[]): string[] {
             if (slashTriple) {
                 line = `${slashTriple[1]}=${slashTriple[2]}*${slashTriple[3]}`;
             } else {
-                line = line.replace(/^(\d{1,5}\.?\s+\d+)\s*[\-/+]\s*(\d+)/, '$1*$2');
+                line = line.replace(/^(\d{1,5}\.?\s+\d+)\s*[\-/+:]\s*(\d+)/, '$1*$2');
             }
         }
 
@@ -669,7 +672,9 @@ function stripPrefixNoise(line: string): string {
 function isBothContext(line: string): boolean {
     const s = line.trim();
     if (/\d/.test(s)) return false;
-    const thaiOnly = s.replace(/[^ก-๛]/g, '');
+    let thaiOnly = s.replace(/[^ก-๛]/g, '');
+    // Remove non-lottery-abbreviation Thai characters containing 'ล' to prevent false positives (e.g. ลอย, เล่น, เลข)
+    thaiOnly = thaiOnly.replace(/ลอย|เล่น|เลข|ลูกค้า|แล้ว|ละ|สลิป/g, '');
     if (/^(บนล่าง|ล่างบน|บล|ลบ)$/.test(thaiOnly)) return true;
     const hasTop = /(บน|บ)/.test(thaiOnly);
     const hasBottom = /(ล่าง|ล)/.test(thaiOnly);
@@ -977,7 +982,7 @@ function parseAmountPart(str: string): ParsedAmount {
     }
 
     cleaned = cleaned.replace(/(\d),(\d{3})/g, '$1$2');
-    cleaned = cleaned.replace(/(\d)\s*[/+tTต]\s*(\d)/g, '$1*$2');
+    cleaned = cleaned.replace(/(\d)\s*[/+:tTต]\s*(\d)/g, '$1*$2');
 
     const parts = cleaned.split(/[*\-]/).map(s => s.trim()).filter(s => s);
 
