@@ -476,10 +476,6 @@ interface AmountInfo {
 
 function extractAmountFromLine(line: string): AmountInfo | null {
     let s = normalizeUnicode(line.trim());
-    const split = splitAmountAndTrailingText(s);
-    if (split) {
-        s = split.amountStr;
-    }
     s = s.replace(/(\d+)\s*[*×xX\-+]?\s*ชุด/g, '$1*ชุด');
     s = s.replace(/(\d)\s*[tTต]\s*(\d)/g, '$1*$2');
     s = s.replace(/(\d)\s*[/+]\s*(\d)/g, '$1*$2');
@@ -511,6 +507,11 @@ function extractAmountFromLine(line: string): AmountInfo | null {
                 s = s.slice(0, singleCtx.index).trim();
             }
         }
+    }
+
+    const split = splitAmountAndTrailingText(s);
+    if (split) {
+        s = split.amountStr;
     }
 
     const eqInlineMatch = s.match(/^(\d{1,5})\s*=\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(.+)$/);

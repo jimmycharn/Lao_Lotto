@@ -689,5 +689,23 @@ describe('pasteParser - parseMultiLinePaste', () => {
         typeLabel: 'ล่างกลับ'
       })
     })
+
+    it('should parse bare numbers with trailing both-context amount (e.g. 79, 29, 77 and =50 บนล่าง)', () => {
+      const text = '79\n29\n77\n\n=50 บนล่าง'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(6)
+      
+      // 79 top & bottom
+      expect(result[0]).toMatchObject({ numbers: '79', amount: 50, betType: '2_top' })
+      expect(result[1]).toMatchObject({ numbers: '79', amount: 50, betType: '2_bottom' })
+      
+      // 29 top & bottom
+      expect(result[2]).toMatchObject({ numbers: '29', amount: 50, betType: '2_top' })
+      expect(result[3]).toMatchObject({ numbers: '29', amount: 50, betType: '2_bottom' })
+      
+      // 77 top & bottom
+      expect(result[4]).toMatchObject({ numbers: '77', amount: 50, betType: '2_top' })
+      expect(result[5]).toMatchObject({ numbers: '77', amount: 50, betType: '2_bottom' })
+    })
   })
 })

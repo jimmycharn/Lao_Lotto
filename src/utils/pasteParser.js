@@ -531,12 +531,6 @@ function isBareNumberLine(line) {
  */
 function extractAmountFromLine(line) {
     let s = normalizeUnicode(line.trim())
-    const split = splitAmountAndTrailingText(s)
-    if (split) {
-        s = split.amountStr
-    }
-    if (DEBUG_PASTE) console.log(`[extractAmount] input: "${s}" | charCodes: [${[...s].map(c => c.charCodeAt(0)).join(',')}]`)
-
     // --- Normalize ชุด variants: "20ชุด", "20 ชุด", "20-ชุด", "20+ชุด" → "20*ชุด" ---
     s = s.replace(/(\d+)\s*[*×xX\-+]?\s*ชุด/g, '$1*ชุด')
 
@@ -577,6 +571,12 @@ function extractAmountFromLine(line) {
             }
         }
     }
+
+    const split = splitAmountAndTrailingText(s)
+    if (split) {
+        s = split.amountStr
+    }
+    if (DEBUG_PASTE) console.log(`[extractAmount] input: "${s}" | charCodes: [${[...s].map(c => c.charCodeAt(0)).join(',')}]`)
 
     // --- Check for inline context prefix right after = (e.g. "39=บล10*10", "39=ลบ10*10") ---
     const eqInlineMatch = s.match(/^(\d{1,5})\s*=\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(.+)$/)
