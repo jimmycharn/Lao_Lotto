@@ -3716,28 +3716,257 @@ serve(async (req) => {
               const totalProfit = incomingProfit + outgoingProfit;
               const hasOutgoing = totalTransferred > 0;
 
-              let replyText = `📊 สรุปกำไร/ขาดทุน\n`;
-              replyText += `ช่วงเวลา: ${rangeText}\n`;
-              replyText += `(จำนวนงวด: ${totalRounds} งวด)\n`;
-              replyText += `--------------------------\n`;
-              replyText += `🟢 ยอดรับ (${totalEntries.toLocaleString()} รายการ)\n`;
-              replyText += `  • ยอดรวม   +฿${Math.round(totalAmount).toLocaleString('th-TH')}\n`;
-              replyText += `  • ค่าคอม   -฿${Math.round(totalCommission).toLocaleString('th-TH')}\n`;
-              replyText += `  • จ่าย     -฿${Math.round(totalPayout).toLocaleString('th-TH')}\n`;
-              replyText += `  • กำไร     ${incomingProfit >= 0 ? '+' : '-'}฿${Math.abs(Math.round(incomingProfit)).toLocaleString('th-TH')}\n`;
+              const bodyContents: Array<any> = [
+                {
+                  "type": "box",
+                  "layout": "vertical",
+                  "backgroundColor": "#f8f9fa",
+                  "paddingAll": "md",
+                  "cornerRadius": "md",
+                  "contents": [
+                    {
+                      "type": "box",
+                      "layout": "horizontal",
+                      "contents": [
+                        {
+                          "type": "text",
+                          "text": "🟢 ยอดรับ",
+                          "weight": "bold",
+                          "size": "sm",
+                          "color": "#2e7d32"
+                        },
+                        {
+                          "type": "text",
+                          "text": `(${totalEntries.toLocaleString()} รายการ)`,
+                          "size": "xs",
+                          "color": "#757575",
+                          "align": "end",
+                          "gravity": "center"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "separator",
+                      "margin": "sm",
+                      "color": "#e2e8f0"
+                    },
+                    {
+                      "type": "box",
+                      "layout": "horizontal",
+                      "margin": "sm",
+                      "contents": [
+                        { "type": "text", "text": "ยอดรวม", "size": "sm", "color": "#555555" },
+                        { "type": "text", "text": `+฿${Math.round(totalAmount).toLocaleString('th-TH')}`, "size": "sm", "align": "end", "color": "#333333", "weight": "bold" }
+                      ]
+                    },
+                    {
+                      "type": "box",
+                      "layout": "horizontal",
+                      "margin": "xs",
+                      "contents": [
+                        { "type": "text", "text": "ค่าคอม", "size": "sm", "color": "#555555" },
+                        { "type": "text", "text": `-฿${Math.round(totalCommission).toLocaleString('th-TH')}`, "size": "sm", "align": "end", "color": "#666666" }
+                      ]
+                    },
+                    {
+                      "type": "box",
+                      "layout": "horizontal",
+                      "margin": "xs",
+                      "contents": [
+                        { "type": "text", "text": "จ่าย", "size": "sm", "color": "#555555" },
+                        { "type": "text", "text": `-฿${Math.round(totalPayout).toLocaleString('th-TH')}`, "size": "sm", "align": "end", "color": "#666666" }
+                      ]
+                    },
+                    {
+                      "type": "separator",
+                      "margin": "sm",
+                      "color": "#e2e8f0"
+                    },
+                    {
+                      "type": "box",
+                      "layout": "horizontal",
+                      "margin": "sm",
+                      "contents": [
+                        { "type": "text", "text": "กำไรยอดรับ", "weight": "bold", "size": "sm", "color": "#333333" },
+                        {
+                          "type": "text",
+                          "text": `${incomingProfit >= 0 ? '+' : '-'}฿${Math.abs(Math.round(incomingProfit)).toLocaleString('th-TH')}`,
+                          "weight": "bold",
+                          "size": "sm",
+                          "align": "end",
+                          "color": incomingProfit >= 0 ? "#2e7d32" : "#c62828"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ];
 
               if (hasOutgoing) {
-                replyText += `\n🔴 ยอดส่ง (${totalTransferredEntries.toLocaleString()} รายการ)\n`;
-                replyText += `  • ยอดรวม   -฿${Math.round(totalTransferred).toLocaleString('th-TH')}\n`;
-                replyText += `  • ค่าคอม   +฿${Math.round(totalUpstreamComm).toLocaleString('th-TH')}\n`;
-                replyText += `  • รับ      ฿${Math.round(totalUpstreamWin).toLocaleString('th-TH')}\n`;
-                replyText += `  • กำไร     ${outgoingProfit >= 0 ? '+' : '-'}฿${Math.abs(Math.round(outgoingProfit)).toLocaleString('th-TH')}\n`;
+                bodyContents.push({
+                  "type": "box",
+                  "layout": "vertical",
+                  "backgroundColor": "#fdf8f7",
+                  "paddingAll": "md",
+                  "cornerRadius": "md",
+                  "margin": "md",
+                  "contents": [
+                    {
+                      "type": "box",
+                      "layout": "horizontal",
+                      "contents": [
+                        {
+                          "type": "text",
+                          "text": "🔴 ยอดส่ง",
+                          "weight": "bold",
+                          "size": "sm",
+                          "color": "#c62828"
+                        },
+                        {
+                          "type": "text",
+                          "text": `(${totalTransferredEntries.toLocaleString()} รายการ)`,
+                          "size": "xs",
+                          "color": "#757575",
+                          "align": "end",
+                          "gravity": "center"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "separator",
+                      "margin": "sm",
+                      "color": "#f1e3e1"
+                    },
+                    {
+                      "type": "box",
+                      "layout": "horizontal",
+                      "margin": "sm",
+                      "contents": [
+                        { "type": "text", "text": "ยอดรวม", "size": "sm", "color": "#555555" },
+                        { "type": "text", "text": `-฿${Math.round(totalTransferred).toLocaleString('th-TH')}`, "size": "sm", "align": "end", "color": "#333333", "weight": "bold" }
+                      ]
+                    },
+                    {
+                      "type": "box",
+                      "layout": "horizontal",
+                      "margin": "xs",
+                      "contents": [
+                        { "type": "text", "text": "ค่าคอม", "size": "sm", "color": "#555555" },
+                        { "type": "text", "text": `+฿${Math.round(totalUpstreamComm).toLocaleString('th-TH')}`, "size": "sm", "align": "end", "color": "#666666" }
+                      ]
+                    },
+                    {
+                      "type": "box",
+                      "layout": "horizontal",
+                      "margin": "xs",
+                      "contents": [
+                        { "type": "text", "text": "รับ", "size": "sm", "color": "#555555" },
+                        { "type": "text", "text": `฿${Math.round(totalUpstreamWin).toLocaleString('th-TH')}`, "size": "sm", "align": "end", "color": "#666666" }
+                      ]
+                    },
+                    {
+                      "type": "separator",
+                      "margin": "sm",
+                      "color": "#f1e3e1"
+                    },
+                    {
+                      "type": "box",
+                      "layout": "horizontal",
+                      "margin": "sm",
+                      "contents": [
+                        { "type": "text", "text": "กำไรยอดส่ง", "weight": "bold", "size": "sm", "color": "#333333" },
+                        {
+                          "type": "text",
+                          "text": `${outgoingProfit >= 0 ? '+' : '-'}฿${Math.abs(Math.round(outgoingProfit)).toLocaleString('th-TH')}`,
+                          "weight": "bold",
+                          "size": "sm",
+                          "align": "end",
+                          "color": outgoingProfit >= 0 ? "#2e7d32" : "#c62828"
+                        }
+                      ]
+                    }
+                  ]
+                });
               }
-              
-              replyText += `--------------------------\n`;
-              replyText += `💵 กำไรรวม   ${totalProfit >= 0 ? '+' : '-'}฿${Math.abs(Math.round(totalProfit)).toLocaleString('th-TH')}`;
 
-              await sendLineReply(replyToken, replyText);
+              const altText = `📊 สรุปกำไร/ขาดทุน\nช่วงเวลา: ${rangeText}\n(จำนวนงวด: ${totalRounds} งวด)\nกำไรรวม: ${totalProfit >= 0 ? '+' : '-'}฿${Math.abs(Math.round(totalProfit)).toLocaleString('th-TH')}`;
+
+              const flexMessage = {
+                "type": "flex",
+                "altText": altText,
+                "contents": {
+                  "type": "bubble",
+                  "size": "mega",
+                  "header": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#1F1A3A",
+                    "paddingAll": "lg",
+                    "contents": [
+                      {
+                        "type": "text",
+                        "text": "📊 สรุปกำไร/ขาดทุน",
+                        "weight": "bold",
+                        "size": "lg",
+                        "color": "#ffffff"
+                      },
+                      {
+                        "type": "text",
+                        "text": `ช่วงเวลา: ${rangeText} (${totalRounds} งวด)`,
+                        "size": "xs",
+                        "color": "#b8b2e0",
+                        "margin": "xs"
+                      }
+                    ]
+                  },
+                  "body": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "paddingAll": "md",
+                    "spacing": "md",
+                    "contents": bodyContents
+                  },
+                  "footer": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [
+                      {
+                        "type": "box",
+                        "layout": "vertical",
+                        "backgroundColor": totalProfit >= 0 ? "#e8f5e9" : "#ffebee",
+                        "paddingAll": "md",
+                        "cornerRadius": "md",
+                        "contents": [
+                          {
+                            "type": "box",
+                            "layout": "horizontal",
+                            "contents": [
+                              {
+                                "type": "text",
+                                "text": "💵 กำไรรวมสุทธิ",
+                                "weight": "bold",
+                                "size": "md",
+                                "color": totalProfit >= 0 ? "#2e7d32" : "#c62828",
+                                "gravity": "center"
+                              },
+                              {
+                                "type": "text",
+                                "text": `${totalProfit >= 0 ? '+' : '-'}฿${Math.abs(Math.round(totalProfit)).toLocaleString('th-TH')}`,
+                                "weight": "bold",
+                                "size": "lg",
+                                "align": "end",
+                                "color": totalProfit >= 0 ? "#1b5e20" : "#b71c1c"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              };
+
+              await sendLineReply(replyToken, flexMessage);
               continue;
             }
 
