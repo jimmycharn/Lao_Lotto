@@ -203,13 +203,20 @@ function expandLines(rawLines: string[]): string[] {
             line = beforeEq + '=' + afterEq;
         }
 
-        // --- Step 2.5: If the line is a bare list of numbers (only digits, spaces, and separators , ) )
+        // --- Step 2.5: If the line is a bare list of numbers (with optional leading context prefix)
         // split them into individual bare numbers so they can be buffered properly!
-        if (!line.includes('=') && /^[\d,\s)]+$/.test(line)) {
-            const numTokens = line.split(/[,)]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s));
-            if (numTokens.length >= 2) {
-                expanded.push(...numTokens);
-                continue;
+        if (!line.includes('=')) {
+            const prefixMatch = line.match(/^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*/i);
+            const prefix = prefixMatch ? prefixMatch[0] : '';
+            const rest = prefixMatch ? line.substring(prefix.length) : line;
+            if (/^[\d,\s\-)]+$/.test(rest)) {
+                const numTokens = rest.split(/[,\-)]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s));
+                if (numTokens.length >= 2) {
+                    for (const num of numTokens) {
+                        expanded.push(`${prefix}${num}`);
+                    }
+                    continue;
+                }
             }
         }
 
@@ -218,25 +225,37 @@ function expandLines(rawLines: string[]): string[] {
             const eqIdx = line.indexOf('=');
             const numsPart = line.substring(0, eqIdx).trim();
             const amtPart = line.substring(eqIdx + 1).trim();
-            if (/[,/)]/.test(numsPart)) {
-                const numTokens = numsPart.split(/[,/)]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s));
+            
+            const prefixMatch = numsPart.match(/^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*/i);
+            const prefix = prefixMatch ? prefixMatch[0] : '';
+            const cleanNumsPart = prefixMatch ? numsPart.substring(prefix.length) : numsPart;
+
+            if (/[,/\-)]/.test(cleanNumsPart)) {
+                const numTokens = cleanNumsPart.split(/[,/\-)]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s));
                 if (numTokens.length >= 2) {
                     for (const num of numTokens) {
-                        expanded.push(`${num}=${amtPart}`);
+                        expanded.push(`${prefix}${num}=${amtPart}`);
                     }
                     didExpand = true;
                 }
             }
         } else {
-            const spaceAmtMatch = line.match(/^([\d,/\s)]+?)\s+(\d+[*]\d+.*)$/);
+            // No = sign: check for "nums space amount" pattern
+            // e.g., "123,456 20*20" or "บ05-50 20*20"
+            const spaceAmtMatch = line.match(/^((?:[ก-๛a-zA-Z.]+\s*)?[\d,/\-\s)]+?)\s+(\d+[*]\d+.*)$/);
             if (spaceAmtMatch) {
                 const numsPart = spaceAmtMatch[1].trim();
                 const amtPart = spaceAmtMatch[2].trim();
-                if (/[,/)]/.test(numsPart)) {
-                    const numTokens = numsPart.split(/[,/)]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s));
+
+                const prefixMatch = numsPart.match(/^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*/i);
+                const prefix = prefixMatch ? prefixMatch[0] : '';
+                const cleanNumsPart = prefixMatch ? numsPart.substring(prefix.length) : numsPart;
+
+                if (/[,/\-)]/.test(cleanNumsPart)) {
+                    const numTokens = cleanNumsPart.split(/[,/\-)]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s));
                     if (numTokens.length >= 2) {
                         for (const num of numTokens) {
-                            expanded.push(`${num}=${amtPart}`);
+                            expanded.push(`${prefix}${num}=${amtPart}`);
                         }
                         didExpand = true;
                     }

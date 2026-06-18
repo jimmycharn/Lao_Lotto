@@ -1285,16 +1285,14 @@ export default function WriteSubmissionModal({
                     <div className="input-section card" style={{ padding: '1rem', marginBottom: '1rem' }}>
                         {/* Action Buttons - วางเลข และ บันทึกโพย */}
                         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-                            {['lao', 'hanoi'].includes(round.lottery_type) && (
-                                <button
-                                    type="button"
-                                    className="btn btn-outline btn-sm"
-                                    onClick={() => setShowPasteModal(true)}
-                                    style={{ flex: 1 }}
-                                >
-                                    <FiPlus style={{ marginRight: '0.25rem' }} /> วางเลข
-                                </button>
-                            )}
+                            <button
+                                type="button"
+                                className="btn btn-outline btn-sm"
+                                onClick={() => setShowPasteModal(true)}
+                                style={{ flex: 1 }}
+                            >
+                                <FiPlus style={{ marginRight: '0.25rem' }} /> วางเลข
+                            </button>
                             <button
                                 type="button"
                                 className={`btn ${drafts.length > 0 ? 'btn-primary' : 'btn-outline'} btn-sm`}

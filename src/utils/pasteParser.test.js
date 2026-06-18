@@ -707,5 +707,27 @@ describe('pasteParser - parseMultiLinePaste', () => {
       expect(result[4]).toMatchObject({ numbers: '77', amount: 50, betType: '2_top' })
       expect(result[5]).toMatchObject({ numbers: '77', amount: 50, betType: '2_bottom' })
     })
+
+    it('should parse dash-separated number lists with prefixes (e.g. บ05-50=20 and ล.05-50=20)', () => {
+      const text = 'บ05-50=20\nล.05-50=20\nบ.87-78=20\nล.87-78=20'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(8)
+      
+      // บ05-50=20 (two top entries)
+      expect(result[0]).toMatchObject({ numbers: '05', amount: 20, betType: '2_top' })
+      expect(result[1]).toMatchObject({ numbers: '50', amount: 20, betType: '2_top' })
+
+      // ล.05-50=20 (two bottom entries)
+      expect(result[2]).toMatchObject({ numbers: '05', amount: 20, betType: '2_bottom' })
+      expect(result[3]).toMatchObject({ numbers: '50', amount: 20, betType: '2_bottom' })
+
+      // บ.87-78=20 (two top entries)
+      expect(result[4]).toMatchObject({ numbers: '87', amount: 20, betType: '2_top' })
+      expect(result[5]).toMatchObject({ numbers: '78', amount: 20, betType: '2_top' })
+
+      // ล.87-78=20 (two bottom entries)
+      expect(result[6]).toMatchObject({ numbers: '87', amount: 20, betType: '2_bottom' })
+      expect(result[7]).toMatchObject({ numbers: '78', amount: 20, betType: '2_bottom' })
+    })
   })
 })
