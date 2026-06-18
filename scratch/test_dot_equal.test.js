@@ -34,4 +34,27 @@ describe('dot-equal typo handling', () => {
             expect(results[0].amount2).toBe(10)
         }
     })
+
+    it('should parse the user screenshot input correctly in JS and TS', () => {
+        const input = `ล
+17=50*50
+20=50*50
+64=50*50
+90=50*50
+68.50*50
+22=20
+55=20
+25=100*100
+92=50*50
+93=50*50`
+        for (const parse of [parseJS, parseTS]) {
+            const results = parse(input, 'lao')
+            console.log('Full Paste Results:', results.map(r => `${r.formattedLine} | ${r.typeLabel}`))
+            expect(results.length).toBe(10)
+            expect(results[4].numbers).toBe('68')
+            expect(results[4].amount).toBe(50)
+            expect(results[4].amount2).toBe(50)
+            expect(results[4].typeLabel).toBe('ล่างกลับ')
+        }
+    })
 })

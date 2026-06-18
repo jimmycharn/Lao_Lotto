@@ -82,6 +82,20 @@ function normalizeUnicode(str) {
     // Case 2: 1-5 digit number followed by colon and amount with operator/suffix (e.g. 12:10*10, 12:10ช)
     s = s.replace(/(\b\d{1,5})\s*:\s*(\d+(?:\s*[*×xX\-+/]|\s*ชุด|\s*บาท|\s*บ\.?|\s*[ชซ](?![ก-๛a-zA-Z0-9])))/g, '$1=$2')
 
+    // Normalize dots to equals when they act as bet separators (e.g. 68.50*50 -> 68=50*50, 68.50 -> 68=50)
+    s = s.replace(/(\b\d{1,5})\s*\.\s*(\d+)(?!\s*\.)/g, (match, p1, p2, offset, string) => {
+        const num1 = parseInt(p1, 10);
+        const num2 = parseInt(p2, 10);
+        const rest = string.substring(offset + match.length).trim();
+        const hasBetSuffix = /^[*×xX\-+/=ชุดบาทบ]/.test(rest);
+
+        // If it looks like a valid timestamp (hour 0-23, minute 0-59) AND doesn't have a bet suffix, keep it as dot.
+        if (p1.length <= 2 && p2.length === 2 && num1 >= 0 && num1 <= 23 && num2 >= 0 && num2 <= 59 && !hasBetSuffix) {
+            return match;
+        }
+        return `${p1}=${p2}`;
+    });
+
     // Convert parenthetical multipliers like "20(10x5)" or "20(10*5)" or "20 (10 x 5)" to "*"-separated format "20*10*5"
     s = s.replace(/(\d+)\s*\(\s*(\d+)\s*[*×xX\-+/tTต\s]\s*(\d+)\s*\)/g, '$1*$2*$3')
 
