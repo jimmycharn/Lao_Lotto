@@ -6178,6 +6178,44 @@ serve(async (req) => {
           continue;
         }
 
+        // ─── COMMAND 4.5: /โพยย่อ หรือ /โพยเต็ม ───
+        if (text === '/โพยย่อ' || text === '/โพยเต็ม') {
+          try {
+            // Find sender's profile
+            const { data: senderProfile } = await supabase
+              .from('profiles')
+              .select('id, full_name')
+              .eq('line_user_id', userId)
+              .maybeSingle();
+
+            if (!senderProfile) {
+              await sendLineReply(replyToken, [
+                `❌ คุณยังไม่ได้เชื่อมบัญชี LINE ของคุณกับระบบ Big Lotto\nกรุณานำ LINE User ID ด้านล่างไปใส่ในเมนูโปรไฟล์บนเว็บเพื่อเชื่อมต่อ`,
+                userId
+              ]);
+              continue;
+            }
+
+            const displayMode = text === '/โพยย่อ' ? 'short' : 'full';
+            const { error: updateErr } = await supabase
+              .from('profiles')
+              .update({ line_poy_display: displayMode })
+              .eq('id', senderProfile.id);
+
+            if (updateErr) {
+              console.error("Failed to update poy display mode:", updateErr);
+              await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการตั้งค่าการแสดงผลโพย`);
+            } else {
+              const displayLabel = displayMode === 'short' ? 'แบบย่อ' : 'แบบเต็ม';
+              await sendLineReply(replyToken, `✅ ตั้งค่าการแสดงผลโพยหลังบันทึกเป็น "${displayLabel}" สำเร็จแล้วค่ะ!`);
+            }
+          } catch (err) {
+            console.error("Error setting poy display mode:", err);
+            await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการทำรายการ: ${err.message}`);
+          }
+          continue;
+        }
+
         // ─── COMMAND 5: /โพย หรือ /bill ───
         if (text.startsWith('/bill') || text.startsWith('/โพย')) {
           if (groupLink && groupLink.member_permissions?.bill === false) {
@@ -6593,7 +6631,7 @@ serve(async (req) => {
         // Verify if sender has a linked profile
         let { data: profile, error: profileErr } = await supabase
           .from('profiles')
-          .select('id, full_name, is_active, role')
+          .select('id, full_name, is_active, role, line_poy_display')
           .eq('line_user_id', userId)
           .eq('is_active', true)
           .maybeSingle();
@@ -6640,7 +6678,7 @@ serve(async (req) => {
             // Fetch representative member profile
             const { data: repProfile } = await supabase
               .from('profiles')
-              .select('id, full_name, role, is_active')
+              .select('id, full_name, role, is_active, line_poy_display')
               .eq('id', groupLink.staff_member_id)
               .eq('is_active', true)
               .maybeSingle();
@@ -7191,6 +7229,27 @@ serve(async (req) => {
         let summaryText = `✅บันทึกโพยสำเร็จ!✅\n`;
         summaryText += `------------------------\n`;
 
+        const formattedDetailLines: string[] = [];
+        if (profile?.line_poy_display === 'full') {
+          const entryGroups = new Map<string, any[]>();
+          processedInserts.forEach((insert) => {
+            const gid = insert.entry_id;
+            if (gid) {
+              if (!entryGroups.has(gid)) {
+                entryGroups.set(gid, []);
+              }
+              entryGroups.get(gid)!.push(insert);
+            }
+          });
+
+          entryGroups.forEach((group) => {
+            const first = group[0];
+            const count = group.length;
+            const countSuffix = count > 1 ? ` (${count})` : '';
+            formattedDetailLines.push(`${first.display_numbers}${countSuffix}`);
+          });
+        }
+
         if (returnedBets && returnedBets.length > 0) {
           const setPrice = activeRound?.set_prices?.['4_top'] || 120;
           const totalReturnedAmount = returnedBets.reduce((sum, rb) => sum + rb.amount, 0);
@@ -7214,6 +7273,10 @@ serve(async (req) => {
           summaryText += `ค่าคอม: ฿${totalCommission.toLocaleString('th-TH')}\n`;
           summaryText += `คงเหลือ: ฿${netAmount.toLocaleString('th-TH')}\n`;
           summaryText += `------------------------\n`;
+          if (profile?.line_poy_display === 'full' && formattedDetailLines.length > 0) {
+            summaryText += formattedDetailLines.join('\n') + '\n';
+            summaryText += `------------------------\n`;
+          }
           summaryText += `/ยกเลิก ${billId}\n\n`;
 
           // Group and summarize returned bets
@@ -7243,6 +7306,10 @@ serve(async (req) => {
           summaryText += `จำนวน: ${parsedBets.length} รายการ\n`;
           summaryText += `ยอดรวม: ฿${totalBetAmount.toLocaleString('th-TH')}\n`;
           summaryText += `------------------------\n`;
+          if (profile?.line_poy_display === 'full' && formattedDetailLines.length > 0) {
+            summaryText += formattedDetailLines.join('\n') + '\n';
+            summaryText += `------------------------\n`;
+          }
           summaryText += `/ยกเลิก ${billId}`;
         }
 
