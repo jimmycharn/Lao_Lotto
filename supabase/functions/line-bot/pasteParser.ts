@@ -799,6 +799,30 @@ function extractInlineContext(line: string): InlineContextInfo {
     if (eqInline) {
         return { cleaned: `${eqInline[1]}${eqInline[3]}`.trim(), mode: 'both' };
     }
+    // --- Inline "both" context after = with space: "25= บล 20*20" ---
+    const eqBothSpace = s.match(/^(\d+)\s*=\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s+(\d.+)$/);
+    if (eqBothSpace) {
+        return { cleaned: `${eqBothSpace[1]}=${eqBothSpace[3].trim()}`, mode: 'both' };
+    }
+    // --- Inline single context after = with space: "25= ล่าง 20*20", "25=บน20*20" ---
+    const eqSingleInline = s.match(/^(\d+)\s*=\s*(บน|บ|ล่าง|ล)\.?\s*(\d.+)$/);
+    if (eqSingleInline) {
+        const modeStr = eqSingleInline[2];
+        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom';
+        return { cleaned: `${eqSingleInline[1]}=${eqSingleInline[3].trim()}`, mode };
+    }
+
+    // --- "num context=amt" pattern: "25 ล่าง=20*20", "25 ล่าง =20*20", "25ล่าง=20*20" ---
+    const numCtxEqBoth = s.match(/^(\d+)\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*=\s*(.+)$/);
+    if (numCtxEqBoth) {
+        return { cleaned: `${numCtxEqBoth[1]}=${numCtxEqBoth[3].trim()}`, mode: 'both' };
+    }
+    const numCtxEqSingle = s.match(/^(\d+)\s*(บน|บ|ล่าง|ล)\.?\s*=\s*(.+)$/);
+    if (numCtxEqSingle) {
+        const modeStr = numCtxEqSingle[2];
+        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom';
+        return { cleaned: `${numCtxEqSingle[1]}=${numCtxEqSingle[3].trim()}`, mode };
+    }
 
     // --- NO SPACE MIDDLE patterns (e.g. "79ล่าง100", "79บน100", "79บล100", "123โต๊ด50", "2วิ่ง10") ---
     const noSpaceBoth = s.match(/^(\d+)(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?([=\d].*)$/);

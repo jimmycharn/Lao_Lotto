@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { FiX, FiTrash2, FiEdit2, FiPlus, FiCheck, FiRefreshCw, FiVolume2, FiVolumeX } from 'react-icons/fi'
 import { getPermutations } from '../constants/lotteryTypes'
-import { parseMultiLinePaste, get3DigitPermCount } from '../utils/pasteParser'
+import { parseMultiLinePaste, get3DigitPermCount, normalizeUnicode, extractInlineContext } from '../utils/pasteParser'
 import { useDragReorder } from '../utils/useDragReorder'
 import { fetchNumberLimits, fetchCurrentTotals, findMatchingLimit, getEffectivePayoutPercent } from '../utils/numberLimits'
 import { useModalBackButton } from '../utils/useModalBackButton'
@@ -82,18 +82,25 @@ const getPermutationCount = (numStr) => {
 }
 
 // Parse a single line of input
-// Supports formats: "123=50 บน", "123=50*30 บนกลับ", "123 50 ล่าง" (old)
+// Supports formats: "123=50 บน", "123=50*30 บนกลับ", "123 50 ล่าง", "16=บน30x30", "16=ล่าง30*30"
 const parseLine = (line) => {
-    const trimmed = line.trim()
-    if (!trimmed) return null
+    // Clean and normalize the line using the shared parser logic
+    let s = normalizeUnicode(line.trim())
+    const inline = extractInlineContext(s)
+    s = inline.cleaned.trim()
+    if (!s) return null
+
+    // Determine the effective context mode
+    const mode = inline.mode || 'top'
+    const isTop = mode === 'top' || mode === 'float_top' || mode === 'both'
 
     let numbers, amount, amount2 = null, typeStr
     
     // Check if using new format with =
-    if (trimmed.includes('=')) {
-        const eqIndex = trimmed.indexOf('=')
-        numbers = trimmed.substring(0, eqIndex).trim()
-        const afterEq = trimmed.substring(eqIndex + 1).trim()
+    if (s.includes('=')) {
+        const eqIndex = s.indexOf('=')
+        numbers = s.substring(0, eqIndex).trim()
+        const afterEq = s.substring(eqIndex + 1).trim()
         
         // Check for * in amount (two amounts)
         if (afterEq.includes('*')) {
@@ -110,7 +117,7 @@ const parseLine = (line) => {
         }
     } else {
         // Old format with spaces
-        const parts = trimmed.split(/\s+/)
+        const parts = s.split(/\s+/)
         if (parts.length < 2) return { error: 'รูปแบบไม่ถูกต้อง: ต้องมีเลขและจำนวนเงิน' }
         numbers = parts[0]
         amount = parseInt(parts[1])
@@ -144,9 +151,9 @@ const parseLine = (line) => {
 
     if (numLen === 1) {
         // 1 digit: ลอยบน/ล่าง, หน้าบน/ล่าง, กลางบน, หลังบน/ล่าง
-        if (typeStr.includes('ลอยล่าง') || typeStr.includes('วิ่งล่าง')) {
+        if (typeStr.includes('ลอยล่าง') || typeStr.includes('วิ่งล่าง') || mode === 'float_bottom' || mode === 'bottom') {
             betType = 'run_bottom'
-        } else if (typeStr.includes('ลอยบน') || typeStr.includes('วิ่งบน')) {
+        } else if (typeStr.includes('ลอยบน') || typeStr.includes('วิ่งบน') || mode === 'float_top') {
             betType = 'run_top'
         } else if (typeStr.includes('หน้าบน')) {
             betType = 'front_top_1'
@@ -158,37 +165,25 @@ const parseLine = (line) => {
             betType = 'back_top_1'
         } else if (typeStr.includes('หลังล่าง')) {
             betType = 'back_bottom_1'
-        } else if (typeStr.includes('ล่าง')) {
-            betType = 'run_bottom'
         } else {
-            betType = 'run_top'
+            betType = isTop ? 'run_top' : 'run_bottom'
         }
     } else if (numLen === 2) {
         // 2 digits: บน/ล่าง, ลอย, หน้า, ถ่าง, กลับ
-        if (typeStr.includes('ล่างกลับ')) {
+        // If amount2 is present, it is always a reverse bet (กลับ)
+        const isReversed = amount2 !== null || typeStr.includes('กลับ')
+        if (typeStr.includes('ล่าง') || mode === 'bottom' || mode === 'float_bottom') {
             betType = '2_bottom'
-            specialType = 'reverse'
-        } else if (typeStr.includes('บนกลับ') || (typeStr.includes('กลับ') && !typeStr.includes('ล่าง') && !typeStr.includes('หน้า') && !typeStr.includes('ถ่าง'))) {
-            betType = '2_top'
-            specialType = 'reverse'
-        } else if (typeStr.includes('หน้ากลับ')) {
+            if (isReversed) specialType = 'reverse'
+        } else if (typeStr.includes('หน้า')) {
             betType = '2_front'
-            specialType = 'reverse'
-        } else if (typeStr.includes('ถ่างกลับ')) {
+            if (isReversed) specialType = 'reverse'
+        } else if (typeStr.includes('ถ่าง')) {
             betType = '2_tang'
-            specialType = 'reverse'
-        } else if (typeStr.includes('ลอย') || typeStr.includes('2ตัวมี')) {
-            betType = '2_teng'
-        } else if (typeStr.includes('หน้าบน') || typeStr.includes('หน้า') || typeStr.includes('2ตัวหน้า')) {
-            betType = '2_front'
-        } else if (typeStr.includes('ถ่างบน') || typeStr.includes('ถ่าง') || typeStr.includes('2ตัวถ่าง')) {
-            betType = '2_tang'
-        } else if (typeStr.includes('ล่าง') || typeStr.includes('2ตัวล่าง')) {
-            betType = '2_bottom'
-        } else if (typeStr.includes('บน') || typeStr.includes('2ตัวบน')) {
-            betType = '2_top'
+            if (isReversed) specialType = 'reverse'
         } else {
             betType = '2_top'
+            if (isReversed) specialType = 'reverse'
         }
     } else if (numLen === 3) {
         // 3 digits: บน/ตรง, โต๊ด, ล่าง, เต็งโต๊ด, กลับ, คูณชุด
@@ -196,49 +191,39 @@ const parseLine = (line) => {
         if (typeStr.includes('คูณชุด')) {
             betType = '3_top'
             specialType = permCount === 3 ? 'set3' : (permCount === 6 ? 'set6' : 'set' + permCount)
-        } else if (typeStr.includes('เต็งโต๊ด')) {
+        } else if (typeStr.includes('เต็งโต๊ด') || (amount2 !== null && typeStr === '')) {
             betType = '3_top'
             specialType = 'tengTod'
-        } else if (typeStr.includes('โต๊ด') || typeStr.includes('3ตัวโต๊ด')) {
+        } else if (typeStr.includes('โต๊ด') || typeStr.includes('3ตัวโต๊ด') || mode === 'float_top' || mode === 'float_bottom') {
             betType = '3_tod'
         } else if (typeStr.includes('กลับ')) {
             betType = '3_top'
             specialType = 'reverse'
-        } else if (typeStr.includes('ล่าง') || typeStr.includes('3ตัวล่าง')) {
+        } else if (typeStr.includes('ล่าง') || typeStr.includes('3ตัวล่าง') || mode === 'bottom') {
             betType = '3_bottom'
-        } else if (typeStr.includes('ตรง') || typeStr.includes('บน') || typeStr.includes('3ตัวบน')) {
-            betType = '3_top'
         } else {
             betType = '3_top'
         }
     } else if (numLen === 4) {
         // 4 digits: 4ตัวชุด, ลอยแพ, คูณชุด
-        const permCount = getPermutationCount(numbers)
         if (typeStr.includes('คูณชุด')) {
-            // คูณชุด ต้อง check ก่อน เพราะ 'ชุด' จะ match กับ 'คูณชุด' ด้วย
             betType = '3_top'
             specialType = '3xPerm'
         } else if (typeStr.includes('4ตัวชุด') || typeStr.includes('ชุด')) {
             betType = '4_set'
-        } else if (typeStr.includes('ลอยแพ') || typeStr.includes('ลอย')) {
-            betType = '4_float'
         } else {
             betType = '4_float'
         }
     } else if (numLen === 5) {
         // 5 digits: ลอยแพ, คูณชุด
-        const permCount = getPermutationCount(numbers)
         if (typeStr.includes('คูณชุด')) {
             betType = '3_top'
             specialType = '3xPerm'
-        } else if (typeStr.includes('ลอยแพ') || typeStr.includes('ลอย')) {
-            betType = '5_float'
         } else {
             betType = '5_float'
         }
     }
 
-    // Validate betType - ต้องไม่เป็น null
     if (!betType) {
         return { error: `ไม่สามารถระบุประเภทเลข ${numLen} หลักได้` }
     }

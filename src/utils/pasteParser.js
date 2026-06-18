@@ -18,7 +18,7 @@ const DEBUG_PASTE = false
  * @param {string} lotteryType - 'thai', 'lao', or 'hanoi'
  * @returns {Array<{ numbers: string, amount: number, amount2: number|null, betType: string, typeLabel: string, rawLine: string, formattedLine: string }>}
  */
-export { get3DigitPermCount }
+export { get3DigitPermCount, normalizeUnicode, extractInlineContext }
 
 /**
  * Normalize Unicode characters commonly found in LINE chat / social media pastes.

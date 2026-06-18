@@ -667,5 +667,27 @@ describe('pasteParser - parseMultiLinePaste', () => {
       expect(result.length).toBe(1)
       expect(result[0]).toMatchObject({ numbers: '11', amount: 50, betType: '2_bottom', typeLabel: 'ล่าง' })
     })
+
+    it('should parse 16=บน30x30 correctly', () => {
+      const text = '16=บน30×30\n16=ล่าง30×30'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(2)
+      expect(result[0]).toMatchObject({
+        numbers: '16',
+        amount: 30,
+        amount2: 30,
+        betType: '2_top',
+        specialType: 'reverse',
+        typeLabel: 'บนกลับ'
+      })
+      expect(result[1]).toMatchObject({
+        numbers: '16',
+        amount: 30,
+        amount2: 30,
+        betType: '2_bottom',
+        specialType: 'reverse',
+        typeLabel: 'ล่างกลับ'
+      })
+    })
   })
 })
