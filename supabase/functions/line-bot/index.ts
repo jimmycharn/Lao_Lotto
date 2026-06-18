@@ -6636,7 +6636,8 @@ serve(async (req) => {
           .eq('is_active', true)
           .maybeSingle();
 
-        console.log(`[LINE BOT MSG] profile lookup result:`, { profile, profileErr });
+        const senderPoyDisplay = profile?.line_poy_display || 'short';
+        console.log(`[LINE BOT MSG] profile lookup result:`, { profile, profileErr, senderPoyDisplay });
 
         // Check if sender is a manager for this dealer
         const { data: managerRecord, error: managerErr } = await supabase
@@ -7230,7 +7231,7 @@ serve(async (req) => {
         summaryText += `------------------------\n`;
 
         const formattedDetailLines: string[] = [];
-        if (profile?.line_poy_display === 'full') {
+        if (senderPoyDisplay === 'full') {
           const entryGroups = new Map<string, any[]>();
           processedInserts.forEach((insert) => {
             const gid = insert.entry_id;
@@ -7273,7 +7274,7 @@ serve(async (req) => {
           summaryText += `ค่าคอม: ฿${totalCommission.toLocaleString('th-TH')}\n`;
           summaryText += `คงเหลือ: ฿${netAmount.toLocaleString('th-TH')}\n`;
           summaryText += `------------------------\n`;
-          if (profile?.line_poy_display === 'full' && formattedDetailLines.length > 0) {
+          if (senderPoyDisplay === 'full' && formattedDetailLines.length > 0) {
             summaryText += formattedDetailLines.join('\n') + '\n';
             summaryText += `------------------------\n`;
           }
@@ -7306,7 +7307,7 @@ serve(async (req) => {
           summaryText += `จำนวน: ${parsedBets.length} รายการ\n`;
           summaryText += `ยอดรวม: ฿${totalBetAmount.toLocaleString('th-TH')}\n`;
           summaryText += `------------------------\n`;
-          if (profile?.line_poy_display === 'full' && formattedDetailLines.length > 0) {
+          if (senderPoyDisplay === 'full' && formattedDetailLines.length > 0) {
             summaryText += formattedDetailLines.join('\n') + '\n';
             summaryText += `------------------------\n`;
           }
