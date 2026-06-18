@@ -57,4 +57,44 @@ describe('dot-equal typo handling', () => {
             expect(results[4].typeLabel).toBe('ล่างกลับ')
         }
     })
+
+    describe('parseMonthYearParam date logic', () => {
+        function parseMonthYearParam(param) {
+            const clean = param.replace(/\s+/g, '')
+            const match = clean.match(/^(\d{1,2})[-/](\d{2,4})$/)
+            if (!match) return null
+
+            const month = parseInt(match[1], 10)
+            let year = parseInt(match[2], 10)
+
+            if (month < 1 || month > 12) return null
+
+            if (year >= 2500) {
+                year = year - 543
+            } else if (year >= 50 && year < 100) {
+                year = (2500 + year) - 543
+            } else if (year < 50) {
+                year = 2000 + year
+            }
+
+            return { month, year }
+        }
+
+        it('should correctly parse and normalize various month-year formats', () => {
+            // Thai 2-digit Buddhist Era (e.g. 6-69 -> June 2026)
+            expect(parseMonthYearParam('6-69')).toEqual({ month: 6, year: 2026 })
+            // Thai 4-digit Buddhist Era (e.g. 6-2569 -> June 2026)
+            expect(parseMonthYearParam('6-2569')).toEqual({ month: 6, year: 2026 })
+            // 2-digit Common Era (e.g. 6-26 -> June 2026)
+            expect(parseMonthYearParam('6-26')).toEqual({ month: 6, year: 2026 })
+            // 4-digit Common Era (e.g. 6-2026 -> June 2026)
+            expect(parseMonthYearParam('6-2026')).toEqual({ month: 6, year: 2026 })
+            // Slash separator
+            expect(parseMonthYearParam('6/2569')).toEqual({ month: 6, year: 2026 })
+            // Invalid month
+            expect(parseMonthYearParam('13-2569')).toBeNull()
+            // Invalid formats
+            expect(parseMonthYearParam('abc')).toBeNull()
+        })
+    })
 })

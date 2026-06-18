@@ -152,6 +152,31 @@ function parseRoundDateParam(param: string): string | null {
   return `${yStr}-${mStr}-${dStr}`;
 }
 
+// Helper: Parse a month-year param (e.g. 6-69, 6-2569, 6-26, 6-2026, 6/69, 6/2026).
+// Returns { month: number, year: number } or null.
+function parseMonthYearParam(param: string): { month: number; year: number } | null {
+  const clean = param.replace(/\s+/g, '');
+  const match = clean.match(/^(\d{1,2})[-/](\d{2,4})$/);
+  if (!match) return null;
+
+  const month = parseInt(match[1], 10);
+  let year = parseInt(match[2], 10);
+
+  if (month < 1 || month > 12) return null;
+
+  // Year normalization
+  if (year >= 2500) {
+    year = year - 543;                 // 4-digit Buddhist (2569 -> 2026)
+  } else if (year >= 50 && year < 100) {
+    year = (2500 + year) - 543;        // 2-digit Buddhist (69 -> 2569 -> 2026)
+  } else if (year < 50) {
+    year = 2000 + year;                // 2-digit Gregorian (26 -> 2026)
+  }
+  // 4-digit Gregorian (e.g. 2026) passes through unchanged
+
+  return { month, year };
+}
+
 // --- LOTTERY CONSTANTS & WINNERS CHECKER FOR TRANSFER WIN CALCULATIONS ---
 const DEFAULT_COMMISSIONS: Record<string, number> = {
   'run_top': 15, 'run_bottom': 15,
@@ -2416,6 +2441,7 @@ serve(async (req) => {
             text.startsWith('/summary') || text.startsWith('/สรุป') ||
             text.startsWith('/help') || text.startsWith('/คำสั่ง') ||
             text.startsWith('/แจ้งผล') ||
+            text.startsWith('/กำไร') ||
             text === '/เปิด' || text === '/ปิด' || text === '/เริ่มขาย' ||
             text.toLowerCase() === 'y' || text === 'ยืนยัน';
 
@@ -3581,6 +3607,137 @@ serve(async (req) => {
               if (!currentGroupProcessed) {
                 await sendLineReply(replyToken, `👥 ไม่มีรายการส่งเลขในกลุ่มนี้สำหรับงวดนี้ค่ะ`);
               }
+              continue;
+            }
+
+            // ─── COMMAND: /กำไร ───
+            if (text.startsWith('/กำไร')) {
+              if (!permissions.can_view_total) {
+                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์เข้าถึงรายงานสรุปกำไร/ขาดทุน`);
+                continue;
+              }
+
+              const param = text.substring('/กำไร'.length).trim().toLowerCase();
+
+              let startDate: string | null = null;
+              let endDate: string | null = null;
+              let rangeText = 'ทั้งหมด';
+              let isValidFilter = true;
+              let requestedMonthText = '';
+
+              if (param === 'm') {
+                rangeText = 'เดือนปัจจุบัน';
+                const nowBangkok = new Date(Date.now() + 7 * 60 * 60 * 1000);
+                const year = nowBangkok.getUTCFullYear();
+                const month = nowBangkok.getUTCMonth(); // 0-11
+                const firstDay = new Date(Date.UTC(year, month, 1));
+                const lastDay = new Date(Date.UTC(year, month + 1, 0));
+                startDate = `${firstDay.getUTCFullYear()}-${String(firstDay.getUTCMonth() + 1).padStart(2, '0')}-${String(firstDay.getUTCDate()).padStart(2, '0')}`;
+                endDate = `${lastDay.getUTCFullYear()}-${String(lastDay.getUTCMonth() + 1).padStart(2, '0')}-${String(lastDay.getUTCDate()).padStart(2, '0')}`;
+              } else if (param === 'w') {
+                rangeText = 'สัปดาห์ปัจจุบัน';
+                const nowBangkok = new Date(Date.now() + 7 * 60 * 60 * 1000);
+                const day = nowBangkok.getUTCDay(); // 0 (Sun) to 6 (Sat)
+                const dayOffset = day === 0 ? 6 : day - 1; // days since Monday
+                const monday = new Date(nowBangkok.getTime() - dayOffset * 24 * 60 * 60 * 1000);
+                const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000);
+                startDate = `${monday.getUTCFullYear()}-${String(monday.getUTCMonth() + 1).padStart(2, '0')}-${String(monday.getUTCDate()).padStart(2, '0')}`;
+                endDate = `${sunday.getUTCFullYear()}-${String(sunday.getUTCMonth() + 1).padStart(2, '0')}-${String(sunday.getUTCDate()).padStart(2, '0')}`;
+              } else if (param !== '') {
+                const parsed = parseMonthYearParam(param);
+                if (parsed) {
+                  const { month, year } = parsed;
+                  requestedMonthText = `${month}-${year + 543}`; // Display as Buddhist Era (Thai year)
+                  rangeText = `เดือน ${requestedMonthText}`;
+                  const firstDay = new Date(Date.UTC(year, month - 1, 1));
+                  const lastDay = new Date(Date.UTC(year, month, 0));
+                  startDate = `${firstDay.getUTCFullYear()}-${String(firstDay.getUTCMonth() + 1).padStart(2, '0')}-${String(firstDay.getUTCDate()).padStart(2, '0')}`;
+                  endDate = `${lastDay.getUTCFullYear()}-${String(lastDay.getUTCMonth() + 1).padStart(2, '0')}-${String(lastDay.getUTCDate()).padStart(2, '0')}`;
+                } else {
+                  isValidFilter = false;
+                }
+              }
+
+              if (!isValidFilter) {
+                await sendLineReply(replyToken, `❌ รูปแบบคำสั่งไม่ถูกต้อง\n\nคำสั่งที่รองรับ:\n• /กำไร - ดูประวัติกำไรทั้งหมด\n• /กำไร m - ดูกำไรเดือนปัจจุบัน\n• /กำไร w - ดูกำไรสัปดาห์ปัจจุบัน\n• /กำไร [เดือน-ปี] - เช่น /กำไร 6-69 หรือ /กำไร 6-2569`);
+                continue;
+              }
+
+              let query = supabase
+                .from('round_history')
+                .select('*')
+                .eq('dealer_id', dealerId);
+
+              if (startDate && endDate) {
+                query = query.gte('round_date', startDate).lte('round_date', endDate);
+              }
+
+              query = query.order('round_date', { ascending: false });
+
+              const { data: historyList, error: historyErr } = await query;
+
+              if (historyErr) {
+                console.error('Error fetching round history for bot:', historyErr);
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลประวัติกำไร/ขาดทุน`);
+                continue;
+              }
+
+              if (!historyList || historyList.length === 0) {
+                await sendLineReply(replyToken, `📊 ไม่พบประวัติงวดหวยในช่วงเวลา "${rangeText}" ค่ะ`);
+                continue;
+              }
+
+              let totalRounds = 0;
+              let totalEntries = 0;
+              let totalAmount = 0;
+              let totalCommission = 0;
+              let totalPayout = 0;
+
+              let totalTransferredEntries = 0;
+              let totalTransferred = 0;
+              let totalUpstreamComm = 0;
+              let totalUpstreamWin = 0;
+
+              for (const h of historyList) {
+                totalRounds++;
+                totalEntries += (h.total_entries || 0);
+                totalAmount += parseFloat(h.total_amount || 0);
+                totalCommission += parseFloat(h.total_commission || 0);
+                totalPayout += parseFloat(h.total_payout || 0);
+
+                totalTransferredEntries += (h.transferred_entries || 0);
+                totalTransferred += parseFloat(h.transferred_amount || 0);
+                totalUpstreamComm += parseFloat(h.upstream_commission || 0);
+                totalUpstreamWin += parseFloat(h.upstream_winnings || 0);
+              }
+
+              const incomingProfit = totalAmount - totalCommission - totalPayout;
+              const outgoingProfit = totalUpstreamWin + totalUpstreamComm - totalTransferred;
+              const totalProfit = incomingProfit + outgoingProfit;
+              const hasOutgoing = totalTransferred > 0;
+
+              let replyText = `📊 สรุปกำไร/ขาดทุน\n`;
+              replyText += `ช่วงเวลา: ${rangeText}\n`;
+              replyText += `(จำนวนงวด: ${totalRounds} งวด)\n`;
+              replyText += `--------------------------\n`;
+              replyText += `🟢 ยอดรับ (${totalEntries.toLocaleString()} รายการ)\n`;
+              replyText += `  • ยอดรวม   +฿${Math.round(totalAmount).toLocaleString('th-TH')}\n`;
+              replyText += `  • ค่าคอม   -฿${Math.round(totalCommission).toLocaleString('th-TH')}\n`;
+              replyText += `  • จ่าย     -฿${Math.round(totalPayout).toLocaleString('th-TH')}\n`;
+              replyText += `  • กำไร     ${incomingProfit >= 0 ? '+' : '-'}฿${Math.abs(Math.round(incomingProfit)).toLocaleString('th-TH')}\n`;
+
+              if (hasOutgoing) {
+                replyText += `\n🔴 ยอดส่ง (${totalTransferredEntries.toLocaleString()} รายการ)\n`;
+                replyText += `  • ยอดรวม   -฿${Math.round(totalTransferred).toLocaleString('th-TH')}\n`;
+                replyText += `  • ค่าคอม   +฿${Math.round(totalUpstreamComm).toLocaleString('th-TH')}\n`;
+                replyText += `  • รับ      ฿${Math.round(totalUpstreamWin).toLocaleString('th-TH')}\n`;
+                replyText += `  • กำไร     ${outgoingProfit >= 0 ? '+' : '-'}฿${Math.abs(Math.round(outgoingProfit)).toLocaleString('th-TH')}\n`;
+              }
+              
+              replyText += `--------------------------\n`;
+              replyText += `💵 กำไรรวม   ${totalProfit >= 0 ? '+' : '-'}฿${Math.abs(Math.round(totalProfit)).toLocaleString('th-TH')}`;
+
+              await sendLineReply(replyToken, replyText);
               continue;
             }
 
@@ -5850,22 +6007,26 @@ serve(async (req) => {
                 helpText += `   • /สรุป [เลขที่ออก] - ประกาศผลและสรุปงวดปัจจุบัน เช่น /สรุป 1234\n`;
                 helpText += `   • /สรุป [งวดวันที่] - ดูสรุปย้อนหลังของงวดวันที่ระบุ เช่น /สรุป 10-6-69 หรือ /สรุป 10-6-2569 (เฉพาะงวดที่ยังไม่ถูกลบ)\n`;
                 helpText += `2. /ยอดรวม - รายงานยอดรับรวมแยกตามประเภทเลขและยอดรวมทั้งหมดของร้าน\n`;
-                helpText += `3. /คนส่ง - รายงานยอดรับแทงแยกตามสมาชิกแต่ละคน\n`;
-                helpText += `4. /สมาชิก [ชื่อ] - ค้นหายอดเงินคงเหลือและข้อมูลสมาชิก\n`;
-                helpText += `5. /ปิด - ปิดรับแทงงวดปัจจุบัน (แจ้งเตือนทุกห้อง)\n`;
-                helpText += `6. /เปิด - เปิดรับแทงงวดที่ปิดอยู่ (ต้องยังไม่ประกาศผล)\n`;
-                helpText += `7. /เริ่มขาย - แจ้งเปิดรับแทงงวดปัจจุบันไปยังทุกกลุ่มไลน์ที่เชื่อมโยง\n\n`;
+                helpText += `3. /กำไร - สรุปกำไร/ขาดทุนทั้งหมดที่ยังบันทึกอยู่ในประวัติ\n`;
+                helpText += `   • /กำไร m - สรุปกำไรของเดือนปัจจุบัน\n`;
+                helpText += `   • /กำไร w - สรุปกำไรของสัปดาห์ปัจจุบัน\n`;
+                helpText += `   • /กำไร [เดือน-ปี] - สรุปกำไรของเดือนระบุ เช่น /กำไร 6-69, /กำไร 6-2569\n`;
+                helpText += `4. /คนส่ง - รายงานยอดรับแทงแยกตามสมาชิกแต่ละคน\n`;
+                helpText += `5. /สมาชิก [ชื่อ] - ค้นหายอดเงินคงเหลือและข้อมูลสมาชิก\n`;
+                helpText += `6. /ปิด - ปิดรับแทงงวดปัจจุบัน (แจ้งเตือนทุกห้อง)\n`;
+                helpText += `7. /เปิด - เปิดรับแทงงวดที่ปิดอยู่ (ต้องยังไม่ประกาศผล)\n`;
+                helpText += `8. /เริ่มขาย - แจ้งเปิดรับแทงงวดปัจจุบันไปยังทุกกลุ่มไลน์ที่เชื่อมโยง\n\n`;
                 helpText += `💸 คำสั่งจัดการยอดเกิน/ตีออก:\n`;
-                helpText += `8. /ยอดเกิน - แสดงตัวเลขและยอดเงินที่เกินลิมิตอั้นในงวดนี้\n`;
-                helpText += `9. /ตีออก - แสดงสรุปประวัติประวัติและยอดเงินการตีออกทั้งหมดในงวดนี้\n`;
-                helpText += `10. /ตีออก เกิน - สั่งตีออกยอดเกินอั้นทั้งหมดไปยังเจ้ามือปลายทาง (จะมีบอทให้กดยืนยันอีกครั้ง)\n`;
-                helpText += `11. /ตีออก [เลข] [ประเภท] [จำนวน] - สั่งตีออกเลขแบบเจาะจง (เช่น /ตีออก 123 บน 100)\n`;
-                helpText += `12. /เอาคืน - แสดงรายการครั้งที่ตีออกที่สามารถเอาคืนได้\n`;
-                helpText += `13. /เอาคืน [ครั้งที่] - เอาคืนยอดที่ตีออกไปตามครั้งที่ระบุ (เช่น /เอาคืน 3 จะมีบอทให้กดยืนยันอีกครั้ง)\n\n`;
+                helpText += `9. /ยอดเกิน - แสดงตัวเลขและยอดเงินที่เกินลิมิตอั้นในงวดนี้\n`;
+                helpText += `10. /ตีออก - แสดงสรุปประวัติประวัติและยอดเงินการตีออกทั้งหมดในงวดนี้\n`;
+                helpText += `11. /ตีออก เกิน - สั่งตีออกยอดเกินอั้นทั้งหมดไปยังเจ้ามือปลายทาง (จะมีบอทให้กดยืนยันอีกครั้ง)\n`;
+                helpText += `12. /ตีออก [เลข] [ประเภท] [จำนวน] - สั่งตีออกเลขแบบเจาะจง (เช่น /ตีออก 123 บน 100)\n`;
+                helpText += `13. /เอาคืน - แสดงรายการครั้งที่ตีออกที่สามารถเอาคืนได้\n`;
+                helpText += `14. /เอาคืน [ครั้งที่] - เอาคืนยอดที่ตีออกไปตามครั้งที่ระบุ (เช่น /เอาคืน 3 จะมีบอทให้กดยืนยันอีกครั้ง)\n\n`;
                 helpText += `👤 คำสั่งทั่วไปสำหรับสมาชิก:\n`;
-                helpText += `14. /สรุป (พิมพ์โดยสมาชิก) - สรุปยอดและรางวัลเฉพาะของตัวสมาชิกเอง\n`;
-                helpText += `15. /ยอดรวม (พิมพ์โดยสมาชิก) - สรุปยอดแทงทั้งหมดเฉพาะของตัวสมาชิกเอง\n`;
-                helpText += `16. /คำสั่ง หรือ /help - แสดงรายการคำสั่งที่ใช้งานได้`;
+                helpText += `15. /สรุป (พิมพ์โดยสมาชิก) - สรุปยอดและรางวัลเฉพาะของตัวสมาชิกเอง\n`;
+                helpText += `16. /ยอดรวม (พิมพ์โดยสมาชิก) - สรุปยอดแทงทั้งหมดเฉพาะของตัวสมาชิกเอง\n`;
+                helpText += `17. /คำสั่ง หรือ /help - แสดงรายการคำสั่งที่ใช้งานได้`;
               }
 
               await sendLineReply(replyToken, helpText);
