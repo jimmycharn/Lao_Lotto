@@ -85,6 +85,9 @@ function normalizeUnicode(str) {
     // Convert parenthetical multipliers like "20(10x5)" or "20(10*5)" or "20 (10 x 5)" to "*"-separated format "20*10*5"
     s = s.replace(/(\d+)\s*\(\s*(\d+)\s*[*×xX\-+/tTต\s]\s*(\d+)\s*\)/g, '$1*$2*$3')
 
+    // Convert typos like -= or =- (with optional spacing and multiple dashes) to =
+    s = s.replace(/\s*-+\s*=/g, '=').replace(/=\s*-+\s*/g, '=')
+
     return s
 }
 
@@ -808,8 +811,8 @@ function parseContextLine(line) {
     // Check for "วิ่ง/ลอย/โต๊ด/มี" float context FIRST (before บน/ล่าง checks)
     // These keywords indicate "ลอย" (float/run) bet type
     const cleanedFloat = withPunct.replace(/[\s.+\-]/g, '')
-    // "วิ่งบน", "ลอยบน", "วิ่ง บน" → float_top
-    if (/^(วิ่งบน|ลอยบน|วิ่งบ|ลอยบ)$/.test(cleanedFloat)) return 'float_top'
+    // "วิ่งบน", "ลอยบน", "วิ่ง บน", "ลอยทั่วไป" → float_top
+    if (/^(วิ่งบน|ลอยบน|วิ่งบ|ลอยบ|ลอยทั่วไป)$/.test(cleanedFloat)) return 'float_top'
     // "วิ่งล่าง", "ลอยล่าง", "วิ่ง ล่าง" → float_bottom
     if (/^(วิ่งล่าง|ลอยล่าง|วิ่งล|ลอยล)$/.test(cleanedFloat)) return 'float_bottom'
     // "วิ่ง", "ลอย", "โต๊ด" standalone → float_top (default to บน)
@@ -897,7 +900,7 @@ function extractInlineContext(line) {
     let s = line.trim()
 
     // --- FLOAT PREFIX: "วิ่ง83=100", "ลอย25=20", "โต๊ด78=500" followed by digit ---
-    const floatPrefixTop = s.match(/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด)\.?\s*(\d.*)$/)
+    const floatPrefixTop = s.match(/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป)\.?\s*(\d.*)$/)
     if (floatPrefixTop) {
         const kw = floatPrefixTop[1]
         const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top'
@@ -913,13 +916,13 @@ function extractInlineContext(line) {
     if (floatSuffixBot) {
         return { cleaned: floatSuffixBot[1].trim(), mode: 'float_bottom' }
     }
-    const floatSuffix = s.match(/^(.+?)\s+(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด)\s*$/)
+    const floatSuffix = s.match(/^(.+?)\s+(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป)\s*$/)
     if (floatSuffix) {
         return { cleaned: floatSuffix[1].trim(), mode: 'float_top' }
     }
 
     // --- FLOAT MIDDLE: "78 โต๊ด 500", "78 วิ่ง 500", "78 ลอย 500", "78 มี 500" ---
-    const floatMiddle = s.match(/^(\d+)\s+(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|มี)\s+(\d[\d*=\-+]*)$/)
+    const floatMiddle = s.match(/^(\d+)\s+(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป|มี)\s+(\d[\d*=\-+]*)$/)
     if (floatMiddle) {
         const kw = floatMiddle[2]
         const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top'
@@ -1022,7 +1025,7 @@ function extractInlineContext(line) {
         return { cleaned: `${noSpaceSingle[1]} ${noSpaceSingle[3].trim()}`, mode }
     }
 
-    const noSpaceFloat = s.match(/^(\d+)(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|มี)\.?([=\d].*)$/)
+    const noSpaceFloat = s.match(/^(\d+)(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป|มี)\.?([=\d].*)$/)
     if (noSpaceFloat) {
         const kw = noSpaceFloat[2]
         const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top'
@@ -1294,7 +1297,20 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
         if (amount1 === null) return null
 
         // Float mode (วิ่ง/ลอย/โต๊ด/มี) → 2_run (ลอย)
+        // BUT if it is float_bottom, it maps to 2_bottom (ล่าง) because "ลอยล่าง" doesn't exist for 2 digits.
         if (isFloat) {
+            if (contextMode === 'float_bottom') {
+                results.push({
+                    numbers,
+                    amount: amount1,
+                    amount2: null,
+                    betType: '2_bottom',
+                    typeLabel: 'ล่าง',
+                    rawLine,
+                    formattedLine: `${numbers}=${amount1} ล่าง`
+                })
+                return results
+            }
             results.push({
                 numbers,
                 amount: amount1,

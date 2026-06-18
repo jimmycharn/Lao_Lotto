@@ -634,4 +634,38 @@ describe('pasteParser - parseMultiLinePaste', () => {
       })
     })
   })
+
+  describe('dash-equal typo, "ลอยทั่วไป" context, and 2-digit float_bottom routing', () => {
+    it('should normalize dash-equals typos correctly', () => {
+      const text = 'ลอยทั่วไป\n11-=50\n22-=50\n66-=50\n88=50'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(4)
+      expect(result[0]).toMatchObject({ numbers: '11', amount: 50, betType: '2_run', typeLabel: 'ลอย' })
+      expect(result[1]).toMatchObject({ numbers: '22', amount: 50, betType: '2_run', typeLabel: 'ลอย' })
+      expect(result[2]).toMatchObject({ numbers: '66', amount: 50, betType: '2_run', typeLabel: 'ลอย' })
+      expect(result[3]).toMatchObject({ numbers: '88', amount: 50, betType: '2_run', typeLabel: 'ลอย' })
+    })
+
+    it('should parse inline ลอยทั่วไป correctly', () => {
+      const text = '11=50 ลอยทั่วไป'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({ numbers: '11', amount: 50, betType: '2_run', typeLabel: 'ลอย' })
+    })
+
+    it('should route 2-digit running bottom bets to 2_bottom (ล่าง)', () => {
+      const text = 'วิ่งล่าง\n11=50\n22=50'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(2)
+      expect(result[0]).toMatchObject({ numbers: '11', amount: 50, betType: '2_bottom', typeLabel: 'ล่าง' })
+      expect(result[1]).toMatchObject({ numbers: '22', amount: 50, betType: '2_bottom', typeLabel: 'ล่าง' })
+    })
+
+    it('should route 2-digit running bottom inline bets to 2_bottom (ล่าง)', () => {
+      const text = '11=50 วิ่งล่าง'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({ numbers: '11', amount: 50, betType: '2_bottom', typeLabel: 'ล่าง' })
+    })
+  })
 })
