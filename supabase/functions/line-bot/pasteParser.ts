@@ -782,7 +782,7 @@ function extractInlineContext(line: string): InlineContextInfo {
         return { cleaned: rest.trim(), mode };
     }
 
-    const bothSuffix = s.match(/^(.+?)\s+(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล|ล[+\-]?บ|บล|ลบ)\s*$/);
+    const bothSuffix = s.match(/^(.+?)\s+(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล|ล[+\-]?บ|บล|ลบ)\.?\s*$/);
     if (bothSuffix) {
         return { cleaned: bothSuffix[1].trim(), mode: 'both' };
     }

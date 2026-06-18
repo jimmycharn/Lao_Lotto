@@ -729,5 +729,13 @@ describe('pasteParser - parseMultiLinePaste', () => {
       expect(result[6]).toMatchObject({ numbers: '87', amount: 20, betType: '2_bottom' })
       expect(result[7]).toMatchObject({ numbers: '78', amount: 20, betType: '2_bottom' })
     })
+
+    it('should parse trailing บล. context correctly (e.g. 08=20 บล.)', () => {
+      const text = '08=20 บล.'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(2)
+      expect(result[0]).toMatchObject({ numbers: '08', amount: 20, betType: '2_top' })
+      expect(result[1]).toMatchObject({ numbers: '08', amount: 20, betType: '2_bottom' })
+    })
   })
 })
