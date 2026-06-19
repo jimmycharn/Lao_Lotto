@@ -833,7 +833,7 @@ function stripPrefixNoise(line) {
  * Must NOT contain digits (to avoid matching "บน 77=30" as context line).
  */
 function isBothContext(line) {
-    const s = line.trim()
+    const s = line.trim().replace(/(?:กลับ|กลับตัว|กลับด้วย)\s*$/, '').trim()
     // Quick check: must not contain digits (context-only line)
     if (/\d/.test(s)) return false
     // Remove all non-Thai characters to get just Thai letters
@@ -855,7 +855,7 @@ function isBothContext(line) {
  * Returns 'top', 'bottom', 'both', or null if not a context line
  */
 function parseContextLine(line) {
-    const withPunct = line.trim()
+    const withPunct = line.trim().replace(/(?:กลับ|กลับตัว|กลับด้วย)\s*$/, '').trim()
 
     // --- Bracketed/prefixed context: [2 ตัวล่าง], [3 ตัวบน], [2 ตัวบนล่าง] ---
     // Also handles without brackets: "2ตัวล่าง", "2 ตัว ล่าง", "3ตัวบน"
@@ -890,7 +890,7 @@ function parseContextLine(line) {
 
     // Match standalone "บ", "บ.", "บน"
     // Match standalone "ล", "ล.", "ล่าง"
-    const cleaned = line.replace(/[^ก-๛a-zA-Z0-9]/g, '').trim()
+    const cleaned = withPunct.replace(/[^ก-๛a-zA-Z0-9]/g, '').trim()
 
     if (/^(บน|บ)$/.test(cleaned)) return 'top'
     if (/^(ล่าง|ล)$/.test(cleaned)) return 'bottom'
@@ -1008,13 +1008,13 @@ function extractInlineContext(line) {
     }
 
     // --- SUFFIX "บนล่าง/ลบ/ล่างบน" variants ---
-    const bothSuffix = s.match(/^(.+?)\s+(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล|ล[+\-]?บ|บล|ลบ)\.?\s*$/)
+    const bothSuffix = s.match(/^(.+?)\s+(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล|ล[+\-]?บ|บล|ลบ)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/)
     if (bothSuffix) {
         return { cleaned: bothSuffix[1].trim(), mode: 'both' }
     }
 
     // --- SUFFIX patterns: "บน", "บ", "ล่าง", "ล" at end ---
-    const suffixMatch = s.match(/^(.+?)\s+(บน|บ|ล่าง|ล)\.?\s*$/)
+    const suffixMatch = s.match(/^(.+?)\s+(บน|บ|ล่าง|ล)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/)
     if (suffixMatch) {
         const rest = suffixMatch[1]
         const modeStr = suffixMatch[2].replace('.', '')

@@ -754,6 +754,25 @@ describe('pasteParser - parseMultiLinePaste', () => {
       expect(result[0]).toMatchObject({ numbers: '9452', amount: 100, betType: '4_float', typeLabel: 'ลอยแพ' })
       expect(result[1]).toMatchObject({ numbers: '9452', amount: 100, betType: '4_float', typeLabel: 'ลอยแพ' })
     })
+
+    it('should parse บนล่างกลับ context suffix correctly (e.g. 80-60-40 50*50 บนล่างกลับ)', () => {
+      const text = '80-60-40  50*50 บนล่างกลับ'
+      const result = parseMultiLinePaste(text, 'lao')
+      // 3 numbers * (บน + ล่าง) = 6 entries. (Each has amount 50 and amount2 50, specialType: reverse)
+      expect(result.length).toBe(6)
+      
+      // 80 top and bottom
+      expect(result.some(r => r.numbers === '80' && r.betType === '2_top' && r.amount === 50 && r.amount2 === 50)).toBe(true)
+      expect(result.some(r => r.numbers === '80' && r.betType === '2_bottom' && r.amount === 50 && r.amount2 === 50)).toBe(true)
+      
+      // 60 top and bottom
+      expect(result.some(r => r.numbers === '60' && r.betType === '2_top' && r.amount === 50 && r.amount2 === 50)).toBe(true)
+      expect(result.some(r => r.numbers === '60' && r.betType === '2_bottom' && r.amount === 50 && r.amount2 === 50)).toBe(true)
+
+      // 40 top and bottom
+      expect(result.some(r => r.numbers === '40' && r.betType === '2_top' && r.amount === 50 && r.amount2 === 50)).toBe(true)
+      expect(result.some(r => r.numbers === '40' && r.betType === '2_bottom' && r.amount === 50 && r.amount2 === 50)).toBe(true)
+    })
   })
 })
 

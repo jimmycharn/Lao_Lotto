@@ -711,7 +711,7 @@ function stripPrefixNoise(line: string): string {
 }
 
 function isBothContext(line: string): boolean {
-    const s = line.trim();
+    const s = line.trim().replace(/(?:กลับ|กลับตัว|กลับด้วย)\s*$/, '').trim();
     if (/\d/.test(s)) return false;
     let thaiOnly = s.replace(/[^ก-๛]/g, '');
     // Remove non-lottery-abbreviation Thai characters containing 'ล' to prevent false positives (e.g. ลอย, เล่น, เลข)
@@ -724,7 +724,7 @@ function isBothContext(line: string): boolean {
 }
 
 function parseContextLine(line: string): string | null {
-    const withPunct = line.trim();
+    const withPunct = line.trim().replace(/(?:กลับ|กลับตัว|กลับด้วย)\s*$/, '').trim();
     const bracketCleaned = withPunct.replace(/[\[\](){}]/g, '').replace(/[\s.+\-]/g, '');
     if (/^\d*ตัว(บนล่าง|ล่างบน|บล|ลบ)$/.test(bracketCleaned)) return 'both';
     if (/^\d*ตัว(ล่าง|ล)$/.test(bracketCleaned)) return 'bottom';
@@ -740,7 +740,7 @@ function parseContextLine(line: string): string | null {
 
     if (isBothContext(withPunct)) return 'both';
 
-    const cleaned = line.replace(/[^ก-๛a-zA-Z0-9]/g, '').trim();
+    const cleaned = withPunct.replace(/[^ก-๛a-zA-Z0-9]/g, '').trim();
     if (/^(บน|บ)$/.test(cleaned)) return 'top';
     if (/^(ล่าง|ล)$/.test(cleaned)) return 'bottom';
 
@@ -828,12 +828,12 @@ function extractInlineContext(line: string): InlineContextInfo {
         return { cleaned: rest.trim(), mode };
     }
 
-    const bothSuffix = s.match(/^(.+?)\s+(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล|ล[+\-]?บ|บล|ลบ)\.?\s*$/);
+    const bothSuffix = s.match(/^(.+?)\s+(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล|ล[+\-]?บ|บล|ลบ)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/);
     if (bothSuffix) {
         return { cleaned: bothSuffix[1].trim(), mode: 'both' };
     }
 
-    const suffixMatch = s.match(/^(.+?)\s+(บน|บ|ล่าง|ล)\.?\s*$/);
+    const suffixMatch = s.match(/^(.+?)\s+(บน|บ|ล่าง|ล)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/);
     if (suffixMatch) {
         const rest = suffixMatch[1];
         const modeStr = suffixMatch[2].replace('.', '');
