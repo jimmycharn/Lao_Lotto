@@ -102,6 +102,11 @@ function normalizeUnicode(str: string): string {
     // Replace ทุกประตู / ทุกประตุ / ทุกตู / ทุกตุ with ชุด
     s = s.replace(/ทุกประตู|ทุกประตุ|ทุกตู|ทุกตุ/g, 'ชุด');
 
+    // Normalize permutation keywords like "กลับตูละ", "กลับตัวละ", "กลับประตูละ" to "กลับชุด="
+    s = s.replace(/กลับ(?:ตู|ตัว|ประตู)\s*ละ/g, 'กลับชุด=');
+    // Normalize "กลับตู", "กลับตัว", "กลับประตู" to "กลับชุด"
+    s = s.replace(/กลับ(?:ตู|ตัว|ประตู)(?!\s*ละ)/g, 'กลับชุด');
+
     // Normalize ช / ซ (abbreviations for ชุด) to ชุด when following a digit or operator
     s = s.replace(/(\d+)\s*[*×xX\-+]?\s*[ชซ](?![ก-๛a-zA-Z0-9])/g, '$1*ชุด');
 

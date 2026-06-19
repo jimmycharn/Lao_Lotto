@@ -814,6 +814,45 @@ describe('pasteParser - parseMultiLinePaste', () => {
         typeLabel: 'คูณชุด'
       })
     })
+
+    it('should parse กลับตูละ, กลับตัวละ, กลับประตูละ for 3-5 digits correctly as คูณชุด', () => {
+      const text1 = '54098= กลับตูละ 15'
+      const text2 = '54098= กลับตัวละ 15'
+      const text3 = '540= กลับประตูละ 15'
+      
+      const result1 = parseMultiLinePaste(text1, 'lao')
+      expect(result1.length).toBe(1)
+      expect(result1[0]).toMatchObject({
+        numbers: '54098',
+        amount: 15,
+        amount2: 60,
+        betType: '3_top',
+        specialType: '3xPerm',
+        typeLabel: 'คูณชุด'
+      })
+
+      const result2 = parseMultiLinePaste(text2, 'lao')
+      expect(result2.length).toBe(1)
+      expect(result2[0]).toMatchObject({
+        numbers: '54098',
+        amount: 15,
+        amount2: 60,
+        betType: '3_top',
+        specialType: '3xPerm',
+        typeLabel: 'คูณชุด'
+      })
+
+      const result3 = parseMultiLinePaste(text3, 'lao')
+      expect(result3.length).toBe(1)
+      expect(result3[0]).toMatchObject({
+        numbers: '540',
+        amount: 15,
+        amount2: 6,
+        betType: '3_top',
+        specialType: 'set6',
+        typeLabel: 'คูณชุด'
+      })
+    })
   })
 })
 
