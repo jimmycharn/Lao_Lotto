@@ -6793,6 +6793,40 @@ serve(async (req) => {
 
             const targetDealerId = roundData.dealer_id;
 
+            // Fetch owner's user settings to determine bonus
+            const { data: ownerSettings } = await supabase
+              .from('user_settings')
+              .select('lottery_settings')
+              .eq('user_id', userIdOfBill)
+              .eq('dealer_id', targetDealerId)
+              .maybeSingle();
+
+            const getLotteryTypeKeyForOwner = (lotteryType: string) => {
+              if (lotteryType === 'thai') return 'thai';
+              if (lotteryType === 'lao' || lotteryType === 'hanoi') return 'lao';
+              if (lotteryType === 'stock') return 'stock';
+              return 'thai';
+            };
+            const ownerLk = getLotteryTypeKeyForOwner(roundData.lottery_type);
+            const ownerTabSettings = ownerSettings?.lottery_settings?.[ownerLk];
+            const isOwnerBonusEnabled = !!ownerTabSettings?.bonusEnabled;
+
+            const isLaoOrHanoiForOwner = ['lao', 'hanoi'].includes(ownerLk);
+            const REVERSE_LAO_MAP_OWNER: Record<string, string> = { '3_straight': '3_top', '3_tod_single': '3_tod' };
+            const ownerBetTypeBonus: Record<string, number> = {};
+            if (isOwnerBonusEnabled && ownerTabSettings) {
+              Object.entries(ownerTabSettings).forEach(([key, val]) => {
+                if (key === 'bonusEnabled' || key === '4_set' || typeof val !== 'object') return;
+                const typedVal = val as { bonus?: number };
+                if (typedVal.bonus && typedVal.bonus > 0) {
+                  ownerBetTypeBonus[key] = typedVal.bonus;
+                  if (isLaoOrHanoiForOwner && REVERSE_LAO_MAP_OWNER[key]) {
+                    ownerBetTypeBonus[REVERSE_LAO_MAP_OWNER[key]] = typedVal.bonus;
+                  }
+                }
+              });
+            }
+
             // 3. Verify sender authorization
             const { data: senderProfile } = await supabase
               .from('profiles')
@@ -6857,6 +6891,28 @@ serve(async (req) => {
             // Grouping algorithm
             const formattedLines = [];
             let totalAmount = 0;
+            let totalBaseAmount = 0;
+
+            const getBaseAmountForSub = (sub: any) => {
+              let base = Number(sub.amount || 0);
+              const displayAmtStr = typeof sub.display_amount === 'string' ? sub.display_amount : String(sub.display_amount || '');
+              const hasBonusOnTag = displayAmtStr.includes('\u200B');
+              const hasBonusOffTag = displayAmtStr.includes('\u200C');
+              
+              if (hasBonusOffTag) return base;
+              
+              const shouldApplyReverseMath = hasBonusOnTag || (!hasBonusOnTag && !hasBonusOffTag);
+              if (shouldApplyReverseMath) {
+                const bt = sub.bet_type;
+                if (bt !== '4_set') {
+                  const bonusPct = ownerBetTypeBonus[bt] || 0;
+                  if (bonusPct > 0) {
+                    base = Math.round(Number(sub.amount || 0) / (1 + bonusPct / 100));
+                  }
+                }
+              }
+              return base;
+            };
 
             // Separate items by whether they have entry_id
             const withEntryId = subs.filter(s => s.entry_id);
@@ -6876,7 +6932,9 @@ serve(async (req) => {
               const first = group[0];
               const count = group.length;
               const groupSum = group.reduce((sum, s) => sum + Number(s.amount || 0), 0);
+              const groupBaseSum = group.reduce((sum, s) => sum + getBaseAmountForSub(s), 0);
               totalAmount += groupSum;
+              totalBaseAmount += groupBaseSum;
 
               let disp = first.display_numbers;
               if (!disp) {
@@ -6927,7 +6985,9 @@ serve(async (req) => {
                 }
 
                 const groupSum = group.reduce((sum, s) => sum + Number(s.amount || 0), 0);
+                const groupBaseSum = group.reduce((sum, s) => sum + getBaseAmountForSub(s), 0);
                 totalAmount += groupSum;
+                totalBaseAmount += groupBaseSum;
 
                 if (group.length > 1) {
                   const count = group.length;
@@ -6956,7 +7016,9 @@ serve(async (req) => {
                 }
 
                 const groupSum = group.reduce((sum, s) => sum + Number(s.amount || 0), 0);
+                const groupBaseSum = group.reduce((sum, s) => sum + getBaseAmountForSub(s), 0);
                 totalAmount += groupSum;
+                totalBaseAmount += groupBaseSum;
 
                 if (group.length > 1) {
                   const label = betTypeStr === '2_top' ? 'บนกลับ' : 'ล่างกลับ';
@@ -6970,6 +7032,7 @@ serve(async (req) => {
               else {
                 visited.add(i);
                 totalAmount += Number(current.amount || 0);
+                totalBaseAmount += getBaseAmountForSub(current);
                 const label = LABELS[betTypeStr] || betTypeStr;
                 formattedLines.push(`${numStr}=${current.amount} ${label}`);
               }
@@ -6984,8 +7047,14 @@ serve(async (req) => {
 
             summaryText += formattedLines.join('\n') + '\n';
 
+            const totalBonusAmount = totalAmount - totalBaseAmount;
             summaryText += `--------------------------\n`;
-            summaryText += `💰 ยอดรวม: ฿${totalAmount.toLocaleString('th-TH')}`;
+            if (totalBonusAmount > 0) {
+              summaryText += `💰 ยอดแทง: ฿${totalBaseAmount.toLocaleString('th-TH')}\n`;
+              summaryText += `🎁 ยอดแถม: ฿${totalBonusAmount.toLocaleString('th-TH')}`;
+            } else {
+              summaryText += `💰 ยอดรวม: ฿${totalAmount.toLocaleString('th-TH')}`;
+            }
 
             await sendLineReply(replyToken, summaryText);
           } catch (err) {
@@ -7159,6 +7228,33 @@ serve(async (req) => {
 
         const returnExcess = !!userSettings?.lottery_settings?.[lotteryType]?.returnExcessOnOverflow;
 
+        // Build betTypeBonus dictionary for applying bonuses
+        const getLotteryTypeKey = (lotteryType: string) => {
+          if (lotteryType === 'thai') return 'thai';
+          if (lotteryType === 'lao' || lotteryType === 'hanoi') return 'lao';
+          if (lotteryType === 'stock') return 'stock';
+          return 'thai';
+        };
+        const lk = getLotteryTypeKey(lotteryType);
+        const tabSettings = userSettings?.lottery_settings?.[lk];
+        const isBonusEnabled = !!tabSettings?.bonusEnabled;
+
+        const isLaoOrHanoiForSettings = ['lao', 'hanoi'].includes(lk);
+        const REVERSE_LAO_MAP: Record<string, string> = { '3_straight': '3_top', '3_tod_single': '3_tod' };
+        const betTypeBonus: Record<string, number> = {};
+        if (isBonusEnabled && tabSettings) {
+          Object.entries(tabSettings).forEach(([key, val]) => {
+            if (key === 'bonusEnabled' || key === '4_set' || typeof val !== 'object') return;
+            const typedVal = val as { bonus?: number };
+            if (typedVal.bonus && typedVal.bonus > 0) {
+              betTypeBonus[key] = typedVal.bonus;
+              if (isLaoOrHanoiForSettings && REVERSE_LAO_MAP[key]) {
+                betTypeBonus[REVERSE_LAO_MAP[key]] = typedVal.bonus;
+              }
+            }
+          });
+        }
+
         let typeLimitsMap: Record<string, number> = {};
         let numberLimits: any[] = [];
         const currentTotals = new Map<string, number>();
@@ -7270,11 +7366,16 @@ serve(async (req) => {
           if (bet.specialType && (bet.specialType === 'set3' || bet.specialType === 'set6' || bet.specialType.startsWith('set'))) {
             // คูณชุด - 3 digits
             const perms = getPermutations(bet.numbers);
+            const bonusPct = betTypeBonus[betType] || 0;
+            const originalAmount = bet.amount;
+            const boostedAmt = (betType !== '4_set' && bonusPct > 0) ? Math.round(originalAmount * (1 + bonusPct / 100)) : originalAmount;
+            const dispAmt = (betType !== '4_set' && bonusPct > 0) ? boostedAmt.toString() + '\u200B' : originalAmount.toString() + '\u200C';
+
             const commissionAmount = commInfo.isFixed
               ? commInfo.rate
-              : (bet.amount * commInfo.rate) / 100;
+              : (boostedAmt * commInfo.rate) / 100;
 
-            totalBetAmount += bet.amount * perms.length;
+            totalBetAmount += boostedAmt * perms.length;
 
             perms.forEach((perm) => {
               const timestamp = new Date(baseTimestamp.getTime() + (insertIndex++)).toISOString();
@@ -7286,7 +7387,7 @@ serve(async (req) => {
                 bill_note: finalBillNote,
                 bet_type: betType,
                 numbers: perm,
-                amount: bet.amount,
+                amount: boostedAmt,
                 commission_rate: commInfo.rate,
                 commission_amount: commissionAmount,
                 is_deleted: false,
@@ -7295,7 +7396,7 @@ serve(async (req) => {
                 submitted_by: submittedById,
                 submitted_by_type: 'user',
                 display_numbers: displayNumbers,
-                display_amount: displayAmount,
+                display_amount: dispAmt,
                 display_bet_type: displayBetType,
                 created_at: timestamp,
                 updated_at: timestamp
@@ -7310,11 +7411,16 @@ serve(async (req) => {
               combos = getUnique3DigitPermsFrom5(bet.numbers);
             }
 
+            const bonusPct = betTypeBonus[betType] || 0;
+            const originalAmount = bet.amount;
+            const boostedAmt = (betType !== '4_set' && bonusPct > 0) ? Math.round(originalAmount * (1 + bonusPct / 100)) : originalAmount;
+            const dispAmt = (betType !== '4_set' && bonusPct > 0) ? boostedAmt.toString() + '\u200B' : originalAmount.toString() + '\u200C';
+
             const commissionAmount = commInfo.isFixed
               ? commInfo.rate
-              : (bet.amount * combos.length * commInfo.rate) / 100; // wait, let's keep it consistent: amount per combo is bet.amount, so commission for that combo row is (bet.amount * rate)/100
+              : (boostedAmt * commInfo.rate) / 100;
 
-            totalBetAmount += bet.amount * combos.length;
+            totalBetAmount += boostedAmt * combos.length;
 
             combos.forEach((combo) => {
               const timestamp = new Date(baseTimestamp.getTime() + (insertIndex++)).toISOString();
@@ -7326,16 +7432,16 @@ serve(async (req) => {
                 bill_note: finalBillNote,
                 bet_type: betType,
                 numbers: combo,
-                amount: bet.amount,
+                amount: boostedAmt,
                 commission_rate: commInfo.rate,
-                commission_amount: commInfo.isFixed ? commInfo.rate : (bet.amount * commInfo.rate) / 100,
+                commission_amount: commissionAmount,
                 is_deleted: false,
                 is_paid: false,
                 source: 'user',
                 submitted_by: submittedById,
                 submitted_by_type: 'user',
                 display_numbers: displayNumbers,
-                display_amount: displayAmount,
+                display_amount: dispAmt,
                 display_bet_type: displayBetType,
                 created_at: timestamp,
                 updated_at: timestamp
@@ -7343,11 +7449,15 @@ serve(async (req) => {
             });
           } else {
             // Normal straight/single bet (including tengTod and reverse base part)
+            const bonusPct = betTypeBonus[betType] || 0;
+            const boostedStraightAmt = (betType !== '4_set' && bonusPct > 0) ? Math.round(straightAmt * (1 + bonusPct / 100)) : straightAmt;
+            const straightDispAmt = (betType !== '4_set' && bonusPct > 0) ? boostedStraightAmt.toString() + '\u200B' : straightAmt.toString() + '\u200C';
+
             const commissionAmount = commInfo.isFixed
               ? commInfo.rate * (betType === '4_set' || betType === '4_top' ? bet.amount : 1)
-              : (straightAmt * commInfo.rate) / 100;
+              : (boostedStraightAmt * commInfo.rate) / 100;
 
-            totalBetAmount += straightAmt;
+            totalBetAmount += boostedStraightAmt;
 
             const timestamp = new Date(baseTimestamp.getTime() + (insertIndex++)).toISOString();
             processedInserts.push({
@@ -7358,7 +7468,7 @@ serve(async (req) => {
               bill_note: finalBillNote,
               bet_type: betType,
               numbers: bet.numbers,
-              amount: straightAmt,
+              amount: boostedStraightAmt,
               commission_rate: commInfo.rate,
               commission_amount: commissionAmount,
               is_deleted: false,
@@ -7367,7 +7477,7 @@ serve(async (req) => {
               submitted_by: submittedById,
               submitted_by_type: 'user',
               display_numbers: displayNumbers,
-              display_amount: displayAmount,
+              display_amount: straightDispAmt,
               display_bet_type: displayBetType,
               created_at: timestamp,
               updated_at: timestamp
@@ -7378,9 +7488,14 @@ serve(async (req) => {
               const todAmt = bet.amount2;
               const sortedNumbers = bet.numbers.split('').sort().join('');
               const todCommInfo = await getCommissionInfo(profile.id, dealerId, '3_tod', lotteryType);
-              const todCommAmt = todCommInfo.isFixed ? todCommInfo.rate : (todAmt * todCommInfo.rate) / 100;
 
-              totalBetAmount += todAmt;
+              const todBonusPct = betTypeBonus['3_tod'] || 0;
+              const boostedTodAmt = todBonusPct > 0 ? Math.round(todAmt * (1 + todBonusPct / 100)) : todAmt;
+              const todDispAmt = todBonusPct > 0 ? boostedTodAmt.toString() + '\u200B' : todAmt.toString() + '\u200C';
+
+              const todCommAmt = todCommInfo.isFixed ? todCommInfo.rate : (boostedTodAmt * todCommInfo.rate) / 100;
+
+              totalBetAmount += boostedTodAmt;
 
               const todTimestamp = new Date(baseTimestamp.getTime() + (insertIndex++)).toISOString();
               processedInserts.push({
@@ -7391,7 +7506,7 @@ serve(async (req) => {
                 bill_note: finalBillNote,
                 bet_type: '3_tod',
                 numbers: sortedNumbers,
-                amount: todAmt,
+                amount: boostedTodAmt,
                 commission_rate: todCommInfo.rate,
                 commission_amount: todCommAmt,
                 is_deleted: false,
@@ -7400,7 +7515,7 @@ serve(async (req) => {
                 submitted_by: submittedById,
                 submitted_by_type: 'user',
                 display_numbers: displayNumbers,
-                display_amount: displayAmount,
+                display_amount: todDispAmt,
                 display_bet_type: displayBetType,
                 created_at: todTimestamp,
                 updated_at: todTimestamp
@@ -7412,11 +7527,15 @@ serve(async (req) => {
               const revAmt = bet.amount2;
               const perms = getPermutations(bet.numbers).filter(p => p !== bet.numbers);
               
+              const revBonusPct = betTypeBonus[betType] || 0;
+              const boostedRevAmt = revBonusPct > 0 ? Math.round(revAmt * (1 + revBonusPct / 100)) : revAmt;
+              const revDispAmt = revBonusPct > 0 ? boostedRevAmt.toString() + '\u200B' : revAmt.toString() + '\u200C';
+
               for (const permNum of perms) {
                 const revCommInfo = await getCommissionInfo(profile.id, dealerId, betType, lotteryType);
-                const revCommAmt = revCommInfo.isFixed ? revCommInfo.rate : (revAmt * revCommInfo.rate) / 100;
+                const revCommAmt = revCommInfo.isFixed ? revCommInfo.rate : (boostedRevAmt * revCommInfo.rate) / 100;
 
-                totalBetAmount += revAmt;
+                totalBetAmount += boostedRevAmt;
 
                 const revTimestamp = new Date(baseTimestamp.getTime() + (insertIndex++)).toISOString();
                 processedInserts.push({
@@ -7427,7 +7546,7 @@ serve(async (req) => {
                   bill_note: finalBillNote,
                   bet_type: betType,
                   numbers: permNum,
-                  amount: revAmt,
+                  amount: boostedRevAmt,
                   commission_rate: revCommInfo.rate,
                   commission_amount: revCommAmt,
                   is_deleted: false,
@@ -7436,7 +7555,7 @@ serve(async (req) => {
                   submitted_by: submittedById,
                   submitted_by_type: 'user',
                   display_numbers: displayNumbers,
-                  display_amount: displayAmount,
+                  display_amount: revDispAmt,
                   display_bet_type: displayBetType,
                   created_at: revTimestamp,
                   updated_at: revTimestamp
@@ -7500,7 +7619,7 @@ serve(async (req) => {
                 insert.amount = acceptedAmount;
                 const commInfo = await getCommissionInfo(profile.id, dealerId, betType, lotteryType);
                 insert.commission_amount = commInfo.isFixed ? commInfo.rate * acceptedSets : (acceptedAmount * commInfo.rate) / 100;
-                insert.display_amount = `${acceptedAmount} บาท (${acceptedSets} ชุด)`;
+                insert.display_amount = `${acceptedAmount} บาท (${acceptedSets} ชุด)\u200C`;
                 finalInserts.push(insert);
 
                 currentExactSetsMap.set(numbers, currentExactSets + acceptedSets);
@@ -7541,17 +7660,26 @@ serve(async (req) => {
                 insert.amount = acceptedAmount;
                 const commInfo = await getCommissionInfo(profile.id, dealerId, betType, lotteryType);
                 insert.commission_amount = commInfo.isFixed ? commInfo.rate : (acceptedAmount * commInfo.rate) / 100;
-                insert.display_amount = acceptedAmount.toString();
+                
+                const bonusPct = betTypeBonus[betType] || 0;
+                insert.display_amount = (betType !== '4_set' && bonusPct > 0)
+                  ? acceptedAmount.toString() + '\u200B'
+                  : acceptedAmount.toString() + '\u200C';
+                
                 finalInserts.push(insert);
 
                 currentTotals.set(`${betType}|${numbers}`, currentTotal + acceptedAmount);
               }
 
               if (excessAmount > 0) {
+                const bonusPct = betTypeBonus[betType] || 0;
+                const baseExcess = (betType !== '4_set' && bonusPct > 0)
+                  ? Math.round(excessAmount / (1 + bonusPct / 100))
+                  : excessAmount;
                 returnedBets.push({
                   numbers,
                   betType,
-                  amount: excessAmount,
+                  amount: baseExcess,
                   typeLabel: getThaiBetTypeLabel(betType, lotteryType)
                 });
               }
@@ -7641,6 +7769,16 @@ serve(async (req) => {
           });
         }
 
+        const totalBaseAmount = processedInserts.reduce((sum, insert) => {
+          const bt = insert.bet_type;
+          const bonusPct = betTypeBonus[bt] || 0;
+          const base = (bt !== '4_set' && bonusPct > 0)
+            ? Math.round(insert.amount / (1 + bonusPct / 100))
+            : insert.amount;
+          return sum + base;
+        }, 0);
+        const totalBonusAmount = totalBetAmount - totalBaseAmount;
+
         if (returnedBets && returnedBets.length > 0) {
           const setPrice = activeRound?.set_prices?.['4_top'] || 120;
           const totalReturnedAmount = returnedBets.reduce((sum, rb) => sum + rb.amount, 0);
@@ -7650,13 +7788,18 @@ serve(async (req) => {
             }
             return sum + 1;
           }, 0);
-          const originalTotalAmount = totalBetAmount + totalReturnedAmount;
+          const originalTotalAmount = totalBaseAmount + totalReturnedAmount;
 
           const totalCommission = processedInserts.reduce((sum, insert) => sum + (Number(insert.commission_amount) || 0), 0);
           const netAmount = totalBetAmount - totalCommission;
 
           summaryText += `จำนวน: ${parsedBets.length} รายการ\n`;
-          summaryText += `ยอดรวม: ฿${originalTotalAmount.toLocaleString('th-TH')}\n`;
+          if (totalBonusAmount > 0) {
+            summaryText += `ยอดแทง: ฿${totalBaseAmount.toLocaleString('th-TH')}\n`;
+            summaryText += `ยอดแถม: ฿${totalBonusAmount.toLocaleString('th-TH')}\n`;
+          } else {
+            summaryText += `ยอดรวม: ฿${originalTotalAmount.toLocaleString('th-TH')}\n`;
+          }
           summaryText += `คืนยอด: ${totalReturnedCount} รายการ\n`;
           summaryText += `ยอดคืน: ฿${totalReturnedAmount.toLocaleString('th-TH')}\n`;
           summaryText += `------------------------\n`;
@@ -7695,7 +7838,12 @@ serve(async (req) => {
           summaryText = summaryText.trimEnd();
         } else {
           summaryText += `จำนวน: ${parsedBets.length} รายการ\n`;
-          summaryText += `ยอดรวม: ฿${totalBetAmount.toLocaleString('th-TH')}\n`;
+          if (totalBonusAmount > 0) {
+            summaryText += `ยอดแทง: ฿${totalBaseAmount.toLocaleString('th-TH')}\n`;
+            summaryText += `ยอดแถม: ฿${totalBonusAmount.toLocaleString('th-TH')}\n`;
+          } else {
+            summaryText += `ยอดรวม: ฿${totalBetAmount.toLocaleString('th-TH')}\n`;
+          }
           summaryText += `------------------------\n`;
           if (senderPoyDisplay === 'full' && formattedDetailLines.length > 0) {
             summaryText += formattedDetailLines.join('\n') + '\n';
