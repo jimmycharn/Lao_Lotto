@@ -1273,6 +1273,9 @@ function parseAmountPart(str) {
         cleaned = cleaned.replace(/\*?ชุด/g, '').trim()
     }
 
+    // Strip leading non-digits (like =, space, text) from start of amount part: e.g. "กลับ=30" -> "30", "=30" -> "30"
+    cleaned = cleaned.replace(/^[^0-9]+/, '').trim()
+
     // Strip commas in formatted amounts: "1,000" → "1000"
     cleaned = cleaned.replace(/(\d),(\d{3})/g, '$1$2')
     // Normalize /, +, :, t/ต between digit amounts to *

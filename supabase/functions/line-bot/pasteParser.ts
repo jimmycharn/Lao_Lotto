@@ -1026,6 +1026,9 @@ function parseAmountPart(str: string): ParsedAmount {
         cleaned = cleaned.replace(/\*?ชุด/g, '').trim();
     }
 
+    // Strip leading non-digits (like =, space, text) from start of amount part: e.g. "กลับ=30" -> "30", "=30" -> "30"
+    cleaned = cleaned.replace(/^[^0-9]+/, '').trim();
+
     cleaned = cleaned.replace(/(\d),(\d{3})/g, '$1$2');
     cleaned = cleaned.replace(/(\d)\s*[/+:tTต]\s*(\d)/g, '$1*$2');
 

@@ -800,6 +800,20 @@ describe('pasteParser - parseMultiLinePaste', () => {
       expect(result.some(r => r.numbers === '40' && r.betType === '2_top' && r.amount === 50 && r.amount2 === 50)).toBe(true)
       expect(result.some(r => r.numbers === '40' && r.betType === '2_bottom' && r.amount === 50 && r.amount2 === 50)).toBe(true)
     })
+
+    it('should parse 5-digit number with กลับทุกประตู ตูละ30 correctly (e.g. 79083= กลับทุกประตู ตูละ30)', () => {
+      const text = '79083= กลับทุกประตู ตูละ30'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '79083',
+        amount: 30,
+        amount2: 60,
+        betType: '3_top',
+        specialType: '3xPerm',
+        typeLabel: 'คูณชุด'
+      })
+    })
   })
 })
 
