@@ -105,10 +105,13 @@ function normalizeUnicode(str) {
     // Convert typos like .= or =. (with optional spacing and multiple dots) to =
     s = s.replace(/\s*\.+\s*=/g, '=').replace(/=\s*\.+\s*/g, '=')
 
+    // Remove "4 ตัว", "3 ตัว", "2 ตัว" noise to clean numbers and prevent blocking prefix noise stripping
+    s = s.replace(/\b\d+\s*ตัว\s*/g, '')
+
     // Strip optional lottery type prefixes (ท, ฮ, ห, and ล when followed by context)
     s = s.replace(/^([ทฮห]\.?\s*|ล\.?\s+|ล\.?(?=ลอย|วิ่ง|โต๊ด|ล่าง|บนล่าง|บล|ลบ))/i, '')
 
-    return s
+    return s;
 }
 
 function findAmountIndex(tokens) {

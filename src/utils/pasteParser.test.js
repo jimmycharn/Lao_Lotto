@@ -746,6 +746,14 @@ describe('pasteParser - parseMultiLinePaste', () => {
       expect(result[1]).toMatchObject({ numbers: '9', amount: 500, betType: 'run_top', typeLabel: 'ลอยบน' })
       expect(result[2]).toMatchObject({ numbers: '9', amount: 500, betType: 'run_bottom', typeLabel: 'ลอยล่าง' })
     })
+
+    it('should parse 4-digit float bets with descriptive noise (e.g. ลอย 4 ตัว 9452 = 100)', () => {
+      const text = 'ลอย 4 ตัว 9452 = 100\nลอย 4 ตัว\n9452=100'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(2)
+      expect(result[0]).toMatchObject({ numbers: '9452', amount: 100, betType: '4_float', typeLabel: 'ลอยแพ' })
+      expect(result[1]).toMatchObject({ numbers: '9452', amount: 100, betType: '4_float', typeLabel: 'ลอยแพ' })
+    })
   })
 })
 
