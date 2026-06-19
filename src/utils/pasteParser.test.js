@@ -413,6 +413,19 @@ describe('pasteParser - parseMultiLinePaste', () => {
   })
 
   describe('No-space inline context', () => {
+    it('should parse single digit runner with มี separator (e.g. 8บนมี300) correctly', () => {
+      const text = '8บนมี300\nบุศรินทร์'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '8',
+        amount: 300,
+        betType: 'run_top',
+        typeLabel: 'ลอยบน'
+      })
+      expect(extractBuyerNote(text, 'lao')).toBe('บุศรินทร์')
+    })
+
     it('should parse 79ล่าง100 correctly', () => {
       const text = '79ล่าง100\nพี่ดาว'
       const result = parseMultiLinePaste(text, 'lao')

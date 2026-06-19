@@ -120,6 +120,10 @@ function normalizeUnicode(str: string): string {
     s = s.replace(/(\d)\s*-\s*(?=[ก-๛])/g, '$1 ');
     s = s.replace(/([ก-๛])\s*-\s*(?=\d)/g, '$1 ');
 
+    // Normalize "มี" to "=" when acting as a bet separator between a number/context and amount digits
+    // e.g. "8บนมี300" -> "8บน=300", "8บน มี 300" -> "8บน=300", "8มี300" -> "8=300"
+    s = s.replace(/(\d+|บน|ล่าง|บ\.?|ล\.?|บล|ลบ|วิ่ง|ลอย|โต๊ด)\s*มี\s*(\d+)/g, '$1=$2');
+
     // Normalize colons to equals when they act as bet separators:
     // Case 1: 3-5 digit number followed by colon and digits (e.g. 610:10)
     s = s.replace(/(\b\d{3,5})\s*:\s*(\d+)/g, '$1=$2');
