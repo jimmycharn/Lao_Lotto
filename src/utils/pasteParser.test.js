@@ -649,6 +649,20 @@ describe('pasteParser - parseMultiLinePaste', () => {
   })
 
   describe('dash-equal typo, "ลอยทั่วไป" context, and 2-digit float_bottom routing', () => {
+    it('should normalize z-operator typos as multiplication operators (e.g. 50z50 -> 50*50) correctly', () => {
+      const text = '485=50z50'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '485',
+        amount: 50,
+        amount2: 50,
+        betType: '3_top',
+        specialType: 'tengTod',
+        typeLabel: 'เต็งโต๊ด'
+      })
+    })
+
     it('should normalize dash-equals typos correctly', () => {
       const text = 'ลอยทั่วไป\n11-=50\n22-=50\n66-=50\n88=50'
       const result = parseMultiLinePaste(text, 'lao')
