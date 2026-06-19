@@ -627,8 +627,8 @@ describe('pasteParser - parseMultiLinePaste', () => {
     })
 
     it('should not ignore bare number with names or trailing notes (e.g. 20 พี่รี, 10xชุด น้องโบว์)', () => {
-      // พี่รี 20 should be treated as bare number 20
-      const text1 = 'พี่รี 20\n=100'
+      // 20 พี่รี should be treated as bare number 20
+      const text1 = '20 พี่รี\n=100'
       const result1 = parseMultiLinePaste(text1, 'lao')
       expect(result1.length).toBe(1)
       expect(result1[0]).toMatchObject({
@@ -644,6 +644,28 @@ describe('pasteParser - parseMultiLinePaste', () => {
         numbers: '140',
         amount: 10,
         amount2: 6
+      })
+    })
+
+    it('should ignore list sequence labels like พี่ป้อม 2', () => {
+      const text = 'พี่ป้อม 2\n867 = 50'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '867',
+        amount: 50,
+        betType: '3_top'
+      })
+    })
+
+    it('should ignore list sequence labels with other numbers like พี่นุ้ย 22 or โกชัย 55', () => {
+      const text = 'พี่นุ้ย 22\nโกชัย 55\n867 = 50'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '867',
+        amount: 50,
+        betType: '3_top'
       })
     })
   })

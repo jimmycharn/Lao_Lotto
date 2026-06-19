@@ -387,8 +387,17 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
 
         // Strip prefix noise (timestamps, Thai names, etc.) and re-check
         const stripped = stripPrefixNoise(trimmed)
-        const lineToProcess = stripped || trimmed
-        if (DEBUG_PASTE) console.log(`[pasteParser]   → stripped: "${stripped}" from "${trimmed}"`)
+        let lineToProcess = stripped || trimmed
+        const digitMatches = lineToProcess.match(/\d+/g) || []
+        if (digitMatches.length === 1 && /^\d+/.test(lineToProcess)) {
+            const hasEquals = lineToProcess.includes('=') || lineToProcess.includes(':')
+            const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว/.test(lineToProcess) || 
+                                   /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(lineToProcess)
+            if (!hasEquals && !hasBetKeywords) {
+                lineToProcess = digitMatches[0]
+            }
+        }
+        if (DEBUG_PASTE) console.log(`[pasteParser]   → stripped: "${stripped}" from "${trimmed}", lineToProcess: "${lineToProcess}"`)
 
         // After stripping noise, re-check if the result is a context line
         // e.g. "12:48 ไอซ์(ร้านตัดผม) ล่าง" → stripped still has noise but ends with "ล่าง"
@@ -409,16 +418,16 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
         }
 
         // After stripping noise, the cleaned line might be a bare number
-        if (stripped && isBareNumberLine(stripped)) {
-            if (DEBUG_PASTE) console.log(`[pasteParser]   → stripped to bare number, added to buffer`)
-            const currentNumLen = stripped.length
+        if (lineToProcess && isBareNumberLine(lineToProcess)) {
+            if (DEBUG_PASTE) console.log(`[pasteParser]   → lineToProcess to bare number, added to buffer`)
+            const currentNumLen = lineToProcess.length
             if (currentNumLen === 3 && lastProcessedNumLen !== null && lastProcessedNumLen !== 3) {
                 if (['float_top', 'float_bottom'].includes(contextMode)) {
                     contextMode = 'top'
                 }
             }
             lastProcessedNumLen = currentNumLen
-            bareNumberBuffer.push(stripped)
+            bareNumberBuffer.push(lineToProcess)
             continue
         }
 
@@ -538,10 +547,21 @@ function isConversationalSingleNumberLine(line) {
 
     let cleaned = textOnly.toLowerCase()
     cleaned = cleaned.replace(/[\s.+\-*×xX\/=\(\)\[\]{}]/g, '')
-    cleaned = cleaned.replace(/ตัวละ|ตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บ\.?|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|ช|ซ/g, '')
+    cleaned = cleaned.replace(/ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บ\.?|ล\.?|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|ช|ซ/g, '')
 
     if (cleaned.length === 0) {
         return false
+    }
+
+    // New check: if the line has text followed by a single digit group, and contains no equals/colon or betting keywords, ignore it.
+    const textFirstMatch = trimmed.match(/^([ก-๛a-zA-Z\s\(\)\[\]{}#.]+?)\s*(\d+)$/)
+    if (textFirstMatch) {
+        const hasEquals = trimmed.includes('=') || trimmed.includes(':')
+        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว/.test(trimmed) || 
+                               /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(trimmed)
+        if (!hasEquals && !hasBetKeywords) {
+            return true
+        }
     }
 
     const conversationalKeywords = [
