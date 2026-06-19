@@ -737,5 +737,15 @@ describe('pasteParser - parseMultiLinePaste', () => {
       expect(result[0]).toMatchObject({ numbers: '08', amount: 20, betType: '2_top' })
       expect(result[1]).toMatchObject({ numbers: '08', amount: 20, betType: '2_bottom' })
     })
+
+    it('should parse single runner with hyphen separator (e.g. บน9-500, ล่าง9-500, 9-500)', () => {
+      const text = '9-500\nบน9-500\nล่าง9-500'
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(3)
+      expect(result[0]).toMatchObject({ numbers: '9', amount: 500, betType: 'run_top', typeLabel: 'ลอยบน' })
+      expect(result[1]).toMatchObject({ numbers: '9', amount: 500, betType: 'run_top', typeLabel: 'ลอยบน' })
+      expect(result[2]).toMatchObject({ numbers: '9', amount: 500, betType: 'run_bottom', typeLabel: 'ลอยล่าง' })
+    })
   })
 })
+

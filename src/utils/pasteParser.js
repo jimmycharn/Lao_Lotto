@@ -161,13 +161,17 @@ function findAmountIndex(tokens) {
 function expandLines(rawLines) {
     const expanded = []
     for (const rawLine of rawLines) {
-        const trimmed = normalizeUnicode(rawLine.trim())
+        let line = rawLine.trim()
+        // --- Step 0: Strip leading list index prefix like "1) ", "2. " (1-2 digits followed by . or ) and space) ---
+        line = line.replace(/^\s*\d{1,2}[\.)\uFF0E\uFF09]\s+/, '')
+
+        const trimmed = normalizeUnicode(line)
         if (!trimmed) { expanded.push(trimmed); continue }
         if (isConversationalSingleNumberLine(trimmed)) continue
         if (isDateLine(trimmed)) continue
 
-        // --- Step 0: Strip leading list index prefix like "1) ", "2. " (1-2 digits followed by . or ) and space) ---
-        let line = trimmed.replace(/^\s*\d{1,2}[\.)]\s+/, '')
+        // Reset line to the trimmed normalized string
+        line = trimmed
 
         // --- Step 1: Normalize "ต" / "t" between amounts to "*" ---
         // "123=50 ต 50" → "123=50*50", "456=20t20" → "456=20*20"
@@ -207,10 +211,14 @@ function expandLines(rawLines) {
             if (/^[\d,\s\-)]+$/.test(rest)) {
                 const numTokens = rest.split(/[,\-)]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s))
                 if (numTokens.length >= 2) {
-                    for (const num of numTokens) {
-                        expanded.push(`${prefix}${num}`)
+                    const firstLen = numTokens[0].length
+                    const allSameLen = numTokens.every(tok => tok.length === firstLen)
+                    if (allSameLen) {
+                        for (const num of numTokens) {
+                            expanded.push(`${prefix}${num}`)
+                        }
+                        continue
                     }
-                    continue
                 }
             }
         }
@@ -722,6 +730,19 @@ function isAmountPattern(s) {
     const t = s.trim()
     // Must have at least one separator or ชุด or currency suffix to be an amount pattern
     if (/^\d+$/.test(t)) return false // pure digits = bare number, not amount
+
+    // Check if it's a hyphen separator (e.g. 9-500 or 123-50)
+    const hyphenMatch = t.match(/^(\d+)-(\d+)$/)
+    if (hyphenMatch) {
+        const len1 = hyphenMatch[1].length
+        const len2 = hyphenMatch[2].length
+        // If they have different lengths, or first is 1 or 3 digits (like runner 9-500, or 3-digit 123-50),
+        // it is NOT an amount pattern; it's a number-amount pair!
+        if (len1 !== len2 || len1 === 1 || len1 === 3) {
+            return false
+        }
+    }
+
     // Match common amount patterns:
     //   50*50, 20×20, 10x10, 10+10, 10-10
     //   15*ชุด, 20ชุด, 20 ชุด, 20-ชุด, 20+ชุด
