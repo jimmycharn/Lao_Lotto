@@ -6544,46 +6544,222 @@ serve(async (req) => {
 
             // ─── COMMAND: /คำสั่ง หรือ /help ───
             if (text.startsWith('/คำสั่ง') || text.startsWith('/help')) {
-              let helpText = '';
-              if (showOwnOnly) {
-                helpText = `💡 คำสั่งบอทสำหรับสมาชิก (${groupLink.lottery_type.toUpperCase()})\n`;
-                helpText += `--------------------------\n`;
-                helpText += `1. /สรุป - สรุปงวดหวย ยอดแทง ส่วนลด ค่าคอม ถูกรางวัล และยอดสุทธิ (ต้องจ่าย/ต้องเก็บ) ของตัวเองในงวดนี้\n`;
-                helpText += `   • /สรุป [งวดวันที่] - ดูสรุปของตัวเองในงวดวันที่ระบุ เช่น /สรุป 10-6-69 หรือ /สรุป 10-6-2569 (เฉพาะงวดที่ยังไม่ถูกลบ)\n`;
-                helpText += `2. /ยอดรวม - สรุปยอดรวมแทงทั้งหมดของตัวเองในงวดนี้\n`;
-                helpText += `3. /คำสั่ง หรือ /help - แสดงคำสั่งที่สามารถใช้งานได้`;
-              } else {
-                helpText = `💡 คำสั่งบอททั้งหมดสำหรับร้านค้า (${groupLink.lottery_type.toUpperCase()})\n`;
-                helpText += `--------------------------\n`;
-                helpText += `👑 คำสั่งทั่วไปสำหรับร้านค้า:\n`;
-                helpText += `1. /สรุป - สรุปงวดหวย (ยอดรับ, ยอดส่ง, กำไร) และสรุปยอดที่ต้องเคลียร์ของสมาชิกแต่ละคน\n`;
-                helpText += `   • /สรุป [เลขที่ออก] - ประกาศผลและสรุปงวดปัจจุบัน เช่น /สรุป 1234\n`;
-                helpText += `   • /สรุป [งวดวันที่] - ดูสรุปย้อนหลังของงวดวันที่ระบุ เช่น /สรุป 10-6-69 หรือ /สรุป 10-6-2569 (เฉพาะงวดที่ยังไม่ถูกลบ)\n`;
-                helpText += `2. /ยอดรวม - รายงานยอดรับรวมแยกตามประเภทเลขและยอดรวมทั้งหมดของร้าน\n`;
-                helpText += `3. /กำไร - สรุปกำไร/ขาดทุนทั้งหมดที่ยังบันทึกอยู่ในประวัติ\n`;
-                helpText += `   • /กำไร m - สรุปกำไรของเดือนปัจจุบัน\n`;
-                helpText += `   • /กำไร w - สรุปกำไรของสัปดาห์ปัจจุบัน\n`;
-                helpText += `   • /กำไร [เดือน-ปี] - สรุปกำไรของเดือนระบุ เช่น /กำไร 6-69, /กำไร 6-2569\n`;
-                helpText += `4. /คนส่ง - รายงานยอดรับแทงแยกตามสมาชิกแต่ละคน\n`;
-                helpText += `5. /สมาชิก [ชื่อ] - ค้นหายอดเงินคงเหลือและข้อมูลสมาชิก\n`;
-                helpText += `6. /ปิด - ปิดรับแทงงวดปัจจุบัน (แจ้งเตือนทุกห้อง)\n`;
-                helpText += `7. /เปิด - เปิดรับแทงงวดที่ปิดอยู่ (ต้องยังไม่ประกาศผล)\n`;
-                helpText += `8. /เริ่มขาย - แจ้งเปิดรับแทงงวดปัจจุบันไปยังทุกกลุ่มไลน์ที่เชื่อมโยง\n`;
-                helpText += `9. /สร้าง [ประเภทหวย] - สร้างงวดหวยใหม่ตามค่าเริ่มต้น (เช่น /สร้าง ไทย, /สร้าง ลาว)\n\n`;
-                helpText += `💸 คำสั่งจัดการยอดเกิน/ตีออก:\n`;
-                helpText += `10. /ยอดเกิน - แสดงตัวเลขและยอดเงินที่เกินลิมิตอั้นในงวดนี้\n`;
-                helpText += `11. /ตีออก - แสดงสรุปประวัติประวัติและยอดเงินการตีออกทั้งหมดในงวดนี้\n`;
-                helpText += `12. /ตีออก เกิน - สั่งตีออกยอดเกินอั้นทั้งหมดไปยังเจ้ามือปลายทาง (จะมีบอทให้กดยืนยันอีกครั้ง)\n`;
-                helpText += `13. /ตีออก [เลข] [ประเภท] [จำนวน] - สั่งตีออกเลขแบบเจาะจง (เช่น /ตีออก 123 บน 100)\n`;
-                helpText += `14. /เอาคืน - แสดงรายการครั้งที่ตีออกที่สามารถเอาคืนได้\n`;
-                helpText += `15. /เอาคืน [ครั้งที่] - เอาคืนยอดที่ตีออกไปตามครั้งที่ระบุ (เช่น /เอาคืน 3 จะมีบอทให้กดยืนยันอีกครั้ง)\n\n`;
-                helpText += `👤 คำสั่งทั่วไปสำหรับสมาชิก:\n`;
-                helpText += `16. /สรุป (พิมพ์โดยสมาชิก) - สรุปยอดและรางวัลเฉพาะของตัวสมาชิกเอง\n`;
-                helpText += `17. /ยอดรวม (พิมพ์โดยสมาชิก) - สรุปยอดแทงทั้งหมดเฉพาะของตัวสมาชิกเอง\n`;
-                helpText += `18. /คำสั่ง หรือ /help - แสดงรายการคำสั่งที่ใช้งานได้`;
-              }
+              const lotteryLabel = groupLink.lottery_type?.toUpperCase() || 'LAO';
 
-              await sendLineReply(replyToken, helpText);
+              // Helper to create a command row
+              const cmdRow = (cmd: string, desc: string, marginTop: string = 'sm') => ({
+                "type": "box",
+                "layout": "vertical",
+                "margin": marginTop,
+                "paddingAll": "sm",
+                "backgroundColor": "#1a1a2e22",
+                "cornerRadius": "md",
+                "contents": [
+                  { "type": "text", "text": cmd, "size": "sm", "weight": "bold", "color": "#E2B44D", "wrap": true },
+                  { "type": "text", "text": desc, "size": "xs", "color": "#cccccc", "wrap": true, "margin": "xs" }
+                ]
+              });
+
+              // Helper to create a section header inside body
+              const sectionHeader = (emoji: string, title: string, marginTop: string = 'lg') => ({
+                "type": "text",
+                "text": `${emoji} ${title}`,
+                "size": "sm",
+                "weight": "bold",
+                "color": "#ffffff",
+                "margin": marginTop
+              });
+
+              if (showOwnOnly) {
+                // ─── Member View: Single bubble ───
+                const memberFlexMessage = {
+                  "type": "flex",
+                  "altText": `💡 คำสั่งบอทสำหรับสมาชิก (${lotteryLabel})`,
+                  "contents": {
+                    "type": "bubble",
+                    "size": "mega",
+                    "header": {
+                      "type": "box",
+                      "layout": "vertical",
+                      "backgroundColor": "#1B6B3A",
+                      "paddingAll": "lg",
+                      "contents": [
+                        { "type": "text", "text": `💡 คำสั่งสำหรับสมาชิก`, "weight": "bold", "size": "lg", "color": "#ffffff" },
+                        { "type": "text", "text": `กลุ่มหวย ${lotteryLabel}`, "size": "xs", "color": "#a7f3d0", "margin": "xs" }
+                      ]
+                    },
+                    "body": {
+                      "type": "box",
+                      "layout": "vertical",
+                      "backgroundColor": "#1a1a2e",
+                      "paddingAll": "lg",
+                      "contents": [
+                        cmdRow("/สรุป", "สรุปยอดแทง ส่วนลด ค่าคอม ถูกรางวัล ยอดสุทธิ ของตัวเองในงวดนี้", "none"),
+                        cmdRow("/สรุป [งวดวันที่]", "ดูสรุปย้อนหลัง เช่น /สรุป 10-6-69"),
+                        cmdRow("/ยอดรวม", "สรุปยอดรวมแทงทั้งหมดของตัวเองในงวดนี้"),
+                        cmdRow("/โพย หรือ /bill", "ดูรายการบิลโพยของตัวเองในงวดนี้"),
+                        cmdRow("/ยกเลิก", "ยกเลิกใบโพยล่าสุดของตัวเอง"),
+                        cmdRow("/link หรือ /id", "ดู LINE User ID ของตัวเอง"),
+                        cmdRow("/คำสั่ง หรือ /help", "แสดงรายการคำสั่งนี้")
+                      ]
+                    },
+                    "footer": {
+                      "type": "box",
+                      "layout": "vertical",
+                      "backgroundColor": "#1a1a2e",
+                      "paddingAll": "md",
+                      "contents": [
+                        {
+                          "type": "text",
+                          "text": "💬 พิมพ์ ตัวเลข=ยอด เพื่อส่งโพย เช่น 123=100",
+                          "size": "xs",
+                          "color": "#888888",
+                          "align": "center",
+                          "wrap": true
+                        }
+                      ]
+                    }
+                  }
+                };
+                await sendLineReply(replyToken, memberFlexMessage);
+              } else {
+                // ─── Admin/Manager View: Carousel of 3 bubbles ───
+
+                // ── Bubble 1: คำสั่งทั่วไป ──
+                const bubble1 = {
+                  "type": "bubble",
+                  "size": "mega",
+                  "header": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#4A2E80",
+                    "paddingAll": "lg",
+                    "contents": [
+                      { "type": "text", "text": `👑 คำสั่งร้านค้า (1/3)`, "weight": "bold", "size": "lg", "color": "#ffffff" },
+                      { "type": "text", "text": `กลุ่มหวย ${lotteryLabel} — คำสั่งทั่วไป`, "size": "xs", "color": "#e1d9f0", "margin": "xs" }
+                    ]
+                  },
+                  "body": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#1a1a2e",
+                    "paddingAll": "lg",
+                    "contents": [
+                      sectionHeader("📊", "รายงาน & สรุป", "none"),
+                      cmdRow("/สรุป", "สรุปงวดหวย ยอดรับ ยอดส่ง กำไร และยอดเคลียร์ของสมาชิก"),
+                      cmdRow("/สรุป [เลขที่ออก]", "ประกาศผลและสรุปงวด เช่น /สรุป 1234"),
+                      cmdRow("/สรุป [งวดวันที่]", "ดูสรุปย้อนหลัง เช่น /สรุป 10-6-69"),
+                      cmdRow("/ยอดรวม", "รายงานยอดรับรวมแยกตามประเภทเลข"),
+                      cmdRow("/กำไร [m/w/เดือน-ปี]", "สรุปกำไร/ขาดทุน (m=เดือน, w=สัปดาห์, ทั้งหมด)"),
+                      cmdRow("/คนส่ง", "รายงานยอดรับแทงแยกตามสมาชิกแต่ละคน"),
+                      cmdRow("/สมาชิก [ชื่อ]", "ค้นหายอดคงเหลือและข้อมูลสมาชิก")
+                    ]
+                  },
+                  "footer": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#1a1a2e",
+                    "paddingAll": "sm",
+                    "contents": [
+                      { "type": "text", "text": "👉 ปัดเพื่อดูคำสั่งเพิ่มเติม", "size": "xs", "color": "#888888", "align": "center" }
+                    ]
+                  }
+                };
+
+                // ── Bubble 2: จัดการงวด & ตีออก ──
+                const bubble2 = {
+                  "type": "bubble",
+                  "size": "mega",
+                  "header": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#B45309",
+                    "paddingAll": "lg",
+                    "contents": [
+                      { "type": "text", "text": `⚙️ จัดการ & ตีออก (2/3)`, "weight": "bold", "size": "lg", "color": "#ffffff" },
+                      { "type": "text", "text": `กลุ่มหวย ${lotteryLabel} — คำสั่งจัดการ`, "size": "xs", "color": "#fde68a", "margin": "xs" }
+                    ]
+                  },
+                  "body": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#1a1a2e",
+                    "paddingAll": "lg",
+                    "contents": [
+                      sectionHeader("🎰", "จัดการงวดหวย", "none"),
+                      cmdRow("/สร้าง [ประเภทหวย]", "สร้างงวดใหม่ เช่น /สร้าง ไทย, /สร้าง ลาว"),
+                      cmdRow("/เริ่มขาย", "ประกาศเปิดรับแทงงวดล่าสุดไปยังทุกกลุ่ม"),
+                      cmdRow("/ปิด", "ปิดรับแทงงวดปัจจุบัน"),
+                      cmdRow("/เปิด", "เปิดรับแทงงวดที่ปิดอยู่ (ยังไม่ประกาศผล)"),
+                      cmdRow("/แจ้งผล [เลขรางวัล]", "ประกาศผลรางวัลและคำนวณผลได้เสีย"),
+
+                      sectionHeader("💸", "จัดการยอดเกิน / ตีออก"),
+                      cmdRow("/ยอดเกิน", "แสดงตัวเลขและยอดเงินที่เกินลิมิตอั้น"),
+                      cmdRow("/ตีออก เกิน", "สั่งตีออกยอดเกินอั้นทั้งหมดไปเจ้ามือปลายทาง"),
+                      cmdRow("/ตีออก [เลข] [ประเภท] [ยอด]", "ตีออกเจาะจง เช่น /ตีออก 123 บน 100"),
+                      cmdRow("/เอาคืน", "แสดงรายการครั้งที่ตีออกที่สามารถเอาคืนได้"),
+                      cmdRow("/เอาคืน [ครั้งที่]", "ดึงยอดที่ตีออกกลับคืน เช่น /เอาคืน 3")
+                    ]
+                  },
+                  "footer": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#1a1a2e",
+                    "paddingAll": "sm",
+                    "contents": [
+                      { "type": "text", "text": "👉 ปัดเพื่อดูคำสั่งเพิ่มเติม", "size": "xs", "color": "#888888", "align": "center" }
+                    ]
+                  }
+                };
+
+                // ── Bubble 3: คำสั่งสมาชิก & ผูกกลุ่ม ──
+                const bubble3 = {
+                  "type": "bubble",
+                  "size": "mega",
+                  "header": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#1B6B3A",
+                    "paddingAll": "lg",
+                    "contents": [
+                      { "type": "text", "text": `👤 สมาชิก & ผูกกลุ่ม (3/3)`, "weight": "bold", "size": "lg", "color": "#ffffff" },
+                      { "type": "text", "text": `กลุ่มหวย ${lotteryLabel} — คำสั่งเสริม`, "size": "xs", "color": "#a7f3d0", "margin": "xs" }
+                    ]
+                  },
+                  "body": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#1a1a2e",
+                    "paddingAll": "lg",
+                    "contents": [
+                      sectionHeader("👤", "คำสั่งที่สมาชิกใช้ได้", "none"),
+                      cmdRow("ตัวเลข=ยอดแทง", "ส่งโพยเข้าระบบ เช่น 123=100 หรือ วาง list"),
+                      cmdRow("/สรุป (โดยสมาชิก)", "สรุปยอดและรางวัลเฉพาะของตัวเอง"),
+                      cmdRow("/ยอดรวม (โดยสมาชิก)", "สรุปยอดแทงทั้งหมดเฉพาะของตัวเอง"),
+                      cmdRow("/โพย หรือ /bill", "ดูรายการบิลโพยของตัวเอง"),
+                      cmdRow("/ยกเลิก", "ยกเลิกใบโพยล่าสุดของตัวเอง"),
+                      cmdRow("/link หรือ /id", "ดู LINE User ID ของตัวเอง"),
+
+                      sectionHeader("📩", "ผูกกลุ่ม (แอดมินเท่านั้น)"),
+                      cmdRow("/ขอรหัส", "ขอรหัสผูกกลุ่มใหม่ (ใช้ในแชทส่วนตัวกับบอท)"),
+                      cmdRow("/bind [รหัส]", "ผูกกลุ่ม LINE ด้วยรหัส (ใช้ในกลุ่ม)"),
+
+                      sectionHeader("❓", "อื่นๆ"),
+                      cmdRow("/คำสั่ง หรือ /help", "แสดงรายการคำสั่งนี้")
+                    ]
+                  }
+                };
+
+                const helpFlexMessage = {
+                  "type": "flex",
+                  "altText": `💡 คำสั่งบอททั้งหมดสำหรับร้านค้า (${lotteryLabel})`,
+                  "contents": {
+                    "type": "carousel",
+                    "contents": [bubble1, bubble2, bubble3]
+                  }
+                };
+                await sendLineReply(replyToken, helpFlexMessage);
+              }
               continue;
             }
 
