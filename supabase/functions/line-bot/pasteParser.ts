@@ -125,6 +125,10 @@ function normalizeUnicode(str: string): string {
     s = s.replace(/(\d)\s*-\s*(?=[ก-๛])/g, '$1 ');
     s = s.replace(/([ก-๛])\s*-\s*(?=\d)/g, '$1 ');
 
+    // Add space between digit and Thai keyword if directly adjacent (e.g. "49บน" -> "49 บน", "บน49" -> "บน 49")
+    s = s.replace(/(\d)(?=[ก-๛])/g, '$1 ');
+    s = s.replace(/([ก-๛])(?=\d)/g, '$1 ');
+
     // Normalize "มี" to "=" when acting as a bet separator between a number/context and amount digits
     // e.g. "8บนมี300" -> "8บน=300", "8บน มี 300" -> "8บน=300", "8มี300" -> "8=300"
     s = s.replace(/(\d+|บน|ล่าง|บ\.?|ล\.?|บล|ลบ|วิ่ง|ลอย|โต๊ด)\s*มี\s*(\d+)/g, '$1=$2');
