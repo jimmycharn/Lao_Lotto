@@ -239,6 +239,17 @@ function getCommissionRate(betType, userId, lotteryType, userSettingsMap) {
     const settingsKey = getSettingsKey(betType, lotteryKey)
     const settings = userSettingsMap?.[userId]?.lottery_settings?.[lotteryKey]?.[settingsKey]
     if (settings?.commission !== undefined) return settings.commission
+    if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+        const LAO_DEFAULTS = {
+            'run_top': 10, 'run_bottom': 10,
+            'pak_top': 20, 'pak_bottom': 20,
+            '2_top': 20, '2_bottom': 20, '2_front': 20, '2_center': 20, '2_spread': 20, '2_run': 20,
+            '3_top': 20, '3_tod': 20, '3_bottom': 20,
+            '4_top': 25, '4_set': 25, '4_float': 20,
+            '5_float': 20
+        }
+        return LAO_DEFAULTS[betType] !== undefined ? LAO_DEFAULTS[betType] : 20
+    }
     return DEFAULT_COMMISSIONS[betType] || 15
 }
 
@@ -247,6 +258,11 @@ function getPayoutRate(betType, userId, lotteryType, userSettingsMap) {
     const settingsKey = getSettingsKey(betType, lotteryKey)
     const settings = userSettingsMap?.[userId]?.lottery_settings?.[lotteryKey]?.[settingsKey]
     if (settings?.payout !== undefined) return settings.payout
+    if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+        if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(betType)) {
+            return 70
+        }
+    }
     return DEFAULT_PAYOUTS[betType] || 1
 }
 

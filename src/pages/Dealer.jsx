@@ -2092,7 +2092,18 @@ export default function Dealer() {
                     if (settings?.commission !== undefined) {
                         return settings.isFixed ? settings.commission : (sub.amount || 0) * (settings.commission / 100)
                     }
-                    return (sub.amount || 0) * ((DEFAULT_COMMISSIONS[sub.bet_type] || 15) / 100)
+                    let defaultRate = DEFAULT_COMMISSIONS[sub.bet_type] || 15
+                    if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+                        const LAO_DEFAULTS = {
+                            'run_top': 10, 'run_bottom': 10,
+                            'pak_top': 20, 'pak_bottom': 20,
+                            '2_top': 20, '2_bottom': 20, '2_front': 20, '2_center': 20, '2_spread': 20, '2_run': 20,
+                            '3_top': 20, '3_tod': 20, '3_bottom': 20,
+                            '4_float': 20, '5_float': 20
+                        }
+                        defaultRate = LAO_DEFAULTS[sub.bet_type] !== undefined ? LAO_DEFAULTS[sub.bet_type] : 20
+                    }
+                    return (sub.amount || 0) * (defaultRate / 100)
                 }
 
                 // Helper: calculate payout for a submission (matches dealer dashboard getExpectedPayout)
@@ -2107,7 +2118,13 @@ export default function Dealer() {
                     const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
                     const settings = allUserSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
                     if (settings?.payout !== undefined) return (sub.amount || 0) * settings.payout
-                    return (sub.amount || 0) * (DEFAULT_PAYOUTS[sub.bet_type] || 1)
+                    let defaultRate = DEFAULT_PAYOUTS[sub.bet_type] || 1
+                    if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+                        if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(sub.bet_type)) {
+                            defaultRate = 70
+                        }
+                    }
+                    return (sub.amount || 0) * defaultRate
                 }
 
                 // Calculate incoming totals

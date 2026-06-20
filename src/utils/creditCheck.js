@@ -1,6 +1,33 @@
 import { supabase, fetchAllRows } from '../lib/supabase'
 import { getLotteryTypeKey, DEFAULT_COMMISSIONS, DEFAULT_PAYOUTS } from '../constants/lotteryTypes'
 
+const getFallbackCommission = (betType, lotteryType) => {
+    const lotteryKey = lotteryType === 'lao' || lotteryType === 'hanoi' ? 'lao' : lotteryType || 'thai'
+    if (lotteryKey === 'lao') {
+        const LAO_DEFAULTS = {
+            'run_top': 10, 'run_bottom': 10,
+            'pak_top': 20, 'pak_bottom': 20,
+            '2_top': 20, '2_bottom': 20, '2_front': 20, '2_center': 20, '2_spread': 20, '2_run': 20,
+            '3_top': 20, '3_tod': 20, '3_bottom': 20,
+            '4_top': 25, '4_set': 25, '4_float': 20,
+            '5_float': 20
+        }
+        return LAO_DEFAULTS[betType] !== undefined ? LAO_DEFAULTS[betType] : 20
+    }
+    return DEFAULT_COMMISSIONS[betType] || 15
+}
+
+const getFallbackPayout = (betType, lotteryType) => {
+    const lotteryKey = lotteryType === 'lao' || lotteryType === 'hanoi' ? 'lao' : lotteryType || 'thai'
+    if (lotteryKey === 'lao') {
+        if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(betType)) {
+            return 70
+        }
+    }
+    return DEFAULT_PAYOUTS[betType] || 1
+}
+
+
 /**
  * Check if dealer has sufficient credit for a new bet
  * @param {string} dealerId - The dealer's user ID
@@ -970,7 +997,7 @@ export async function calculateRoundProfit(dealerId, roundId) {
             if (settings?.commission !== undefined) {
                 return settings.isFixed ? settings.commission : amount * (settings.commission / 100)
             }
-            return amount * ((DEFAULT_COMMISSIONS[sub.bet_type] || 15) / 100)
+            return amount * ((getFallbackCommission(sub.bet_type, lotteryType)) / 100)
         }
 
         // Payout calculation — matches dealer dashboard getExpectedPayout() exactly
@@ -986,7 +1013,7 @@ export async function calculateRoundProfit(dealerId, roundId) {
             const settingsKey = getSettingsKey(sub.bet_type)
             const settings = userSettingsMap[sub.user_id]?.[lotteryKey]?.[settingsKey]
             if (settings?.payout !== undefined) return amount * settings.payout
-            return amount * (DEFAULT_PAYOUTS[sub.bet_type] || 1)
+            return amount * getFallbackPayout(sub.bet_type, lotteryType)
         }
 
         // Get outgoing bet_transfers for this round
@@ -1038,13 +1065,13 @@ export async function calculateRoundProfit(dealerId, roundId) {
                             outgoingTotalWin += parseFloat(ts.prize_amount || 0)
                         }
                     }
-                    const commRate = DEFAULT_COMMISSIONS[ts.bet_type] || 15
+                    const commRate = getFallbackCommission(ts.bet_type, lotteryType)
                     outgoingTotalCommission += parseFloat(ts.amount || 0) * (commRate / 100)
                 }
             }
 
             for (const t of externalOutgoing) {
-                const commRate = DEFAULT_COMMISSIONS[t.bet_type] || 15
+                const commRate = getFallbackCommission(t.bet_type, lotteryType)
                 outgoingTotalCommission += parseFloat(t.amount || 0) * (commRate / 100)
             }
         }

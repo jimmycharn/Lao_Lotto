@@ -366,7 +366,12 @@ function checkTransferWin(
     return true;
   };
   
-  const payoutRate = DEFAULT_PAYOUTS[bt] || 1;
+  let payoutRate = DEFAULT_PAYOUTS[bt] || 1;
+  if (lotteryType === 'lao' || lotteryType === 'hanoi') {
+    if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(bt)) {
+      payoutRate = 70;
+    }
+  }
   let isWinner = false;
   let prize = 0;
   
@@ -1448,6 +1453,14 @@ async function getCommissionInfo(userId: string, dealerId: string, betType: stri
     if (betType === '4_top' || betType === '4_set') {
       return { rate: 25, isFixed: true };
     }
+    const LAO_DEFAULTS: Record<string, number> = {
+      'run_top': 10, 'run_bottom': 10,
+      'pak_top': 20, 'pak_bottom': 20,
+      '2_top': 20, '2_bottom': 20, '2_front': 20, '2_center': 20, '2_spread': 20, '2_run': 20,
+      '3_top': 20, '3_tod': 20, '3_bottom': 20,
+      '4_float': 20, '5_float': 20
+    };
+    return { rate: LAO_DEFAULTS[betType] !== undefined ? LAO_DEFAULTS[betType] : 20, isFixed: false };
   }
 
   const DEFAULT_COMMISSIONS: Record<string, number> = {
@@ -1930,7 +1943,17 @@ async function deductProfitBasedCreditDeno(dealerId: string, roundId: string, pr
               outgoingTotalWin += parseFloat(ts.prize_amount || '0');
             }
           }
-          const commRate = DEFAULT_COMMISSIONS[ts.bet_type] || 15;
+          let commRate = DEFAULT_COMMISSIONS[ts.bet_type] || 15;
+          if (roundData.lottery_type === 'lao' || roundData.lottery_type === 'hanoi') {
+            const LAO_DEFAULTS: Record<string, number> = {
+              'run_top': 10, 'run_bottom': 10,
+              'pak_top': 20, 'pak_bottom': 20,
+              '2_top': 20, '2_bottom': 20, '2_front': 20, '2_center': 20, '2_spread': 20, '2_run': 20,
+              '3_top': 20, '3_tod': 20, '3_bottom': 20,
+              '4_float': 20, '5_float': 20
+            };
+            commRate = LAO_DEFAULTS[ts.bet_type] !== undefined ? LAO_DEFAULTS[ts.bet_type] : 20;
+          }
           outgoingTotalCommission += parseFloat(ts.amount || '0') * (commRate / 100);
         }
       }
@@ -1938,7 +1961,17 @@ async function deductProfitBasedCreditDeno(dealerId: string, roundId: string, pr
 
     const externalOutgoing = activeOutgoing.filter((t: any) => !t.target_submission_id);
     for (const t of externalOutgoing) {
-      const commRate = DEFAULT_COMMISSIONS[t.bet_type] || 15;
+      let commRate = DEFAULT_COMMISSIONS[t.bet_type] || 15;
+      if (roundData.lottery_type === 'lao' || roundData.lottery_type === 'hanoi') {
+        const LAO_DEFAULTS: Record<string, number> = {
+          'run_top': 10, 'run_bottom': 10,
+          'pak_top': 20, 'pak_bottom': 20,
+          '2_top': 20, '2_bottom': 20, '2_front': 20, '2_center': 20, '2_spread': 20, '2_run': 20,
+          '3_top': 20, '3_tod': 20, '3_bottom': 20,
+          '4_float': 20, '5_float': 20
+        };
+        commRate = LAO_DEFAULTS[t.bet_type] !== undefined ? LAO_DEFAULTS[t.bet_type] : 20;
+      }
       outgoingTotalCommission += parseFloat(t.amount || '0') * (commRate / 100);
 
       const setPrice = roundData?.set_prices?.['4_top'] || 120;
@@ -4682,9 +4715,20 @@ serve(async (req) => {
                     const commRate = betSettings?.commission !== undefined ? betSettings.commission : (DEFAULT_4_SET_SETTINGS.commission || 25);
                     comm = numSets * commRate;
                   } else {
+                    let defaultComm = DEFAULT_COMMISSIONS[t.bet_type] || 15;
+                    if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+                      const LAO_DEFAULTS: Record<string, number> = {
+                        'run_top': 10, 'run_bottom': 10,
+                        'pak_top': 20, 'pak_bottom': 20,
+                        '2_top': 20, '2_bottom': 20, '2_front': 20, '2_center': 20, '2_spread': 20, '2_run': 20,
+                        '3_top': 20, '3_tod': 20, '3_bottom': 20,
+                        '4_float': 20, '5_float': 20
+                      };
+                      defaultComm = LAO_DEFAULTS[t.bet_type] !== undefined ? LAO_DEFAULTS[t.bet_type] : 20;
+                    }
                     const commissionRate = betSettings?.commission !== undefined 
                       ? betSettings.commission 
-                      : (DEFAULT_COMMISSIONS[t.bet_type] || 15);
+                      : defaultComm;
                     comm = amt * (commissionRate / 100);
                   }
                   outgoingTotalCommission += comm;
@@ -6113,9 +6157,20 @@ serve(async (req) => {
                     const commRate = betSettings?.commission !== undefined ? betSettings.commission : (DEFAULT_4_SET_SETTINGS.commission || 25);
                     comm = numSets * commRate;
                   } else {
+                    let defaultComm = DEFAULT_COMMISSIONS[t.bet_type] || 15;
+                    if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+                      const LAO_DEFAULTS: Record<string, number> = {
+                        'run_top': 10, 'run_bottom': 10,
+                        'pak_top': 20, 'pak_bottom': 20,
+                        '2_top': 20, '2_bottom': 20, '2_front': 20, '2_center': 20, '2_spread': 20, '2_run': 20,
+                        '3_top': 20, '3_tod': 20, '3_bottom': 20,
+                        '4_float': 20, '5_float': 20
+                      };
+                      defaultComm = LAO_DEFAULTS[t.bet_type] !== undefined ? LAO_DEFAULTS[t.bet_type] : 20;
+                    }
                     const commissionRate = betSettings?.commission !== undefined 
                       ? betSettings.commission 
-                      : (DEFAULT_COMMISSIONS[t.bet_type] || 15);
+                      : defaultComm;
                     comm = amt * (commissionRate / 100);
                   }
                   t.computedCommission = comm;

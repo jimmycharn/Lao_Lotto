@@ -229,7 +229,13 @@ serve(async (req) => {
       const settingsKey = getSettingsKey(betType, lotteryKey)
       const settings = userSettingsMap[userId]?.[lotteryKey]?.[settingsKey]
       if (settings?.payout !== undefined) return settings.payout
-      return DEFAULT_PAYOUTS[betType] || 1
+      let rate = DEFAULT_PAYOUTS[betType] || 1
+      if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+        if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(betType)) {
+          rate = 70
+        }
+      }
+      return rate
     }
 
     // Helper: get 4_set prizes for a user
@@ -296,7 +302,13 @@ serve(async (req) => {
         b.set_price = setPrice
         b.num_sets = numSets
       } else {
-        let maxPayout = DEFAULT_PAYOUTS[b.bet_type] || 1
+        let defaultRate = DEFAULT_PAYOUTS[b.bet_type] || 1
+        if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+          if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(b.bet_type)) {
+            defaultRate = 70
+          }
+        }
+        let maxPayout = defaultRate
         for (const d of details) {
           const p = getPayoutForSub(b.bet_type, d.user_id)
           if (p > maxPayout) maxPayout = p

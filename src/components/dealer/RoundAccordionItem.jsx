@@ -42,6 +42,33 @@ import { checkBetWin, deriveWinningNumbers } from '../../utils/scenarioCalculato
 import DealerWriteSubmissionWrapper from './DealerWriteSubmissionWrapper'
 import AIAnalysisModal from './AIAnalysisModal'
 
+// Helper functions for default fallbacks
+const getFallbackCommission = (betType, lotteryType) => {
+    const lotteryKey = lotteryType === 'lao' || lotteryType === 'hanoi' ? 'lao' : lotteryType || 'thai'
+    if (lotteryKey === 'lao') {
+        const LAO_DEFAULTS = {
+            'run_top': 10, 'run_bottom': 10,
+            'pak_top': 20, 'pak_bottom': 20,
+            '2_top': 20, '2_bottom': 20, '2_front': 20, '2_center': 20, '2_spread': 20, '2_run': 20,
+            '3_top': 20, '3_tod': 20, '3_bottom': 20,
+            '4_top': 25, '4_set': 25, '4_float': 20,
+            '5_float': 20
+        }
+        return LAO_DEFAULTS[betType] !== undefined ? LAO_DEFAULTS[betType] : 20
+    }
+    return DEFAULT_COMMISSIONS[betType] || 15
+}
+
+const getFallbackPayout = (betType, lotteryType) => {
+    const lotteryKey = lotteryType === 'lao' || lotteryType === 'hanoi' ? 'lao' : lotteryType || 'thai'
+    if (lotteryKey === 'lao') {
+        if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(betType)) {
+            return 70
+        }
+    }
+    return DEFAULT_PAYOUTS[betType] || 1
+}
+
 // Helper: chunked Supabase update to avoid URL query string overflow (max ~100 IDs per batch)
 const CHUNK_SIZE = 100
 async function chunkedUpdate(table, updateData, ids) {
@@ -524,7 +551,7 @@ export default function RoundAccordionItem({
                         } else {
                             const commissionRate = betSettings?.commission !== undefined 
                                 ? betSettings.commission 
-                                : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
+                                : getFallbackCommission(t.bet_type, round.lottery_type)
                             dealer.totalCommission += (t.amount || 0) * (commissionRate / 100)
                         }
                     })
@@ -589,7 +616,7 @@ export default function RoundAccordionItem({
                         } else {
                             const commissionRate = betSettings?.commission !== undefined 
                                 ? betSettings.commission 
-                                : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
+                                : getFallbackCommission(t.bet_type, round.lottery_type)
                             dealer.totalCommission += (t.amount || 0) * (commissionRate / 100)
                         }
                     })
@@ -850,7 +877,7 @@ export default function RoundAccordionItem({
                 } else {
                     const commissionRate = betSettings?.commission !== undefined 
                         ? betSettings.commission 
-                        : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
+                        : getFallbackCommission(t.bet_type, round.lottery_type)
                     totalCommission += (t.amount || 0) * (commissionRate / 100)
                 }
             })
@@ -913,7 +940,7 @@ export default function RoundAccordionItem({
                 // If we can't find the dealer, use default commission
                 let totalCommission = 0
                 dealerGroups[billNote].forEach(sub => {
-                    const commissionRate = DEFAULT_COMMISSIONS[sub.bet_type] || 15
+                    const commissionRate = getFallbackCommission(sub.bet_type, round.lottery_type)
                     // 4_set: commission is fixed amount per set (บาท/ชุด), not percentage
                     if (sub.bet_type === '4_set') {
                         const setPrice = round?.set_prices?.['4_top'] || 120
@@ -955,7 +982,7 @@ export default function RoundAccordionItem({
                 } else {
                     const commissionRate = betSettings?.commission !== undefined 
                         ? betSettings.commission 
-                        : (DEFAULT_COMMISSIONS[sub.bet_type] || 15)
+                        : getFallbackCommission(sub.bet_type, round.lottery_type)
                     totalCommission += (sub.amount || 0) * (commissionRate / 100)
                 }
             })
@@ -1457,7 +1484,7 @@ export default function RoundAccordionItem({
                             commissionAmount = betSettings.isFixed ? betSettings.commission : amount * (betSettings.commission / 100)
                         } else {
                             // Use default commission rate (15% if not specified)
-                            commissionAmount = amount * ((DEFAULT_COMMISSIONS[item.bet_type] || 15) / 100)
+                            commissionAmount = amount * (getFallbackCommission(item.bet_type, round.lottery_type) / 100)
                         }
                         return {
                             round_id: targetRoundId,
@@ -2374,7 +2401,7 @@ export default function RoundAccordionItem({
             return settings.isFixed ? settings.commission : sub.amount * (settings.commission / 100)
         }
         // Use default rates if no settings found
-        const defaultRate = DEFAULT_COMMISSIONS[sub.bet_type] || 15
+        const defaultRate = getFallbackCommission(sub.bet_type, round.lottery_type)
         return sub.amount * (defaultRate / 100)
     }
 
@@ -2394,7 +2421,7 @@ export default function RoundAccordionItem({
         const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
         const settings = summaryData.userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
         if (settings?.payout !== undefined) return sub.amount * settings.payout
-        return sub.amount * (DEFAULT_PAYOUTS[sub.bet_type] || 1)
+        return sub.amount * getFallbackPayout(sub.bet_type, round.lottery_type)
     }
 
     // Check if a submission item is a winner and calculate payout
@@ -2419,7 +2446,7 @@ export default function RoundAccordionItem({
         const lotteryKey = getLotteryTypeKey(lt)
         const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
         const settings = summaryData.userSettings?.[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
-        const payoutRate = settings?.payout !== undefined ? settings.payout : (DEFAULT_PAYOUTS[sub.bet_type] || 1)
+        const payoutRate = settings?.payout !== undefined ? settings.payout : getFallbackPayout(sub.bet_type, round.lottery_type)
         const currentSetPrice = round?.set_prices?.['4_top'] || 120
         const setPrizes = settings?.prizes || DEFAULT_4_SET_SETTINGS.prizes
         const result = checkBetWin(sub.bet_type, sub.numbers, winNums, payoutRate, sub.amount, currentSetPrice, setPrizes)
@@ -2446,7 +2473,7 @@ export default function RoundAccordionItem({
         }
         if (!primaryNumber) return null
         const winNums = deriveWinningNumbers(primaryNumber, lt, bottomNumber)
-        const payoutRate = DEFAULT_PAYOUTS[item.bet_type] || 1
+        const payoutRate = getFallbackPayout(item.bet_type, round.lottery_type)
         const currentSetPrice = round?.set_prices?.['4_top'] || 120
         const setPrizes = DEFAULT_4_SET_SETTINGS.prizes
         const result = checkBetWin(item.bet_type, item.numbers, winNums, payoutRate, item.amount, currentSetPrice, setPrizes)
@@ -4911,7 +4938,7 @@ export default function RoundAccordionItem({
                                                                                 const commRate_c = DEFAULT_4_SET_SETTINGS.commission || 25
                                                                                 batchCommission += numSets_c * commRate_c
                                                                             } else {
-                                                                                const commRate_c = DEFAULT_COMMISSIONS[item.bet_type] || 15
+                                                                                const commRate_c = getFallbackCommission(item.bet_type, round.lottery_type)
                                                                                 batchCommission += (item.amount || 0) * (commRate_c / 100)
                                                                             }
                                                                         })
@@ -4923,7 +4950,7 @@ export default function RoundAccordionItem({
                                                                                     const sp = round?.set_prices?.['4_top'] || 120
                                                                                     defComm += Math.floor((t.amount || 0) / sp) * (DEFAULT_4_SET_SETTINGS.commission || 25)
                                                                                 } else {
-                                                                                    defComm += (t.amount || 0) * ((DEFAULT_COMMISSIONS[t.bet_type] || 15) / 100)
+                                                                                    defComm += (t.amount || 0) * (getFallbackCommission(t.bet_type, round.lottery_type) / 100)
                                                                                 }
                                                                             })
                                                                             return defComm

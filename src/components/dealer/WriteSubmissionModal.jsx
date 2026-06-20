@@ -366,7 +366,7 @@ export default function WriteSubmissionModal({
             return { rate: betSettings.commission, isFixed: betSettings.isFixed || false }
         }
 
-        // Default rates for Lao/Hanoi set-based bets
+        // Default rates for Lao/Hanoi
         if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
             const LAO_SET_DEFAULTS = {
                 '4_top': { commission: 25, isFixed: true },
@@ -375,9 +375,17 @@ export default function WriteSubmissionModal({
             if (LAO_SET_DEFAULTS[betType]) {
                 return { rate: LAO_SET_DEFAULTS[betType].commission, isFixed: true }
             }
+            const LAO_DEFAULTS = {
+                'run_top': 10, 'run_bottom': 10,
+                'pak_top': 20, 'pak_bottom': 20,
+                '2_top': 20, '2_bottom': 20, '2_front': 20, '2_spread': 20, '2_run': 20,
+                '3_top': 20, '3_tod': 20, '3_bottom': 20,
+                '4_float': 20, '5_float': 20
+            }
+            return { rate: LAO_DEFAULTS[betType] !== undefined ? LAO_DEFAULTS[betType] : 20, isFixed: false }
         }
 
-        // Default commission rates (percentage)
+        // Default commission rates (percentage) for Thai/Stock
         const DEFAULT_COMMISSIONS = {
             '2_top': 15, '2_bottom': 15, '2_front': 15, '2_spread': 15,
             '3_top': 30, '3_tod': 15, '3_bottom': 15,

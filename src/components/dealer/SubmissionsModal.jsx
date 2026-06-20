@@ -265,9 +265,21 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
                     const commRate = betSettings?.commission !== undefined ? betSettings.commission : (DEFAULT_4_SET_SETTINGS.commission || 25)
                     totalCommission += numSets * commRate
                 } else {
+                    let defaultComm = DEFAULT_COMMISSIONS[t.bet_type] || 15
+                    if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+                        const LAO_DEFAULTS = {
+                            'run_top': 10, 'run_bottom': 10,
+                            'pak_top': 20, 'pak_bottom': 20,
+                            '2_top': 20, '2_bottom': 20, '2_front': 20, '2_center': 20, '2_spread': 20, '2_run': 20,
+                            '3_top': 20, '3_tod': 20, '3_bottom': 20,
+                            '4_top': 25, '4_set': 25, '4_float': 20,
+                            '5_float': 20
+                        }
+                        defaultComm = LAO_DEFAULTS[t.bet_type] !== undefined ? LAO_DEFAULTS[t.bet_type] : 20
+                    }
                     const commissionRate = betSettings?.commission !== undefined 
                         ? betSettings.commission 
-                        : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
+                        : defaultComm
                     totalCommission += (t.amount || 0) * (commissionRate / 100)
                 }
             })

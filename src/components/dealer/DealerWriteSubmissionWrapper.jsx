@@ -74,6 +74,17 @@ export default function DealerWriteSubmissionWrapper({
         }
         
         // Default commissions
+        if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+            const laoDefaults = {
+                'run_top': 10, 'run_bottom': 10,
+                'pak_top': 20, 'pak_bottom': 20,
+                '2_top': 20, '2_bottom': 20, '2_front': 20, '2_center': 20, '2_run': 20,
+                '3_top': 20, '3_tod': 20, '3_straight': 20, '3_tod_single': 20,
+                '4_top': 25, '4_set': 25, '4_float': 20,
+                '5_float': 20
+            }
+            return laoDefaults[betType] !== undefined ? laoDefaults[betType] : 20
+        }
         const defaults = {
             'run_top': 10, 'run_bottom': 10,
             '2_top': 15, '2_bottom': 15, '2_front': 15, '2_center': 15, '2_run': 15,

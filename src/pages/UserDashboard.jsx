@@ -2743,7 +2743,12 @@ export default function UserDashboard() {
         }
 
         // Use default payout rate for this bet type
-        const defaultRate = DEFAULT_PAYOUTS[sub.bet_type] || 1
+        let defaultRate = DEFAULT_PAYOUTS[sub.bet_type] || 1
+        if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+            if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(sub.bet_type)) {
+                defaultRate = 70
+            }
+        }
         return sub.amount * defaultRate
     }, [userSettings, getLotteryTypeKey])
 
@@ -2774,7 +2779,17 @@ export default function UserDashboard() {
         if (settings?.commission !== undefined) {
             return settings.isFixed ? settings.commission : (sub.amount || 0) * (settings.commission / 100)
         }
-        const defaultRate = DEFAULT_COMMISSIONS[sub.bet_type] || 15
+        let defaultRate = DEFAULT_COMMISSIONS[sub.bet_type] || 15
+        if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+            const LAO_DEFAULTS = {
+                'run_top': 10, 'run_bottom': 10,
+                'pak_top': 20, 'pak_bottom': 20,
+                '2_top': 20, '2_bottom': 20, '2_front': 20, '2_center': 20, '2_spread': 20, '2_run': 20,
+                '3_top': 20, '3_tod': 20, '3_bottom': 20,
+                '4_float': 20, '5_float': 20
+            }
+            defaultRate = LAO_DEFAULTS[sub.bet_type] !== undefined ? LAO_DEFAULTS[sub.bet_type] : 20
+        }
         return (sub.amount || 0) * (defaultRate / 100)
     }, [userSettings, getLotteryTypeKey])
 
