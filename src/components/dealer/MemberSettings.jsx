@@ -26,8 +26,8 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
         thai: {
             bonusEnabled: false,
             returnExcessOnOverflow: false,
-            'run_top': { commission: 15, payout: 3, bonus: 0 },
-            'run_bottom': { commission: 15, payout: 4, bonus: 0 },
+            'run_top': { commission: 10, payout: 3, bonus: 0 },
+            'run_bottom': { commission: 10, payout: 4, bonus: 0 },
             'pak_top': { commission: 15, payout: 8, bonus: 0 },
             'pak_bottom': { commission: 15, payout: 6, bonus: 0 },
             '2_top': { commission: 15, payout: 65, bonus: 0 },

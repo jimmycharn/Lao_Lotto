@@ -380,8 +380,8 @@ export default function WriteSubmissionModal({
         // Default commission rates (percentage)
         const DEFAULT_COMMISSIONS = {
             '2_top': 15, '2_bottom': 15, '2_front': 15, '2_spread': 15,
-            '3_top': 15, '3_tod': 15, '3_bottom': 15,
-            'run_top': 15, 'run_bottom': 15
+            '3_top': 30, '3_tod': 15, '3_bottom': 15,
+            'run_top': 10, 'run_bottom': 10
         }
         return { rate: DEFAULT_COMMISSIONS[betType] || 15, isFixed: false }
     }

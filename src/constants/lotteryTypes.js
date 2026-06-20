@@ -222,12 +222,12 @@ export const PERMUTATION_BET_TYPES = ['2_run', '2_spread', '3_tod', '3_tod_singl
 
 // Default commission rates per bet type (percentage)
 export const DEFAULT_COMMISSIONS = {
-    'run_top': 15, 'run_bottom': 15,
+    'run_top': 10, 'run_bottom': 10,
     'pak_top': 15, 'pak_bottom': 15,
     'front_top_1': 15, 'middle_top_1': 15, 'back_top_1': 15,
     'front_bottom_1': 15, 'back_bottom_1': 15,
     '2_top': 15, '2_front': 15, '2_center': 15, '2_spread': 15, '2_run': 15, '2_bottom': 15,
-    '3_top': 15, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
+    '3_top': 30, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
     '4_tod': 15, '4_set': 15, '4_float': 15, '5_float': 15, '6_top': 15
 }
 

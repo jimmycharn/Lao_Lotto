@@ -29,7 +29,7 @@ const DEFAULT_SET_PRICE = 120
 const DEFAULT_SET_WORST_CASE = 100000
 
 const DEFAULT_COMMISSIONS: Record<string, number> = {
-  'run_top': 15, 'run_bottom': 15,
+  'run_top': 10, 'run_bottom': 10,
   'pak_top': 15, 'pak_bottom': 15,
   'front_top_1': 15, 'middle_top_1': 15, 'back_top_1': 15,
   'front_bottom_1': 15, 'back_bottom_1': 15,

@@ -87,9 +87,9 @@ export default function BuyLottery() {
     const [userSettings, setUserSettings] = useState(null)
 
     const DEFAULT_COMMISSIONS = {
-        'run_top': 15, 'run_bottom': 15,
+        'run_top': 10, 'run_bottom': 10,
         '2_top': 15, '2_bottom': 15, '2_front': 15, '2_center': 15, '2_run': 15,
-        '3_top': 15, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
+        '3_top': 30, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
         '4_top': 25, '4_set': 25, '4_float': 15, '4_tod': 15,
         '5_float': 15, '6_top': 15
     }
