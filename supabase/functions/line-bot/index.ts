@@ -6958,8 +6958,10 @@ serve(async (req) => {
             }
           }
 
-          const linkText = `รหัส LINE User ID ของคุณคือ:\n\n${userId}\n\nกรุณาคัดลอกรหัสนี้เพื่อนำไปเชื่อมต่อบัญชีหรือตั้งค่าสิทธิ์ผู้จัดการบนหน้าเว็บค่ะ`;
-          await sendLineReply(replyToken, linkText);
+          await sendLineReply(replyToken, [
+            `${userId}`,
+            `รหัส LINE User ID ของคุณคือข้อความด้านบนค่ะ\n(รหัสย่อ 4 ตัวท้าย: ${userId.slice(-4)})\n\nกรุณาคัดลอกรหัสในข้อความแรกเพื่อนำไปเชื่อมต่อบัญชีหรือตั้งค่าสิทธิ์ผู้จัดการบนหน้าเว็บค่ะ 🤖`
+          ]);
           continue;
         }
 
