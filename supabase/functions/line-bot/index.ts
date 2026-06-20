@@ -6721,7 +6721,11 @@ serve(async (req) => {
             .maybeSingle();
 
           if (pendingCode) {
-            await sendLineReply(replyToken, `คุณมีรหัสผูกกลุ่มที่ยังไม่ได้ใช้งานอยู่แล้วค่ะ:\n\n${pendingCode.binding_code}\n\nสามารถนำรหัสนี้ไปพิมพ์ในห้องแชทกลุ่ม LINE ที่ต้องการผูกด้วยคำสั่ง:\n/bind ${pendingCode.binding_code}\n\n*(หากต้องการรหัสใหม่ กรุณากดลบรหัสเดิมผ่านระบบหลังบ้านบนหน้าเว็บดีลเลอร์ก่อนนะคะ)*`);
+            await sendLineReply(replyToken, [
+              `คุณมีรหัสผูกกลุ่มที่ยังไม่ได้ใช้งานอยู่แล้วค่ะ\n\nสามารถนำรหัสนี้ไปพิมพ์ในห้องแชทกลุ่ม LINE ที่ต้องการผูกค่ะ\n\n*(หากต้องการรหัสใหม่ กรุณากดลบรหัสเดิมผ่านระบบหลังบ้านบนหน้าเว็บดีลเลอร์ก่อนนะคะ)*`,
+              `รหัสผูกกลุ่ม: ${pendingCode.binding_code}`,
+              `/bind ${pendingCode.binding_code}`
+            ]);
             continue;
           }
 
@@ -6742,7 +6746,11 @@ serve(async (req) => {
             console.error('Error inserting pending binding code from LINE Bot:', insertErr);
             await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดทางเทคนิคในการสร้างรหัสผูกกลุ่ม กรุณาลองใหม่อีกครั้ง`);
           } else {
-            await sendLineReply(replyToken, `✅ สร้างรหัสผูกกลุ่มใหม่สำเร็จแล้วค่ะ!\n\nรหัสผูกกลุ่มของคุณคือ:\n\n${code}\n\nกรุณาคัดลอกรหัสนี้ไปพิมพ์ในห้องแชทกลุ่ม LINE ที่ต้องการเชื่อมโยงด้วยคำสั่ง:\n\n/bind ${code}\n\nเพื่อทำการผูกกลุ่มแชทเข้ากับระบบรับโพยของท่านค่ะ 🤖`);
+            await sendLineReply(replyToken, [
+              `✅ สร้างรหัสผูกกลุ่มใหม่สำเร็จแล้วค่ะ!\n\nกรุณาคัดลอกรหัสและคำสั่งด้านล่าง ไปพิมพ์ในห้องแชทกลุ่ม LINE ที่ต้องการเชื่อมโยงเพื่อทำการผูกกลุ่มแชทเข้ากับระบบรับโพยของท่านค่ะ 🤖`,
+              `รหัสผูกกลุ่ม: ${code}`,
+              `/bind ${code}`
+            ]);
           }
           continue;
         }
