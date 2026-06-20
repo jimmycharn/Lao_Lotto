@@ -192,11 +192,11 @@ export default function Dealer() {
         lottery_type: 'lao',
         lottery_name: '',
         open_date: new Date().toISOString().split('T')[0],
-        open_time: '08:00',
+        open_time: '06:00',
         close_date: new Date().toISOString().split('T')[0],
-        close_time: '20:00',
-        delete_before_minutes: 1,
-        delete_after_submit_minutes: 0, // 0 = ไม่จำกัดเวลาหลังป้อน (ใช้แค่ delete_before_minutes)
+        close_time: '20:15',
+        delete_before_minutes: 30,
+        delete_after_submit_minutes: 120,
         currency_symbol: '฿',
         currency_name: 'บาท',
         notify_close_to_groups: true,
@@ -206,12 +206,45 @@ export default function Dealer() {
 
     // Update limits when lottery type changes
     const handleLotteryTypeChange = (newType) => {
-        setRoundForm(prev => ({
-            ...prev,
-            lottery_type: newType,
-            type_limits: getDefaultLimitsForType(newType),
-            set_prices: getDefaultSetPricesForType(newType)
-        }))
+        setRoundForm(prev => {
+            let open_time = '06:00'
+            let close_time = '20:15'
+            let delete_after_submit_minutes = 120
+            let delete_before_minutes = 30
+            let notify_close_to_groups = true
+
+            if (newType === 'thai') {
+                open_time = '06:00'
+                close_time = '14:05'
+                delete_after_submit_minutes = 120
+                delete_before_minutes = 30
+                notify_close_to_groups = false
+            } else if (newType === 'lao') {
+                open_time = '06:00'
+                close_time = '20:15'
+                delete_after_submit_minutes = 120
+                delete_before_minutes = 30
+                notify_close_to_groups = true
+            } else {
+                open_time = '08:00'
+                close_time = '20:00'
+                delete_after_submit_minutes = 0
+                delete_before_minutes = 1
+                notify_close_to_groups = false
+            }
+
+            return {
+                ...prev,
+                lottery_type: newType,
+                open_time,
+                close_time,
+                delete_after_submit_minutes,
+                delete_before_minutes,
+                notify_close_to_groups,
+                type_limits: getDefaultLimitsForType(newType),
+                set_prices: getDefaultSetPricesForType(newType)
+            }
+        })
     }
 
     // Auto-select input content on focus
@@ -1871,6 +1904,21 @@ export default function Dealer() {
             if (limitsError) throw limitsError
 
             setShowCreateModal(false)
+            setRoundForm({
+                lottery_type: 'lao',
+                lottery_name: '',
+                open_date: new Date().toISOString().split('T')[0],
+                open_time: '06:00',
+                close_date: new Date().toISOString().split('T')[0],
+                close_time: '20:15',
+                delete_before_minutes: 30,
+                delete_after_submit_minutes: 120,
+                currency_symbol: '฿',
+                currency_name: 'บาท',
+                notify_close_to_groups: true,
+                type_limits: getDefaultLimitsForType('lao'),
+                set_prices: getDefaultSetPricesForType('lao')
+            })
             fetchData()
             toast.success('สร้างงวดสำเร็จ!')
 

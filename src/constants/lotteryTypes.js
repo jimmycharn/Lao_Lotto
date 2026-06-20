@@ -13,18 +13,18 @@ export const BET_TYPES_BY_LOTTERY = {
     thai: {
         'run_top': { label: 'ลอยบน', defaultLimit: 5000 },
         'run_bottom': { label: 'ลอยล่าง', defaultLimit: 5000 },
-        'pak_top': { label: 'ปักบน', defaultLimit: 5000 },
-        'pak_bottom': { label: 'ปักล่าง', defaultLimit: 5000 },
+        'pak_top': { label: 'ปักบน', defaultLimit: 3000 },
+        'pak_bottom': { label: 'ปักล่าง', defaultLimit: 3000 },
         '2_top': { label: '2 ตัวบน', defaultLimit: 1000 },
         '2_front': { label: '2 ตัวหน้า', defaultLimit: 1000 },
         '2_center': { label: '2 ตัวถ่าง', defaultLimit: 1000 },
         '2_run': { label: '2 ตัวลอย', defaultLimit: 1000 },
         '2_bottom': { label: '2 ตัวล่าง', defaultLimit: 1000 },
         '3_top': { label: '3 ตัวบน', defaultLimit: 500 },
-        '3_tod': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
-        '3_bottom': { label: '3 ตัวล่าง', defaultLimit: 500 },
-        '4_float': { label: '4 ตัวลอย', defaultLimit: 200 },
-        '5_float': { label: '5 ตัวลอย', defaultLimit: 100 }
+        '3_tod': { label: '3 ตัวโต๊ด', defaultLimit: 1000 },
+        '3_bottom': { label: '3 ตัวล่าง', defaultLimit: 1000 },
+        '4_float': { label: '4 ตัวลอย', defaultLimit: 1000 },
+        '5_float': { label: '5 ตัวลอย', defaultLimit: 1000 }
     },
     lao: {
         '4_set': { 
@@ -44,23 +44,23 @@ export const BET_TYPES_BY_LOTTERY = {
         },
         '3_set': { 
             label: '3 ตัวตรงชุด', 
-            defaultLimit: 2, 
+            defaultLimit: 1, 
             isSet: true,
             isLinkedTo4Set: true
         },
         'run_top': { label: 'ลอยบน', defaultLimit: 5000 },
         'run_bottom': { label: 'ลอยล่าง', defaultLimit: 5000 },
-        'pak_top': { label: 'ปักบน', defaultLimit: 5000 },
-        'pak_bottom': { label: 'ปักล่าง', defaultLimit: 5000 },
+        'pak_top': { label: 'ปักบน', defaultLimit: 3000 },
+        'pak_bottom': { label: 'ปักล่าง', defaultLimit: 3000 },
         '2_top': { label: '2 ตัวบน', defaultLimit: 1000 },
         '2_front': { label: '2 ตัวหน้า', defaultLimit: 1000 },
         '2_bottom': { label: '2 ตัวล่าง', defaultLimit: 1000 },
         '2_center': { label: '2 ตัวถ่าง', defaultLimit: 1000 },
         '2_run': { label: '2 ตัวลอย', defaultLimit: 1000 },
-        '3_top': { label: '3 ตัวตรง', defaultLimit: 500 },
-        '3_tod': { label: '3 ตัวโต๊ด', defaultLimit: 500 },
-        '4_float': { label: '4 ตัวลอย', defaultLimit: 200 },
-        '5_float': { label: '5 ตัวลอย', defaultLimit: 100 }
+        '3_top': { label: '3 ตัวตรง', defaultLimit: 120 },
+        '3_tod': { label: '3 ตัวโต๊ด', defaultLimit: 1000 },
+        '4_float': { label: '4 ตัวลอย', defaultLimit: 1000 },
+        '5_float': { label: '5 ตัวลอย', defaultLimit: 1000 }
     },
     hanoi: {
         '4_set': { 

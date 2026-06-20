@@ -246,6 +246,14 @@ function expandLines(rawLines: string[]): string[] {
             const prefix = prefixMatch ? prefixMatch[0] : '';
             const rest = prefixMatch ? line.substring(prefix.length) : line;
             if (/^[\d,\s\-)]+$/.test(rest)) {
+                const hasComma = rest.includes(',');
+                const hasParen = rest.includes(')');
+                const hyphenCount = (rest.match(/-/g) || []).length;
+                if (hyphenCount === 1 && !hasComma && !hasParen) {
+                    expanded.push(line);
+                    continue;
+                }
+
                 const numTokens = rest.split(/[,\-)]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s));
                 if (numTokens.length >= 2) {
                     const firstLen = numTokens[0].length;
@@ -689,9 +697,12 @@ function isAmountPattern(s: string): boolean {
     if (hyphenMatch) {
         const len1 = hyphenMatch[1].length;
         const len2 = hyphenMatch[2].length;
+        const val1 = hyphenMatch[1];
+        const val2 = hyphenMatch[2];
         // If they have different lengths, or first is 1 or 3 digits (like runner 9-500, or 3-digit 123-50),
+        // OR if it's a 2-digit pair but the values are not equal (e.g. 77-50),
         // it is NOT an amount pattern; it's a number-amount pair!
-        if (len1 !== len2 || len1 === 1 || len1 === 3) {
+        if (len1 !== len2 || len1 === 1 || len1 === 3 || (len1 === 2 && val1 !== val2)) {
             return false;
         }
     }

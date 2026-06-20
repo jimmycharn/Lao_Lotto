@@ -2129,13 +2129,21 @@ serve(async (req) => {
 
       const { data: round } = await supabase
         .from('lottery_rounds')
-        .select('id, dealer_id, lottery_type, lottery_name, round_date, close_time')
+        .select('id, dealer_id, lottery_type, lottery_name, round_date, close_time, notify_close_to_groups')
         .eq('id', roundId)
         .maybeSingle()
 
       if (!round) {
         return new Response(JSON.stringify({ error: 'Round not found' }), {
           status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      // Check if notifications are enabled for this round in the UI settings
+      if (round.notify_close_to_groups === false) {
+        return new Response(JSON.stringify({ success: true, round_id: roundId, message: 'Notifications disabled by setting' }), {
+          status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
@@ -2147,9 +2155,35 @@ serve(async (req) => {
         .eq('lottery_type', round.lottery_type)
         .eq('is_active', true)
 
+      let groupsToNotify: any[] = [];
+      
+      if (groups && groups.length > 0) {
+        // Fetch all active submissions for this round to see which users bet
+        const { data: submissions } = await supabase
+          .from('submissions')
+          .select('user_id')
+          .eq('round_id', roundId)
+          .eq('is_deleted', false);
+
+        const activeUserIds = [...new Set((submissions || []).map((s: any) => s.user_id).filter(Boolean))];
+        const groupIds = groups.map((g: any) => g.line_group_id).filter(Boolean);
+
+        if (activeUserIds.length > 0 && groupIds.length > 0) {
+          // Query line_group_members to find which of the dealer's groups contain these active users
+          const { data: activeMembers } = await supabase
+            .from('line_group_members')
+            .select('line_group_id')
+            .in('line_group_id', groupIds)
+            .in('user_id', activeUserIds);
+
+          const activeGroupIds = new Set((activeMembers || []).map((m: any) => m.line_group_id));
+          groupsToNotify = groups.filter((g: any) => activeGroupIds.has(g.line_group_id));
+        }
+      }
+
       const closeFlexMessage = buildCloseFlexMessage(round)
       let sent = 0
-      for (const g of (groups || [])) {
+      for (const g of groupsToNotify) {
         try {
           await sendLinePush(g.line_group_id, closeFlexMessage)
           sent++

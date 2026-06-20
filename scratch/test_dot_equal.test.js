@@ -15,6 +15,13 @@ describe('dot-equal typo handling', () => {
         }
     })
 
+    it('should parse "77-50" correctly in JS and TS', () => {
+        for (const parse of [parseJS, parseTS]) {
+            const results = parse('77-50', 'lao')
+            console.log('Results 77-50:', JSON.stringify(results, null, 2))
+        }
+    })
+
     it('should parse "980. = 22*10" correctly in JS and TS', () => {
         for (const parse of [parseJS, parseTS]) {
             const results = parse('980. = 22*10', 'lao')
