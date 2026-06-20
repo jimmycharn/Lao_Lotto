@@ -6667,6 +6667,66 @@ serve(async (req) => {
           continue;
         }
 
+        // ─── COMMAND: /ขอรหัส หรือ /ขอรหัสผูกกลุ่ม หรือ /bindcode ───
+        if (text === '/ขอรหัส' || text === '/ขอรหัสผูกกลุ่ม' || text.toLowerCase() === '/bindcode') {
+          if (sourceType !== 'user') {
+            await sendLineReply(replyToken, `⚠️ เพื่อความปลอดภัย กรุณาพิมพ์คำสั่งนี้ในแชทส่วนตัวกับบอท (1-on-1) เท่านั้นค่ะ`);
+            continue;
+          }
+
+          // Lookup profile by line_user_id
+          const { data: profile, error: profileErr } = await supabase
+            .from('profiles')
+            .select('id, full_name, role')
+            .eq('line_user_id', userId)
+            .maybeSingle();
+
+          if (profileErr || !profile) {
+            await sendLineReply(replyToken, `❌ คุณยังไม่ได้เชื่อมต่อบัญชี LINE เข้ากับระบบ หรือไม่พบบัญชีดีลเลอร์ของคุณค่ะ\n(กรุณานำ User ID ที่ได้จากคำสั่ง /link ไปกรอกเชื่อมต่อในหน้าโปรไฟล์บนเว็บก่อนใช้งานค่ะ)`);
+            continue;
+          }
+
+          // Check role: must be dealer, admin, or superadmin
+          if (profile.role !== 'dealer' && profile.role !== 'superadmin' && profile.role !== 'admin') {
+            await sendLineReply(replyToken, `❌ ขออภัยค่ะ คำสั่งนี้สามารถใช้งานได้เฉพาะบัญชีดีลเลอร์หรือแอดมินเท่านั้นค่ะ`);
+            continue;
+          }
+
+          // Check if there is already an active pending code
+          const { data: pendingCode, error: pendingErr } = await supabase
+            .from('line_groups')
+            .select('*')
+            .eq('dealer_id', profile.id)
+            .eq('line_group_id', 'pending')
+            .maybeSingle();
+
+          if (pendingCode) {
+            await sendLineReply(replyToken, `คุณมีรหัสผูกกลุ่มที่ยังไม่ได้ใช้งานอยู่แล้วค่ะ:\n\n${pendingCode.binding_code}\n\nสามารถนำรหัสนี้ไปพิมพ์ในห้องแชทกลุ่ม LINE ที่ต้องการผูกด้วยคำสั่ง:\n/bind ${pendingCode.binding_code}\n\n*(หากต้องการรหัสใหม่ กรุณากดลบรหัสเดิมผ่านระบบหลังบ้านบนหน้าเว็บดีลเลอร์ก่อนนะคะ)*`);
+            continue;
+          }
+
+          // Generate a random 6-digit alphanumeric code: BG-XXXXXX
+          const code = 'BG-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+
+          const { error: insertErr } = await supabase
+            .from('line_groups')
+            .insert({
+              line_group_id: 'pending',
+              dealer_id: profile.id,
+              lottery_type: 'lao', // default
+              binding_code: code,
+              is_active: false
+            });
+
+          if (insertErr) {
+            console.error('Error inserting pending binding code from LINE Bot:', insertErr);
+            await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดทางเทคนิคในการสร้างรหัสผูกกลุ่ม กรุณาลองใหม่อีกครั้ง`);
+          } else {
+            await sendLineReply(replyToken, `✅ สร้างรหัสผูกกลุ่มใหม่สำเร็จแล้วค่ะ!\n\nรหัสผูกกลุ่มของคุณคือ:\n\n${code}\n\nกรุณาคัดลอกรหัสนี้ไปพิมพ์ในห้องแชทกลุ่ม LINE ที่ต้องการเชื่อมโยงด้วยคำสั่ง:\n\n/bind ${code}\n\nเพื่อทำการผูกกลุ่มแชทเข้ากับระบบรับโพยของท่านค่ะ 🤖`);
+          }
+          continue;
+        }
+
         // ─── COMMAND 2: /link หรือ /id หรือ /myid ───
         if (text === '/link' || text === '/id' || text === '/myid') {
           if (groupLink && groupLink.member_permissions?.link === false) {
