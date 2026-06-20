@@ -30,6 +30,47 @@ function formatToThaiBudDate(dateStr: string | null | undefined): string {
   return dateStr;
 }
 
+// Helper: Parse lottery type in Thai or English
+function parseLotteryType(input: string): string | null {
+  const clean = input.trim().toLowerCase();
+  if (clean === 'ไทย' || clean === 'หวยไทย' || clean === 'thai' || clean === 'th') return 'thai';
+  if (clean === 'ลาว' || clean === 'หวยลาว' || clean === 'lao' || clean === 'la') return 'lao';
+  if (clean === 'ฮานอย' || clean === 'หวยฮานอย' || clean === 'hanoi' || clean === 'vn') return 'hanoi';
+  if (clean === 'หุ้น' || clean === 'หวยหุ้น' || clean === 'stock') return 'stock';
+  return null;
+}
+
+// Helper: Get ISO string with Bangkok timezone offset (+07:00) for a given date and time string
+function getBangkokISOString(date: Date, timeStr: string): string {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const parts = formatter.formatToParts(date);
+  const year = parts.find(p => p.type === 'year')?.value;
+  const month = parts.find(p => p.type === 'month')?.value;
+  const day = parts.find(p => p.type === 'day')?.value;
+
+  return `${year}-${month}-${day}T${timeStr}:00+07:00`;
+}
+
+// Helper: Get Bangkok date string (YYYY-MM-DD)
+function getBangkokDateString(date: Date): string {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const parts = formatter.formatToParts(date);
+  const year = parts.find(p => p.type === 'year')?.value;
+  const month = parts.find(p => p.type === 'month')?.value;
+  const day = parts.find(p => p.type === 'day')?.value;
+  return `${year}-${month}-${day}`;
+}
+
 // Helper: Get round display date in Buddhist Era (using close_time/end date if available, otherwise round_date)
 function getRoundDisplayDate(round: any, useSlash = false): string {
   if (!round) return '';
@@ -2476,6 +2517,7 @@ serve(async (req) => {
             text.startsWith('/help') || text.startsWith('/คำสั่ง') ||
             text.startsWith('/แจ้งผล') ||
             text.startsWith('/กำไร') ||
+            text.startsWith('/สร้าง') ||
             text === '/เปิด' || text === '/ปิด' || text === '/เริ่มขาย' ||
             text.toLowerCase() === 'y' || text === 'ยืนยัน';
 
@@ -2515,7 +2557,7 @@ serve(async (req) => {
             let memberProfileName = '';
 
             if (!manager && !isStaff) {
-              const isOpenCloseCommand = text === '/เปิด' || text === '/ปิด' || text === '/เริ่มขาย';
+              const isOpenCloseCommand = text === '/เปิด' || text === '/ปิด' || text === '/เริ่มขาย' || text.startsWith('/สร้าง');
               if (isTotalCommand || isSummaryCommand || isHelpCommand || isOpenCloseCommand || isReportCommand) {
                 // Check member permissions toggles
                 const memberPerms = groupLink.member_permissions || {};
@@ -2559,7 +2601,13 @@ serve(async (req) => {
                 }
 
                 if (isOpenCloseCommand || isReportCommand) {
-                  await sendLineReply(replyToken, isOpenCloseCommand ? `❌ สมาชิกไม่มีสิทธิ์ปิดรับหรือเปิดรับได้` : `❌ สมาชิกไม่มีสิทธิ์ใช้งานคำสั่งนี้`);
+                  let replyMsg = `❌ สมาชิกไม่มีสิทธิ์ใช้งานคำสั่งนี้`;
+                  if (text.startsWith('/สร้าง')) {
+                    replyMsg = `❌ สมาชิกไม่มีสิทธิ์สร้างงวดหวยได้`;
+                  } else if (text === '/เปิด' || text === '/ปิด' || text === '/เริ่มขาย') {
+                    replyMsg = `❌ สมาชิกไม่มีสิทธิ์ปิดรับหรือเปิดรับได้`;
+                  }
+                  await sendLineReply(replyToken, replyMsg);
                   continue;
                 }
 
@@ -3002,6 +3050,188 @@ serve(async (req) => {
               };
 
               await sendLineReply(replyToken, flexMessage);
+              continue;
+            }
+
+            // ─── COMMAND: /สร้าง (Create Round) ───
+            if (text.startsWith('/สร้าง')) {
+              if (showOwnOnly) {
+                await sendLineReply(replyToken, `❌ สมาชิกไม่มีสิทธิ์สร้างงวดหวยได้`);
+                continue;
+              }
+
+              const parts = text.split(/\s+/);
+              if (parts.length < 2) {
+                await sendLineReply(replyToken, `❌ กรุณาระบุประเภทหวย เช่น /สร้าง ไทย หรือ /สร้าง ลาว`);
+                continue;
+              }
+
+              const typeInput = parts[1];
+              const targetType = parseLotteryType(typeInput);
+              if (!targetType) {
+                await sendLineReply(replyToken, `❌ ไม่พบประเภทหวย "${typeInput}" (ประเภทที่รองรับ: ไทย, ลาว, ฮานอย, หุ้น)`);
+                continue;
+              }
+
+              // Check if there is an open round that hasn't been announced yet
+              const { data: existingRound } = await supabase
+                .from('lottery_rounds')
+                .select('id, round_date')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', targetType)
+                .eq('is_result_announced', false)
+                .maybeSingle();
+
+              if (existingRound) {
+                await sendLineReply(
+                  replyToken, 
+                  `❌ ไม่สามารถสร้างงวดใหม่ได้ เนื่องจากมีงวด ${targetType.toUpperCase()} ที่ยังไม่ได้ประกาศผลค้างอยู่ในระบบ (งวดวันที่ ${formatToThaiBudDate(existingRound.round_date)})`
+                );
+                continue;
+              }
+
+              // Constants for default settings
+              const DEFAULT_LIMITS_BY_TYPE: Record<string, Record<string, number>> = {
+                thai: {
+                  run_top: 5000,
+                  run_bottom: 5000,
+                  pak_top: 3000,
+                  pak_bottom: 3000,
+                  '2_top': 1000,
+                  '2_front': 1000,
+                  '2_center': 1000,
+                  '2_run': 1000,
+                  '2_bottom': 1000,
+                  '3_top': 500,
+                  '3_tod': 1000,
+                  '3_bottom': 1000,
+                  '4_float': 1000,
+                  '5_float': 1000,
+                },
+                lao: {
+                  '4_set': 1,
+                  '3_set': 1,
+                  run_top: 5000,
+                  run_bottom: 5000,
+                  pak_top: 3000,
+                  pak_bottom: 3000,
+                  '2_top': 1000,
+                  '2_front': 1000,
+                  '2_bottom': 1000,
+                  '2_center': 1000,
+                  '2_run': 1000,
+                  '3_top': 120,
+                  '3_tod': 1000,
+                  '4_float': 1000,
+                  '5_float': 1000,
+                },
+                hanoi: {
+                  '4_set': 1,
+                  '3_set': 2,
+                  run_top: 5000,
+                  run_bottom: 5000,
+                  pak_top: 5000,
+                  pak_bottom: 5000,
+                  '2_top': 1000,
+                  '2_front': 1000,
+                  '2_bottom': 1000,
+                  '2_center': 1000,
+                  '2_run': 1000,
+                  '3_top': 500,
+                  '3_tod': 500,
+                  '4_float': 200,
+                  '5_float': 100,
+                },
+                stock: {
+                  '2_top': 1000,
+                  '2_bottom': 1000,
+                }
+              };
+
+              const DEFAULT_SET_PRICES_BY_TYPE: Record<string, Record<string, number>> = {
+                lao: {
+                  '4_set': 120,
+                  '3_set': 120,
+                },
+                hanoi: {
+                  '4_set': 120,
+                  '3_set': 120,
+                }
+              };
+
+              const today = new Date();
+              const openTimeStr = targetType === 'thai' || targetType === 'lao' ? '06:00' : '08:00';
+              let closeTimeStr = '20:00';
+              if (targetType === 'thai') closeTimeStr = '14:05';
+              else if (targetType === 'lao') closeTimeStr = '20:15';
+
+              const roundDate = getBangkokDateString(today);
+              const openTime = getBangkokISOString(today, openTimeStr);
+              const closeTime = getBangkokISOString(today, closeTimeStr);
+
+              const deleteBeforeMinutes = targetType === 'thai' || targetType === 'lao' ? 30 : 1;
+              const deleteAfterSubmitMinutes = targetType === 'thai' || targetType === 'lao' ? 120 : 0;
+              const notifyCloseToGroups = targetType === 'lao';
+
+              const lotteryNames: Record<string, string> = {
+                thai: 'หวยไทย',
+                lao: 'หวยลาว',
+                hanoi: 'หวยฮานอย',
+                stock: 'หวยหุ้น'
+              };
+              const lotteryName = lotteryNames[targetType] || targetType;
+              const defaultSetPrices = DEFAULT_SET_PRICES_BY_TYPE[targetType] || {};
+
+              // Insert round
+              const { data: round, error: roundError } = await supabase
+                .from('lottery_rounds')
+                .insert({
+                  dealer_id: dealerId,
+                  lottery_type: targetType,
+                  lottery_name: lotteryName,
+                  round_date: roundDate,
+                  open_time: openTime,
+                  close_time: closeTime,
+                  delete_before_minutes: deleteBeforeMinutes,
+                  delete_after_submit_minutes: deleteAfterSubmitMinutes,
+                  currency_symbol: '฿',
+                  currency_name: 'บาท',
+                  notify_close_to_groups: notifyCloseToGroups,
+                  is_active: true,
+                  status: 'open',
+                  set_prices: defaultSetPrices
+                })
+                .select()
+                .single();
+
+              if (roundError) {
+                await sendLineReply(replyToken, `❌ ไม่สามารถสร้างงวดได้: ${roundError.message}`);
+                continue;
+              }
+
+              // Create type limits
+              const defaultLimits = DEFAULT_LIMITS_BY_TYPE[targetType] || {};
+              const typeLimitsData = Object.entries(defaultLimits).map(([betType, maxAmount]) => ({
+                round_id: round.id,
+                bet_type: betType,
+                max_per_number: maxAmount,
+                payout_rate: 0
+              }));
+
+              const { error: limitsError } = await supabase
+                .from('type_limits')
+                .insert(typeLimitsData);
+
+              if (limitsError) {
+                await sendLineReply(replyToken, `⚠️ สร้างงวดสำเร็จ แต่เกิดข้อผิดพลาดในการสร้างวงเงินอั้น: ${limitsError.message}`);
+                continue;
+              }
+
+              const formattedThaiDate = formatToThaiBudDate(roundDate);
+              await sendLineReply(
+                replyToken, 
+                `✅ สร้างงวดหวย ${lotteryName} เรียบร้อยแล้ว!\n📅 งวดวันที่: ${formattedThaiDate}\n⏰ ปิดรับแทง: ${closeTimeStr}\n✍️ สามารถพิมพ์คำสั่ง /เริ่มขาย เพื่อประกาศเปิดรับแทงไปยังทุกกลุ่มได้ค่ะ`
+              );
               continue;
             }
 
@@ -6278,18 +6508,19 @@ serve(async (req) => {
                 helpText += `5. /สมาชิก [ชื่อ] - ค้นหายอดเงินคงเหลือและข้อมูลสมาชิก\n`;
                 helpText += `6. /ปิด - ปิดรับแทงงวดปัจจุบัน (แจ้งเตือนทุกห้อง)\n`;
                 helpText += `7. /เปิด - เปิดรับแทงงวดที่ปิดอยู่ (ต้องยังไม่ประกาศผล)\n`;
-                helpText += `8. /เริ่มขาย - แจ้งเปิดรับแทงงวดปัจจุบันไปยังทุกกลุ่มไลน์ที่เชื่อมโยง\n\n`;
+                helpText += `8. /เริ่มขาย - แจ้งเปิดรับแทงงวดปัจจุบันไปยังทุกกลุ่มไลน์ที่เชื่อมโยง\n`;
+                helpText += `9. /สร้าง [ประเภทหวย] - สร้างงวดหวยใหม่ตามค่าเริ่มต้น (เช่น /สร้าง ไทย, /สร้าง ลาว)\n\n`;
                 helpText += `💸 คำสั่งจัดการยอดเกิน/ตีออก:\n`;
-                helpText += `9. /ยอดเกิน - แสดงตัวเลขและยอดเงินที่เกินลิมิตอั้นในงวดนี้\n`;
-                helpText += `10. /ตีออก - แสดงสรุปประวัติประวัติและยอดเงินการตีออกทั้งหมดในงวดนี้\n`;
-                helpText += `11. /ตีออก เกิน - สั่งตีออกยอดเกินอั้นทั้งหมดไปยังเจ้ามือปลายทาง (จะมีบอทให้กดยืนยันอีกครั้ง)\n`;
-                helpText += `12. /ตีออก [เลข] [ประเภท] [จำนวน] - สั่งตีออกเลขแบบเจาะจง (เช่น /ตีออก 123 บน 100)\n`;
-                helpText += `13. /เอาคืน - แสดงรายการครั้งที่ตีออกที่สามารถเอาคืนได้\n`;
-                helpText += `14. /เอาคืน [ครั้งที่] - เอาคืนยอดที่ตีออกไปตามครั้งที่ระบุ (เช่น /เอาคืน 3 จะมีบอทให้กดยืนยันอีกครั้ง)\n\n`;
+                helpText += `10. /ยอดเกิน - แสดงตัวเลขและยอดเงินที่เกินลิมิตอั้นในงวดนี้\n`;
+                helpText += `11. /ตีออก - แสดงสรุปประวัติประวัติและยอดเงินการตีออกทั้งหมดในงวดนี้\n`;
+                helpText += `12. /ตีออก เกิน - สั่งตีออกยอดเกินอั้นทั้งหมดไปยังเจ้ามือปลายทาง (จะมีบอทให้กดยืนยันอีกครั้ง)\n`;
+                helpText += `13. /ตีออก [เลข] [ประเภท] [จำนวน] - สั่งตีออกเลขแบบเจาะจง (เช่น /ตีออก 123 บน 100)\n`;
+                helpText += `14. /เอาคืน - แสดงรายการครั้งที่ตีออกที่สามารถเอาคืนได้\n`;
+                helpText += `15. /เอาคืน [ครั้งที่] - เอาคืนยอดที่ตีออกไปตามครั้งที่ระบุ (เช่น /เอาคืน 3 จะมีบอทให้กดยืนยันอีกครั้ง)\n\n`;
                 helpText += `👤 คำสั่งทั่วไปสำหรับสมาชิก:\n`;
-                helpText += `15. /สรุป (พิมพ์โดยสมาชิก) - สรุปยอดและรางวัลเฉพาะของตัวสมาชิกเอง\n`;
-                helpText += `16. /ยอดรวม (พิมพ์โดยสมาชิก) - สรุปยอดแทงทั้งหมดเฉพาะของตัวสมาชิกเอง\n`;
-                helpText += `17. /คำสั่ง หรือ /help - แสดงรายการคำสั่งที่ใช้งานได้`;
+                helpText += `16. /สรุป (พิมพ์โดยสมาชิก) - สรุปยอดและรางวัลเฉพาะของตัวสมาชิกเอง\n`;
+                helpText += `17. /ยอดรวม (พิมพ์โดยสมาชิก) - สรุปยอดแทงทั้งหมดเฉพาะของตัวสมาชิกเอง\n`;
+                helpText += `18. /คำสั่ง หรือ /help - แสดงรายการคำสั่งที่ใช้งานได้`;
               }
 
               await sendLineReply(replyToken, helpText);
