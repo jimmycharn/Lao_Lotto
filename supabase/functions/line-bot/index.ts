@@ -6716,7 +6716,8 @@ serve(async (req) => {
             .from('line_groups')
             .select('*')
             .eq('dealer_id', targetDealerId)
-            .eq('line_group_id', 'pending')
+            .is('is_active', false)
+            .not('binding_code', 'is', null)
             .maybeSingle();
 
           if (pendingCode) {
@@ -6730,7 +6731,7 @@ serve(async (req) => {
           const { error: insertErr } = await supabase
             .from('line_groups')
             .insert({
-              line_group_id: 'pending',
+              line_group_id: 'pending-' + code,
               dealer_id: targetDealerId,
               lottery_type: 'lao', // default
               binding_code: code,

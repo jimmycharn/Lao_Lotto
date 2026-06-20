@@ -235,7 +235,7 @@ export default function DealerLineBotTab({ user, profile }) {
             }
 
             // If there's an active binding code that hasn't been bound yet, set it as activeCode
-            const pending = groups?.find(g => g.line_group_id === 'pending' || !g.line_group_id)
+            const pending = groups?.find(g => (g.line_group_id && g.line_group_id.startsWith('pending')) || !g.line_group_id)
             if (pending) {
                 setActiveCode(pending.binding_code)
             } else {
@@ -283,7 +283,7 @@ export default function DealerLineBotTab({ user, profile }) {
             const { error } = await supabase
                 .from('line_groups')
                 .insert({
-                    line_group_id: 'pending',
+                    line_group_id: 'pending-' + code,
                     dealer_id: user.id,
                     lottery_type: 'lao', // default
                     binding_code: code,
