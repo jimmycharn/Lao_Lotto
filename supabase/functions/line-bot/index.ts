@@ -2503,7 +2503,7 @@ serve(async (req) => {
       }
 
       // Handle Bot Leaving Group/Room (kicked or manually left)
-      if (event.type === 'leave') {
+        if (event.type === 'leave') {
         console.log(`Bot left group/room: ${groupId}`);
         // 1. Deactivate the group link in line_groups
         await supabase
@@ -2580,17 +2580,18 @@ serve(async (req) => {
               .maybeSingle();
 
             const isStaff = profile?.role === 'dealer' || profile?.role === 'superadmin' || profile?.role === 'admin';
+            const isAdminOrDealer = isStaff || (manager && manager.role === 'admin');
 
             const isTotalCommand = text.startsWith('/total') || text.startsWith('/ยอดรวม');
             const isSummaryCommand = text.startsWith('/summary') || text.startsWith('/สรุป');
             const isHelpCommand = text.startsWith('/help') || text.startsWith('/คำสั่ง');
             const isReportCommand = text.startsWith('/แจ้งผล');
+            const isOpenCloseCommand = text === '/เปิด' || text === '/ปิด' || text === '/เริ่มขาย' || text.startsWith('/สร้าง');
             let showOwnOnly = false;
             let targetUserId: string | null = null;
             let memberProfileName = '';
 
             if (!manager && !isStaff) {
-              const isOpenCloseCommand = text === '/เปิด' || text === '/ปิด' || text === '/เริ่มขาย' || text.startsWith('/สร้าง');
               if (isTotalCommand || isSummaryCommand || isHelpCommand || isOpenCloseCommand || isReportCommand) {
                 // Check member permissions toggles
                 const memberPerms = groupLink.member_permissions || {};
@@ -2651,9 +2652,13 @@ serve(async (req) => {
                 // Not a manager/staff and not a total/summary command, ignore silently
                 continue;
               }
+            } else if (manager && !isAdminOrDealer && (isOpenCloseCommand || isReportCommand)) {
+              // The sender is a manager but NOT an admin, and they are executing an admin command
+              await sendLineReply(replyToken, `❌ เฉพาะแอดมินหรือเจ้ามือหลักเท่านั้นที่มีสิทธิ์ใช้งานคำสั่งนี้`);
+              continue;
             }
 
-            const permissions = isStaff
+            const permissions = isAdminOrDealer
               ? { can_view_stats: true, can_view_total: true, can_view_excess: true, can_transfer: true }
               : (manager?.permissions || {});
 
@@ -6681,14 +6686,28 @@ serve(async (req) => {
             .eq('line_user_id', userId)
             .maybeSingle();
 
-          if (profileErr || !profile) {
-            await sendLineReply(replyToken, `❌ คุณยังไม่ได้เชื่อมต่อบัญชี LINE เข้ากับระบบ หรือไม่พบบัญชีดีลเลอร์ของคุณค่ะ\n(กรุณานำ User ID ที่ได้จากคำสั่ง /link ไปกรอกเชื่อมต่อในหน้าโปรไฟล์บนเว็บก่อนใช้งานค่ะ)`);
-            continue;
+          const isStaffProfile = !profileErr && profile && (profile.role === 'dealer' || profile.role === 'superadmin' || profile.role === 'admin');
+          let targetDealerId: string | null = null;
+
+          if (isStaffProfile && profile) {
+            targetDealerId = profile.id;
+          } else {
+            // Check if user is an active admin manager for any dealer
+            const { data: adminManager } = await supabase
+              .from('line_managers')
+              .select('dealer_id')
+              .eq('line_user_id', userId)
+              .eq('role', 'admin')
+              .eq('is_active', true)
+              .maybeSingle();
+
+            if (adminManager) {
+              targetDealerId = adminManager.dealer_id;
+            }
           }
 
-          // Check role: must be dealer, admin, or superadmin
-          if (profile.role !== 'dealer' && profile.role !== 'superadmin' && profile.role !== 'admin') {
-            await sendLineReply(replyToken, `❌ ขออภัยค่ะ คำสั่งนี้สามารถใช้งานได้เฉพาะบัญชีดีลเลอร์หรือแอดมินเท่านั้นค่ะ`);
+          if (!targetDealerId) {
+            await sendLineReply(replyToken, `❌ ขออภัยค่ะ คำสั่งนี้สามารถใช้งานได้เฉพาะบัญชีดีลเลอร์ แอดมิน หรือผู้ช่วยแอดมินกลุ่มของดีลเลอร์เท่านั้นค่ะ\n(กรุณานำ User ID ที่ได้จากคำสั่ง /link ไปกรอกเชื่อมต่อในระบบ หรือแจ้งเจ้ามือเพื่อเพิ่มชื่อท่านในบทบาทแอดมินของบอทนะคะ)`);
             continue;
           }
 
@@ -6696,7 +6715,7 @@ serve(async (req) => {
           const { data: pendingCode, error: pendingErr } = await supabase
             .from('line_groups')
             .select('*')
-            .eq('dealer_id', profile.id)
+            .eq('dealer_id', targetDealerId)
             .eq('line_group_id', 'pending')
             .maybeSingle();
 
@@ -6712,7 +6731,7 @@ serve(async (req) => {
             .from('line_groups')
             .insert({
               line_group_id: 'pending',
-              dealer_id: profile.id,
+              dealer_id: targetDealerId,
               lottery_type: 'lao', // default
               binding_code: code,
               is_active: false

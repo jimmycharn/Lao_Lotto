@@ -27,6 +27,7 @@ export default function DealerLineBotTab({ user, profile }) {
     const [managers, setManagers] = useState([])
     const [managerLineId, setManagerLineId] = useState('')
     const [managerNickname, setManagerNickname] = useState('')
+    const [managerRole, setManagerRole] = useState('manager')
     const [managerPermissions, setManagerPermissions] = useState({
         can_view_stats: false,
         can_view_total: false,
@@ -134,19 +135,25 @@ export default function DealerLineBotTab({ user, profile }) {
             return
         }
         try {
+            const finalPermissions = managerRole === 'admin'
+                ? { can_view_stats: true, can_view_total: true, can_view_excess: true, can_transfer: true }
+                : managerPermissions;
+
             const { error } = await supabase
                 .from('line_managers')
                 .insert({
                     dealer_id: user.id,
                     line_user_id: managerLineId.trim(),
                     nickname: managerNickname.trim(),
-                    permissions: managerPermissions,
+                    role: managerRole,
+                    permissions: finalPermissions,
                     is_active: true
                 })
             if (error) throw error
             toast.success('เพิ่มผู้จัดการเรียบร้อยแล้ว')
             setManagerLineId('')
             setManagerNickname('')
+            setManagerRole('manager')
             setManagerPermissions({
                 can_view_stats: false,
                 can_view_total: false,
@@ -880,37 +887,67 @@ export default function DealerLineBotTab({ user, profile }) {
                         </div>
                     </div>
 
-                    <div style={{ marginBottom: '1rem' }}>
+                    <div style={{ marginBottom: '1.25rem' }}>
+                        <span style={{ display: 'block', fontSize: '0.8rem', marginBottom: '0.5rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>บทบาท (Role):</span>
+                        <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                <input
+                                    type="radio"
+                                    name="managerRole"
+                                    value="manager"
+                                    checked={managerRole === 'manager'}
+                                    onChange={() => setManagerRole('manager')}
+                                />
+                                ผู้จัดการ (Manager)
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                <input
+                                    type="radio"
+                                    name="managerRole"
+                                    value="admin"
+                                    checked={managerRole === 'admin'}
+                                    onChange={() => setManagerRole('admin')}
+                                />
+                                แอดมิน (Admin) - มีสิทธิ์สั่งการทุกคำสั่ง (สร้าง/เปิด/ปิดงวด, แจ้งผลรางวัล)
+                            </label>
+                        </div>
+                    </div>
+
+                    <div style={{ marginBottom: '1.25rem' }}>
                         <span style={{ display: 'block', fontSize: '0.8rem', marginBottom: '0.5rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>กำหนดสิทธิ์การสั่งการ (Permissions):</span>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: managerRole === 'admin' ? 'not-allowed' : 'pointer', opacity: managerRole === 'admin' ? 0.7 : 1 }}>
                                 <input
                                     type="checkbox"
-                                    checked={managerPermissions.can_view_stats}
+                                    checked={managerRole === 'admin' ? true : managerPermissions.can_view_stats}
+                                    disabled={managerRole === 'admin'}
                                     onChange={e => setManagerPermissions(prev => ({ ...prev, can_view_stats: e.target.checked }))}
                                 />
                                 ดูเครดิต/ยอดเงินสมาชิกรายคน (/สมาชิก)
                             </label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: managerRole === 'admin' ? 'not-allowed' : 'pointer', opacity: managerRole === 'admin' ? 0.7 : 1 }}>
                                 <input
                                     type="checkbox"
-                                    checked={managerPermissions.can_view_total}
+                                    checked={managerRole === 'admin' ? true : managerPermissions.can_view_total}
+                                    disabled={managerRole === 'admin'}
                                     onChange={e => setManagerPermissions(prev => ({ ...prev, can_view_total: e.target.checked }))}
                                 />
                                 ดูยอดรวมทั้งหมดในงวด (/ยอดรวม)
                             </label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: managerRole === 'admin' ? 'not-allowed' : 'pointer', opacity: managerRole === 'admin' ? 0.7 : 1 }}>
                                 <input
                                     type="checkbox"
-                                    checked={managerPermissions.can_view_excess}
+                                    checked={managerRole === 'admin' ? true : managerPermissions.can_view_excess}
+                                    disabled={managerRole === 'admin'}
                                     onChange={e => setManagerPermissions(prev => ({ ...prev, can_view_excess: e.target.checked }))}
                                 />
                                 ดูยอดเกินอั้น (/ยอดเกิน)
                             </label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: managerRole === 'admin' ? 'not-allowed' : 'pointer', opacity: managerRole === 'admin' ? 0.7 : 1 }}>
                                 <input
                                     type="checkbox"
-                                    checked={managerPermissions.can_transfer}
+                                    checked={managerRole === 'admin' ? true : managerPermissions.can_transfer}
+                                    disabled={managerRole === 'admin'}
                                     onChange={e => setManagerPermissions(prev => ({ ...prev, can_transfer: e.target.checked }))}
                                 />
                                 สั่งตีออกยอดเกิน (/ตีออก)
@@ -919,7 +956,7 @@ export default function DealerLineBotTab({ user, profile }) {
                     </div>
 
                     <button type="submit" className="btn btn-primary btn-sm" style={{ padding: '0.4rem 1.5rem' }}>
-                        <FiPlus /> เพิ่มผู้จัดการ
+                        <FiPlus /> เพิ่มผู้จัดการ/แอดมิน
                     </button>
                 </form>
 
@@ -935,6 +972,7 @@ export default function DealerLineBotTab({ user, profile }) {
                                 <tr style={{ borderBottom: '2px solid var(--color-border)' }}>
                                     <th style={{ textAlign: 'left', padding: '0.5rem' }}>ชื่อเรียก / นามแฝง</th>
                                     <th style={{ textAlign: 'left', padding: '0.5rem' }}>LINE User ID</th>
+                                    <th style={{ textAlign: 'left', padding: '0.5rem', width: '120px' }}>บทบาท</th>
                                     <th style={{ textAlign: 'left', padding: '0.5rem' }}>สิทธิ์การใช้งาน</th>
                                     <th style={{ textAlign: 'center', padding: '0.5rem', width: '100px' }}>สถานะ</th>
                                     <th style={{ textAlign: 'center', padding: '0.5rem', width: '80px' }}>จัดการ</th>
@@ -946,12 +984,31 @@ export default function DealerLineBotTab({ user, profile }) {
                                         <td style={{ padding: '0.5rem', fontWeight: 600 }}>{mgr.nickname}</td>
                                         <td style={{ padding: '0.5rem' }}><code style={{ fontSize: '0.75rem' }}>{mgr.line_user_id}</code></td>
                                         <td style={{ padding: '0.5rem' }}>
+                                            <span style={{
+                                                background: mgr.role === 'admin' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(54, 162, 235, 0.15)',
+                                                color: mgr.role === 'admin' ? '#ef4444' : '#36a2eb',
+                                                padding: '0.2rem 0.5rem',
+                                                borderRadius: '4px',
+                                                fontSize: '0.75rem',
+                                                fontWeight: 600,
+                                                display: 'inline-block'
+                                            }}>
+                                                {mgr.role === 'admin' ? 'แอดมิน' : 'ผู้จัดการ'}
+                                            </span>
+                                        </td>
+                                        <td style={{ padding: '0.5rem' }}>
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
-                                                {mgr.permissions?.can_view_stats && <span style={{ background: 'rgba(212,175,55,0.1)', color: 'var(--color-primary)', padding: '0.1rem 0.3rem', borderRadius: '3px', fontSize: '0.7rem' }}>ดูสมาชิก</span>}
-                                                {mgr.permissions?.can_view_total && <span style={{ background: 'rgba(54,162,235,0.1)', color: '#36a2eb', padding: '0.1rem 0.3rem', borderRadius: '3px', fontSize: '0.7rem' }}>ดูยอดรวม</span>}
-                                                {mgr.permissions?.can_view_excess && <span style={{ background: 'rgba(255,159,64,0.1)', color: '#ff9f40', padding: '0.1rem 0.3rem', borderRadius: '3px', fontSize: '0.7rem' }}>ดูยอดเกิน</span>}
-                                                {mgr.permissions?.can_transfer && <span style={{ background: 'rgba(153,102,255,0.1)', color: '#9966ff', padding: '0.1rem 0.3rem', borderRadius: '3px', fontSize: '0.7rem' }}>ตีออก</span>}
-                                                {!mgr.permissions?.can_view_stats && !mgr.permissions?.can_view_total && !mgr.permissions?.can_view_excess && !mgr.permissions?.can_transfer && <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>ไม่มีสิทธิ์</span>}
+                                                {mgr.role === 'admin' ? (
+                                                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', fontStyle: 'italic' }}>มีสิทธิ์ทุกอย่าง (แอดมิน)</span>
+                                                ) : (
+                                                    <>
+                                                        {mgr.permissions?.can_view_stats && <span style={{ background: 'rgba(212,175,55,0.1)', color: 'var(--color-primary)', padding: '0.1rem 0.3rem', borderRadius: '3px', fontSize: '0.7rem' }}>ดูสมาชิก</span>}
+                                                        {mgr.permissions?.can_view_total && <span style={{ background: 'rgba(54,162,235,0.1)', color: '#36a2eb', padding: '0.1rem 0.3rem', borderRadius: '3px', fontSize: '0.7rem' }}>ดูยอดรวม</span>}
+                                                        {mgr.permissions?.can_view_excess && <span style={{ background: 'rgba(255,159,64,0.1)', color: '#ff9f40', padding: '0.1rem 0.3rem', borderRadius: '3px', fontSize: '0.7rem' }}>ดูยอดเกิน</span>}
+                                                        {mgr.permissions?.can_transfer && <span style={{ background: 'rgba(153,102,255,0.1)', color: '#9966ff', padding: '0.1rem 0.3rem', borderRadius: '3px', fontSize: '0.7rem' }}>ตีออก</span>}
+                                                        {!mgr.permissions?.can_view_stats && !mgr.permissions?.can_view_total && !mgr.permissions?.can_view_excess && !mgr.permissions?.can_transfer && <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>ไม่มีสิทธิ์</span>}
+                                                    </>
+                                                )}
                                             </div>
                                         </td>
                                         <td style={{ padding: '0.5rem', textAlign: 'center' }}>
