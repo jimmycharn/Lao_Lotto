@@ -1350,6 +1350,72 @@ export default function DealerLineBotTab({ user, profile }) {
                                 <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
                                 <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
                             </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)', background: 'rgba(255,255,255,0.01)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /สร้าง [ประเภทหวย]
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>สร้างงวดหวยใหม่สำหรับประเภทที่กำหนด (ไทย, ลาว, ฮานอย, หุ้น)</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)', background: 'rgba(255,255,255,0.01)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /เริ่มขาย
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>ประกาศเปิดรับแทงงวดล่าสุดของกลุ่ม พร้อมส่งข้อความแจ้งสมาชิก</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)', background: 'rgba(255,255,255,0.01)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /กำไร [m/y/ทั้งหมด]
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>รายงานสรุปกำไร/ขาดทุน แยกตามช่วงเวลา (m=เดือนนี้, y=ปีนี้, ทั้งหมด)</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                    <span style={{ color: 'var(--color-primary)', fontSize: '0.75rem', background: 'rgba(212,175,55,0.1)', padding: '0.15rem 0.35rem', borderRadius: '4px', fontWeight: 600 }}>
+                                        🔑 สิทธิ์ดูยอดรวม
+                                    </span>
+                                </td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                            </tr>
+
+                            {/* DM / Group Binding Commands */}
+                            <tr style={{ borderTop: '2px solid rgba(128,128,128,0.2)' }}>
+                                <td colSpan={5} style={{ padding: '0.6rem 0.75rem', fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'rgba(255,255,255,0.02)' }}>
+                                    📩 คำสั่งผูกกลุ่ม (แชทส่วนตัว / ในกลุ่ม)
+                                </td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)', background: 'rgba(255,255,255,0.01)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /ขอรหัส หรือ /bindcode
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>ขอรหัสผูกกลุ่มใหม่ (ใช้ในแชทส่วนตัวกับบอทเท่านั้น) เพื่อนำไปผูกกลุ่ม LINE ด้วยคำสั่ง /bind</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)', background: 'rgba(255,255,255,0.01)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /bind [รหัสผูกกลุ่ม]
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>ผูกกลุ่ม LINE เข้ากับระบบรับโพยด้วยรหัสที่ได้จาก /ขอรหัส หรือจากหน้าเว็บ (ใช้ในกลุ่มเท่านั้น)</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
