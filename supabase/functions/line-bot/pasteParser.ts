@@ -611,25 +611,25 @@ function extractAmountFromLine(line: string): AmountInfo | null {
     s = s.replace(/(\d),(\d{3})/g, '$1$2');
 
     let mode: string | null = null;
-    const floatBotSuffix = s.match(/\s+(วิ่งล่าง|ลอยล่าง)\s*$/);
+    const floatBotSuffix = s.match(/\s*(วิ่งล่าง|ลอยล่าง)\s*$/);
     if (floatBotSuffix) {
         mode = 'float_bottom';
         s = s.slice(0, floatBotSuffix.index).trim();
     }
     if (!mode) {
-        const floatTopSuffix = s.match(/\s+(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด)\s*$/);
+        const floatTopSuffix = s.match(/\s*(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?)\s*$/);
         if (floatTopSuffix) {
             mode = 'float_top';
             s = s.slice(0, floatTopSuffix.index).trim();
         }
     }
     if (!mode) {
-        const bothSuffix = s.match(/\s+(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล\.?|ล[+\-]?บ\.?|บล\.?|ลบ\.?)\s*$/);
+        const bothSuffix = s.match(/\s*(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล\.?|ล[+\-]?บ\.?|บล\.?|ลบ\.?)\s*$/);
         if (bothSuffix) {
             mode = 'both';
             s = s.slice(0, bothSuffix.index).trim();
         } else {
-            const singleCtx = s.match(/\s+(บน|บ\.?|ล่าง|ล\.?)\s*$/);
+            const singleCtx = s.match(/\s*(บน|บ\.?|ล่าง|ล\.?)\s*$/);
             if (singleCtx) {
                 const modeStr = singleCtx[1].replace('.', '');
                 mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom';
@@ -656,6 +656,17 @@ function extractAmountFromLine(line: string): AmountInfo | null {
             let mode = 'both';
             if (/^(บน|บ)$/.test(ctxStr)) mode = 'top';
             else if (/^(ล่าง|ล)$/.test(ctxStr)) mode = 'bottom';
+            return { amountStr: amt, mode, number: null };
+        }
+    }
+
+    const floatPrefixRe = /^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\.?\s*(\d.+)$/;
+    const floatPrefixMatch = s.match(floatPrefixRe);
+    if (floatPrefixMatch) {
+        const kw = floatPrefixMatch[1];
+        const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
+        const amt = floatPrefixMatch[2].trim();
+        if (isAmountPattern(amt) || /^\d+$/.test(amt)) {
             return { amountStr: amt, mode, number: null };
         }
     }
@@ -812,19 +823,23 @@ function parseContextLine(line: string): string | null {
     if (/^\d*ตัว(ล่าง|ล)$/.test(bracketCleaned)) return 'bottom';
     if (/^\d*ตัว(บน|บ)$/.test(bracketCleaned)) return 'top';
     if (/^\d*ตัว(วิ่งล่าง|ลอยล่าง)$/.test(bracketCleaned)) return 'float_bottom';
-    if (/^\d*ตัว(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|มี)$/.test(bracketCleaned)) return 'float_top';
+    if (/^\d*ตัว(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|มี)$/.test(bracketCleaned)) return 'float_top';
 
     const cleanedFloat = withPunct.replace(/[\s.+\-]/g, '');
     if (/^(วิ่งบน|ลอยบน|วิ่งบ|ลอยบ|ลอยทั่วไป)$/.test(cleanedFloat)) return 'float_top';
     if (/^(วิ่งล่าง|ลอยล่าง|วิ่งล|ลอยล)$/.test(cleanedFloat)) return 'float_bottom';
-    if (/^(วิ่ง|ลอย|โต๊ด)$/.test(cleanedFloat)) return 'float_top';
-    if (/^2ตัว(มี|วิ่ง|ลอย|โต๊ด)$/.test(cleanedFloat)) return 'float_top';
+    if (/^(วิ่ง|ลอย|โต๊ด|โตด|ต\.?)$/.test(cleanedFloat)) return 'float_top';
+    if (/^2ตัว(มี|วิ่ง|ลอย|โต๊ด|โตด|ต\.?)$/.test(cleanedFloat)) return 'float_top';
 
     if (isBothContext(withPunct)) return 'both';
 
     const cleaned = withPunct.replace(/[^ก-๛a-zA-Z0-9]/g, '').trim();
-    if (/^(บน|บ)$/.test(cleaned)) return 'top';
-    if (/^(ล่าง|ล)$/.test(cleaned)) return 'bottom';
+    if (/^(บน|บ)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(cleaned)) return 'top';
+    if (/^(ล่าง|ล)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(cleaned)) return 'bottom';
+
+    const testStr = cleaned.replace(/^\d+ตัว/, '');
+    if (/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(testStr)) return 'float_top';
+    if (/^(วิ่งล่าง|ลอยล่าง)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(testStr)) return 'float_bottom';
 
     if (/^บ\.?$/.test(withPunct)) return 'top';
     if (/^ล\.?$/.test(withPunct)) return 'bottom';
@@ -884,7 +899,7 @@ function refineFloatMode(mode: string, text: string): string {
 function extractInlineContext(line: string): InlineContextInfo {
     let s = line.trim();
 
-    const floatPrefixTop = s.match(/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป)\.?\s*(\d.*)$/);
+    const floatPrefixTop = s.match(/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\.?\s*(\d.*)$/);
     if (floatPrefixTop) {
         const kw = floatPrefixTop[1];
         let mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
@@ -898,20 +913,20 @@ function extractInlineContext(line: string): InlineContextInfo {
         return { cleaned: floatPrefixBot[2].trim(), mode };
     }
 
-    const floatSuffixBot = s.match(/^(.+?)\s+(วิ่งล่าง|ลอยล่าง)\s*$/);
+    const floatSuffixBot = s.match(/^(.+?)\s*(วิ่งล่าง|ลอยล่าง)\s*$/);
     if (floatSuffixBot) {
         let mode = 'float_bottom';
         mode = refineFloatMode(mode, s);
         return { cleaned: floatSuffixBot[1].trim(), mode };
     }
-    const floatSuffix = s.match(/^(.+?)\s+(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป)\s*$/);
+    const floatSuffix = s.match(/^(.+?)\s*(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\s*$/);
     if (floatSuffix) {
         let mode = 'float_top';
         mode = refineFloatMode(mode, s);
         return { cleaned: floatSuffix[1].trim(), mode };
     }
 
-    const floatMiddle = s.match(/^(\d+)\s+(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป|มี)\s+(\d[\d*=\-+]*)$/);
+    const floatMiddle = s.match(/^(\d+)\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|มี)\s+(\d[\d*=\-+]*)$/);
     if (floatMiddle) {
         const kw = floatMiddle[2];
         let mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
@@ -932,12 +947,12 @@ function extractInlineContext(line: string): InlineContextInfo {
         return { cleaned: rest.trim(), mode };
     }
 
-    const bothSuffix = s.match(/^(.+?)\s+(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล|ล[+\-]?บ|บล|ลบ)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/);
+    const bothSuffix = s.match(/^(.+?)\s*(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล|ล[+\-]?บ|บล|ลบ)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/);
     if (bothSuffix) {
         return { cleaned: bothSuffix[1].trim(), mode: 'both' };
     }
 
-    const suffixMatch = s.match(/^(.+?)\s+(บน|บ|ล่าง|ล)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/);
+    const suffixMatch = s.match(/^(.+?)\s*(บน|บ|ล่าง|ล)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/);
     if (suffixMatch) {
         const rest = suffixMatch[1];
         const modeStr = suffixMatch[2].replace('.', '');
@@ -981,6 +996,13 @@ function extractInlineContext(line: string): InlineContextInfo {
         const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom';
         return { cleaned: `${eqSingleInline[1]}=${eqSingleInline[3].trim()}`, mode };
     }
+    // --- Inline float context after =: "25= วิ่งบน 20", "25=โต๊ด20", "25=ต20" ---
+    const eqFloatInline = s.match(/^(\d+)\s*=\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\.?\s*(\d.+)$/);
+    if (eqFloatInline) {
+        const kw = eqFloatInline[2];
+        const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
+        return { cleaned: `${eqFloatInline[1]}=${eqFloatInline[3].trim()}`, mode };
+    }
 
     // --- "num context=amt" pattern: "25 ล่าง=20*20", "25 ล่าง =20*20", "25ล่าง=20*20" ---
     const numCtxEqBoth = s.match(/^(\d+)\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*=\s*(.+)$/);
@@ -1007,7 +1029,7 @@ function extractInlineContext(line: string): InlineContextInfo {
         return { cleaned: `${noSpaceSingle[1]} ${noSpaceSingle[3].trim()}`, mode };
     }
 
-    const noSpaceFloat = s.match(/^(\d+)(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป|มี)\.?([=\d].*)$/);
+    const noSpaceFloat = s.match(/^(\d+)(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|มี)\.?([=\d].*)$/);
     if (noSpaceFloat) {
         const kw = noSpaceFloat[2];
         const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
