@@ -858,33 +858,55 @@ interface InlineContextInfo {
     mode: string | null;
 }
 
+function refineFloatMode(mode: string, text: string): string {
+    const lower = text.toLowerCase();
+    if (/บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ/.test(lower)) {
+        return 'both';
+    }
+    if (/ล่าง|ล\.?(?![ก-๛a-zA-Z])/.test(lower)) {
+        return 'float_bottom';
+    }
+    if (/บน|บ\.?(?![ก-๛a-zA-Z])/.test(lower)) {
+        return 'float_top';
+    }
+    return mode;
+}
+
 function extractInlineContext(line: string): InlineContextInfo {
     let s = line.trim();
 
     const floatPrefixTop = s.match(/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป)\.?\s*(\d.*)$/);
     if (floatPrefixTop) {
         const kw = floatPrefixTop[1];
-        const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
+        let mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
+        mode = refineFloatMode(mode, s);
         return { cleaned: floatPrefixTop[2].trim(), mode };
     }
     const floatPrefixBot = s.match(/^(วิ่งล่าง|ลอยล่าง)\.?\s*(\d.*)$/);
     if (floatPrefixBot) {
-        return { cleaned: floatPrefixBot[2].trim(), mode: 'float_bottom' };
+        let mode = 'float_bottom';
+        mode = refineFloatMode(mode, s);
+        return { cleaned: floatPrefixBot[2].trim(), mode };
     }
 
     const floatSuffixBot = s.match(/^(.+?)\s+(วิ่งล่าง|ลอยล่าง)\s*$/);
     if (floatSuffixBot) {
-        return { cleaned: floatSuffixBot[1].trim(), mode: 'float_bottom' };
+        let mode = 'float_bottom';
+        mode = refineFloatMode(mode, s);
+        return { cleaned: floatSuffixBot[1].trim(), mode };
     }
     const floatSuffix = s.match(/^(.+?)\s+(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป)\s*$/);
     if (floatSuffix) {
-        return { cleaned: floatSuffix[1].trim(), mode: 'float_top' };
+        let mode = 'float_top';
+        mode = refineFloatMode(mode, s);
+        return { cleaned: floatSuffix[1].trim(), mode };
     }
 
     const floatMiddle = s.match(/^(\d+)\s+(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป|มี)\s+(\d[\d*=\-+]*)$/);
     if (floatMiddle) {
         const kw = floatMiddle[2];
-        const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
+        let mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
+        mode = refineFloatMode(mode, s);
         return { cleaned: `${floatMiddle[1]}=${floatMiddle[3].trim()}`, mode };
     }
 
