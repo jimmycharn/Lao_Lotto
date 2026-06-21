@@ -6913,7 +6913,7 @@ serve(async (req) => {
             .insert({
               line_group_id: 'pending-' + code,
               dealer_id: targetDealerId,
-              lottery_type: 'lao', // default
+              lottery_type: 'thai', // default
               binding_code: code,
               is_active: false
             });

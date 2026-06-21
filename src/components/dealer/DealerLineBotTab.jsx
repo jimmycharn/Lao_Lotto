@@ -287,7 +287,7 @@ export default function DealerLineBotTab({ user, profile }) {
                 .insert({
                     line_group_id: 'pending-' + code,
                     dealer_id: user.id,
-                    lottery_type: 'lao', // default
+                    lottery_type: 'thai', // default
                     binding_code: code,
                     is_active: false
                 })
@@ -741,9 +741,20 @@ export default function DealerLineBotTab({ user, profile }) {
                                                             {isExpanded ? '▲ ซ่อนสมาชิก' : '▼ ดูสมาชิก'}
                                                         </span>
                                                     </div>
-                                                    <code style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                        {group.line_group_id}
-                                                    </code>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.15rem' }}>
+                                                        <code style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                            {group.line_group_id}
+                                                        </code>
+                                                        {group.line_group_id?.startsWith('pending-') && group.binding_code && (
+                                                            <span 
+                                                                onClick={e => e.stopPropagation()} 
+                                                                title="คัดลอกคำสั่งผูกกลุ่ม"
+                                                                style={{ display: 'inline-flex', verticalAlign: 'middle' }}
+                                                            >
+                                                                <CopyButton text={`/bind ${group.binding_code}`} keepSpace={true} />
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td style={{ padding: '0.75rem', textAlign: 'center' }}>
                                                     <select
