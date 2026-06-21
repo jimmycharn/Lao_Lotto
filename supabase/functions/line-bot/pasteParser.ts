@@ -529,6 +529,18 @@ function isConversationalSingleNumberLine(line: string): boolean {
         return false;
     }
 
+    // A single set of numbers on the same line as text is not a bet,
+    // unless it has an equals/colon sign or betting keywords.
+    const hasLetters = /[ก-๛a-zA-Z]/.test(trimmed);
+    if (hasLetters) {
+        const hasEquals = trimmed.includes('=') || trimmed.includes(':');
+        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว/.test(trimmed) || 
+                               /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(trimmed);
+        if (!hasEquals && !hasBetKeywords) {
+            return true;
+        }
+    }
+
     const numStr = digitMatches[0];
     const textOnly = trimmed.replace(numStr, '').trim();
     if (textOnly.length === 0) {
