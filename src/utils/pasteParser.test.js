@@ -872,5 +872,87 @@ describe('pasteParser - parseMultiLinePaste', () => {
       })
     })
   })
+
+  describe('Tod/Tood parsing enhancements for 10 common betting styles', () => {
+    it('should parse Case 1: Header style correctly', () => {
+      const text = 'โต๊ด\n615=18\n156=85'
+      const result = parseMultiLinePaste(text, 'thai')
+      expect(result.length).toBe(2)
+      expect(result[0]).toMatchObject({ numbers: '615', amount: 18, betType: '3_tod', typeLabel: 'โต๊ด' })
+      expect(result[1]).toMatchObject({ numbers: '156', amount: 85, betType: '3_tod', typeLabel: 'โต๊ด' })
+    })
+
+    it('should parse Case 2: Inline style with space correctly', () => {
+      const text = '615=18 โต๊ด\n156=85 โต๊ด'
+      const result = parseMultiLinePaste(text, 'thai')
+      expect(result.length).toBe(2)
+      expect(result[0]).toMatchObject({ numbers: '615', amount: 18, betType: '3_tod', typeLabel: 'โต๊ด' })
+      expect(result[1]).toMatchObject({ numbers: '156', amount: 85, betType: '3_tod', typeLabel: 'โต๊ด' })
+    })
+
+    it('should parse Case 3: Inline style without space correctly', () => {
+      const text = '615=18โต๊ด\n156=85โต๊ด'
+      const result = parseMultiLinePaste(text, 'thai')
+      expect(result.length).toBe(2)
+      expect(result[0]).toMatchObject({ numbers: '615', amount: 18, betType: '3_tod', typeLabel: 'โต๊ด' })
+      expect(result[1]).toMatchObject({ numbers: '156', amount: 85, betType: '3_tod', typeLabel: 'โต๊ด' })
+    })
+
+    it('should parse Case 4: Thai shorthand "ต" correctly', () => {
+      const text = '615=18 ต\n156=85 ต'
+      const result = parseMultiLinePaste(text, 'thai')
+      expect(result.length).toBe(2)
+      expect(result[0]).toMatchObject({ numbers: '615', amount: 18, betType: '3_tod', typeLabel: 'โต๊ด' })
+      expect(result[1]).toMatchObject({ numbers: '156', amount: 85, betType: '3_tod', typeLabel: 'โต๊ด' })
+    })
+
+    it('should parse Case 5: Thai shorthand "ต" without space correctly', () => {
+      const text = '615=18ต\n156=85ต'
+      const result = parseMultiLinePaste(text, 'thai')
+      expect(result.length).toBe(2)
+      expect(result[0]).toMatchObject({ numbers: '615', amount: 18, betType: '3_tod', typeLabel: 'โต๊ด' })
+      expect(result[1]).toMatchObject({ numbers: '156', amount: 85, betType: '3_tod', typeLabel: 'โต๊ด' })
+    })
+
+    it('should parse Case 6: Thai shorthand "โตด" (no tone mark) correctly', () => {
+      const text = '615=18 โตด\n156=85 โตด'
+      const result = parseMultiLinePaste(text, 'thai')
+      expect(result.length).toBe(2)
+      expect(result[0]).toMatchObject({ numbers: '615', amount: 18, betType: '3_tod', typeLabel: 'โต๊ด' })
+      expect(result[1]).toMatchObject({ numbers: '156', amount: 85, betType: '3_tod', typeLabel: 'โต๊ด' })
+    })
+
+    it('should parse Case 7: Thai shorthand "โตด" without space correctly', () => {
+      const text = '615=18โตด\n156=85โตด'
+      const result = parseMultiLinePaste(text, 'thai')
+      expect(result.length).toBe(2)
+      expect(result[0]).toMatchObject({ numbers: '615', amount: 18, betType: '3_tod', typeLabel: 'โต๊ด' })
+      expect(result[1]).toMatchObject({ numbers: '156', amount: 85, betType: '3_tod', typeLabel: 'โต๊ด' })
+    })
+
+    it('should parse Case 8: Bracket style correctly', () => {
+      const text = '[โต๊ด]\n615=18\n156=85'
+      const result = parseMultiLinePaste(text, 'thai')
+      expect(result.length).toBe(2)
+      expect(result[0]).toMatchObject({ numbers: '615', amount: 18, betType: '3_tod', typeLabel: 'โต๊ด' })
+      expect(result[1]).toMatchObject({ numbers: '156', amount: 85, betType: '3_tod', typeLabel: 'โต๊ด' })
+    })
+
+    it('should parse Case 9: Space separation instead of equals correctly', () => {
+      const text = '615 18 โต๊ด\n156 85 โต๊ด'
+      const result = parseMultiLinePaste(text, 'thai')
+      expect(result.length).toBe(2)
+      expect(result[0]).toMatchObject({ numbers: '615', amount: 18, betType: '3_tod', typeLabel: 'โต๊ด' })
+      expect(result[1]).toMatchObject({ numbers: '156', amount: 85, betType: '3_tod', typeLabel: 'โต๊ด' })
+    })
+
+    it('should parse Case 10: Mixed with other text (e.g. โต๊ด นะคะ) correctly', () => {
+      const text = 'โต๊ด นะคะ\n615=18\n156=85'
+      const result = parseMultiLinePaste(text, 'thai')
+      expect(result.length).toBe(2)
+      expect(result[0]).toMatchObject({ numbers: '615', amount: 18, betType: '3_tod', typeLabel: 'โต๊ด' })
+      expect(result[1]).toMatchObject({ numbers: '156', amount: 85, betType: '3_tod', typeLabel: 'โต๊ด' })
+    })
+  })
 })
 

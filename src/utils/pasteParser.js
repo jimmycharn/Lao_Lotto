@@ -668,26 +668,26 @@ function extractAmountFromLine(line) {
     // --- Extract trailing context suffix (วิ่ง/ลอย/โต๊ด/บนล่าง/ลบ/ล่างบน/บน/ล่าง etc.) ---
     let mode = null
     // Float suffix: "วิ่งล่าง", "ลอยล่าง" → float_bottom
-    const floatBotSuffix = s.match(/\s+(วิ่งล่าง|ลอยล่าง)\s*$/)
+    const floatBotSuffix = s.match(/\s*(วิ่งล่าง|ลอยล่าง)\s*$/)
     if (floatBotSuffix) {
         mode = 'float_bottom'
         s = s.slice(0, floatBotSuffix.index).trim()
     }
-    // Float suffix: "วิ่งบน", "ลอยบน", "วิ่ง", "ลอย", "โต๊ด" → float_top
+    // Float suffix: "วิ่งบน", "ลอยบน", "วิ่ง", "ลอย", "โต๊ด", "โตด", "ต" → float_top
     if (!mode) {
-        const floatTopSuffix = s.match(/\s+(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด)\s*$/)
+        const floatTopSuffix = s.match(/\s*(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?)\s*$/)
         if (floatTopSuffix) {
             mode = 'float_top'
             s = s.slice(0, floatTopSuffix.index).trim()
         }
     }
     if (!mode) {
-        const bothSuffix = s.match(/\s+(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล\.?|ล[+\-]?บ\.?|บล\.?|ลบ\.?)\s*$/)
+        const bothSuffix = s.match(/\s*(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล\.?|ล[+\-]?บ\.?|บล\.?|ลบ\.?)\s*$/)
         if (bothSuffix) {
             mode = 'both'
             s = s.slice(0, bothSuffix.index).trim()
         } else {
-            const singleCtx = s.match(/\s+(บน|บ\.?|ล่าง|ล\.?)\s*$/)
+            const singleCtx = s.match(/\s*(บน|บ\.?|ล่าง|ล\.?)\s*$/)
             if (singleCtx) {
                 const modeStr = singleCtx[1].replace('.', '')
                 mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
@@ -700,7 +700,6 @@ function extractAmountFromLine(line) {
     if (split) {
         s = split.amountStr
     }
-    if (DEBUG_PASTE) console.log(`[extractAmount] input: "${s}" | charCodes: [${[...s].map(c => c.charCodeAt(0)).join(',')}]`)
 
     // --- Check for inline context prefix right after = (e.g. "39=บล10*10", "39=ลบ10*10") ---
     const eqInlineMatch = s.match(/^(\d{1,5})\s*=\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(.+)$/)
@@ -723,8 +722,18 @@ function extractAmountFromLine(line) {
 
     // --- Context prefix attached to amount (no =): "บล50*50", "89 บล50*50", "89=บล50*50" ---
     // "both" prefix variants: บล, ลบ, บนล่าง, ล่างบน, บ+ล, ล+บ, etc.
+    const floatPrefixRe = /^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\.?\s*(\d.+)$/
+    const floatPrefixMatch = s.match(floatPrefixRe)
+    if (floatPrefixMatch) {
+        const kw = floatPrefixMatch[1]
+        const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top'
+        const amt = floatPrefixMatch[2].trim()
+        if (isAmountPattern(amt) || /^\d+$/.test(amt)) {
+            return { amountStr: amt, mode, number: null }
+        }
+    }
+
     const bothPrefixRe = /^(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(\d.+)$/
-    // "single" prefix variants: บน, บ, ล่าง, ล
     const singlePrefixRe = /^(บน|บ|ล่าง|ล)\.?\s*(\d.+)$/
 
     // Case: "number space/= contextAmount" e.g. "89 บล50*50" or "89=บล50*50"
@@ -947,8 +956,8 @@ function parseContextLine(line) {
     if (/^\d*ตัว(บน|บ)$/.test(bracketCleaned)) return 'top'
     // "2ตัววิ่งล่าง", "2ตัวลอยล่าง" → float_bottom
     if (/^\d*ตัว(วิ่งล่าง|ลอยล่าง)$/.test(bracketCleaned)) return 'float_bottom'
-    // "2ตัววิ่งบน", "2ตัวลอยบน", "2ตัววิ่ง", "2ตัวลอย" → float_top
-    if (/^\d*ตัว(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|มี)$/.test(bracketCleaned)) return 'float_top'
+    // "2ตัววิ่งบน", "2ตัวลอยบน", "2ตัววิ่ง", "2ตัวลอย", "2ตัวโต๊ด", "2ตัวโตด", "2ตัวต" → float_top
+    if (/^\d*ตัว(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|มี)$/.test(bracketCleaned)) return 'float_top'
 
     // Check for "วิ่ง/ลอย/โต๊ด/มี" float context FIRST (before บน/ล่าง checks)
     // These keywords indicate "ลอย" (float/run) bet type
@@ -957,10 +966,10 @@ function parseContextLine(line) {
     if (/^(วิ่งบน|ลอยบน|วิ่งบ|ลอยบ|ลอยทั่วไป)$/.test(cleanedFloat)) return 'float_top'
     // "วิ่งล่าง", "ลอยล่าง", "วิ่ง ล่าง" → float_bottom
     if (/^(วิ่งล่าง|ลอยล่าง|วิ่งล|ลอยล)$/.test(cleanedFloat)) return 'float_bottom'
-    // "วิ่ง", "ลอย", "โต๊ด" standalone → float_top (default to บน)
-    if (/^(วิ่ง|ลอย|โต๊ด)$/.test(cleanedFloat)) return 'float_top'
-    // "2ตัวมี", "2 ตัว มี", "2ตัววิ่ง", "2ตัวลอย", "2ตัวโต๊ด" → float_top
-    if (/^2ตัว(มี|วิ่ง|ลอย|โต๊ด)$/.test(cleanedFloat)) return 'float_top'
+    // "วิ่ง", "ลอย", "โต๊ด", "โตด", "ต" standalone → float_top (default to บน)
+    if (/^(วิ่ง|ลอย|โต๊ด|โตด|ต\.?)$/.test(cleanedFloat)) return 'float_top'
+    // "2ตัวมี", "2 ตัว มี", "2ตัววิ่ง", "2ตัวลอย", "2ตัวโต๊ด", "2ตัวโตด", "2ตัวต" → float_top
+    if (/^2ตัว(มี|วิ่ง|ลอย|โต๊ด|โตด|ต\.?)$/.test(cleanedFloat)) return 'float_top'
 
     // Check for "บนล่าง" / "ล่างบน" variants first (must come before single checks)
     // If a line contains BOTH a บน-variant AND a ล่าง-variant (in any order, with any separators),
@@ -971,8 +980,12 @@ function parseContextLine(line) {
     // Match standalone "ล", "ล.", "ล่าง"
     const cleaned = withPunct.replace(/[^ก-๛a-zA-Z0-9]/g, '').trim()
 
-    if (/^(บน|บ)$/.test(cleaned)) return 'top'
-    if (/^(ล่าง|ล)$/.test(cleaned)) return 'bottom'
+    if (/^(บน|บ)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(cleaned)) return 'top'
+    if (/^(ล่าง|ล)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(cleaned)) return 'bottom'
+
+    const testStr = cleaned.replace(/^\d+ตัว/, '')
+    if (/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(testStr)) return 'float_top'
+    if (/^(วิ่งล่าง|ลอยล่าง)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(testStr)) return 'float_bottom'
 
     // Also check original line with punctuation: "บ.", "ล."
     if (/^บ\.?$/.test(withPunct)) return 'top'
@@ -1056,7 +1069,7 @@ function extractInlineContext(line) {
     let s = line.trim()
 
     // --- FLOAT PREFIX: "วิ่ง83=100", "ลอย25=20", "โต๊ด78=500" followed by digit ---
-    const floatPrefixTop = s.match(/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป)\.?\s*(\d.*)$/)
+    const floatPrefixTop = s.match(/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\.?\s*(\d.*)$/)
     if (floatPrefixTop) {
         const kw = floatPrefixTop[1]
         let mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top'
@@ -1071,13 +1084,13 @@ function extractInlineContext(line) {
     }
 
     // --- FLOAT SUFFIX: "83=100 วิ่ง", "83=100 ลอย", "2=150 วิ่งล่าง" ---
-    const floatSuffixBot = s.match(/^(.+?)\s+(วิ่งล่าง|ลอยล่าง)\s*$/)
+    const floatSuffixBot = s.match(/^(.+?)\s*(วิ่งล่าง|ลอยล่าง)\s*$/)
     if (floatSuffixBot) {
         let mode = 'float_bottom'
         mode = refineFloatMode(mode, s)
         return { cleaned: floatSuffixBot[1].trim(), mode }
     }
-    const floatSuffix = s.match(/^(.+?)\s+(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป)\s*$/)
+    const floatSuffix = s.match(/^(.+?)\s*(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\s*$/)
     if (floatSuffix) {
         let mode = 'float_top'
         mode = refineFloatMode(mode, s)
@@ -1085,7 +1098,7 @@ function extractInlineContext(line) {
     }
 
     // --- FLOAT MIDDLE: "78 โต๊ด 500", "78 วิ่ง 500", "78 ลอย 500", "78 มี 500" ---
-    const floatMiddle = s.match(/^(\d+)\s+(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป|มี)\s+(\d[\d*=\-+]*)$/)
+    const floatMiddle = s.match(/^(\d+)\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|มี)\s+(\d[\d*=\-+]*)$/)
     if (floatMiddle) {
         const kw = floatMiddle[2]
         let mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top'
@@ -1109,13 +1122,13 @@ function extractInlineContext(line) {
     }
 
     // --- SUFFIX "บนล่าง/ลบ/ล่างบน" variants ---
-    const bothSuffix = s.match(/^(.+?)\s+(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล|ล[+\-]?บ|บล|ลบ)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/)
+    const bothSuffix = s.match(/^(.+?)\s*(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล|ล[+\-]?บ|บล|ลบ)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/)
     if (bothSuffix) {
         return { cleaned: bothSuffix[1].trim(), mode: 'both' }
     }
 
     // --- SUFFIX patterns: "บน", "บ", "ล่าง", "ล" at end ---
-    const suffixMatch = s.match(/^(.+?)\s+(บน|บ|ล่าง|ล)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/)
+    const suffixMatch = s.match(/^(.+?)\s*(บน|บ|ล่าง|ล)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/)
     if (suffixMatch) {
         const rest = suffixMatch[1]
         const modeStr = suffixMatch[2].replace('.', '')
@@ -1164,6 +1177,13 @@ function extractInlineContext(line) {
         const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
         return { cleaned: `${eqSingleInline[1]}=${eqSingleInline[3].trim()}`, mode }
     }
+    // --- Inline float context after =: "25= วิ่งบน 20", "25=โต๊ด20", "25=ต20" ---
+    const eqFloatInline = s.match(/^(\d+)\s*=\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\.?\s*(\d.+)$/)
+    if (eqFloatInline) {
+        const kw = eqFloatInline[2]
+        const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top'
+        return { cleaned: `${eqFloatInline[1]}=${eqFloatInline[3].trim()}`, mode }
+    }
 
     // --- "num context=amt" pattern: "25 ล่าง=20*20", "25 ล่าง =20*20", "25ล่าง=20*20" ---
     const numCtxEqBoth = s.match(/^(\d+)\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*=\s*(.+)$/)
@@ -1176,6 +1196,7 @@ function extractInlineContext(line) {
         const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
         return { cleaned: `${numCtxEqSingle[1]}=${numCtxEqSingle[3].trim()}`, mode }
     }
+
     // --- NO SPACE MIDDLE patterns (e.g. "79ล่าง100", "79บน100", "79บล100", "123โต๊ด50", "2วิ่ง10") ---
     const noSpaceBoth = s.match(/^(\d+)(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?([=\d].*)$/)
     if (noSpaceBoth) {
@@ -1189,14 +1210,14 @@ function extractInlineContext(line) {
         return { cleaned: `${noSpaceSingle[1]} ${noSpaceSingle[3].trim()}`, mode }
     }
 
-    const noSpaceFloat = s.match(/^(\d+)(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป|มี)\.?([=\d].*)$/)
+    const noSpaceFloat = s.match(/^(\d+)(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|มี)\.?([=\d].*)$/)
     if (noSpaceFloat) {
         const kw = noSpaceFloat[2]
         const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top'
         return { cleaned: `${noSpaceFloat[1]}=${noSpaceFloat[3].trim()}`, mode }
     }
 
-    return { cleaned: s, mode: null }
+    return { cleaned: line, mode: null }
 }
 
 /**
