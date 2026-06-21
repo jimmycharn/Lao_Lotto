@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase, fetchAllRows } from '../../lib/supabase'
 import { useToast } from '../../contexts/ToastContext'
 import { updatePendingDeduction } from '../../utils/creditCheck'
@@ -22,6 +22,7 @@ import {
     FiFileText,
     FiRefreshCw,
     FiChevronRight,
+    FiChevronDown,
     FiPower
 } from 'react-icons/fi'
 import {
@@ -90,6 +91,115 @@ async function chunkedDelete(table, ids) {
             .in('id', chunk)
         if (error) throw error
     }
+}
+
+function SearchableDropdown({ value, onChange, options, placeholder = "ค้นหาชื่อ...", emptyMessage = "ไม่พบข้อมูล" }) {
+    const [isOpen, setIsOpen] = useState(false)
+    const [searchTerm, setSearchTerm] = useState("")
+    const dropdownRef = useRef(null)
+
+    useEffect(() => {
+        function handleClickOutside(event) {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsOpen(false)
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside)
+        return () => document.removeEventListener("mousedown", handleClickOutside)
+    }, [])
+
+    useEffect(() => {
+        if (!isOpen) {
+            setSearchTerm("")
+        }
+    }, [isOpen])
+
+    const selectedOption = options.find(opt => opt.value === value) || { label: "ทุกคน", value: "all" }
+
+    const filteredOptions = options.filter(opt =>
+        (opt.label || "").toLowerCase().includes(searchTerm.toLowerCase())
+    )
+
+    return (
+        <div className="searchable-dropdown" ref={dropdownRef}>
+            <div
+                className="searchable-dropdown-trigger"
+                onClick={() => setIsOpen(!isOpen)}
+            >
+                <span style={{ 
+                    overflow: 'hidden', 
+                    textOverflow: 'ellipsis', 
+                    whiteSpace: 'nowrap',
+                    color: value === 'all' ? 'var(--color-text-muted)' : 'var(--color-text)'
+                }}>
+                    {selectedOption.label}
+                </span>
+                <FiChevronDown style={{ 
+                    marginLeft: '0.5rem', 
+                    flexShrink: 0,
+                    transition: 'transform 0.2s ease',
+                    transform: isOpen ? 'rotate(180deg)' : 'rotate(0)'
+                }} />
+            </div>
+
+            {isOpen && (
+                <div className="searchable-dropdown-menu">
+                    <div className="searchable-dropdown-search-wrapper">
+                        <FiSearch className="search-icon" />
+                        <input
+                            type="text"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            placeholder={placeholder}
+                            className="searchable-dropdown-search-input"
+                            autoFocus
+                        />
+                        {searchTerm && (
+                            <button
+                                onClick={() => setSearchTerm("")}
+                                className="searchable-dropdown-clear-btn"
+                            >
+                                <FiX size={12} />
+                            </button>
+                        )}
+                    </div>
+                    <div className="searchable-dropdown-list">
+                        {filteredOptions.length > 0 ? (
+                            filteredOptions.map(opt => {
+                                const isSelected = opt.value === value
+                                return (
+                                    <div
+                                        key={opt.value}
+                                        onClick={() => {
+                                            onChange(opt.value)
+                                            setIsOpen(false)
+                                        }}
+                                        className={`searchable-dropdown-option ${isSelected ? 'active' : ''}`}
+                                    >
+                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {opt.label}
+                                        </span>
+                                        {isSelected && <FiCheck size={14} style={{ marginLeft: '0.5rem', flexShrink: 0 }} />}
+                                    </div>
+                                )
+                            })
+                        ) : (
+                            <div
+                                style={{
+                                    padding: '0.75rem',
+                                    fontSize: '0.8rem',
+                                    color: 'var(--color-text-muted)',
+                                    textAlign: 'center'
+                                }}
+                            >
+                                {emptyMessage}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    )
 }
 
 export default function RoundAccordionItem({ 
@@ -3189,21 +3299,24 @@ export default function RoundAccordionItem({
                                                 
                                                 {/* Row 0.5: Dropdown + Write bet button */}
                                                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'stretch' }}>
-                                                    <select value={inlineUserFilter} onChange={(e) => setInlineUserFilter(e.target.value)} className="form-input" style={{ flex: 1, minHeight: '40px', fontSize: '0.85rem' }}>
-                                                        <option value="all">ทุกคน</option>
-                                                        {memberFilterMode === 'all' ? (
-                                                            allowedMembers.map(member => (
-                                                                <option key={member.id} value={member.full_name || member.email || 'ไม่ระบุ'}>
-                                                                    {member.full_name || member.email || 'ไม่ระบุ'}
-                                                                </option>
-                                                            ))
-                                                        ) : (
-                                                            [...new Set(inlineSubmissions.map(s => s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'))].map(name => (
-                                                                <option key={name} value={name}>{name}</option>
-                                                            ))
-                                                        )}
-                                                    </select>
-                                                    {canWriteBetForSelectedMember() && (
+                                                     <SearchableDropdown
+                                                         value={inlineUserFilter}
+                                                         onChange={(val) => setInlineUserFilter(val)}
+                                                         options={[
+                                                             { label: 'ทุกคน', value: 'all' },
+                                                             ...(memberFilterMode === 'all'
+                                                                 ? allowedMembers.map(member => {
+                                                                       const name = member.full_name || member.email || 'ไม่ระบุ'
+                                                                       return { label: name, value: name }
+                                                                   })
+                                                                 : [...new Set(inlineSubmissions.map(s => s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'))].map(name => ({
+                                                                       label: name,
+                                                                       value: name
+                                                                   }))
+                                                             )
+                                                         ]}
+                                                     />
+                                                     {canWriteBetForSelectedMember() && (
                                                         <button
                                                             className="btn btn-primary btn-sm"
                                                             onClick={handleOpenWriteBet}
