@@ -12,7 +12,8 @@ import {
     FiAlertCircle,
     FiSettings,
     FiRefreshCw,
-    FiTerminal
+    FiTerminal,
+    FiX
 } from 'react-icons/fi'
 import CopyButton from '../CopyButton'
 import { LOTTERY_TYPES } from '../../constants/lotteryTypes'
@@ -642,22 +643,55 @@ export default function DealerLineBotTab({ user, profile }) {
                                 </tr>
                                 <tr>
                                     <td style={{ padding: '0.5rem 0.75rem' }}>
-                                        <input
-                                            type="text"
-                                            placeholder="🔍 ค้นหาชื่อกลุ่ม หรือ กลุ่ม ID..."
-                                            value={searchGroupQuery}
-                                            onChange={e => setSearchGroupQuery(e.target.value)}
-                                            style={{
-                                                width: '100%',
-                                                maxWidth: '280px',
-                                                padding: '0.35rem 0.75rem',
-                                                fontSize: '0.85rem',
-                                                borderRadius: 'var(--radius-md)',
-                                                border: '1px solid var(--color-border)',
-                                                background: 'var(--color-surface)',
-                                                color: 'var(--color-text)'
-                                            }}
-                                        />
+                                        <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: '100%', maxWidth: '280px' }}>
+                                            <input
+                                                type="text"
+                                                placeholder="🔍 ค้นหาชื่อกลุ่ม หรือ กลุ่ม ID..."
+                                                value={searchGroupQuery}
+                                                onChange={e => setSearchGroupQuery(e.target.value)}
+                                                style={{
+                                                    width: '100%',
+                                                    padding: '0.35rem 2rem 0.35rem 0.75rem',
+                                                    fontSize: '0.85rem',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    border: '1px solid var(--color-border)',
+                                                    background: 'var(--color-surface)',
+                                                    color: 'var(--color-text)',
+                                                    outline: 'none'
+                                                }}
+                                            />
+                                            {searchGroupQuery && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSearchGroupQuery('')}
+                                                    style={{
+                                                        position: 'absolute',
+                                                        right: '8px',
+                                                        background: 'none',
+                                                        border: 'none',
+                                                        color: 'var(--color-text-muted)',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        padding: '4px',
+                                                        borderRadius: '50%',
+                                                        transition: 'color 0.2s, background-color 0.2s'
+                                                    }}
+                                                    onMouseOver={e => {
+                                                        e.currentTarget.style.color = 'var(--color-danger)';
+                                                        e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+                                                    }}
+                                                    onMouseOut={e => {
+                                                        e.currentTarget.style.color = 'var(--color-text-muted)';
+                                                        e.currentTarget.style.backgroundColor = 'transparent';
+                                                    }}
+                                                    title="ล้างข้อความค้นหา"
+                                                >
+                                                    <FiX size={14} />
+                                                </button>
+                                            )}
+                                        </div>
                                     </td>
                                     <td></td>
                                     <td></td>
