@@ -39,6 +39,7 @@ export default function DealerLineBotTab({ user, profile }) {
     const [selectedGroupId, setSelectedGroupId] = useState(null)
     const [selectedConfigGroupId, setSelectedConfigGroupId] = useState(null)
     const [activeMembers, setActiveMembers] = useState([])
+    const [searchGroupQuery, setSearchGroupQuery] = useState('')
 
     const isOwnerOrSuper = profile?.role === 'dealer' || profile?.role === 'superadmin'
 
@@ -499,6 +500,13 @@ export default function DealerLineBotTab({ user, profile }) {
 
     // Filter list to active groups (those actually bound to a LINE chat)
     const activeGroups = lineGroups.filter(g => g.line_group_id !== 'pending' && g.line_group_id)
+    const filteredActiveGroups = activeGroups.filter(g => {
+        const query = searchGroupQuery.toLowerCase().trim();
+        if (!query) return true;
+        const name = (g.group_name || '').toLowerCase();
+        const id = (g.line_group_id || '').toLowerCase();
+        return name.includes(query) || id.includes(query);
+    });
     const pendingCodeObj = lineGroups.find(g => g.line_group_id === 'pending' || !g.line_group_id)
 
     return (
@@ -599,7 +607,9 @@ export default function DealerLineBotTab({ user, profile }) {
             {/* Bound Groups Table */}
             <div className="card" style={{ padding: '1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-                    <h3 style={{ margin: 0 }}>กลุ่ม LINE ที่ผูกเชื่อมต่อแล้ว ({activeGroups.length})</h3>
+                    <h3 style={{ margin: 0 }}>
+                        กลุ่ม LINE ที่ผูกเชื่อมต่อแล้ว {searchGroupQuery.trim() ? `(${filteredActiveGroups.length} จาก ${activeGroups.length})` : `(${activeGroups.length})`}
+                    </h3>
                     <button
                         className="btn btn-outline btn-sm"
                         onClick={handleRefresh}
@@ -630,9 +640,41 @@ export default function DealerLineBotTab({ user, profile }) {
                                     <th style={{ textAlign: 'center', padding: '0.75rem', width: '120px' }}>สถานะ</th>
                                     <th style={{ textAlign: 'center', padding: '0.75rem', width: '80px' }}>การจัดการ</th>
                                 </tr>
+                                <tr>
+                                    <td style={{ padding: '0.5rem 0.75rem' }}>
+                                        <input
+                                            type="text"
+                                            placeholder="🔍 ค้นหาชื่อกลุ่ม หรือ กลุ่ม ID..."
+                                            value={searchGroupQuery}
+                                            onChange={e => setSearchGroupQuery(e.target.value)}
+                                            style={{
+                                                width: '100%',
+                                                maxWidth: '280px',
+                                                padding: '0.35rem 0.75rem',
+                                                fontSize: '0.85rem',
+                                                borderRadius: 'var(--radius-md)',
+                                                border: '1px solid var(--color-border)',
+                                                background: 'var(--color-surface)',
+                                                color: 'var(--color-text)'
+                                            }}
+                                        />
+                                    </td>
+                                    <td></td>
+                                    <td></td>
+                                    <td></td>
+                                    <td></td>
+                                </tr>
                             </thead>
                             <tbody>
-                                {activeGroups.map(group => {
+                                {filteredActiveGroups.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={5} style={{ padding: '3rem 1.5rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                                            <FiAlertCircle size={24} style={{ display: 'block', margin: '0 auto 0.5rem auto', opacity: 0.6 }} />
+                                            ไม่พบกลุ่มแชทที่ตรงกับการค้นหาของคุณ
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    filteredActiveGroups.map(group => {
                                     const isOpen = openRounds.some(r => r.lottery_type === group.lottery_type);
                                     const isExpanded = selectedGroupId === group.id;
                                     return (
