@@ -239,6 +239,22 @@ function expandLines(rawLines: string[]): string[] {
         // Reset line to the trimmed normalized string
         line = trimmed;
 
+        // --- Step 0.5: Split multi-bet lines (copied from PDF grid) ---
+        const eqCount = (trimmed.match(/[=:]/g) || []).length;
+        if (eqCount >= 2) {
+            const subLines = trimmed.split(/\s+(?=[ก-๛a-zA-Z0-9]*\d+\s*[=:])/);
+            if (subLines.length > 1) {
+                for (const subLine of subLines) {
+                    const subTrimmed = subLine.trim();
+                    if (subTrimmed) {
+                        const subExpanded = expandLines([subTrimmed]);
+                        expanded.push(...subExpanded);
+                    }
+                }
+                continue;
+            }
+        }
+
         // --- Step 1: Normalize "ต" / "t" between amounts to "*" ---
         // "123=50 ต 50" → "123=50*50", "456=20t20" → "456=20*20"
         line = line.replace(/(\d)\s*[tTตt]\s*(\d)/g, '$1*$2');

@@ -953,6 +953,62 @@ describe('pasteParser - parseMultiLinePaste', () => {
       expect(result[0]).toMatchObject({ numbers: '615', amount: 18, betType: '3_tod', typeLabel: 'โต๊ด' })
       expect(result[1]).toMatchObject({ numbers: '156', amount: 85, betType: '3_tod', typeLabel: 'โต๊ด' })
     })
+
+    it('should parse space-separated multi-bet PDF grid paste correctly', () => {
+      const text = `ลอยบน
+6=2,300 9=10,400 3=1,000 5=1,900
+7=7,100 0=200
+2 ตัวบน
+47=480 74=410
+2 ตัวล่าง
+27=155 47=1,070 74=1,000 56=200
+29=205 92=85
+3 ตัวบน
+409=127 081=171 047=420 074=8
+407=587 470=873 704=815 740=317
+930=69 713=218 173=402 761=712
+561=123 544=154 209=86 307=325
+305=175 170=92 570=438 557=214
+267=91 539=126 092=9 902=250
+920=180 168=274 516=143 651=20
+615=18 156=85 332=100 814=195
+804=182 574=132 744=386 908=118
+390=22 702=1,090 701=27 784=636
+228=125 071=11
+3 ตัวโต๊ด
+029=15 457=30 047=795`
+
+      const result = parseMultiLinePaste(text, 'thai')
+      // ลอยบน: 6 (2300), 9 (10400), 3 (1000), 5 (1900), 7 (7100), 0 (200) -> 6 items
+      // 2 ตัวบน: 47 (480), 74 (410) -> 2 items
+      // 2 ตัวล่าง: 27 (155), 47 (1070), 74 (1000), 56 (200), 29 (205), 92 (85) -> 6 items
+      // 3 ตัวบน: 42 items -> 42 items
+      // 3 ตัวโต๊ด: 3 items -> 3 items
+      // Total = 6 + 2 + 6 + 42 + 3 = 59 items
+      expect(result.length).toBe(59)
+
+      // Verify specific items
+      const entry6 = result.find(r => r.numbers === '6')
+      expect(entry6).toMatchObject({ amount: 2300, betType: 'run_top', typeLabel: 'ลอยบน' })
+
+      const entry9 = result.find(r => r.numbers === '9')
+      expect(entry9).toMatchObject({ amount: 10400, betType: 'run_top', typeLabel: 'ลอยบน' })
+
+      const entry47_top = result.find(r => r.numbers === '47' && r.betType === '2_top')
+      expect(entry47_top).toMatchObject({ amount: 480, typeLabel: 'บน' })
+
+      const entry47_bot = result.find(r => r.numbers === '47' && r.betType === '2_bottom')
+      expect(entry47_bot).toMatchObject({ amount: 1070, typeLabel: 'ล่าง' })
+
+      const entry047_top = result.find(r => r.numbers === '047' && r.betType === '3_top')
+      expect(entry047_top).toMatchObject({ amount: 420, typeLabel: 'บน' })
+
+      const entry047_tod = result.find(r => r.numbers === '047' && r.betType === '3_tod')
+      expect(entry047_tod).toMatchObject({ amount: 795, typeLabel: 'โต๊ด' })
+
+      const entry029_tod = result.find(r => r.numbers === '029' && r.betType === '3_tod')
+      expect(entry029_tod).toMatchObject({ amount: 15, typeLabel: 'โต๊ด' })
+    })
   })
 })
 
