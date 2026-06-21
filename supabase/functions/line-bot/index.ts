@@ -6042,7 +6042,7 @@ serve(async (req) => {
                     pdfCategories,
                     `รวมยอดเกิน: ฿${totalExcess.toLocaleString('th-TH')}`
                   );
-                  const fileName = `เลขเกิน_${activeRound.id}_${Date.now()}.pdf`;
+                  const fileName = `excess_${activeRound.id}_${Date.now()}.pdf`;
                   const signedUrl = await uploadPDFToStorage(pdfBytes, fileName);
                   await sendLineReply(replyToken, `📄 ดาวน์โหลด PDF รายการเลขเกินอั้น (${lotteryDisplayName})\nงวดวันที่: ${roundDateStr}\n\n👉 กดที่นี่เพื่อดาวน์โหลด:\n${signedUrl}`);
                 } catch (pdfErr) {
@@ -6234,7 +6234,7 @@ serve(async (req) => {
                     pdfCategories,
                     `รวมยอดรวม: ฿${grandTotal.toLocaleString('th-TH')}`
                   );
-                  const fileName = `เลขรวม_${activeRound.id}_${Date.now()}.pdf`;
+                  const fileName = `total_${activeRound.id}_${Date.now()}.pdf`;
                   const signedUrl = await uploadPDFToStorage(pdfBytes, fileName);
                   await sendLineReply(replyToken, `📄 ดาวน์โหลด PDF รายงานเลขรวม (${typeNameInThai})\nงวดวันที่: ${roundDateStr}\n\n👉 กดที่นี่เพื่อดาวน์โหลด:\n${signedUrl}`);
                 } catch (pdfErr) {
@@ -6393,7 +6393,7 @@ serve(async (req) => {
                     pdfCategories,
                     `รวมยอดตีออก: ฿${grandTotal.toLocaleString('th-TH')}`
                   );
-                  const fileName = `เลขตีออก_${activeRound.id}_${Date.now()}.pdf`;
+                  const fileName = `transfers_${activeRound.id}_${Date.now()}.pdf`;
                   const signedUrl = await uploadPDFToStorage(pdfBytes, fileName);
                   await sendLineReply(replyToken, `📄 ดาวน์โหลด PDF รายงานเลขตีออก (${typeNameInThai})\nงวดวันที่: ${roundDateStr}\n\n👉 กดที่นี่เพื่อดาวน์โหลด:\n${signedUrl}`);
                 } catch (pdfErr) {
@@ -6586,7 +6586,7 @@ serve(async (req) => {
                     pdfCategories,
                     `รวมยอดเหลือ: ฿${grandRemainingTotal.toLocaleString('th-TH')}`
                   );
-                  const fileName = `เลขเหลือ_${activeRound.id}_${Date.now()}.pdf`;
+                  const fileName = `remaining_${activeRound.id}_${Date.now()}.pdf`;
                   const signedUrl = await uploadPDFToStorage(pdfBytes, fileName);
                   await sendLineReply(replyToken, `📄 ดาวน์โหลด PDF รายงานเลขเหลือ (${typeNameInThai})\nงวดวันที่: ${roundDateStr}\n\n👉 กดที่นี่เพื่อดาวน์โหลด:\n${signedUrl}`);
                 } catch (pdfErr) {
