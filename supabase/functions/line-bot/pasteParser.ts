@@ -418,6 +418,10 @@ export function parseMultiLinePaste(text: string, lotteryType = 'lao'): ParsedBe
             const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว/.test(lineToProcess) || 
                                    /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(lineToProcess);
             if (!hasEquals && !hasBetKeywords) {
+                // If it contains letters (Thai/English), skip it completely as text/noise
+                if (/[ก-๛a-zA-Z]/.test(lineToProcess)) {
+                    continue;
+                }
                 lineToProcess = digitMatches[0];
             }
         }

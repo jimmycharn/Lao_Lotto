@@ -627,16 +627,12 @@ describe('pasteParser - parseMultiLinePaste', () => {
     })
 
     it('should not ignore bare number with names or trailing notes (e.g. 20 พี่รี, 10xชุด น้องโบว์)', () => {
-      // 20 พี่รี should be treated as bare number 20
+      // 20 พี่รี should be ignored because it has text and no betting keywords
       const text1 = '20 พี่รี\n=100'
       const result1 = parseMultiLinePaste(text1, 'lao')
-      expect(result1.length).toBe(1)
-      expect(result1[0]).toMatchObject({
-        numbers: '20',
-        amount: 100
-      })
+      expect(result1.length).toBe(0)
 
-      // 10xชุด น้องโบว์ should be trailing amount line
+      // 10xชุด น้องโบว์ should be trailing amount line (contains 'ชุด' which is a bet keyword)
       const text2 = '140\n10xชุด น้องโบว์'
       const result2 = parseMultiLinePaste(text2, 'lao')
       expect(result2.length).toBe(1)
