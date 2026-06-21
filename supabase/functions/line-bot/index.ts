@@ -22,10 +22,10 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 let cachedFontBytes: Uint8Array | null = null;
 async function getNotoSansThaiFontBytes(): Promise<Uint8Array> {
   if (cachedFontBytes) return cachedFontBytes;
-  const fontUrl = "https://raw.githubusercontent.com/google/fonts/main/ofl/notosansthai/NotoSansThai-Regular.ttf";
+  const fontUrl = "https://raw.githubusercontent.com/google/fonts/main/ofl/sarabun/Sarabun-Regular.ttf";
   const res = await fetch(fontUrl);
   if (!res.ok) {
-    throw new Error(`Failed to fetch Noto Sans Thai font from Google Fonts. Status: ${res.statusText}`);
+    throw new Error(`Failed to fetch Sarabun font from Google Fonts. Status: ${res.statusText}`);
   }
   const arr = await res.arrayBuffer();
   cachedFontBytes = new Uint8Array(arr);
