@@ -2,6 +2,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0"
 import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts"
 import { parseMultiLinePaste, ParsedBet, getPermutations, getUnique3DigitPermsFrom4, getUnique3DigitPermsFrom5, extractBuyerNote } from "./pasteParser.ts"
+import { PDFDocument, rgb } from "npm:pdf-lib@1.17.1"
+import fontkit from "npm:@pdf-lib/fontkit@0.0.4"
+
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -15,6 +18,209 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '
 
 // Initialize Supabase client with Service Role Key to bypass RLS for bot actions
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+let cachedFontBytes: Uint8Array | null = null;
+async function getNotoSansThaiFontBytes(): Promise<Uint8Array> {
+  if (cachedFontBytes) return cachedFontBytes;
+  const fontUrl = "https://raw.githubusercontent.com/google/fonts/main/ofl/notosansthai/NotoSansThai-Regular.ttf";
+  const res = await fetch(fontUrl);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch Noto Sans Thai font from Google Fonts. Status: ${res.statusText}`);
+  }
+  const arr = await res.arrayBuffer();
+  cachedFontBytes = new Uint8Array(arr);
+  return cachedFontBytes;
+}
+
+interface PDFItem {
+  numbers: string;
+  amountText: string;
+}
+
+interface PDFCategory {
+  label: string;
+  items: PDFItem[];
+}
+
+async function generateReportPDF(
+  title: string,
+  dateStr: string,
+  categories: PDFCategory[],
+  grandTotalText: string
+): Promise<Uint8Array> {
+  const fontBytes = await getNotoSansThaiFontBytes();
+  const pdfDoc = await PDFDocument.create();
+  pdfDoc.registerFontkit(fontkit);
+  const font = await pdfDoc.embedFont(fontBytes);
+
+  let page = pdfDoc.addPage([595.28, 841.89]); // A4
+  const { width, height } = page.getSize();
+  
+  let currentY = height - 50; // Top margin
+  
+  // Header
+  // Top accent bar (dark navy)
+  page.drawRectangle({
+    x: 40,
+    y: currentY - 8,
+    width: 515,
+    height: 8,
+    color: rgb(0.12, 0.23, 0.35),
+  });
+  currentY -= 20;
+
+  // Title
+  page.drawText(title, {
+    x: 40,
+    y: currentY - 18,
+    size: 18,
+    font,
+    color: rgb(0.12, 0.23, 0.35),
+  });
+  currentY -= 25;
+
+  // Date
+  if (dateStr) {
+    page.drawText(dateStr, {
+      x: 40,
+      y: currentY - 12,
+      size: 11,
+      font,
+      color: rgb(0.4, 0.4, 0.4),
+    });
+    currentY -= 18;
+  }
+
+  // Grand Total
+  page.drawText(grandTotalText, {
+    x: 40,
+    y: currentY - 14,
+    size: 13,
+    font,
+    color: rgb(0.12, 0.23, 0.35),
+  });
+  currentY -= 22;
+
+  // Divider
+  page.drawLine({
+    start: { x: 40, y: currentY },
+    end: { x: 555, y: currentY },
+    thickness: 1,
+    color: rgb(0.8, 0.8, 0.8),
+  });
+  currentY -= 15;
+
+  // Render categories
+  for (const cat of categories) {
+    if (cat.items.length === 0) continue;
+
+    // Check if we need a new page for category header
+    if (currentY - 40 < 50) {
+      page = pdfDoc.addPage([595.28, 841.89]);
+      currentY = height - 50;
+    }
+
+    // Category Header Box
+    page.drawRectangle({
+      x: 40,
+      y: currentY - 22,
+      width: 515,
+      height: 22,
+      color: rgb(0.92, 0.94, 0.96),
+    });
+    // Category Label
+    page.drawText(cat.label, {
+      x: 48,
+      y: currentY - 16,
+      size: 11,
+      font,
+      color: rgb(0.12, 0.23, 0.35),
+    });
+    currentY -= 30;
+
+    // Grid Layout for items (4 columns)
+    const colWidth = 128;
+    const rowHeight = 18;
+    
+    // Group items into rows of 4
+    for (let i = 0; i < cat.items.length; i += 4) {
+      // Check space for row
+      if (currentY - rowHeight < 50) {
+        page = pdfDoc.addPage([595.28, 841.89]);
+        currentY = height - 50;
+      }
+
+      // Draw up to 4 items in this row
+      for (let c = 0; c < 4; c++) {
+        const itemIdx = i + c;
+        if (itemIdx >= cat.items.length) break;
+        const item = cat.items[itemIdx];
+        const xPos = 40 + c * colWidth;
+        page.drawText(`${item.numbers}=${item.amountText}`, {
+          x: xPos,
+          y: currentY - 12,
+          size: 10,
+          font,
+          color: rgb(0.2, 0.2, 0.2),
+        });
+      }
+      currentY -= rowHeight;
+    }
+    
+    currentY -= 10; // Extra spacing after category
+  }
+
+  // Draw Page Numbers at the end
+  const pages = pdfDoc.getPages();
+  for (let i = 0; i < pages.length; i++) {
+    const p = pages[i];
+    p.drawText(`หน้า ${i + 1} จาก ${pages.length}`, {
+      x: 270,
+      y: 25,
+      size: 9,
+      font,
+      color: rgb(0.5, 0.5, 0.5),
+    });
+  }
+
+  return await pdfDoc.save();
+}
+
+async function uploadPDFToStorage(pdfBytes: Uint8Array, fileName: string): Promise<string> {
+  // Ensure bucket exists
+  try {
+    const { data: bucket, error: bucketError } = await supabase.storage.getBucket('reports');
+    if (bucketError || !bucket) {
+      await supabase.storage.createBucket('reports', { public: false });
+    }
+  } catch (e) {
+    console.warn("Error checking/creating reports bucket, proceeding with upload:", e);
+  }
+
+  // Upload to Supabase storage 'reports' bucket
+  const { data, error } = await supabase.storage
+    .from('reports')
+    .upload(fileName, pdfBytes, {
+      contentType: 'application/pdf',
+      upsert: true,
+    });
+
+  if (error) {
+    throw new Error(`Storage upload failed: ${error.message}`);
+  }
+
+  // Create signed URL valid for 24 hours (86,400 seconds)
+  const { data: signData, error: signError } = await supabase.storage
+    .from('reports')
+    .createSignedUrl(fileName, 86400);
+
+  if (signError) {
+    throw new Error(`Failed to create signed URL: ${signError.message}`);
+  }
+
+  return signData.signedUrl;
+}
+
 
 // Helper: Format YYYY-MM-DD to DD-MM-YYYY (Buddhist Era)
 function formatToThaiBudDate(dateStr: string | null | undefined): string {
@@ -726,11 +932,13 @@ async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
   const lotteryType = roundData?.lottery_type || '';
   const isSetBasedLottery = ['lao', 'hanoi'].includes(lotteryType);
 
-  const { data: submissions, error: subErr } = await supabase
-    .from('submissions')
-    .select('id, bet_type, numbers, amount, created_at')
-    .eq('round_id', roundId)
-    .eq('is_deleted', false);
+  let submissions = [];
+  let subErr = null;
+  try {
+    submissions = await fetchAllSubmissions(roundId);
+  } catch (err) {
+    subErr = err;
+  }
 
   if (subErr || !submissions) return [];
 
@@ -1311,11 +1519,12 @@ async function updatePendingDeduction(dealerId: string): Promise<void> {
     let totalPending = 0;
 
     for (const round of rounds) {
-      const { data: allSubs } = await supabase
-        .from('submissions')
-        .select('id, amount, user_id, source, submitted_by_type')
-        .eq('round_id', round.id)
-        .eq('is_deleted', false);
+      let allSubs = [];
+      try {
+        allSubs = await fetchAllSubmissions(round.id);
+      } catch (err) {
+        console.error("Failed to fetch all submissions in updatePendingDeduction:", err);
+      }
 
       const { data: outgoingTransfers } = await supabase
         .from('bet_transfers')
@@ -1552,19 +1761,25 @@ function parseWinningNumbers(param: string, lotteryType: string): any | null {
   return null;
 }
 
-async function fetchAllSubmissions(roundId: string): Promise<any[]> {
+async function fetchAllSubmissions(roundId: string, filterUserId?: string | null): Promise<any[]> {
   let allSubs: any[] = [];
   let page = 0;
   const pageSize = 1000;
   while (true) {
     const from = page * pageSize;
     const to = from + pageSize - 1;
-    const { data, error } = await supabase
+    let query = supabase
       .from('submissions')
-      .select('id, amount, user_id, source, submitted_by_type, commission_amount, prize_amount, is_winner, bet_type')
+      .select('id, amount, user_id, source, submitted_by_type, commission_amount, prize_amount, is_winner, bet_type, numbers, created_at, bill_id, bill_note, entry_id')
       .eq('round_id', roundId)
       .eq('is_deleted', false)
       .range(from, to);
+
+    if (filterUserId) {
+      query = query.eq('user_id', filterUserId);
+    }
+
+    const { data, error } = await query;
     if (error) {
       console.error("Error fetching submissions page:", error);
       throw error;
@@ -2233,11 +2448,12 @@ serve(async (req) => {
       
       if (groups && groups.length > 0) {
         // Fetch all active submissions for this round to see which users bet
-        const { data: submissions } = await supabase
-          .from('submissions')
-          .select('user_id')
-          .eq('round_id', roundId)
-          .eq('is_deleted', false);
+        let submissions = [];
+        try {
+          submissions = await fetchAllSubmissions(roundId);
+        } catch (err) {
+          console.error("Failed to fetch all submissions in sendResultAnnouncementNotification:", err);
+        }
 
         const activeUserIds = [...new Set((submissions || []).map((s: any) => s.user_id).filter(Boolean))];
         const groupIds = groups.map((g: any) => g.line_group_id).filter(Boolean);
@@ -2720,11 +2936,12 @@ serve(async (req) => {
               const sumMap: Record<string, number> = {};
               const commMap: Record<string, number> = {};
               if (activeRound) {
-                const { data: submissions } = await supabase
-                  .from('submissions')
-                  .select('user_id, amount, commission_amount')
-                  .eq('round_id', activeRound.id)
-                  .eq('is_deleted', false);
+                let submissions = [];
+                try {
+                  submissions = await fetchAllSubmissions(activeRound.id);
+                } catch (err) {
+                  console.error('Error in stats fetchAllSubmissions:', err);
+                }
 
                 (submissions || []).forEach((s: any) => {
                   sumMap[s.user_id] = (sumMap[s.user_id] || 0) + Number(s.amount);
@@ -2741,6 +2958,13 @@ serve(async (req) => {
               summaryText += `ยอด       คอม      เหลือ\n`;
               summaryText += `--------------------------\n`;
               
+              // Sort members by total bet amount descending
+              filteredMembers.sort((a: any, b: any) => {
+                const totalA = sumMap[a.user_id] || 0;
+                const totalB = sumMap[b.user_id] || 0;
+                return totalB - totalA;
+              });
+
               filteredMembers.forEach((m: any) => {
                 const profile = m.profiles || {};
                 const name = profile.full_name || 'Unknown User';
@@ -2781,11 +3005,13 @@ serve(async (req) => {
               }
 
               // Get all submissions for this round
-              const { data: submissions, error: subErr } = await supabase
-                .from('submissions')
-                .select('user_id, amount, commission_amount')
-                .eq('round_id', activeRound.id)
-                .eq('is_deleted', false);
+              let submissions = [];
+              let subErr = null;
+              try {
+                submissions = await fetchAllSubmissions(activeRound.id);
+              } catch (err) {
+                subErr = err;
+              }
 
               if (subErr) {
                 await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลผู้ส่งเลข`);
@@ -2799,8 +3025,10 @@ serve(async (req) => {
                 userComms[s.user_id] = (userComms[s.user_id] || 0) + Number(s.commission_amount || 0);
               });
 
-              // Filter out users who have sent 0 or null amount
-              const activeUserIds = Object.keys(userTotals).filter(uid => userTotals[uid] > 0);
+              // Filter out users who have sent 0 or null amount and sort descending by total amount
+              const activeUserIds = Object.keys(userTotals)
+                .filter(uid => userTotals[uid] > 0)
+                .sort((a, b) => userTotals[b] - userTotals[a]);
 
               if (activeUserIds.length === 0) {
                 await sendLineReply(replyToken, `👥 ยังไม่มีสมาชิกส่งเลขเข้ามาในงวดนี้ค่ะ`);
@@ -3628,12 +3856,15 @@ serve(async (req) => {
                 }
 
                 // 2. Fetch submissions for these group members in this round
-                const { data: submissions, error: subErr } = await supabase
-                  .from('submissions')
-                  .select('amount, commission_amount, prize_amount, is_winner, user_id, bet_type, numbers')
-                  .eq('round_id', activeRound.id)
-                  .in('user_id', memberUserIds)
-                  .eq('is_deleted', false);
+                let submissions = [];
+                let subErr = null;
+                try {
+                  const allSubs = await fetchAllSubmissions(activeRound.id);
+                  const memberSet = new Set(memberUserIds);
+                  submissions = allSubs.filter(s => memberSet.has(s.user_id));
+                } catch (err) {
+                  subErr = err;
+                }
 
                 if (subErr) {
                   console.error(`[แจ้งผล] SKIP group=${targetGroupId} reason=subError msg=${subErr.message}`);
@@ -4475,17 +4706,13 @@ serve(async (req) => {
               const isAnnounced = activeRound.is_result_announced === true && !!activeRound.winning_numbers;
 
               // 1. Fetch Submissions (ยอดรับ)
-              let subQuery = supabase
-                .from('submissions')
-                .select('amount, commission_amount, prize_amount, is_winner, user_id, bet_type, numbers')
-                .eq('round_id', activeRound.id)
-                .eq('is_deleted', false);
-
-              if (showOwnOnly && targetUserId) {
-                subQuery = subQuery.eq('user_id', targetUserId);
+              let submissions = [];
+              let subErr = null;
+              try {
+                submissions = await fetchAllSubmissions(activeRound.id, showOwnOnly && targetUserId ? targetUserId : null);
+              } catch (err) {
+                subErr = err;
               }
-
-              const { data: submissions, error: subErr } = await subQuery;
 
               if (subErr) {
                 await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลยอดรับ`);
@@ -5293,9 +5520,23 @@ serve(async (req) => {
 
             // ─── COMMAND: /ยอดรวม หรือ /total ───
             if (text.startsWith('/total') || text.startsWith('/ยอดรวม')) {
-              if (!showOwnOnly && !permissions.can_view_total) {
-                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์เข้าถึงรายงานยอดรวม`);
-                continue;
+              let searchArg = '';
+              if (text.startsWith('/total')) {
+                searchArg = text.substring('/total'.length).trim();
+              } else if (text.startsWith('/ยอดรวม')) {
+                searchArg = text.substring('/ยอดรวม'.length).trim();
+              }
+
+              if (searchArg !== '') {
+                if (!permissions.can_view_total) {
+                  await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์เข้าถึงรายงานยอดรวมของสมาชิกรายอื่น`);
+                  continue;
+                }
+              } else {
+                if (!showOwnOnly && !permissions.can_view_total) {
+                  await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์เข้าถึงรายงานยอดรวม`);
+                  continue;
+                }
               }
 
               const { data: activeRound } = await supabase
@@ -5313,17 +5554,118 @@ serve(async (req) => {
                 continue;
               }
 
-              let query = supabase
-                .from('submissions')
-                .select('bet_type, amount, commission_amount')
-                .eq('round_id', activeRound.id)
-                .eq('is_deleted', false);
+              let matchedUserId: string | null = null;
+              let matchedUserName = '';
 
-              if (showOwnOnly && targetUserId) {
-                query = query.eq('user_id', targetUserId);
+              if (searchArg !== '') {
+                // 1. Fetch dealer's active memberships
+                const { data: memberships, error: memErr } = await supabase
+                  .from('user_dealer_memberships')
+                  .select(`
+                    user_id,
+                    profiles:user_id (
+                      id,
+                      full_name,
+                      line_poy_display,
+                      line_user_id,
+                      email
+                    )
+                  `)
+                  .eq('dealer_id', dealerId)
+                  .eq('status', 'active');
+
+                if (memErr) {
+                  await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลสมาชิก`);
+                  continue;
+                }
+
+                // 2. Fetch group members for this LINE group
+                const { data: groupMembers } = await supabase
+                  .from('line_group_members')
+                  .select('user_id, line_user_id, display_name')
+                  .eq('line_group_id', groupLink.line_group_id);
+
+                const cleanArg = searchArg.toLowerCase().trim();
+
+                // Find matches from memberships
+                const candidates: Array<{
+                  user_id: string;
+                  full_name: string;
+                  line_user_id: string;
+                  email: string;
+                  group_display_name: string;
+                }> = [];
+
+                (memberships || []).forEach((m: any) => {
+                  const p = m.profiles;
+                  if (p) {
+                    const gm = (groupMembers || []).find((g: any) => g.user_id === p.id || (g.line_user_id === p.line_user_id && p.line_user_id));
+                    candidates.push({
+                      user_id: p.id,
+                      full_name: p.full_name || '',
+                      line_user_id: p.line_user_id || '',
+                      email: p.email || '',
+                      group_display_name: gm?.display_name || ''
+                    });
+                  }
+                });
+
+                // Let's perform matches
+                // 1. Exact match on UUID
+                let matches = candidates.filter(c => c.user_id.toLowerCase() === cleanArg);
+
+                // 2. Exact match on line_user_id
+                if (matches.length === 0) {
+                  matches = candidates.filter(c => c.line_user_id.toLowerCase() === cleanArg);
+                }
+
+                // 3. Exact match on full_name or group_display_name
+                if (matches.length === 0) {
+                  matches = candidates.filter(c => 
+                    c.full_name.toLowerCase() === cleanArg ||
+                    c.group_display_name.toLowerCase() === cleanArg
+                  );
+                }
+
+                // 4. Substring match on full_name, group_display_name, email
+                if (matches.length === 0) {
+                  matches = candidates.filter(c => 
+                    c.full_name.toLowerCase().includes(cleanArg) ||
+                    c.group_display_name.toLowerCase().includes(cleanArg) ||
+                    c.email.toLowerCase().includes(cleanArg)
+                  );
+                }
+
+                if (matches.length === 0) {
+                  await sendLineReply(replyToken, `❌ ไม่พบสมาชิกที่ตรงกับ "${searchArg}"`);
+                  continue;
+                }
+
+                if (matches.length > 1) {
+                  const names = matches.map(c => `คุณ ${c.full_name || c.group_display_name || 'ไม่ทราบชื่อ'}`).join(', ');
+                  await sendLineReply(replyToken, `⚠️ พบสมาชิกมากกว่า 1 คนที่ตรงกับ "${searchArg}":\n${names}\nกรุณาระบุชื่อที่ละเอียดขึ้นค่ะ`);
+                  continue;
+                }
+
+                const matchedCandidate = matches[0];
+                matchedUserId = matchedCandidate.user_id;
+                matchedUserName = matchedCandidate.full_name || matchedCandidate.group_display_name || 'ไม่ทราบชื่อ';
               }
 
-              const { data: submissions, error: sumErr } = await query;
+              let targetIdForSubmissions: string | null = null;
+              if (matchedUserId) {
+                targetIdForSubmissions = matchedUserId;
+              } else if (showOwnOnly && targetUserId) {
+                targetIdForSubmissions = targetUserId;
+              }
+
+              let submissions = [];
+              let sumErr = null;
+              try {
+                submissions = await fetchAllSubmissions(activeRound.id, targetIdForSubmissions);
+              } catch (err) {
+                sumErr = err;
+              }
 
               if (sumErr) {
                 await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการคำนวณยอดรวม`);
@@ -5363,7 +5705,36 @@ serve(async (req) => {
               let headerTitle = '';
               const headerContents: any[] = [];
 
-              if (showOwnOnly) {
+              if (matchedUserId) {
+                headerTitle = `📈 ยอดรวมส่งโพยของ คุณ ${matchedUserName} (${groupLink.lottery_type.toUpperCase()})`;
+                summaryText = `${headerTitle}\n`;
+                summaryText += `งวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
+                summaryText += `ผู้ซื้อ: คุณ ${matchedUserName}\n`;
+
+                headerContents.push(
+                  {
+                    "type": "text",
+                    "text": headerTitle,
+                    "weight": "bold",
+                    "size": "md",
+                    "color": "#ffffff"
+                  },
+                  {
+                    "type": "text",
+                    "text": `งวดวันที่: ${getRoundDisplayDate(activeRound, false)}`,
+                    "size": "xs",
+                    "color": "#e1d9f0",
+                    "margin": "xs"
+                  },
+                  {
+                    "type": "text",
+                    "text": `ผู้ซื้อ: คุณ ${matchedUserName}`,
+                    "size": "xs",
+                    "color": "#e1d9f0",
+                    "margin": "xs"
+                  }
+                );
+              } else if (showOwnOnly) {
                 headerTitle = `📈 ยอดรวมส่งโพยของคุณ (${groupLink.lottery_type.toUpperCase()})`;
                 summaryText = `${headerTitle}\n`;
                 summaryText += `งวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
@@ -5419,7 +5790,9 @@ serve(async (req) => {
               const bubbleBodyContents: any[] = [];
 
               if (Object.keys(betTypeTotals).length === 0) {
-                const noBetsMsg = showOwnOnly ? `คุณยังไม่มียอดแทงส่งเข้ามาในงวดนี้ค่ะ` : `ยังไม่มียอดแทงส่งเข้ามาค่ะ`;
+                const noBetsMsg = matchedUserId
+                  ? `คุณ ${matchedUserName} ยังไม่มียอดแทงส่งเข้ามาในงวดนี้ค่ะ`
+                  : (showOwnOnly ? `คุณยังไม่มียอดแทงส่งเข้ามาในงวดนี้ค่ะ` : `ยังไม่มียอดแทงส่งเข้ามาค่ะ`);
                 summaryText += `${noBetsMsg}\n`;
                 bubbleBodyContents.push({
                   "type": "text",
@@ -5580,15 +5953,17 @@ serve(async (req) => {
             }
 
             // ─── COMMAND: /ยอดเกิน หรือ /excess ───
-            if (text === '/excess' || text === '/ยอดเกิน') {
+            if (text.startsWith('/excess') || text.startsWith('/ยอดเกิน')) {
               if (!permissions.can_view_excess) {
                 await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์เข้าถึงรายงานยอดเกินอั้น`);
                 continue;
               }
 
+              const isPdf = text.toLowerCase().split(/\s+/).includes('pdf');
+
               const { data: activeRound } = await supabase
                 .from('lottery_rounds')
-                .select('id, round_date, close_time, set_prices, lottery_type')
+                .select('id, round_date, close_time, set_prices, lottery_type, lottery_name')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
                 .in('status', ['open', 'closed', 'announced'])
@@ -5619,22 +5994,103 @@ serve(async (req) => {
                 'run_bottom': 'ลอยล่าง'
               };
 
-              let summaryText = `รายการยอดเกินอั้น (${groupLink.lottery_type.toUpperCase()})\nงวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
+              const LOTTERY_NAMES: Record<string, string> = { 'thai': 'หวยไทย', 'lao': 'หวยลาว', 'hanoi': 'หวยฮานอย', 'stock': 'หวยหุ้น', 'yeekee': 'หวยยี่กี', 'other': 'อื่นๆ' };
+              const lotteryDisplayName = activeRound.lottery_name || LOTTERY_NAMES[groupLink.lottery_type] || groupLink.lottery_type.toUpperCase();
+              const roundDateStr = getRoundDisplayDate(activeRound, false);
+
+              if (isPdf) {
+                const pdfCategories: PDFCategory[] = [];
+                let totalExcess = 0;
+                if (excessItems.length > 0) {
+                  // Group items by bet_type
+                  const betTypeOrder = ['run_top', 'run_bottom', 'pak_top', 'pak_bottom', '2_top', '2_front', '2_center', '2_run', '2_bottom', '3_top', '3_tod', '3_front', '3_back', '3_bottom', '4_set', '4_top', '4_tod', '4_float', '5_float', '6_top'];
+                  const grouped: Record<string, typeof excessItems> = {};
+                  excessItems.forEach((item) => {
+                    if (!grouped[item.bet_type]) grouped[item.bet_type] = [];
+                    grouped[item.bet_type].push(item);
+                    totalExcess += item.amount;
+                  });
+                  const sortedTypes = Object.keys(grouped).sort((a, b) => {
+                    const idxA = betTypeOrder.indexOf(a);
+                    const idxB = betTypeOrder.indexOf(b);
+                    if (idxA === -1 && idxB === -1) return a.localeCompare(b);
+                    if (idxA === -1) return 1;
+                    if (idxB === -1) return -1;
+                    return idxA - idxB;
+                  });
+
+                  for (const betType of sortedTypes) {
+                    const items = grouped[betType];
+                    const label = LABELS[betType] || betType;
+                    const pdfItems = items.map((item) => {
+                      if (betType === '4_set') {
+                        const setPrice = activeRound.set_prices?.['4_top'] || 120;
+                        const numSets = Math.round(item.amount / setPrice);
+                        return { numbers: item.numbers, amountText: `${numSets} ชุด` };
+                      } else {
+                        return { numbers: item.numbers, amountText: item.amount.toLocaleString('th-TH') };
+                      }
+                    });
+                    pdfCategories.push({ label, items: pdfItems });
+                  }
+                }
+
+                try {
+                  const pdfBytes = await generateReportPDF(
+                    `รายการเลขเกินอั้น (${lotteryDisplayName})`,
+                    roundDateStr ? `งวดวันที่: ${roundDateStr}` : '',
+                    pdfCategories,
+                    `รวมยอดเกิน: ฿${totalExcess.toLocaleString('th-TH')}`
+                  );
+                  const fileName = `เลขเกิน_${activeRound.id}_${Date.now()}.pdf`;
+                  const signedUrl = await uploadPDFToStorage(pdfBytes, fileName);
+                  await sendLineReply(replyToken, `📄 ดาวน์โหลด PDF รายการเลขเกินอั้น (${lotteryDisplayName})\nงวดวันที่: ${roundDateStr}\n\n👉 กดที่นี่เพื่อดาวน์โหลด:\n${signedUrl}`);
+                } catch (pdfErr) {
+                  console.error("PDF generation/upload error:", pdfErr);
+                  await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการสร้างไฟล์ PDF: ${pdfErr.message}`);
+                }
+                continue;
+              }
+
+              let summaryText = `รายการเลขเกินอั้น ${lotteryDisplayName}\nงวดวันที่: ${roundDateStr}\n`;
               summaryText += `--------------------------\n`;
 
               let totalExcess = 0;
               if (excessItems.length === 0) {
                 summaryText += `ไม่มียอดเกินอั้นค่ะ 🎉\n`;
               } else {
+                // Group items by bet_type
+                const betTypeOrder = ['run_top', 'run_bottom', 'pak_top', 'pak_bottom', '2_top', '2_front', '2_center', '2_run', '2_bottom', '3_top', '3_tod', '3_front', '3_back', '3_bottom', '4_set', '4_top', '4_tod', '4_float', '5_float', '6_top'];
+                const grouped: Record<string, typeof excessItems> = {};
                 excessItems.forEach((item) => {
-                  if (item.bet_type === '4_set') {
-                    const setPrice = activeRound.set_prices?.['4_top'] || 120;
-                    const numSets = Math.round(item.amount / setPrice);
-                    summaryText += `${item.numbers}=${numSets} ชุด [${LABELS[item.bet_type] || item.bet_type}]\n`;
-                  } else {
-                    summaryText += `${item.numbers}=${item.amount} [${LABELS[item.bet_type] || item.bet_type}]\n`;
-                  }
+                  if (!grouped[item.bet_type]) grouped[item.bet_type] = [];
+                  grouped[item.bet_type].push(item);
                   totalExcess += item.amount;
+                });
+                const sortedTypes = Object.keys(grouped).sort((a, b) => {
+                  const idxA = betTypeOrder.indexOf(a);
+                  const idxB = betTypeOrder.indexOf(b);
+                  if (idxA === -1 && idxB === -1) return a.localeCompare(b);
+                  if (idxA === -1) return 1;
+                  if (idxB === -1) return -1;
+                  return idxA - idxB;
+                });
+                sortedTypes.forEach((betType, idx) => {
+                  const items = grouped[betType];
+                  const label = LABELS[betType] || betType;
+                  summaryText += `[${label}]\n`;
+                  items.forEach((item) => {
+                    if (betType === '4_set') {
+                      const setPrice = activeRound.set_prices?.['4_top'] || 120;
+                      const numSets = Math.round(item.amount / setPrice);
+                      summaryText += `${item.numbers}=${numSets} ชุด\n`;
+                    } else {
+                      summaryText += `${item.numbers}=${item.amount}\n`;
+                    }
+                  });
+                  if (idx < sortedTypes.length - 1) {
+                    summaryText += `---------------\n`;
+                  }
                 });
               }
               summaryText += `--------------------------\n`;
@@ -5678,6 +6134,8 @@ serve(async (req) => {
                 continue;
               }
 
+              const isPdf = text.toLowerCase().split(/\s+/).includes('pdf');
+
               let sortByAmount: 'asc' | 'desc' | null = null;
               if (text.includes('น-ม')) {
                 sortByAmount = 'asc';
@@ -5700,11 +6158,13 @@ serve(async (req) => {
                 continue;
               }
 
-              const { data: submissions, error: sumErr } = await supabase
-                .from('submissions')
-                .select('bet_type, numbers, amount')
-                .eq('round_id', activeRound.id)
-                .eq('is_deleted', false);
+              let submissions = [];
+              let sumErr = null;
+              try {
+                submissions = await fetchAllSubmissions(activeRound.id);
+              } catch (err) {
+                sumErr = err;
+              }
 
               if (sumErr) {
                 await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลเลขรวม`);
@@ -5739,9 +6199,52 @@ serve(async (req) => {
                 yeekee: 'หวยยี่กี'
               };
               const typeNameInThai = LOTTERY_TYPE_NAMES[groupLink.lottery_type] || `หวย${groupLink.lottery_type.toUpperCase()}`;
+              const roundDateStr = getRoundDisplayDate(activeRound, false);
+
+              if (isPdf) {
+                const pdfCategories: PDFCategory[] = [];
+                for (const type of sortedTypes) {
+                  const label = getThaiBetTypeLabel(type, groupLink.lottery_type);
+                  const typeMap = soldMap.get(type)!;
+                  const sortedNums = Array.from(typeMap.keys()).sort((a, b) => {
+                    if (sortByAmount) {
+                      const amtA = typeMap.get(a)!;
+                      const amtB = typeMap.get(b)!;
+                      if (amtA !== amtB) {
+                        return sortByAmount === 'asc' ? amtA - amtB : amtB - amtA;
+                      }
+                    }
+                    const numA = parseInt(a, 10);
+                    const numB = parseInt(b, 10);
+                    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                    return a.localeCompare(b);
+                  });
+
+                  const items = sortedNums.map(num => {
+                    const amt = typeMap.get(num)!;
+                    return { numbers: num, amountText: amt.toLocaleString('th-TH') };
+                  });
+                  pdfCategories.push({ label, items });
+                }
+
+                try {
+                  const pdfBytes = await generateReportPDF(
+                    `รายงานเลขรวม (${typeNameInThai})`,
+                    roundDateStr ? `งวดวันที่: ${roundDateStr}` : '',
+                    pdfCategories,
+                    `รวมยอดรวม: ฿${grandTotal.toLocaleString('th-TH')}`
+                  );
+                  const fileName = `เลขรวม_${activeRound.id}_${Date.now()}.pdf`;
+                  const signedUrl = await uploadPDFToStorage(pdfBytes, fileName);
+                  await sendLineReply(replyToken, `📄 ดาวน์โหลด PDF รายงานเลขรวม (${typeNameInThai})\nงวดวันที่: ${roundDateStr}\n\n👉 กดที่นี่เพื่อดาวน์โหลด:\n${signedUrl}`);
+                } catch (pdfErr) {
+                  console.error("PDF generation/upload error:", pdfErr);
+                  await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการสร้างไฟล์ PDF: ${pdfErr.message}`);
+                }
+                continue;
+              }
 
               let summaryText = `รายงานเลขรวม (${typeNameInThai})\n`;
-              const roundDateStr = getRoundDisplayDate(activeRound, false);
               if (roundDateStr) {
                 summaryText += `งวดวันที่: ${roundDateStr}\n`;
               }
@@ -5790,6 +6293,8 @@ serve(async (req) => {
                 await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์เข้าถึงรายงานข้อมูลตัวเลข`);
                 continue;
               }
+
+              const isPdf = text.toLowerCase().split(/\s+/).includes('pdf');
 
               let sortByAmount: 'asc' | 'desc' | null = null;
               if (text.includes('น-ม')) {
@@ -5853,9 +6358,52 @@ serve(async (req) => {
                 yeekee: 'หวยยี่กี'
               };
               const typeNameInThai = LOTTERY_TYPE_NAMES[groupLink.lottery_type] || `หวย${groupLink.lottery_type.toUpperCase()}`;
+              const roundDateStr = getRoundDisplayDate(activeRound, false);
+
+              if (isPdf) {
+                const pdfCategories: PDFCategory[] = [];
+                for (const type of sortedTypes) {
+                  const label = getThaiBetTypeLabel(type, groupLink.lottery_type);
+                  const typeMap = transferMap.get(type)!;
+                  const sortedNums = Array.from(typeMap.keys()).sort((a, b) => {
+                    if (sortByAmount) {
+                      const amtA = typeMap.get(a)!;
+                      const amtB = typeMap.get(b)!;
+                      if (amtA !== amtB) {
+                        return sortByAmount === 'asc' ? amtA - amtB : amtB - amtA;
+                      }
+                    }
+                    const numA = parseInt(a, 10);
+                    const numB = parseInt(b, 10);
+                    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                    return a.localeCompare(b);
+                  });
+
+                  const items = sortedNums.map(num => {
+                    const amt = typeMap.get(num)!;
+                    return { numbers: num, amountText: amt.toLocaleString('th-TH') };
+                  });
+                  pdfCategories.push({ label, items });
+                }
+
+                try {
+                  const pdfBytes = await generateReportPDF(
+                    `รายงานเลขตีออก (${typeNameInThai})`,
+                    roundDateStr ? `งวดวันที่: ${roundDateStr}` : '',
+                    pdfCategories,
+                    `รวมยอดตีออก: ฿${grandTotal.toLocaleString('th-TH')}`
+                  );
+                  const fileName = `เลขตีออก_${activeRound.id}_${Date.now()}.pdf`;
+                  const signedUrl = await uploadPDFToStorage(pdfBytes, fileName);
+                  await sendLineReply(replyToken, `📄 ดาวน์โหลด PDF รายงานเลขตีออก (${typeNameInThai})\nงวดวันที่: ${roundDateStr}\n\n👉 กดที่นี่เพื่อดาวน์โหลด:\n${signedUrl}`);
+                } catch (pdfErr) {
+                  console.error("PDF generation/upload error:", pdfErr);
+                  await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการสร้างไฟล์ PDF: ${pdfErr.message}`);
+                }
+                continue;
+              }
 
               let summaryText = `รายงานเลขตีออก (${typeNameInThai})\n`;
-              const roundDateStr = getRoundDisplayDate(activeRound, false);
               if (roundDateStr) {
                 summaryText += `งวดวันที่: ${roundDateStr}\n`;
               }
@@ -5905,6 +6453,8 @@ serve(async (req) => {
                 continue;
               }
 
+              const isPdf = text.toLowerCase().split(/\s+/).includes('pdf');
+
               let sortByAmount: 'asc' | 'desc' | null = null;
               if (text.includes('น-ม')) {
                 sortByAmount = 'asc';
@@ -5927,11 +6477,13 @@ serve(async (req) => {
                 continue;
               }
 
-              const { data: submissions, error: sumErr } = await supabase
-                .from('submissions')
-                .select('bet_type, numbers, amount')
-                .eq('round_id', activeRound.id)
-                .eq('is_deleted', false);
+              let submissions = [];
+              let sumErr = null;
+              try {
+                submissions = await fetchAllSubmissions(activeRound.id);
+              } catch (err) {
+                sumErr = err;
+              }
 
               const { data: transfers, error: trErr } = await supabase
                 .from('bet_transfers')
@@ -5975,11 +6527,11 @@ serve(async (req) => {
                   const trAmt = transferTypeMap?.get(num) || 0;
                   const remainingAmt = soldAmt - trAmt;
                   if (remainingAmt > 0) {
-                    if (!remainingMap.has(type)) {
-                      remainingMap.set(type, new Map<string, number>());
-                    }
-                    remainingMap.get(type)!.set(num, remainingAmt);
-                    grandRemainingTotal += remainingAmt;
+                     if (!remainingMap.has(type)) {
+                       remainingMap.set(type, new Map<string, number>());
+                     }
+                     remainingMap.get(type)!.set(num, remainingAmt);
+                     grandRemainingTotal += remainingAmt;
                   }
                 }
               }
@@ -5999,9 +6551,52 @@ serve(async (req) => {
                 yeekee: 'หวยยี่กี'
               };
               const typeNameInThai = LOTTERY_TYPE_NAMES[groupLink.lottery_type] || `หวย${groupLink.lottery_type.toUpperCase()}`;
+              const roundDateStr = getRoundDisplayDate(activeRound, false);
+
+              if (isPdf) {
+                const pdfCategories: PDFCategory[] = [];
+                for (const type of sortedTypes) {
+                  const label = getThaiBetTypeLabel(type, groupLink.lottery_type);
+                  const typeMap = remainingMap.get(type)!;
+                  const sortedNums = Array.from(typeMap.keys()).sort((a, b) => {
+                    if (sortByAmount) {
+                      const amtA = typeMap.get(a)!;
+                      const amtB = typeMap.get(b)!;
+                      if (amtA !== amtB) {
+                        return sortByAmount === 'asc' ? amtA - amtB : amtB - amtA;
+                      }
+                    }
+                    const numA = parseInt(a, 10);
+                    const numB = parseInt(b, 10);
+                    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                    return a.localeCompare(b);
+                  });
+
+                  const items = sortedNums.map(num => {
+                    const amt = typeMap.get(num)!;
+                    return { numbers: num, amountText: amt.toLocaleString('th-TH') };
+                  });
+                  pdfCategories.push({ label, items });
+                }
+
+                try {
+                  const pdfBytes = await generateReportPDF(
+                    `รายงานเลขเหลือ (${typeNameInThai})`,
+                    roundDateStr ? `งวดวันที่: ${roundDateStr}` : '',
+                    pdfCategories,
+                    `รวมยอดเหลือ: ฿${grandRemainingTotal.toLocaleString('th-TH')}`
+                  );
+                  const fileName = `เลขเหลือ_${activeRound.id}_${Date.now()}.pdf`;
+                  const signedUrl = await uploadPDFToStorage(pdfBytes, fileName);
+                  await sendLineReply(replyToken, `📄 ดาวน์โหลด PDF รายงานเลขเหลือ (${typeNameInThai})\nงวดวันที่: ${roundDateStr}\n\n👉 กดที่นี่เพื่อดาวน์โหลด:\n${signedUrl}`);
+                } catch (pdfErr) {
+                  console.error("PDF generation/upload error:", pdfErr);
+                  await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการสร้างไฟล์ PDF: ${pdfErr.message}`);
+                }
+                continue;
+              }
 
               let summaryText = `รายงานเลขเหลือ (${typeNameInThai})\n`;
-              const roundDateStr = getRoundDisplayDate(activeRound, false);
               if (roundDateStr) {
                 summaryText += `งวดวันที่: ${roundDateStr}\n`;
               }
@@ -6266,18 +6861,43 @@ serve(async (req) => {
                   'run_bottom': 'ลอยล่าง'
                 };
 
-                let summaryText = `รายการยอดเกินอั้น (${groupLink.lottery_type.toUpperCase()})\nงวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
+                const LOTTERY_NAMES2: Record<string, string> = { 'thai': 'หวยไทย', 'lao': 'หวยลาว', 'hanoi': 'หวยฮานอย', 'stock': 'หวยหุ้น', 'yeekee': 'หวยยี่กี', 'other': 'อื่นๆ' };
+                const lotteryDisplayName2 = activeRound.lottery_name || LOTTERY_NAMES2[groupLink.lottery_type] || groupLink.lottery_type.toUpperCase();
+                let summaryText = `รายการเลขเกินอั้น ${lotteryDisplayName2}\nงวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
                 summaryText += `--------------------------\n`;
                 let totalExcess = 0;
+                // Group items by bet_type
+                const betTypeOrder2 = ['run_top', 'run_bottom', 'pak_top', 'pak_bottom', '2_top', '2_front', '2_center', '2_run', '2_bottom', '3_top', '3_tod', '3_front', '3_back', '3_bottom', '4_set', '4_top', '4_tod', '4_float', '5_float', '6_top'];
+                const grouped2: Record<string, typeof excessItems> = {};
                 excessItems.forEach((item) => {
-                  if (item.bet_type === '4_set') {
-                    const setPrice = activeRound.set_prices?.['4_top'] || 120;
-                    const numSets = Math.round(item.amount / setPrice);
-                    summaryText += `${item.numbers}=${numSets} ชุด [${LABELS[item.bet_type] || item.bet_type}]\n`;
-                  } else {
-                    summaryText += `${item.numbers}=${item.amount} [${LABELS[item.bet_type] || item.bet_type}]\n`;
-                  }
+                  if (!grouped2[item.bet_type]) grouped2[item.bet_type] = [];
+                  grouped2[item.bet_type].push(item);
                   totalExcess += item.amount;
+                });
+                const sortedTypes2 = Object.keys(grouped2).sort((a, b) => {
+                  const idxA = betTypeOrder2.indexOf(a);
+                  const idxB = betTypeOrder2.indexOf(b);
+                  if (idxA === -1 && idxB === -1) return a.localeCompare(b);
+                  if (idxA === -1) return 1;
+                  if (idxB === -1) return -1;
+                  return idxA - idxB;
+                });
+                sortedTypes2.forEach((betType, idx) => {
+                  const items = grouped2[betType];
+                  const label = LABELS[betType] || betType;
+                  summaryText += `[${label}]\n`;
+                  items.forEach((item) => {
+                    if (betType === '4_set') {
+                      const setPrice = activeRound.set_prices?.['4_top'] || 120;
+                      const numSets = Math.round(item.amount / setPrice);
+                      summaryText += `${item.numbers}=${numSets} ชุด\n`;
+                    } else {
+                      summaryText += `${item.numbers}=${item.amount}\n`;
+                    }
+                  });
+                  if (idx < sortedTypes2.length - 1) {
+                    summaryText += `---------------\n`;
+                  }
                 });
                 summaryText += `--------------------------\n`;
                 summaryText += `รวมยอดเกิน: ฿${totalExcess.toLocaleString('th-TH')}`;
@@ -7282,13 +7902,13 @@ serve(async (req) => {
               }
 
               // 4. Fetch all of this member's submissions in this round
-              const { data: mySubs } = await supabase
-                .from('submissions')
-                .select('bill_id, bill_note, amount, commission_amount, entry_id, created_at')
-                .eq('round_id', listActiveRound.id)
-                .eq('user_id', senderProfile.id)
-                .eq('is_deleted', false)
-                .order('created_at', { ascending: true });
+              let mySubs = [];
+              try {
+                mySubs = await fetchAllSubmissions(listActiveRound.id, senderProfile.id);
+                mySubs.sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+              } catch (err) {
+                console.error("Failed to fetch myBills submissions:", err);
+              }
 
               if (!mySubs || mySubs.length === 0) {
                 await sendLineReply(replyToken, `📭 คุณ ${senderProfile.full_name} ยังไม่มีใบโพยในงวดนี้ค่ะ`);
@@ -7865,11 +8485,12 @@ serve(async (req) => {
           numberLimits = (numberLimitsData || []).filter((nl: any) => nl.is_active === undefined || nl.is_active === true);
 
           // Fetch submissions totals
-          const { data: submissionsData } = await supabase
-            .from('submissions')
-            .select('bet_type, numbers, amount')
-            .eq('round_id', activeRound.id)
-            .eq('is_deleted', false);
+          let submissionsData = [];
+          try {
+            submissionsData = await fetchAllSubmissions(activeRound.id);
+          } catch (err) {
+            console.error("Failed to fetch submissions totals:", err);
+          }
           (submissionsData || []).forEach((s: any) => {
             const key = `${s.bet_type}|${s.numbers}`;
             currentTotals.set(key, (currentTotals.get(key) || 0) + Number(s.amount || 0));
