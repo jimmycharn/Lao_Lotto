@@ -27,8 +27,12 @@ export { get3DigitPermCount, normalizeUnicode, extractInlineContext }
 function normalizeUnicode(str) {
     if (!str) return ''
     let s = str
-        // Remove zero-width and invisible characters that break regex matching
-        .replace(/[\u200B\u200C\u200D\uFEFF\u00AD\u2060\u200E\u200F]/g, '')
+        // Remove zero-width, invisible characters, and variation selectors that break regex matching
+        .replace(/[\u200B\u200C\u200D\uFEFF\u00AD\u2060\u200E\u200F\uFE00-\uFE0F]/g, '')
+        // Heavy math sign emojis: ➕ (U+2795), ➖ (U+2796), ➗ (U+2797) → standard ASCII
+        .replace(/\u2795/g, '+')
+        .replace(/\u2796/g, '-')
+        .replace(/\u2797/g, '/')
         // Dashes: en-dash (–), em-dash (—), minus sign (−), figure dash (‒), horizontal bar (―) → hyphen-minus (-)
         .replace(/[\u2013\u2014\u2212\u2012\u2015]/g, '-')
         // Multiplication/asterisk variants: × (U+00D7), ✕ (U+2715), ✖ (U+2716), ⨉ (U+2A09),

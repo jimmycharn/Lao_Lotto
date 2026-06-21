@@ -82,7 +82,10 @@ export function getPermutationCount(numStr: string): number {
 function normalizeUnicode(str: string): string {
     if (!str) return '';
     let s = str
-        .replace(/[\u200B\u200C\u200D\uFEFF\u00AD\u2060\u200E\u200F]/g, '')
+        .replace(/[\u200B\u200C\u200D\uFEFF\u00AD\u2060\u200E\u200F\uFE00-\uFE0F]/g, '')
+        .replace(/\u2795/g, '+')
+        .replace(/\u2796/g, '-')
+        .replace(/\u2797/g, '/')
         .replace(/[\u2013\u2014\u2212\u2012\u2015]/g, '-')
         .replace(/[\u00D7\u2715\u2716\u2A09\uFE61\u30FB\u2217\u204E\u2731\u2732\u2733\u066D\uFF0A\u22C6\u274C]/g, '*')
         .replace(/[\u2215\u2044]/g, '/')
