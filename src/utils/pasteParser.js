@@ -131,7 +131,7 @@ function normalizeUnicode(str) {
     s = s.replace(/\b\d+\s*ตัว\s*/g, '')
 
     // Strip optional lottery type prefixes (ท, ฮ, ห, and ล when followed by context)
-    s = s.replace(/^([ทฮห]\.?\s*|ล\.?\s+|ล\.?(?=ลอย|วิ่ง|โต๊ด|ล่าง|บนล่าง|บล|ลบ))/i, '')
+    s = s.replace(/^([ทฮห]\.?\s*|ล\.?(?=ลอย|วิ่ง|โต๊ด|ล่าง|บนล่าง|บล|ลบ))/i, '')
 
     return s;
 }
