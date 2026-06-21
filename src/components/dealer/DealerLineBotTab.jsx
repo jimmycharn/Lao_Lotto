@@ -877,7 +877,7 @@ export default function DealerLineBotTab({ user, profile }) {
                                             )}
                                         </Fragment>
                                     );
-                                })}
+                                }))}
                             </tbody>
                         </table>
                     </div>
