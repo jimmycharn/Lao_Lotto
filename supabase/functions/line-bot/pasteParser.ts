@@ -182,6 +182,12 @@ function normalizeUnicode(str: string): string {
     // Strip optional lottery type prefixes (ท, ฮ, ห, and ล when followed by context)
     s = s.replace(/^([ทฮห]\.?\s*|ล\.?(?=ลอย|วิ่ง|โต๊ด|ล่าง|บนล่าง|บล|ลบ))/i, '');
 
+    // Normalize both-context shorthand variants to standard บล / ลบ / บนล่าง / ล่างบน
+    s = s.replace(/(?<![ก-๛a-zA-Z0-9])บน[\s./+\-]?ล่าง(?![ก-๛a-zA-Z0-9])/g, 'บนล่าง');
+    s = s.replace(/(?<![ก-๛a-zA-Z0-9])ล่าง[\s./+\-]?บน(?![ก-๛a-zA-Z0-9])/g, 'ล่างบน');
+    s = s.replace(/(?<![ก-๛a-zA-Z0-9])บ[\s./+\-]?ล\.?(?![ก-๛a-zA-Z0-9])/g, 'บล');
+    s = s.replace(/(?<![ก-๛a-zA-Z0-9])ล[\s./+\-]?บ\.?(?![ก-๛a-zA-Z0-9])/g, 'ลบ');
+
     return s;
 }
 
