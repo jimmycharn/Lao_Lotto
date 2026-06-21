@@ -139,6 +139,17 @@ function normalizeUnicode(str: string): string {
     // Case 2: 1-5 digit number followed by colon and amount with operator/suffix (e.g. 12:10*10, 12:10ช)
     s = s.replace(/(\b\d{1,5})\s*:\s*(\d+(?:\s*[*×xX\-+/]|\s*ชุด|\s*บาท|\s*บ\.?|\s*[ชซ](?![ก-๛a-zA-Z0-9])))/g, '$1=$2');
 
+    // Normalize dot-separated triplets (e.g. 450.55.30 -> 450=55*30)
+    // To avoid matching dates (like 21.06.26 or 21.06.2026), we ensure it doesn't look like a date
+    s = s.replace(/(\b\d{1,5})\s*\.\s*(\d+)\s*\.\s*(\d+)(?!\s*\.)/g, (match, p1, p2, p3) => {
+        const num1 = parseInt(p1, 10);
+        const num2 = parseInt(p2, 10);
+        if (p1.length <= 2 && p2.length <= 2 && num1 >= 1 && num1 <= 31 && num2 >= 1 && num2 <= 12) {
+            return match;
+        }
+        return `${p1}=${p2}*${p3}`;
+    });
+
     // Normalize dots to equals when they act as bet separators (e.g. 68.50*50 -> 68=50*50, 68.50 -> 68=50)
     s = s.replace(/(\b\d{1,5})\s*\.\s*(\d+)(?!\s*\.)/g, (match, p1, p2, offset, string) => {
         const num1 = parseInt(p1, 10);
