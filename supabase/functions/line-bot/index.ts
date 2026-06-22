@@ -7756,9 +7756,9 @@ serve(async (req) => {
 
           let cancelCode = '';
           if (text.startsWith('/cancel')) {
-            cancelCode = text.substring('/cancel'.length).trim();
+            cancelCode = text.substring('/cancel'.length).trim().toUpperCase();
           } else if (text.startsWith('/ยกเลิก')) {
-            cancelCode = text.substring('/ยกเลิก'.length).trim();
+            cancelCode = text.substring('/ยกเลิก'.length).trim().toUpperCase();
           }
 
           if (!cancelCode) {
