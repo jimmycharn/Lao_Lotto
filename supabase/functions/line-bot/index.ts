@@ -9093,7 +9093,6 @@ serve(async (req) => {
             summaryText += formattedDetailLines.join('\n') + '\n';
             summaryText += `------------------------\n`;
           }
-          summaryText += `/ยกเลิก ${billId}\n\n`;
 
           // Group and summarize returned bets
           const groupedReturned = new Map<string, { numbers: string; betType: string; typeLabel: string; amount: number }>();
@@ -9131,10 +9130,11 @@ serve(async (req) => {
             summaryText += formattedDetailLines.join('\n') + '\n';
             summaryText += `------------------------\n`;
           }
-          summaryText += `/ยกเลิก ${billId}`;
+          summaryText = summaryText.trimEnd();
         }
 
-        await sendLineReply(replyToken, summaryText);
+        const cancelMsg = `/ยกเลิก ${billId}`;
+        await sendLineReply(replyToken, [summaryText, cancelMsg]);
       }
       } catch (error: any) {
         console.error('Error handling loop event:', error);
