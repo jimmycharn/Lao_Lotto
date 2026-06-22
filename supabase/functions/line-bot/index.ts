@@ -4044,8 +4044,11 @@ serve(async (req) => {
                   });
                 }
 
-                // Sort user summaries by net profit descending (so high winnings / payout first)
+                // Sort user summaries by total bet descending
                 const sortedUserSummaries = Object.values(userSummaries).sort((a, b) => {
+                  if (b.totalBet !== a.totalBet) {
+                    return b.totalBet - a.totalBet;
+                  }
                   const netA = a.totalWin - (a.totalBet - a.totalCommission);
                   const netB = b.totalWin - (b.totalBet - b.totalCommission);
                   return netB - netA;
@@ -5101,11 +5104,14 @@ serve(async (req) => {
 
               const roundedTotalCombinedProfit = Math.round(totalCombinedProfit);
 
-              // Sort user summaries by net profit descending (similar to frontend)
+              // Sort user summaries by total bet descending
               const sortedUserSummaries = Object.values(userSummaries).sort((a, b) => {
+                if (b.totalBet !== a.totalBet) {
+                  return b.totalBet - a.totalBet;
+                }
                 const netA = a.totalWin - (a.totalBet - a.totalCommission);
                 const netB = b.totalWin - (b.totalBet - b.totalCommission);
-                return netB - netA; // high winnings / payout first
+                return netB - netA;
               });
 
               // Construct AltText Summary (Thai Plaintext) and Flex Message
