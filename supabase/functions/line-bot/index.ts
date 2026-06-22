@@ -8769,7 +8769,7 @@ serve(async (req) => {
             if (bet.specialType === 'tengTod' && bet.amount2) {
               const todAmt = bet.amount2;
               const sortedNumbers = bet.numbers.split('').sort().join('');
-              const todCommInfo = await getCommissionInfo(profile.id, dealerId, '3_tod', lotteryType);
+              const todCommInfo = getCommissionInfo(userSettings?.lottery_settings, '3_tod', lotteryType);
 
               const todBonusPct = betTypeBonus['3_tod'] || 0;
               const boostedTodAmt = todBonusPct > 0 ? Math.round(todAmt * (1 + todBonusPct / 100)) : todAmt;
@@ -8813,8 +8813,8 @@ serve(async (req) => {
               const boostedRevAmt = revBonusPct > 0 ? Math.round(revAmt * (1 + revBonusPct / 100)) : revAmt;
               const revDispAmt = revBonusPct > 0 ? boostedRevAmt.toString() + '\u200B' : revAmt.toString() + '\u200C';
 
+              const revCommInfo = getCommissionInfo(userSettings?.lottery_settings, betType, lotteryType);
               for (const permNum of perms) {
-                const revCommInfo = await getCommissionInfo(profile.id, dealerId, betType, lotteryType);
                 const revCommAmt = revCommInfo.isFixed ? revCommInfo.rate : (boostedRevAmt * revCommInfo.rate) / 100;
 
                 totalBetAmount += boostedRevAmt;
@@ -8899,7 +8899,7 @@ serve(async (req) => {
 
               if (acceptedSets > 0) {
                 insert.amount = acceptedAmount;
-                const commInfo = await getCommissionInfo(profile.id, dealerId, betType, lotteryType);
+                const commInfo = getCommissionInfo(userSettings?.lottery_settings, betType, lotteryType);
                 insert.commission_amount = commInfo.isFixed ? commInfo.rate * acceptedSets : (acceptedAmount * commInfo.rate) / 100;
                 insert.display_amount = `${acceptedAmount} บาท (${acceptedSets} ชุด)\u200C`;
                 finalInserts.push(insert);
@@ -8940,7 +8940,7 @@ serve(async (req) => {
 
               if (acceptedAmount > 0) {
                 insert.amount = acceptedAmount;
-                const commInfo = await getCommissionInfo(profile.id, dealerId, betType, lotteryType);
+                const commInfo = getCommissionInfo(userSettings?.lottery_settings, betType, lotteryType);
                 insert.commission_amount = commInfo.isFixed ? commInfo.rate : (acceptedAmount * commInfo.rate) / 100;
                 
                 const bonusPct = betTypeBonus[betType] || 0;
