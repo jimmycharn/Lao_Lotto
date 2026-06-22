@@ -1632,7 +1632,7 @@ async function updatePendingDeduction(dealerId: string): Promise<void> {
 }
 
 // Helper: Get Commission settings for user
-async function getCommissionInfo(userId: string, dealerId: string, betType: string, lotteryType: string) {
+function getCommissionInfo(lotterySettings: any, betType: string, lotteryType: string) {
   const lotteryKey = lotteryType === 'lao' ? 'lao' : lotteryType === 'hanoi' ? 'hanoi' : 'thai';
   let settingsKey = betType;
   if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
@@ -1644,14 +1644,7 @@ async function getCommissionInfo(userId: string, dealerId: string, betType: stri
     settingsKey = LAO_BET_TYPE_MAP[betType] || betType;
   }
 
-  const { data: settings } = await supabase
-    .from('user_settings')
-    .select('lottery_settings')
-    .eq('user_id', userId)
-    .eq('dealer_id', dealerId)
-    .single();
-
-  const betSettings = settings?.lottery_settings?.[lotteryKey]?.[settingsKey];
+  const betSettings = lotterySettings?.[lotteryKey]?.[settingsKey];
   if (betSettings?.commission !== undefined) {
     const isFixed = betSettings.isFixed || betSettings.isSet || betType === '4_set' || betType === '4_top';
     return { rate: betSettings.commission, isFixed };
@@ -8508,22 +8501,14 @@ serve(async (req) => {
         let totalBetAmount = 0;
         const processedInserts = [];
 
-        // Generate a unique 6-digit numeric code for the bill_id
-        let billId = '';
-        let isUnique = false;
-        while (!isUnique) {
-          const randCode = Math.floor(100000 + Math.random() * 900000).toString();
-          // Check if this bill_id already exists in submissions
-          const { data: existing } = await supabase
-            .from('submissions')
-            .select('id')
-            .eq('bill_id', randCode)
-            .limit(1)
-            .maybeSingle();
-          if (!existing) {
-            billId = randCode;
-            isUnique = true;
-          }
+        // Generate a 6-character readable alphanumeric code for the bill_id
+        // Excludes easily confused characters: 0, 1, I, O (Base32 format)
+        const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+        let billId = "";
+        const randomBytes = new Uint8Array(6);
+        crypto.getRandomValues(randomBytes);
+        for (let i = 0; i < 6; i++) {
+          billId += chars[randomBytes[i] % chars.length];
         }
 
         const baseTimestamp = new Date();
@@ -8567,8 +8552,8 @@ serve(async (req) => {
             displayAmount = `${bet.amount}*${bet.amount2}`;
           }
 
-          // Retrieve commission settings for this specific user
-          const commInfo = await getCommissionInfo(profile.id, dealerId, betType, lotteryType);
+          // Retrieve commission settings for this specific user (using pre-fetched settings)
+          const commInfo = getCommissionInfo(userSettings?.lottery_settings, betType, lotteryType);
 
           if (bet.specialType && (bet.specialType === 'set3' || bet.specialType === 'set6' || bet.specialType.startsWith('set'))) {
             // คูณชุด - 3 digits
