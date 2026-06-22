@@ -4244,11 +4244,16 @@ serve(async (req) => {
               let isValidFilter = true;
               let requestedMonthText = '';
 
+              const THAI_MONTH_NAMES = [
+                "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+                "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
+              ];
+
               if (param === 'm') {
-                rangeText = 'เดือนปัจจุบัน';
                 const nowBangkok = new Date(Date.now() + 7 * 60 * 60 * 1000);
                 const year = nowBangkok.getUTCFullYear();
                 const month = nowBangkok.getUTCMonth(); // 0-11
+                rangeText = `เดือน${THAI_MONTH_NAMES[month]} ${year + 543}`;
                 const firstDay = new Date(Date.UTC(year, month, 1));
                 const lastDay = new Date(Date.UTC(year, month + 1, 0));
                 startDate = `${firstDay.getUTCFullYear()}-${String(firstDay.getUTCMonth() + 1).padStart(2, '0')}-${String(firstDay.getUTCDate()).padStart(2, '0')}`;
@@ -4266,8 +4271,7 @@ serve(async (req) => {
                 const parsed = parseMonthYearParam(param);
                 if (parsed) {
                   const { month, year } = parsed;
-                  requestedMonthText = `${month}-${year + 543}`; // Display as Buddhist Era (Thai year)
-                  rangeText = `เดือน ${requestedMonthText}`;
+                  rangeText = `เดือน${THAI_MONTH_NAMES[month - 1]} ${year + 543}`;
                   const firstDay = new Date(Date.UTC(year, month - 1, 1));
                   const lastDay = new Date(Date.UTC(year, month, 0));
                   startDate = `${firstDay.getUTCFullYear()}-${String(firstDay.getUTCMonth() + 1).padStart(2, '0')}-${String(firstDay.getUTCDate()).padStart(2, '0')}`;
@@ -4567,6 +4571,17 @@ serve(async (req) => {
 
               const historyList = combinedHistory;
 
+              const uniqueTypes = Array.from(new Set(historyList.map((h: any) => h.lottery_type))).filter(Boolean);
+              const typeMap: Record<string, string> = {
+                'thai': 'ไทย',
+                'lao': 'ลาว',
+                'hanoi': 'ฮานอย',
+                'stock': 'หุ้น',
+                'yeekee': 'ยี่กี',
+                'other': 'อื่นๆ'
+              };
+              const lotteryTypesText = uniqueTypes.map((t: any) => typeMap[t] || t).join(', ');
+
               if (historyList.length === 0) {
                 await sendLineReply(replyToken, `📊 ไม่พบประวัติงวดหวยในช่วงเวลา "${rangeText}" ค่ะ`);
                 continue;
@@ -4774,7 +4789,7 @@ serve(async (req) => {
                 });
               }
 
-              const altText = `📊 สรุปกำไร/ขาดทุน\nช่วงเวลา: ${rangeText}\n(จำนวนงวด: ${totalRounds} งวด)\nกำไรรวม: ${totalProfit >= 0 ? '+' : '-'}฿${Math.abs(Math.round(totalProfit)).toLocaleString('th-TH')}`;
+              const altText = `📊 สรุปกำไร/ขาดทุน${lotteryTypesText ? ` (${lotteryTypesText})` : ''}\nช่วงเวลา: ${rangeText}\n(จำนวนงวด: ${totalRounds} งวด)\nกำไรรวม: ${totalProfit >= 0 ? '+' : '-'}฿${Math.abs(Math.round(totalProfit)).toLocaleString('th-TH')}`;
 
               const flexMessage = {
                 "type": "flex",
@@ -4790,10 +4805,11 @@ serve(async (req) => {
                     "contents": [
                       {
                         "type": "text",
-                        "text": "📊 สรุปกำไร/ขาดทุน",
+                        "text": `📊 สรุปกำไร/ขาดทุน${lotteryTypesText ? ` (${lotteryTypesText})` : ''}`,
                         "weight": "bold",
                         "size": "lg",
-                        "color": "#ffffff"
+                        "color": "#ffffff",
+                        "wrap": true
                       },
                       {
                         "type": "text",
