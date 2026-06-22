@@ -4282,6 +4282,7 @@ serve(async (req) => {
                 continue;
               }
 
+              // Fetch history list from round_history
               let query = supabase
                 .from('round_history')
                 .select('*')
@@ -4293,7 +4294,7 @@ serve(async (req) => {
 
               query = query.order('round_date', { ascending: false });
 
-              const { data: historyList, error: historyErr } = await query;
+              const { data: dbHistoryList, error: historyErr } = await query;
 
               if (historyErr) {
                 console.error('Error fetching round history for bot:', historyErr);
@@ -4301,7 +4302,272 @@ serve(async (req) => {
                 continue;
               }
 
-              if (!historyList || historyList.length === 0) {
+              // Fetch active closed or announced rounds from lottery_rounds
+              let roundsQuery = supabase
+                .from('lottery_rounds')
+                .select('*')
+                .eq('dealer_id', dealerId)
+                .in('status', ['closed', 'announced']);
+
+              if (startDate && endDate) {
+                roundsQuery = roundsQuery.gte('round_date', startDate).lte('round_date', endDate);
+              }
+
+              const { data: activeClosedRounds, error: roundsErr } = await roundsQuery;
+              if (roundsErr) {
+                console.error('Error fetching active closed rounds for bot:', roundsErr);
+              }
+
+              const combinedHistory = dbHistoryList ? [...dbHistoryList] : [];
+
+              if (activeClosedRounds && activeClosedRounds.length > 0) {
+                for (const round of activeClosedRounds) {
+                  // 1. Fetch submissions for this round
+                  const { data: submissions } = await supabase
+                    .from('submissions')
+                    .select('amount, commission_amount, prize_amount, is_winner, bet_type, numbers')
+                    .eq('round_id', round.id)
+                    .eq('is_deleted', false);
+
+                  // 2. Fetch transfers for this round
+                  const { data: transfers } = await supabase
+                    .from('bet_transfers')
+                    .select('*')
+                    .eq('round_id', round.id);
+
+                  // 3. Calculate aggregates
+                  const setPrice = round.set_prices?.['4_top'] || 120;
+                  const isAnnounced = round.status === 'announced' || !!round.winning_numbers;
+
+                  let grandTotalBet = 0;
+                  let grandTotalCommission = 0;
+                  let grandTotalWin = 0;
+
+                  (submissions || []).forEach((sub: any) => {
+                    const amt = Number(sub.amount || 0);
+                    const comm = Number(sub.commission_amount || 0);
+
+                    let win = 0;
+                    if (isAnnounced && sub.is_winner) {
+                      if (sub.bet_type === '4_set') {
+                        const numSets = Math.max(1, Math.floor(amt / setPrice));
+                        win = (sub.prize_amount != null ? Number(sub.prize_amount) : 0) * numSets;
+                      } else {
+                        win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
+                      }
+                      if (win === 0) {
+                        const winResult = checkTransferWin(
+                          sub.bet_type,
+                          sub.numbers,
+                          round.winning_numbers,
+                          round.lottery_type,
+                          amt,
+                          setPrice,
+                          DEFAULT_4_SET_SETTINGS.prizes
+                        );
+                        if (winResult.wins) {
+                          win = winResult.payout;
+                        }
+                      }
+                    }
+
+                    grandTotalBet += amt;
+                    grandTotalCommission += comm;
+                    grandTotalWin += win;
+                  });
+
+                  // 4. Outgoing transfers calculations
+                  let outgoingTotalBet = 0;
+                  let outgoingTotalCommission = 0;
+                  let outgoingTotalWin = 0;
+
+                  if (transfers && transfers.length > 0) {
+                    const linkedTransfers = transfers.filter((t: any) => t.is_linked && t.target_submission_id);
+                    const targetSubmissionIds = linkedTransfers.map((t: any) => t.target_submission_id);
+
+                    const upstreamSubsMap: Record<string, any> = {};
+                    if (targetSubmissionIds.length > 0) {
+                      const { data: upstreamSubs } = await supabase
+                        .from('submissions')
+                        .select('id, is_winner, prize_amount, amount, bet_type')
+                        .in('id', targetSubmissionIds)
+                        .eq('is_deleted', false);
+
+                      (upstreamSubs || []).forEach((sub: any) => {
+                        upstreamSubsMap[sub.id] = sub;
+                      });
+                    }
+
+                    const targetRoundIds = linkedTransfers.map((t: any) => t.target_round_id).filter(Boolean);
+                    const upstreamRoundsMap: Record<string, any> = {};
+                    if (targetRoundIds.length > 0) {
+                      const { data: upstreamRounds } = await supabase
+                        .from('lottery_rounds')
+                        .select('id, set_prices, status, is_result_announced')
+                        .in('id', targetRoundIds);
+
+                      (upstreamRounds || []).forEach((r: any) => {
+                        upstreamRoundsMap[r.id] = r;
+                      });
+                    }
+
+                    const uniqueUpstreamDealerIds = linkedTransfers.map((t: any) => t.upstream_dealer_id).filter(Boolean);
+                    const userSettingsMap: Record<string, any> = {};
+                    if (uniqueUpstreamDealerIds.length > 0) {
+                      const { data: settings } = await supabase
+                        .from('user_settings')
+                        .select('*')
+                        .eq('user_id', dealerId)
+                        .in('dealer_id', uniqueUpstreamDealerIds);
+
+                      (settings || []).forEach((s: any) => {
+                        userSettingsMap[s.dealer_id] = s;
+                      });
+                    }
+
+                    const externalTransfers = transfers.filter((t: any) => !t.is_linked);
+                    const uniqueExternalDealerNames = externalTransfers.map((t: any) => t.target_dealer_name).filter(Boolean);
+                    const connMap: Record<string, any> = {};
+                    if (uniqueExternalDealerNames.length > 0) {
+                      const { data: connData } = await supabase
+                        .from('dealer_upstream_connections')
+                        .select('upstream_name, lottery_settings')
+                        .eq('dealer_id', dealerId)
+                        .in('upstream_name', uniqueExternalDealerNames);
+
+                      (connData || []).forEach((c: any) => {
+                        connMap[c.upstream_name] = c;
+                      });
+                    }
+
+                    const lotteryKey = round.lottery_type === 'thai' ? 'thai' : round.lottery_type === 'lao' ? 'lao' : round.lottery_type === 'hanoi' ? 'hanoi' : 'thai';
+
+                    transfers.forEach((t: any) => {
+                      const amt = Number(t.amount || 0);
+                      outgoingTotalBet += amt;
+
+                      let comm = 0;
+                      let betSettings: any = null;
+
+                      const settingsKey = getBetSettingsKey(t.bet_type, lotteryKey);
+                      if (t.is_linked && t.upstream_dealer_id) {
+                        const s = userSettingsMap[t.upstream_dealer_id];
+                        betSettings = s?.lottery_settings?.[lotteryKey]?.[settingsKey];
+                      } else if (!t.is_linked && t.target_dealer_name) {
+                        const c = connMap[t.target_dealer_name];
+                        betSettings = c?.lottery_settings?.[lotteryKey]?.[settingsKey];
+                      }
+
+                      if (t.bet_type === '4_set' || t.bet_type === '4_top') {
+                        const setPrice = betSettings?.setPrice || round?.set_prices?.['4_top'] || 120;
+                        const numSets = Math.floor(amt / setPrice);
+                        const commRate = betSettings?.commission !== undefined ? betSettings.commission : (DEFAULT_4_SET_SETTINGS.commission || 25);
+                        comm = numSets * commRate;
+                      } else {
+                        let defaultComm = DEFAULT_COMMISSIONS[t.bet_type] || 15;
+                        if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+                          const LAO_DEFAULTS: Record<string, number> = {
+                            'run_top': 10, 'run_bottom': 10,
+                            'pak_top': 20, 'pak_bottom': 20,
+                            '2_top': 20, '2_bottom': 20, '2_front': 20, '2_center': 20, '2_spread': 20, '2_run': 20,
+                            '3_top': 20, '3_tod': 20, '3_bottom': 20,
+                            '4_float': 20, '5_float': 20
+                          };
+                          defaultComm = LAO_DEFAULTS[t.bet_type] !== undefined ? LAO_DEFAULTS[t.bet_type] : 20;
+                        }
+                        const commissionRate = betSettings?.commission !== undefined 
+                          ? betSettings.commission 
+                          : defaultComm;
+                        comm = amt * (commissionRate / 100);
+                      }
+                      outgoingTotalCommission += comm;
+
+                      let win = 0;
+                      if (isAnnounced) {
+                        if (t.is_linked && t.target_submission_id) {
+                          const sub = upstreamSubsMap[t.target_submission_id];
+                          const upRound = upstreamRoundsMap[t.target_round_id];
+                          const isUpstreamAnnounced = upRound?.status === 'announced' && upRound?.is_result_announced;
+                          if (sub && sub.is_winner && isUpstreamAnnounced) {
+                            win = sub.prize_amount || 0;
+                          }
+                        } else if (!t.is_linked && round.winning_numbers) {
+                          const wn = round.winning_numbers;
+                          const lt = round.lottery_type;
+                          const w4set = wn['4_set'] || '';
+                          const w3top = wn['3_top'] || (lt !== 'thai' && w4set.length >= 3 ? w4set.slice(1) : '') || '';
+                          const w2top = wn['2_top'] || (lt !== 'thai' && w4set.length >= 2 ? w4set.slice(2) : '') || '';
+                          const w2bottom = wn['2_bottom'] || (lt === 'lao' && w4set.length >= 2 ? w4set.slice(0, 2) : '') || '';
+                          const w3topSorted = w3top.split('').sort().join('');
+                          const floatCheck = (src: string, target: string) => {
+                            let temp = target;
+                            for (const ch of src) {
+                              const idx = temp.indexOf(ch);
+                              if (idx === -1) return false;
+                              temp = temp.slice(0, idx) + temp.slice(idx + 1);
+                            }
+                            return true;
+                          };
+
+                          const num = t.numbers || '';
+                          const bt = t.bet_type;
+                          let isWinner = false;
+                          let prize = 0;
+                          const payoutRate = DEFAULT_PAYOUTS[bt] || 1;
+
+                          if (bt === 'run_top' && w3top && num.length === 1) isWinner = w3top.includes(num);
+                          else if (bt === 'run_bottom' && w2bottom && num.length === 1) isWinner = w2bottom.includes(num);
+                          else if (bt === 'front_top_1' && w3top && w3top.length === 3 && num.length === 1) isWinner = num === w3top[0];
+                          else if (bt === 'middle_top_1' && w3top && w3top.length === 3 && num.length === 1) isWinner = num === w3top[1];
+                          else if (bt === 'back_top_1' && w3top && w3top.length === 3 && num.length === 1) isWinner = num === w3top[2];
+                          else if (bt === 'front_bottom_1' && w2bottom && w2bottom.length === 2 && num.length === 1) isWinner = num === w2bottom[0];
+                          else if (bt === 'back_bottom_1' && w2bottom && w2bottom.length === 2 && num.length === 1) isWinner = num === w2bottom[1];
+                          else if (bt === 'pak_top' && w3top && w3top.length === 3 && num.length === 1) isWinner = w3top.includes(num);
+                          else if (bt === 'pak_bottom' && w2bottom && w2bottom.length === 2 && num.length === 1) isWinner = w2bottom.includes(num);
+                          else if (bt === '2_bottom' && w2bottom && num.length === 2) isWinner = num === w2bottom;
+                          else if (bt === '2_top' && w2top && num.length === 2) isWinner = num === w2top;
+                          else if ((bt === '3_top' || bt === '3_straight') && w3top && num.length === 3) isWinner = num === w3top;
+                          else if ((bt === '3_tod' || bt === '3_tod_single') && w3top && num.length === 3) isWinner = num.split('').sort().join('') === w3topSorted && num !== w3top;
+                          else if (bt === '4_set' && w4set && num.length === 4) {
+                            const r = calculate4SetPrizesDeno(num, w4set, DEFAULT_4_SET_SETTINGS.prizes);
+                            if (r.totalPrize > 0) {
+                              isWinner = true;
+                              prize = r.totalPrize;
+                            }
+                          }
+
+                          if (isWinner) {
+                            win = bt === '4_set' ? prize : amt * payoutRate;
+                          }
+                        }
+                      }
+                      outgoingTotalWin += win;
+                    });
+                  }
+
+                  // Append virtual round history item
+                  combinedHistory.push({
+                    total_entries: submissions?.length || 0,
+                    total_amount: grandTotalBet,
+                    total_commission: grandTotalCommission,
+                    total_payout: grandTotalWin,
+                    transferred_amount: outgoingTotalBet,
+                    transferred_entries: (transfers || []).length,
+                    upstream_commission: outgoingTotalCommission,
+                    upstream_winnings: outgoingTotalWin,
+                    round_date: round.round_date,
+                    lottery_type: round.lottery_type,
+                    lottery_name: round.lottery_name || round.lottery_type.toUpperCase(),
+                  });
+                }
+              }
+
+              // Sort combined history by round_date descending
+              combinedHistory.sort((a, b) => new Date(b.round_date).getTime() - new Date(a.round_date).getTime());
+
+              const historyList = combinedHistory;
+
+              if (historyList.length === 0) {
                 await sendLineReply(replyToken, `📊 ไม่พบประวัติงวดหวยในช่วงเวลา "${rangeText}" ค่ะ`);
                 continue;
               }
