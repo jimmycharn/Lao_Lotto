@@ -2370,6 +2370,9 @@ serve(async (req) => {
   try {
     const bodyText = await req.text()
 
+    let isProcessingQueue = false
+    let currentQueueId = ""
+    let payloadToProcess: any = null
 
     // Check if it is a JSON API call from our frontend
     let isApiCall = false
@@ -2381,6 +2384,65 @@ serve(async (req) => {
       }
     } catch (e) {
       // not JSON or not the action we want
+    }
+
+    // ─── BACKGROUND QUEUE PROCESSOR: process_queue ───
+    if (apiPayload && apiPayload.action === 'process_queue') {
+      const { data: secretRow } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'line_bot_cron_secret')
+        .maybeSingle()
+
+      const expectedSecret = secretRow?.value || ''
+      if (!expectedSecret || apiPayload.secret !== expectedSecret) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      const queueId = apiPayload.queue_id
+      if (!queueId) {
+        return new Response(JSON.stringify({ error: 'Missing queue_id' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      try {
+        const { data: queueItem, error: fetchErr } = await supabase
+          .from('line_webhook_queue')
+          .select('*')
+          .eq('id', queueId)
+          .single()
+
+        if (fetchErr || !queueItem) {
+          throw new Error(`Queue item ${queueId} not found: ${fetchErr?.message || 'unknown error'}`)
+        }
+
+        if (queueItem.status !== 'pending') {
+          return new Response(JSON.stringify({ success: true, message: `Queue item already processed` }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          })
+        }
+
+        await supabase
+          .from('line_webhook_queue')
+          .update({ status: 'processing', processed_at: new Date().toISOString() })
+          .eq('id', queueId)
+
+        payloadToProcess = queueItem.payload
+        isProcessingQueue = true
+        currentQueueId = queueId
+      } catch (err: any) {
+        console.error('Error starting queue processing:', err)
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
     }
 
     // ─── CRON CALLBACK: auto-close round + notify groups ───
@@ -2538,20 +2600,48 @@ serve(async (req) => {
     // Otherwise it is the LINE webhook
     const signature = req.headers.get('x-line-signature') || ''
 
-    // Verify LINE Webhook signature
-    if (LINE_CHANNEL_SECRET) {
-      const isValid = await verifySignature(bodyText, signature, LINE_CHANNEL_SECRET)
+    let payload: any;
+    let events: any[] = [];
 
-      if (!isValid) {
-        console.warn("Invalid signature detected");
-        return new Response('Invalid signature', { status: 401 })
-      }
+    if (isProcessingQueue) {
+      payload = payloadToProcess;
+      events = payload?.events || [];
     } else {
-      console.warn("LINE_CHANNEL_SECRET not set, signature verification skipped.");
-    }
+      // Verify LINE Webhook signature
+      if (LINE_CHANNEL_SECRET) {
+        const isValid = await verifySignature(bodyText, signature, LINE_CHANNEL_SECRET)
 
-    const payload = JSON.parse(bodyText)
-    const events = payload.events || []
+        if (!isValid) {
+          console.warn("Invalid signature detected");
+          return new Response('Invalid signature', { status: 401 })
+        }
+      } else {
+        console.warn("LINE_CHANNEL_SECRET not set, signature verification skipped.");
+      }
+
+      // --- ENQUEUE WEBHOOOK IN BACKGROUND QUEUE ---
+      const { data: qItem, error: qErr } = await supabase
+        .from('line_webhook_queue')
+        .insert({
+          payload: JSON.parse(bodyText),
+          status: 'pending'
+        })
+        .select('id')
+        .maybeSingle();
+
+      if (qErr) {
+        console.error("Failed to enqueue webhook payload, falling back to synchronous execution:", qErr);
+        // Fallback: continue processing synchronously
+        payload = JSON.parse(bodyText);
+        events = payload.events || [];
+      } else {
+        // Enqueue succeeded. Return HTTP 200 OK immediately to LINE!
+        return new Response(JSON.stringify({ success: true, queued: true, id: qItem?.id }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200
+        });
+      }
+    }
 
     for (const event of events) {
       const replyToken = event.replyToken
@@ -9057,6 +9147,12 @@ serve(async (req) => {
         }
       }
     }
+    if (isProcessingQueue) {
+      await supabase
+        .from('line_webhook_queue')
+        .update({ status: 'completed' })
+        .eq('id', currentQueueId)
+    }
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -9065,6 +9161,17 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error('Error handling webhook event:', error);
+
+    if (isProcessingQueue) {
+      try {
+        await supabase
+          .from('line_webhook_queue')
+          .update({ status: 'failed', error_message: error.message || String(error) })
+          .eq('id', currentQueueId)
+      } catch (dbErr) {
+        console.error('Failed to update queue status on error:', dbErr);
+      }
+    }
 
     return new Response(JSON.stringify({ success: false, message: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
