@@ -239,6 +239,19 @@ function expandLines(rawLines: string[]): string[] {
         // Reset line to the trimmed normalized string
         line = trimmed;
 
+        // --- Step 0.3: Handle "รูดหน้า" (น[เลข] [เงิน], หน้า[เลข] [เงิน], รูดหน้า[เลข] [เงิน]) ---
+        const rudNaMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(รูดหน้า|หน้า|น้า|น)\s*(\d)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
+        if (rudNaMatch) {
+            const prefixCtx = rudNaMatch[1] ? rudNaMatch[1] + ' ' : '';
+            const fixedDigit = rudNaMatch[3];
+            const amount = rudNaMatch[4];
+            const suffix = rudNaMatch[5] || '';
+            for (let d = 0; d <= 9; d++) {
+                expanded.push(`${prefixCtx}${fixedDigit}${d}=${amount}${suffix}`);
+            }
+            continue;
+        }
+
         // --- Step 0.5: Split multi-bet lines (copied from PDF grid) ---
         const eqCount = (trimmed.match(/[=:]/g) || []).length;
         if (eqCount >= 2) {

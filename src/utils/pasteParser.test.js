@@ -1010,5 +1010,76 @@ describe('pasteParser - parseMultiLinePaste', () => {
       expect(entry029_tod).toMatchObject({ amount: 15, typeLabel: 'โต๊ด' })
     })
   })
+
+  describe('stock lottery - fixed front digit (รูดหน้า)', () => {
+    it('should parse น1 20 correctly (fixed front digit 1, top)', () => {
+      const text = 'น1 20'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(10)
+      for (let i = 0; i <= 9; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: `1${i}`,
+          amount: 20,
+          betType: '2_top',
+          typeLabel: 'บน'
+        })
+      }
+    })
+
+    it('should parse น 1 20 ล่าง correctly (fixed front digit 1, bottom)', () => {
+      const text = 'น 1 20 ล่าง'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(10)
+      for (let i = 0; i <= 9; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: `1${i}`,
+          amount: 20,
+          betType: '2_bottom',
+          typeLabel: 'ล่าง'
+        })
+      }
+    })
+
+    it('should parse หน้า1=20 correctly', () => {
+      const text = 'หน้า1=20'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(10)
+      for (let i = 0; i <= 9; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: `1${i}`,
+          amount: 20,
+          betType: '2_top'
+        })
+      }
+    })
+
+    it('should parse รูดหน้า1=20 ล่าง correctly', () => {
+      const text = 'รูดหน้า1=20 ล่าง'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(10)
+      for (let i = 0; i <= 9; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: `1${i}`,
+          amount: 20,
+          betType: '2_bottom'
+        })
+      }
+    })
+
+    it('should parse บน น1 50*50 correctly (with split amount and prefix context)', () => {
+      const text = 'บน น1 50*50'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(10)
+      for (let i = 0; i <= 9; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: `1${i}`,
+          amount: 50,
+          amount2: 50,
+          betType: '2_top',
+          specialType: 'reverse'
+        })
+      }
+    })
+  })
 })
 
