@@ -180,7 +180,7 @@ function normalizeUnicode(str: string): string {
     s = s.replace(/\b\d+\s*ตัว\s*/g, '');
 
     // Strip optional lottery type prefixes (ท, ฮ, ห, and ล when followed by context)
-    s = s.replace(/^([ทฮห]\.?\s*|ล\.?(?=ลอย|วิ่ง|โต๊ด|ล่าง|บนล่าง|บล|ลบ))/i, '');
+    s = s.replace(/^([ทฮห]\.?\s*(?!\s*\d(?!\d))|ล\.?(?=ลอย|วิ่ง|โต๊ด|ล่าง|บนล่าง|บล|ลบ))/i, '');
 
     // Normalize both-context shorthand variants to standard บล / ลบ / บนล่าง / ล่างบน
     s = s.replace(/(?<![ก-๛a-zA-Z0-9])บน[\s./+\-]?ล่าง(?![ก-๛a-zA-Z0-9])/g, 'บนล่าง');
@@ -248,6 +248,19 @@ function expandLines(rawLines: string[]): string[] {
             const suffix = rudNaMatch[5] || '';
             for (let d = 0; d <= 9; d++) {
                 expanded.push(`${prefixCtx}${fixedDigit}${d}=${amount}${suffix}`);
+            }
+            continue;
+        }
+
+        // --- Step 0.4: Handle "รูดหลัง" (ห[เลข] [เงิน], หลัง[เลข] [เงิน], ลัง[เลข] [เงิน], รูดหลัง[เลข] [เงิน]) ---
+        const rudLangMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(รูดหลัง|หลัง|ลัง|ห)\s*(\d)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
+        if (rudLangMatch) {
+            const prefixCtx = rudLangMatch[1] ? rudLangMatch[1] + ' ' : '';
+            const fixedDigit = rudLangMatch[3];
+            const amount = rudLangMatch[4];
+            const suffix = rudLangMatch[5] || '';
+            for (let d = 0; d <= 9; d++) {
+                expanded.push(`${prefixCtx}${d}${fixedDigit}=${amount}${suffix}`);
             }
             continue;
         }
