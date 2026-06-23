@@ -224,6 +224,21 @@ function expandLines(rawLines) {
             continue
         }
 
+        // --- Step 0.1.5: Handle "เลขคู่/เลขเบิ้ล" (คู่ [เงิน], เลขคู่ [เงิน], คู่=[เงิน], เลขคู่=[เงิน], เบิ้ล [เงิน], เบิ้ล=[เงิน], เลขเบิ้ล [เงิน], เลขเบิ้ล=[เงิน]) ---
+        const doubleMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(เลขคู่|คู่|เลขเบิ้ล|เบิ้ล)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i)
+        if (doubleMatch) {
+            const prefixCtx = doubleMatch[1] ? doubleMatch[1] + ' ' : ''
+            const amount = doubleMatch[3]
+            const suffix = doubleMatch[4] || ''
+            const doubleNumbers = [
+                '00', '11', '22', '33', '44', '55', '66', '77', '88', '99'
+            ]
+            for (const num of doubleNumbers) {
+                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`)
+            }
+            continue
+        }
+
         // --- Step 0.2: Handle "หน้าหลัง" (นห[เลข] [เงิน], หน้าหลัง[เลข] [เงิน], น้าหลัง[เลข] [เงิน]) ---
         const rudBothMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(หน้าหลัง|น้าหลัง|นห)\s*(\d)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i)
         if (rudBothMatch) {
@@ -498,7 +513,7 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
         const digitMatches = lineToProcess.match(/\d+/g) || []
         if (digitMatches.length === 1 && /^\d+/.test(lineToProcess)) {
             const hasEquals = lineToProcess.includes('=') || lineToProcess.includes(':')
-            const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน/.test(lineToProcess) || 
+            const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล/.test(lineToProcess) || 
                                    /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(lineToProcess)
             if (!hasEquals && !hasBetKeywords) {
                 // If it contains letters (Thai/English), skip it completely as text/noise
@@ -655,7 +670,7 @@ function isConversationalSingleNumberLine(line) {
     const hasLetters = /[ก-๛a-zA-Z]/.test(trimmed)
     if (hasLetters) {
         const hasEquals = trimmed.includes('=') || trimmed.includes(':')
-        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน/.test(trimmed) || 
+        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล/.test(trimmed) || 
                                /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(trimmed)
         if (!hasEquals && !hasBetKeywords) {
             return true
@@ -670,7 +685,7 @@ function isConversationalSingleNumberLine(line) {
 
     let cleaned = textOnly.toLowerCase()
     cleaned = cleaned.replace(/[\s.+\-*×xX\/=\(\)\[\]{}]/g, '')
-    cleaned = cleaned.replace(/ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บ\.?|ล\.?|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|ช|ซ|พี่น้อง|พน/g, '')
+    cleaned = cleaned.replace(/ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บ\.?|ล\.?|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|ช|ซ|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล/g, '')
 
     if (cleaned.length === 0) {
         return false
@@ -680,7 +695,7 @@ function isConversationalSingleNumberLine(line) {
     const textFirstMatch = trimmed.match(/^([ก-๛a-zA-Z\s\(\)\[\]{}#.]+?)\s*(\d+)$/)
     if (textFirstMatch) {
         const hasEquals = trimmed.includes('=') || trimmed.includes(':')
-        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน/.test(trimmed) || 
+        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล/.test(trimmed) || 
                                /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(trimmed)
         if (!hasEquals && !hasBetKeywords) {
             return true

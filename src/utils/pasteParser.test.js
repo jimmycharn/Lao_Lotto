@@ -1240,5 +1240,43 @@ describe('pasteParser - parseMultiLinePaste', () => {
       }
     })
   })
+
+  describe('stock lottery - double numbers (เลขคู่/เลขเบิ้ล)', () => {
+    it('should parse คู่ 20 correctly (double numbers, top)', () => {
+      const text = 'คู่ 20'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(10)
+      
+      const doubleNumbers = [
+        '00', '11', '22', '33', '44', '55', '66', '77', '88', '99'
+      ]
+      for (let i = 0; i < 10; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: doubleNumbers[i],
+          amount: 20,
+          betType: '2_top',
+          typeLabel: 'บน'
+        })
+      }
+    })
+
+    it('should parse เบิ้ล=50 ล่าง correctly (double numbers, bottom)', () => {
+      const text = 'เบิ้ล=50 ล่าง'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(10)
+      
+      const doubleNumbers = [
+        '00', '11', '22', '33', '44', '55', '66', '77', '88', '99'
+      ]
+      for (let i = 0; i < 10; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: doubleNumbers[i],
+          amount: 50,
+          betType: '2_bottom',
+          typeLabel: 'ล่าง'
+        })
+      }
+    })
+  })
 })
 
