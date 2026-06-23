@@ -208,6 +208,22 @@ function expandLines(rawLines) {
         // Reset line to the trimmed normalized string
         line = trimmed
 
+        // --- Step 0.1: Handle "เลขพี่น้อง" (พน [เงิน], พี่น้อง [เงิน], พน=[เงิน], พี่น้อง=[เงิน]) ---
+        const siblingMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(พี่น้อง|พน)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i)
+        if (siblingMatch) {
+            const prefixCtx = siblingMatch[1] ? siblingMatch[1] + ' ' : ''
+            const amount = siblingMatch[3]
+            const suffix = siblingMatch[4] || ''
+            const siblingNumbers = [
+                '01', '12', '23', '34', '45', '56', '67', '78', '89', '90',
+                '10', '21', '32', '43', '54', '65', '76', '87', '98', '09'
+            ]
+            for (const num of siblingNumbers) {
+                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`)
+            }
+            continue
+        }
+
         // --- Step 0.2: Handle "หน้าหลัง" (นห[เลข] [เงิน], หน้าหลัง[เลข] [เงิน], น้าหลัง[เลข] [เงิน]) ---
         const rudBothMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(หน้าหลัง|น้าหลัง|นห)\s*(\d)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i)
         if (rudBothMatch) {
@@ -482,7 +498,7 @@ export function parseMultiLinePaste(text, lotteryType = 'lao') {
         const digitMatches = lineToProcess.match(/\d+/g) || []
         if (digitMatches.length === 1 && /^\d+/.test(lineToProcess)) {
             const hasEquals = lineToProcess.includes('=') || lineToProcess.includes(':')
-            const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว/.test(lineToProcess) || 
+            const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน/.test(lineToProcess) || 
                                    /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(lineToProcess)
             if (!hasEquals && !hasBetKeywords) {
                 // If it contains letters (Thai/English), skip it completely as text/noise
@@ -639,7 +655,7 @@ function isConversationalSingleNumberLine(line) {
     const hasLetters = /[ก-๛a-zA-Z]/.test(trimmed)
     if (hasLetters) {
         const hasEquals = trimmed.includes('=') || trimmed.includes(':')
-        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว/.test(trimmed) || 
+        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน/.test(trimmed) || 
                                /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(trimmed)
         if (!hasEquals && !hasBetKeywords) {
             return true
@@ -654,7 +670,7 @@ function isConversationalSingleNumberLine(line) {
 
     let cleaned = textOnly.toLowerCase()
     cleaned = cleaned.replace(/[\s.+\-*×xX\/=\(\)\[\]{}]/g, '')
-    cleaned = cleaned.replace(/ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บ\.?|ล\.?|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|ช|ซ/g, '')
+    cleaned = cleaned.replace(/ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บ\.?|ล\.?|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|ช|ซ|พี่น้อง|พน/g, '')
 
     if (cleaned.length === 0) {
         return false
@@ -664,7 +680,7 @@ function isConversationalSingleNumberLine(line) {
     const textFirstMatch = trimmed.match(/^([ก-๛a-zA-Z\s\(\)\[\]{}#.]+?)\s*(\d+)$/)
     if (textFirstMatch) {
         const hasEquals = trimmed.includes('=') || trimmed.includes(':')
-        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว/.test(trimmed) || 
+        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน/.test(trimmed) || 
                                /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(trimmed)
         if (!hasEquals && !hasBetKeywords) {
             return true

@@ -1200,5 +1200,45 @@ describe('pasteParser - parseMultiLinePaste', () => {
       }
     })
   })
+
+  describe('stock lottery - sibling numbers (เลขพี่น้อง)', () => {
+    it('should parse พน 20 correctly (sibling numbers, top)', () => {
+      const text = 'พน 20'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(20)
+      
+      const siblingNumbers = [
+        '01', '12', '23', '34', '45', '56', '67', '78', '89', '90',
+        '10', '21', '32', '43', '54', '65', '76', '87', '98', '09'
+      ]
+      for (let i = 0; i < 20; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: siblingNumbers[i],
+          amount: 20,
+          betType: '2_top',
+          typeLabel: 'บน'
+        })
+      }
+    })
+
+    it('should parse พี่น้อง=50 ล่าง correctly (sibling numbers, bottom)', () => {
+      const text = 'พี่น้อง=50 ล่าง'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(20)
+      
+      const siblingNumbers = [
+        '01', '12', '23', '34', '45', '56', '67', '78', '89', '90',
+        '10', '21', '32', '43', '54', '65', '76', '87', '98', '09'
+      ]
+      for (let i = 0; i < 20; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: siblingNumbers[i],
+          amount: 50,
+          betType: '2_bottom',
+          typeLabel: 'ล่าง'
+        })
+      }
+    })
+  })
 })
 
