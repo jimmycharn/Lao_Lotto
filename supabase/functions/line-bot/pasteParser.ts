@@ -239,6 +239,24 @@ function expandLines(rawLines: string[]): string[] {
         // Reset line to the trimmed normalized string
         line = trimmed;
 
+        // --- Step 0.2: Handle "หน้าหลัง" (นห[เลข] [เงิน], หน้าหลัง[เลข] [เงิน], น้าหลัง[เลข] [เงิน]) ---
+        const rudBothMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(หน้าหลัง|น้าหลัง|นห)\s*(\d)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
+        if (rudBothMatch) {
+            const prefixCtx = rudBothMatch[1] ? rudBothMatch[1] + ' ' : '';
+            const fixedDigit = rudBothMatch[3];
+            const amount = rudBothMatch[4];
+            const suffix = rudBothMatch[5] || '';
+            // 1. Front fixed
+            for (let d = 0; d <= 9; d++) {
+                expanded.push(`${prefixCtx}${fixedDigit}${d}=${amount}${suffix}`);
+            }
+            // 2. Back fixed
+            for (let d = 0; d <= 9; d++) {
+                expanded.push(`${prefixCtx}${d}${fixedDigit}=${amount}${suffix}`);
+            }
+            continue;
+        }
+
         // --- Step 0.3: Handle "รูดหน้า" (น[เลข] [เงิน], หน้า[เลข] [เงิน], รูดหน้า[เลข] [เงิน]) ---
         const rudNaMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(รูดหน้า|หน้า|น้า|น)\s*(\d)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
         if (rudNaMatch) {

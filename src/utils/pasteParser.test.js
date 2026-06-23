@@ -1152,5 +1152,53 @@ describe('pasteParser - parseMultiLinePaste', () => {
       }
     })
   })
+
+  describe('stock lottery - fixed front & back digit (หน้าหลัง)', () => {
+    it('should parse นห1 20 correctly (fixed front and back digit 1, top)', () => {
+      const text = 'นห1 20'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(20)
+      
+      // First 10 should be 10, 11, ..., 19 (front fixed)
+      for (let i = 0; i <= 9; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: `1${i}`,
+          amount: 20,
+          betType: '2_top',
+          typeLabel: 'บน'
+        })
+      }
+      // Next 10 should be 01, 11, ..., 91 (back fixed)
+      for (let i = 0; i <= 9; i++) {
+        expect(result[10 + i]).toMatchObject({
+          numbers: `${i}1`,
+          amount: 20,
+          betType: '2_top',
+          typeLabel: 'บน'
+        })
+      }
+    })
+
+    it('should parse หน้าหลัง 1=20 ล่าง correctly (fixed front and back digit 1, bottom)', () => {
+      const text = 'หน้าหลัง 1=20 ล่าง'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(20)
+      
+      for (let i = 0; i <= 9; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: `1${i}`,
+          amount: 20,
+          betType: '2_bottom',
+          typeLabel: 'ล่าง'
+        })
+        expect(result[10 + i]).toMatchObject({
+          numbers: `${i}1`,
+          amount: 20,
+          betType: '2_bottom',
+          typeLabel: 'ล่าง'
+        })
+      }
+    })
+  })
 })
 
