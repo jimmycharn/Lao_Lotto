@@ -73,6 +73,30 @@ export function get3DigitPermCount(numbers: string): number {
     return combinations.size;
 }
 
+function get2DigitPermutations(numberStr: string): string[] {
+    const digits = numberStr.split('');
+    const combinations = new Set<string>([
+        numberStr,
+        digits[1] + digits[0]
+    ]);
+    return [...combinations];
+}
+
+function get3DigitPermutations(numberStr: string): string[] {
+    const digits = numberStr.split('');
+    const combinations = new Set<string>();
+    for (let i = 0; i < digits.length; i++) {
+        for (let j = 0; j < digits.length; j++) {
+            if (j === i) continue;
+            for (let k = 0; k < digits.length; k++) {
+                if (k === i || k === j) continue;
+                combinations.add(digits[i] + digits[j] + digits[k]);
+            }
+        }
+    }
+    return [...combinations];
+}
+
 export function getPermutationCount(numStr: string): number {
     if (!numStr || numStr.length < 2) return 1;
     const perms = getPermutations(numStr);
@@ -180,7 +204,7 @@ function normalizeUnicode(str: string): string {
     s = s.replace(/\b\d+\s*ตัว\s*/g, '');
 
     // Strip optional lottery type prefixes (ท, ฮ, ห, and ล when followed by context)
-    s = s.replace(/^([ทฮห]\.?\s*(?!\s*\d(?!\d))|ล\.?(?=ลอย|วิ่ง|โต๊ด|ล่าง|บนล่าง|บล|ลบ))/i, '');
+    s = s.replace(/^([ทฮห]\.?(?![ก-๛])\s*(?!\s*\d(?!\d))|ล\.?(?=ลอย|วิ่ง|โต๊ด|ล่าง|บนล่าง|บล|ลบ))/i, '');
 
     // Normalize both-context shorthand variants to standard บล / ลบ / บนล่าง / ล่างบน
     s = s.replace(/(?<![ก-๛a-zA-Z0-9])บน[\s./+\-]?ล่าง(?![ก-๛a-zA-Z0-9])/g, 'บนล่าง');
@@ -224,7 +248,7 @@ function findAmountIndex(tokens: string[]): number {
     return -1;
 }
 
-function expandLines(rawLines: string[]): string[] {
+function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_separator_behavior?: string }): string[] {
     const expanded: string[] = [];
     for (const rawLine of rawLines) {
         let line = rawLine.trim();
@@ -239,6 +263,35 @@ function expandLines(rawLines: string[]): string[] {
         // Reset line to the trimmed normalized string
         line = trimmed;
 
+        // --- Step 0.0.5: Handle "Smart Auto-Default x/*" separator for 2-3 digits (e.g. 25x30, 123*20) ---
+        const xMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(\d{2,3})\s*([*×xX])\s*(\d+)\s*(.*)$/i);
+        if (xMatch) {
+            const prefixCtx = xMatch[1] ? xMatch[1] + ' ' : '';
+            const numberStr = xMatch[2];
+            const amount = xMatch[4];
+            const suffix = xMatch[5] || '';
+
+            // If suffix contains other digits or separators (e.g. "x20" in 25x20x20, or "*6" in 456*20*6),
+            // it has more than 2 parts, so we do NOT apply auto-reversal/permutation.
+            const hasOtherParts = /[\d*×xX=:\-]/.test(suffix);
+            
+            const behavior = settings?.x_separator_behavior || 'auto';
+            const shouldRevert = 
+                behavior === 'revert' || 
+                (behavior === 'auto' && lotteryType === 'stock');
+
+            if (!hasOtherParts && shouldRevert) {
+                const perms = numberStr.length === 2 
+                    ? get2DigitPermutations(numberStr) 
+                    : get3DigitPermutations(numberStr);
+                    
+                for (const num of perms) {
+                    expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
+                }
+                continue;
+            }
+        }
+
         // --- Step 0.1: Handle "เลขพี่น้อง" (พน [เงิน], พี่น้อง [เงิน], พน=[เงิน], พี่น้อง=[เงิน]) ---
         const siblingMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(พี่น้อง|พน)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
         if (siblingMatch) {
@@ -250,6 +303,128 @@ function expandLines(rawLines: string[]): string[] {
                 '10', '21', '32', '43', '54', '65', '76', '87', '98', '09'
             ];
             for (const num of siblingNumbers) {
+                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
+            }
+            continue;
+        }
+
+        // --- Step 0.1.2: Handle "คู่คี่/คู่คี" (คู่คี่ [เงิน], คู่คี่=[เงิน], คู่คี [เงิน], คู่คี=[เงิน]) ---
+        const evenOddMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(คู่คี่|คู่คี)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
+        if (evenOddMatch) {
+            const prefixCtx = evenOddMatch[1] ? evenOddMatch[1] + ' ' : '';
+            const amount = evenOddMatch[3];
+            const suffix = evenOddMatch[4] || '';
+            const evenOddNumbers = [
+                '98', '96', '94', '92', '90',
+                '89', '87', '85', '83', '81',
+                '78', '76', '74', '72', '70',
+                '69', '67', '65', '63', '61',
+                '58', '56', '54', '52', '50',
+                '49', '47', '45', '43', '41',
+                '38', '36', '34', '32', '30',
+                '29', '27', '25', '23', '21',
+                '18', '16', '14', '12', '10',
+                '09', '07', '05', '03', '01'
+            ];
+            for (const num of evenOddNumbers) {
+                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
+            }
+            continue;
+        }
+
+        // --- Step 0.1.3: Handle "คู่คู่/คู่คู" (คู่คู่ [เงิน], คู่คู่=[เงิน], คู่คู [เงิน], คู่คู=[เงิน]) ---
+        const evenEvenMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(คู่คู่|คู่คู)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
+        if (evenEvenMatch) {
+            const prefixCtx = evenEvenMatch[1] ? evenEvenMatch[1] + ' ' : '';
+            const amount = evenEvenMatch[3];
+            const suffix = evenEvenMatch[4] || '';
+            const evenEvenNumbers = [
+                '88', '86', '84', '82', '80',
+                '68', '66', '64', '62', '60',
+                '48', '46', '44', '42', '40',
+                '28', '26', '24', '22', '20',
+                '08', '06', '04', '02', '00'
+            ];
+            for (const num of evenEvenNumbers) {
+                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
+            }
+            continue;
+        }
+
+        // --- Step 0.1.4: Handle "คี่คี่/คี่คี" (คี่คี่ [เงิน], คี่คี่=[เงิน], คี่คี [เงิน], คี่คี=[เงิน]) ---
+        const oddOddMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(คี่คี่|คี่คี)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
+        if (oddOddMatch) {
+            const prefixCtx = oddOddMatch[1] ? oddOddMatch[1] + ' ' : '';
+            const amount = oddOddMatch[3];
+            const suffix = oddOddMatch[4] || '';
+            const oddOddNumbers = [
+                '99', '97', '95', '93', '91',
+                '79', '77', '75', '73', '71',
+                '59', '57', '55', '53', '51',
+                '39', '37', '35', '33', '31',
+                '19', '17', '15', '13', '11'
+            ];
+            for (const num of oddOddNumbers) {
+                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
+            }
+            continue;
+        }
+
+        // --- Step 0.1.6: Handle "วิน/วินกลับ/วินเบิ้ล" (วิน 12345 20, วินกลับ 12345=20, วินเบิ้ล 12345 20) ---
+        const winMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(วินกลับ|วินเบิ้ล|วิน)\s*(\d{2,10})\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
+        if (winMatch) {
+            const prefixCtx = winMatch[1] ? winMatch[1] + ' ' : '';
+            const winType = winMatch[2].toLowerCase();
+            const digitStr = winMatch[3];
+            const amount = winMatch[4];
+            const suffix = winMatch[5] || '';
+            
+            const digits = [...new Set(digitStr.split(''))];
+            const winNumbers: string[] = [];
+            
+            if (winType === 'วิน') {
+                for (let i = 0; i < digits.length; i++) {
+                    for (let j = i + 1; j < digits.length; j++) {
+                        winNumbers.push(digits[i] + digits[j]);
+                    }
+                }
+            } else {
+                // winType is 'วินกลับ' or 'วินเบิ้ล' -> generate both direct and reverse pairs
+                for (let i = 0; i < digits.length; i++) {
+                    for (let j = i + 1; j < digits.length; j++) {
+                        winNumbers.push(digits[i] + digits[j]);
+                        winNumbers.push(digits[j] + digits[i]);
+                    }
+                }
+            }
+            
+            for (const num of winNumbers) {
+                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
+            }
+            continue;
+        }
+
+        // --- Step 0.1.7: Handle "หาง" (หาง 1=20, หาง 1 20, 19หาง 1=20) ---
+        const hangMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(19\s*หาง|หาง)\s*(\d)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
+        if (hangMatch) {
+            const prefixCtx = hangMatch[1] ? hangMatch[1] + ' ' : '';
+            const fixedDigit = hangMatch[3];
+            const amount = hangMatch[4];
+            const suffix = hangMatch[5] || '';
+            const hangNumbers: string[] = [];
+            
+            // 1. Front fixed (e.g. 10, 11, 12, ..., 19)
+            for (let d = 0; d <= 9; d++) {
+                hangNumbers.push(`${fixedDigit}${d}`);
+            }
+            // 2. Back fixed (e.g. 01, 21, ..., 91) - skip double to keep it 19 unique numbers
+            for (let d = 0; d <= 9; d++) {
+                if (String(d) !== fixedDigit) {
+                    hangNumbers.push(`${d}${fixedDigit}`);
+                }
+            }
+            
+            for (const num of hangNumbers) {
                 expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
             }
             continue;
@@ -442,7 +617,7 @@ function expandLines(rawLines: string[]): string[] {
     return expanded;
 }
 
-export function parseMultiLinePaste(text: string, lotteryType = 'lao'): ParsedBet[] {
+export function parseMultiLinePaste(text: string, lotteryType = 'lao', settings?: { x_separator_behavior?: string }): ParsedBet[] {
     if (!text || !text.trim()) return [];
 
     // Filter out laughter (555, 5555, etc.) that are standalone and not part of a bet specification
@@ -450,7 +625,7 @@ export function parseMultiLinePaste(text: string, lotteryType = 'lao'): ParsedBe
 
     const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType);
     const rawLines = filteredText.split('\n');
-    const lines = expandLines(rawLines);
+    const lines = expandLines(rawLines, lotteryType, settings);
     const results: ParsedBet[] = [];
     let contextMode = 'top'; // default: บน
     let bareNumberBuffer: string[] = [];
@@ -515,7 +690,7 @@ export function parseMultiLinePaste(text: string, lotteryType = 'lao'): ParsedBe
         const digitMatches = lineToProcess.match(/\d+/g) || [];
         if (digitMatches.length === 1 && /^\d+/.test(lineToProcess)) {
             const hasEquals = lineToProcess.includes('=') || lineToProcess.includes(':');
-            const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล/.test(lineToProcess) || 
+            const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19\s*หาง|หาง/.test(lineToProcess) || 
                                    /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(lineToProcess);
             if (!hasEquals && !hasBetKeywords) {
                 // If it contains letters (Thai/English), skip it completely as text/noise
@@ -634,7 +809,7 @@ function isConversationalSingleNumberLine(line: string): boolean {
     const hasLetters = /[ก-๛a-zA-Z]/.test(trimmed);
     if (hasLetters) {
         const hasEquals = trimmed.includes('=') || trimmed.includes(':');
-        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล/.test(trimmed) || 
+        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19\s*หาง|หาง/.test(trimmed) || 
                                /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(trimmed);
         if (!hasEquals && !hasBetKeywords) {
             return true;
@@ -649,7 +824,7 @@ function isConversationalSingleNumberLine(line: string): boolean {
 
     let cleaned = textOnly.toLowerCase();
     cleaned = cleaned.replace(/[\s.+\-*×xX\/=\(\)\[\]{}]/g, '');
-    cleaned = cleaned.replace(/ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บ\.?|ล\.?|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|ช|ซ|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล/g, '');
+    cleaned = cleaned.replace(/ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บ\.?|ล\.?|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|ช|ซ|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19หาง|หาง/g, '');
 
     if (cleaned.length === 0) {
         return false;
@@ -659,7 +834,7 @@ function isConversationalSingleNumberLine(line: string): boolean {
     const textFirstMatch = trimmed.match(/^([ก-๛a-zA-Z\s\(\)\[\]{}#.]+?)\s*(\d+)$/);
     if (textFirstMatch) {
         const hasEquals = trimmed.includes('=') || trimmed.includes(':');
-        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล/.test(trimmed) || 
+        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19\s*หาง|หาง/.test(trimmed) || 
                                /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(trimmed);
         if (!hasEquals && !hasBetKeywords) {
             return true;

@@ -2825,6 +2825,7 @@ serve(async (req) => {
 
           // Fetch group link details if in a group or room
           let groupLink = null;
+          let xSeparatorBehavior = 'auto';
           if (groupId && (groupId.startsWith('C') || groupId.startsWith('R'))) {
             const { data: gl } = await supabase
               .from('line_groups')
@@ -2833,6 +2834,17 @@ serve(async (req) => {
               .eq('is_active', true)
               .maybeSingle();
             groupLink = gl;
+
+            if (gl && gl.dealer_id) {
+              const { data: dealerProfile } = await supabase
+                .from('profiles')
+                .select('x_separator_behavior')
+                .eq('id', gl.dealer_id)
+                .maybeSingle();
+              if (dealerProfile && dealerProfile.x_separator_behavior) {
+                xSeparatorBehavior = dealerProfile.x_separator_behavior;
+              }
+            }
           }
 
           // ─── MANAGER COMMANDS ROUTER ───
@@ -7318,7 +7330,7 @@ serve(async (req) => {
                 }
                 continue;
               } else {
-                const parsedBets = parseMultiLinePaste(commandArg, groupLink.lottery_type);
+                const parsedBets = parseMultiLinePaste(commandArg, groupLink.lottery_type, { x_separator_behavior: xSeparatorBehavior });
                 if (parsedBets.length === 0) {
                   await sendLineReply(replyToken, `❌ รูปแบบคำสั่งตีออกไม่ถูกต้อง\n\n- ตีออกยอดเกิน:พิมพ์ /ตีออก เกิน\n- ตีออกเจาะจง: พิมพ์ /ตีออก [เลข] [ประเภท] [จำนวน]\n(เช่น /ตีออก 362 บน 200)`);
                   continue;
@@ -8700,7 +8712,7 @@ serve(async (req) => {
           continue;
         }
 
-        const parsedBets = parseMultiLinePaste(text, lotteryType);
+        const parsedBets = parseMultiLinePaste(text, lotteryType, { x_separator_behavior: xSeparatorBehavior });
         const isStaffSender = isDealer || isAdmin || isManager;
         let originalSenderId = profile?.id || null;
 

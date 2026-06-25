@@ -35,11 +35,13 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
     const [profileData, setProfileData] = useState({
         full_name: profile?.full_name || '',
         phone: profile?.phone || '',
-        role: profile?.role || 'dealer'
+        role: profile?.role || 'dealer',
+        x_separator_behavior: profile?.x_separator_behavior || 'auto'
     })
     const [formData, setFormData] = useState({
         full_name: profile?.full_name || '',
-        phone: profile?.phone || ''
+        phone: profile?.phone || '',
+        x_separator_behavior: profile?.x_separator_behavior || 'auto'
     })
 
     // Bank form data
@@ -73,11 +75,13 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
             setProfileData({
                 full_name: profile.full_name || '',
                 phone: profile.phone || '',
-                role: profile.role || 'dealer'
+                role: profile.role || 'dealer',
+                x_separator_behavior: profile.x_separator_behavior || 'auto'
             })
             setFormData({
                 full_name: profile.full_name || '',
-                phone: profile.phone || ''
+                phone: profile.phone || '',
+                x_separator_behavior: profile.x_separator_behavior || 'auto'
             })
         }
     }, [profile])
@@ -124,7 +128,8 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                 .from('profiles')
                 .update({
                     full_name: formData.full_name,
-                    phone: formData.phone
+                    phone: formData.phone,
+                    x_separator_behavior: formData.x_separator_behavior
                 })
                 .eq('id', user.id)
 
@@ -133,7 +138,8 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
             setProfileData({
                 ...profileData,
                 full_name: formData.full_name,
-                phone: formData.phone
+                phone: formData.phone,
+                x_separator_behavior: formData.x_separator_behavior
             })
 
             setIsEditing(false)
@@ -375,6 +381,18 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                                 placeholder="0xx-xxx-xxxx"
                             />
                         </div>
+                        <div className="form-group">
+                            <label className="form-label">การตีความเครื่องหมาย x / *</label>
+                            <select
+                                className="form-input"
+                                value={formData.x_separator_behavior}
+                                onChange={e => setFormData({ ...formData, x_separator_behavior: e.target.value })}
+                            >
+                                <option value="auto">อัตโนมัติ (ตามประเภทหวย)</option>
+                                <option value="revert">ซื้อไป-กลับอัตโนมัติ (ทุกหวย)</option>
+                                <option value="straight">ซื้อตรงอย่างเดียว (ทุกหวย)</option>
+                            </select>
+                        </div>
                         <div className="form-actions">
                             <button
                                 className="btn btn-secondary"
@@ -382,7 +400,8 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                                     setIsEditing(false)
                                     setFormData({
                                         full_name: profileData.full_name || '',
-                                        phone: profileData.phone || ''
+                                        phone: profileData.phone || '',
+                                        x_separator_behavior: profileData.x_separator_behavior || 'auto'
                                     })
                                 }}
                             >
@@ -410,6 +429,14 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                         <div className="info-row">
                             <span className="info-label">เบอร์โทรศัพท์</span>
                             <span className="info-value">{profileData.phone || '-'}</span>
+                        </div>
+                        <div className="info-row">
+                            <span className="info-label">การตีความเครื่องหมาย x / *</span>
+                            <span className="info-value">
+                                {profileData.x_separator_behavior === 'revert' ? 'ซื้อไป-กลับอัตโนมัติ (ทุกหวย)' :
+                                 profileData.x_separator_behavior === 'straight' ? 'ซื้อตรงอย่างเดียว (ทุกหวย)' :
+                                 'อัตโนมัติ (ตามประเภทหวย)'}
+                            </span>
                         </div>
                     </div>
                 )}

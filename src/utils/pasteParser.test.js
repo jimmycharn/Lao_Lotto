@@ -1278,5 +1278,323 @@ describe('pasteParser - parseMultiLinePaste', () => {
       }
     })
   })
+
+  describe('stock lottery - even-odd numbers (เลขคู่คี่)', () => {
+    it('should parse คู่คี่ 20 correctly (even-odd numbers, top)', () => {
+      const text = 'คู่คี่ 20'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(50)
+      
+      const evenOddNumbers = [
+        '98', '96', '94', '92', '90',
+        '89', '87', '85', '83', '81',
+        '78', '76', '74', '72', '70',
+        '69', '67', '65', '63', '61',
+        '58', '56', '54', '52', '50',
+        '49', '47', '45', '43', '41',
+        '38', '36', '34', '32', '30',
+        '29', '27', '25', '23', '21',
+        '18', '16', '14', '12', '10',
+        '09', '07', '05', '03', '01'
+      ]
+      for (let i = 0; i < 50; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: evenOddNumbers[i],
+          amount: 20,
+          betType: '2_top',
+          typeLabel: 'บน'
+        })
+      }
+    })
+
+    it('should parse คู่คี=50 ล่าง correctly (even-odd numbers, bottom)', () => {
+      const text = 'คู่คี=50 ล่าง'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(50)
+      
+      const evenOddNumbers = [
+        '98', '96', '94', '92', '90',
+        '89', '87', '85', '83', '81',
+        '78', '76', '74', '72', '70',
+        '69', '67', '65', '63', '61',
+        '58', '56', '54', '52', '50',
+        '49', '47', '45', '43', '41',
+        '38', '36', '34', '32', '30',
+        '29', '27', '25', '23', '21',
+        '18', '16', '14', '12', '10',
+        '09', '07', '05', '03', '01'
+      ]
+      for (let i = 0; i < 50; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: evenOddNumbers[i],
+          amount: 50,
+          betType: '2_bottom',
+          typeLabel: 'ล่าง'
+        })
+      }
+    })
+  })
+
+  describe('stock lottery - even-even numbers (เลขคู่คู่)', () => {
+    it('should parse คู่คู่ 20 correctly (even-even numbers, top)', () => {
+      const text = 'คู่คู่ 20'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(25)
+      
+      const evenEvenNumbers = [
+        '88', '86', '84', '82', '80',
+        '68', '66', '64', '62', '60',
+        '48', '46', '44', '42', '40',
+        '28', '26', '24', '22', '20',
+        '08', '06', '04', '02', '00'
+      ]
+      for (let i = 0; i < 25; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: evenEvenNumbers[i],
+          amount: 20,
+          betType: '2_top',
+          typeLabel: 'บน'
+        })
+      }
+    })
+
+    it('should parse คู่คู=50 ล่าง correctly (even-even numbers, bottom)', () => {
+      const text = 'คู่คู=50 ล่าง'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(25)
+      
+      const evenEvenNumbers = [
+        '88', '86', '84', '82', '80',
+        '68', '66', '64', '62', '60',
+        '48', '46', '44', '42', '40',
+        '28', '26', '24', '22', '20',
+        '08', '06', '04', '02', '00'
+      ]
+      for (let i = 0; i < 25; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: evenEvenNumbers[i],
+          amount: 50,
+          betType: '2_bottom',
+          typeLabel: 'ล่าง'
+        })
+      }
+    })
+  })
+
+  describe('stock lottery - odd-odd numbers (เลขคี่คี่)', () => {
+    it('should parse คี่คี่ 20 correctly (odd-odd numbers, top)', () => {
+      const text = 'คี่คี่ 20'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(25)
+      
+      const oddOddNumbers = [
+        '99', '97', '95', '93', '91',
+        '79', '77', '75', '73', '71',
+        '59', '57', '55', '53', '51',
+        '39', '37', '35', '33', '31',
+        '19', '17', '15', '13', '11'
+      ]
+      for (let i = 0; i < 25; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: oddOddNumbers[i],
+          amount: 20,
+          betType: '2_top',
+          typeLabel: 'บน'
+        })
+      }
+    })
+
+    it('should parse คี่คี=50 ล่าง correctly (odd-odd numbers, bottom)', () => {
+      const text = 'คี่คี=50 ล่าง'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(25)
+      
+      const oddOddNumbers = [
+        '99', '97', '95', '93', '91',
+        '79', '77', '75', '73', '71',
+        '59', '57', '55', '53', '51',
+        '39', '37', '35', '33', '31',
+        '19', '17', '15', '13', '11'
+      ]
+      for (let i = 0; i < 25; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: oddOddNumbers[i],
+          amount: 50,
+          betType: '2_bottom',
+          typeLabel: 'ล่าง'
+        })
+      }
+    })
+  })
+
+  describe('stock lottery - win numbers (เลขวิน)', () => {
+    it('should parse วิน 12345 20 correctly (win without doubles, top)', () => {
+      const text = 'วิน 12345 20'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(10) // 10 pairs
+      
+      const expectedPairs = ['12', '13', '14', '15', '23', '24', '25', '34', '35', '45']
+      for (let i = 0; i < 10; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: expectedPairs[i],
+          amount: 20,
+          betType: '2_top',
+          typeLabel: 'บน'
+        })
+      }
+    })
+
+    it('should parse วินกลับ 12345=20 correctly (win with reversals, top)', () => {
+      const text = 'วินกลับ 12345=20'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(20) // 20 pairs (direct + reverse)
+      
+      const expectedPairs = [
+        '12', '21', '13', '31', '14', '41', '15', '51',
+        '23', '32', '24', '42', '25', '52',
+        '34', '43', '35', '53',
+        '45', '54'
+      ]
+      for (let i = 0; i < 20; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: expectedPairs[i],
+          amount: 20,
+          betType: '2_top',
+          typeLabel: 'บน'
+        })
+      }
+    })
+
+    it('should parse วินเบิ้ล 12345 20 ล่าง correctly (win with reversals, bottom)', () => {
+      const text = 'วินเบิ้ล 12345 20 ล่าง'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(20) // 20 pairs (direct + reverse)
+      
+      const expectedPairs = [
+        '12', '21', '13', '31', '14', '41', '15', '51',
+        '23', '32', '24', '42', '25', '52',
+        '34', '43', '35', '53',
+        '45', '54'
+      ]
+      for (let i = 0; i < 20; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: expectedPairs[i],
+          amount: 20,
+          betType: '2_bottom',
+          typeLabel: 'ล่าง'
+        })
+      }
+    })
+  })
+
+  describe('stock lottery - hang numbers (19 หาง)', () => {
+    it('should parse หาง1=20 correctly (19 sets, top)', () => {
+      const text = 'หาง1=20'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(19)
+      
+      const expectedNumbers = [
+        '10', '11', '12', '13', '14', '15', '16', '17', '18', '19',
+        '01', '21', '31', '41', '51', '61', '71', '81', '91'
+      ]
+      
+      for (let i = 0; i < 19; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: expectedNumbers[i],
+          amount: 20,
+          betType: '2_top',
+          typeLabel: 'บน'
+        })
+      }
+    })
+
+    it('should parse 19หาง 2 30 ล่าง correctly (19 sets, bottom)', () => {
+      const text = '19หาง 2 30 ล่าง'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(19)
+      
+      const expectedNumbers = [
+        '20', '21', '22', '23', '24', '25', '26', '27', '28', '29',
+        '02', '12', '32', '42', '52', '62', '72', '82', '92'
+      ]
+      
+      for (let i = 0; i < 19; i++) {
+        expect(result[i]).toMatchObject({
+          numbers: expectedNumbers[i],
+          amount: 30,
+          betType: '2_bottom',
+          typeLabel: 'ล่าง'
+        })
+      }
+    })
+
+    it('should parse บล หาง 5=50 correctly (19 sets, both)', () => {
+      const text = 'บล หาง 5=50'
+      const result = parseMultiLinePaste(text, 'stock')
+      expect(result.length).toBe(38) // 19 top + 19 bottom
+      
+      // Check that we have exactly 19 top and 19 bottom bets
+      const topBets = result.filter(r => r.betType === '2_top')
+      const bottomBets = result.filter(r => r.betType === '2_bottom')
+      expect(topBets.length).toBe(19)
+      expect(bottomBets.length).toBe(19)
+    })
+  })
+
+  describe('Smart Auto-Default x/* separator behavior', () => {
+    it('should auto-revert 2-digit number when behavior is auto and lotteryType is stock', () => {
+      const text = '25x30'
+      const result = parseMultiLinePaste(text, 'stock', { x_separator_behavior: 'auto' })
+      expect(result.length).toBe(2)
+      expect(result[0]).toMatchObject({ numbers: '25', amount: 30 })
+      expect(result[1]).toMatchObject({ numbers: '52', amount: 30 })
+    })
+
+    it('should unique-revert double 2-digit number (11x30) to only 1 entry when behavior is auto and lotteryType is stock', () => {
+      const text = '11x30'
+      const result = parseMultiLinePaste(text, 'stock', { x_separator_behavior: 'auto' })
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({ numbers: '11', amount: 30 })
+    })
+
+    it('should generate permutations for 3-digit number (123*20) when behavior is auto and lotteryType is stock', () => {
+      const text = '123*20'
+      const result = parseMultiLinePaste(text, 'stock', { x_separator_behavior: 'auto' })
+      expect(result.length).toBe(6) // 123, 132, 213, 231, 312, 321
+      const numbers = result.map(r => r.numbers)
+      expect(numbers).toContain('123')
+      expect(numbers).toContain('321')
+    })
+
+    it('should not auto-revert 2-digit number when behavior is auto but lotteryType is normal (lao)', () => {
+      const text = '25x30'
+      const result = parseMultiLinePaste(text, 'lao', { x_separator_behavior: 'auto' })
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({ numbers: '25', amount: 30 })
+    })
+
+    it('should auto-revert 2-digit number when behavior is revert even on normal (lao) lottery', () => {
+      const text = '25x30'
+      const result = parseMultiLinePaste(text, 'lao', { x_separator_behavior: 'revert' })
+      expect(result.length).toBe(2)
+      expect(result[0]).toMatchObject({ numbers: '25', amount: 30 })
+      expect(result[1]).toMatchObject({ numbers: '52', amount: 30 })
+    })
+
+    it('should not auto-revert 2-digit number when behavior is straight even on stock lottery', () => {
+      const text = '25x30'
+      const result = parseMultiLinePaste(text, 'stock', { x_separator_behavior: 'straight' })
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({ numbers: '25', amount: 30 })
+    })
+
+    it('should skip auto-reversion for 3 parts or more like 25x20x20 even on stock lottery', () => {
+      const text = '25x20x20'
+      const result = parseMultiLinePaste(text, 'stock', { x_separator_behavior: 'auto' })
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({ numbers: '25', amount: 20, amount2: 20 })
+    })
+  })
 })
+
 

@@ -5,6 +5,7 @@ import { parseMultiLinePaste, get3DigitPermCount, normalizeUnicode, extractInlin
 import { useDragReorder } from '../utils/useDragReorder'
 import { fetchNumberLimits, fetchCurrentTotals, findMatchingLimit, getEffectivePayoutPercent } from '../utils/numberLimits'
 import { useModalBackButton } from '../utils/useModalBackButton'
+import { useAuth } from '../contexts/AuthContext'
 import './WriteSubmissionModal.css'
 
 // Shared AudioContext for low-latency sound playback
@@ -403,6 +404,7 @@ export default function WriteSubmissionModal({
     // Bonus settings: { bonusEnabled, betTypeBonus: { '3_top': 10, '2_top': 5, ... } }
     bonusSettings = null
 }) {
+    const { profile } = useAuth()
     const [lines, setLines] = useState([])
     const [currentInput, setCurrentInput] = useState('')
     const [editingIndex, setEditingIndex] = useState(null)
@@ -1935,7 +1937,7 @@ export default function WriteSubmissionModal({
             return
         }
 
-        const parsed = parseMultiLinePaste(pasteText, lotteryType)
+        const parsed = parseMultiLinePaste(pasteText, lotteryType, { x_separator_behavior: profile?.x_separator_behavior })
         if (parsed.length === 0) {
             setError('ไม่พบรายการเลขในข้อความ')
             return
@@ -2991,7 +2993,7 @@ export default function WriteSubmissionModal({
                                             setPasteText(text)
                                             // Auto-submit after a tick so state updates
                                             setTimeout(() => {
-                                                const parsed = parseMultiLinePaste(text, lotteryType)
+                                                const parsed = parseMultiLinePaste(text, lotteryType, { x_separator_behavior: profile?.x_separator_behavior })
                                                 if (parsed.length === 0) {
                                                     setError('ไม่พบรายการเลขในข้อความ')
                                                     setShowPasteModal(false)
