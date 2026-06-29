@@ -7856,7 +7856,7 @@ serve(async (req) => {
                 }
 
                 const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(searchKey);
-                let query = supabase.from('profiles').select('id, full_name, role, is_active, member_code, admin_poy_display').eq('is_active', true);
+                let query = supabase.from('profiles').select('id, full_name, role, is_active, member_code, line_user_id, admin_poy_display').eq('is_active', true);
                 if (isUUID) {
                   query = query.eq('id', searchKey);
                 } else if (/^\d+$/.test(searchKey)) {
@@ -7894,17 +7894,35 @@ serve(async (req) => {
                 }
 
                 const isClosingCmd = commandPrefix.includes('ปิด');
-                const targetAdminMode = isClosingCmd ? 'force_close' : 'normal';
+                const isNormalCmd = commandPrefix.includes('ปกติ');
+                const targetAdminMode = isClosingCmd ? 'force_close' : (isNormalCmd ? 'normal' : 'force_open');
                 const targetLineMode = isClosingCmd ? 'none' : 'short';
-                const actionLabel = isClosingCmd ? 'ปิดการแสดงผลโพยเด็ดขาด' : 'เปิดการแสดงผลโพย';
+                const lotName = groupLink.lottery_type === 'lao' ? 'หวยลาว' : groupLink.lottery_type === 'thai' ? 'หวยไทย' : groupLink.lottery_type === 'hanoi' ? 'หวยฮานอย' : groupLink.lottery_type === 'stock' ? 'หวยหุ้น' : 'หวยประเภทนี้';
+                const actionLabel = isClosingCmd ? `ปิดการแสดงผลโพยเด็ดขาดสำหรับกลุ่ม${lotName}` : (isNormalCmd ? `เคารพสิทธิ์ตั้งค่าส่วนบุคคลตามปกติสำหรับกลุ่ม${lotName}` : `เปิดการแสดงผลโพยเด็ดขาดเป็นข้อยกเว้นสำหรับกลุ่ม${lotName}`);
 
-                const { error: updateErr } = await supabase
-                  .from('profiles')
+                // Fetch all groups of this dealer sharing the same lottery_type
+                const { data: grps } = await supabase
+                  .from('line_groups')
+                  .select('line_group_id')
+                  .eq('dealer_id', dealerId)
+                  .eq('lottery_type', groupLink.lottery_type);
+                 
+                const grpIds = (grps || []).map(g => g.line_group_id).filter(Boolean);
+
+                let memberUpdateQuery = supabase
+                  .from('line_group_members')
                   .update({ 
                     admin_poy_display: targetAdminMode,
-                    line_poy_display: targetLineMode
+                    poy_display: targetLineMode
                   })
-                  .eq('id', targetProfile.id);
+                  .in('line_group_id', grpIds);
+                 
+                if (targetProfile.line_user_id) {
+                  memberUpdateQuery = memberUpdateQuery.or(`user_id.eq.${targetProfile.id},line_user_id.eq.${targetProfile.line_user_id}`);
+                } else {
+                  memberUpdateQuery = memberUpdateQuery.eq('user_id', targetProfile.id);
+                }
+                const { error: updateErr } = await memberUpdateQuery;
 
                 if (updateErr) {
                   console.error("Error updating member specific poy display:", updateErr);
@@ -8600,18 +8618,28 @@ serve(async (req) => {
 
         if (isPoySettingsCmd) {
           try {
-            // Find sender's profile
-            const { data: senderProfile } = await supabase
-              .from('profiles')
-              .select('id, full_name, admin_poy_display')
+            // Find sender's membership record in this group
+            const { data: memberRec } = await supabase
+              .from('line_group_members')
+              .select('id, display_name, admin_poy_display')
+              .eq('line_group_id', groupId)
               .eq('line_user_id', userId)
               .maybeSingle();
 
-            if (!senderProfile) {
-              await sendLineReply(replyToken, [
-                `❌ คุณยังไม่ได้เชื่อมบัญชี LINE ของคุณกับระบบ Big Lotto\nกรุณานำ LINE User ID ด้านล่างไปใส่ในเมนูโปรไฟล์บนเว็บเพื่อเชื่อมต่อ`,
-                userId
-              ]);
+            let activeMemberRec = memberRec;
+            if (!activeMemberRec) {
+              await upsertGroupMember(groupId, userId, event.source?.type || 'group');
+              const { data: retryRec } = await supabase
+                .from('line_group_members')
+                .select('id, display_name, admin_poy_display')
+                .eq('line_group_id', groupId)
+                .eq('line_user_id', userId)
+                .maybeSingle();
+              activeMemberRec = retryRec;
+            }
+
+            if (!activeMemberRec) {
+              await sendLineReply(replyToken, `❌ ไม่พบข้อมูลสมาชิกกลุ่มแชทในระบบ กรุณาลองส่งข้อความแทงปกติเพื่อลงทะเบียนก่อนค่ะ`);
               continue;
             }
 
@@ -8624,15 +8652,15 @@ serve(async (req) => {
               displayMode = 'short';
             }
 
-            if (senderProfile.admin_poy_display === 'force_close' && displayMode !== 'none') {
+            if (activeMemberRec.admin_poy_display === 'force_close' && displayMode !== 'none') {
               await sendLineReply(replyToken, `❌ ขออภัยค่ะ ผู้ดูแลระบบได้ปิดการแสดงผลโพยของคุณไว้เฉพาะตัว หากต้องการเปิดกรุณาติดต่อผู้ดูแลระบบค่ะ`);
               continue;
             }
 
             const { error: updateErr } = await supabase
-              .from('profiles')
-              .update({ line_poy_display: displayMode })
-              .eq('id', senderProfile.id);
+              .from('line_group_members')
+              .update({ poy_display: displayMode })
+              .eq('id', activeMemberRec.id);
 
             if (updateErr) {
               console.error("Failed to update poy display mode:", updateErr);
@@ -8644,9 +8672,16 @@ serve(async (req) => {
               } else if (displayMode === 'none') {
                 displayLabel = 'ปิดการแสดงผล';
               }
-              await sendLineReply(replyToken, `✅ ตั้งค่าการแสดงผลโพยหลังบันทึกเป็น "${displayLabel}" สำเร็จแล้วค่ะ!`);
+              
+              let warnMsg = '';
+              const currentGlobalPoy = groupLink?.poy_display || 'normal';
+              if (currentGlobalPoy === 'force_close' && displayMode !== 'none') {
+                warnMsg = '\n(⚠️ หมายเหตุ: ขณะนี้ระบบหลักของกลุ่มแชทถูกผู้ดูแลสั่งปิดการแสดงผลไว้ สรุปใบโพยจะยังไม่แสดงขึ้นในกลุ่มจนกว่าผู้ดูแลจะเปิดระบบค่ะ)';
+              }
+              
+              await sendLineReply(replyToken, `✅ ตั้งค่าการแสดงผลโพยหลังบันทึกในกลุ่มนี้เป็น "${displayLabel}" สำเร็จแล้วค่ะ!${warnMsg}`);
             }
-          } catch (err) {
+          } catch (err: any) {
             console.error("Error setting poy display mode:", err);
             await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการทำรายการ: ${err.message}`);
           }
