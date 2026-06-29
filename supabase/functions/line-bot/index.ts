@@ -2829,6 +2829,19 @@ serve(async (req) => {
         // Handle Text Message
         if (event.type === 'message' && event.message?.type === 'text') {
           const text = event.message.text.trim();
+          
+          // Normalize poy commands aliases
+          let normText = text;
+          if (text.startsWith('/') && (text.includes('โพย') || text.includes('bill'))) {
+            normText = text
+              .replace(/^\/(?:ปิดโพย|ปิด\s+โพย)/, '/โพยปิด')
+              .replace(/^\/(?:เปิดโพย|เปิด\s+โพย)/, '/โพยเปิด')
+              .replace(/^\/โพย\s+/, '/โพย');
+            normText = normText
+              .replace(/^\/โพย(?:ปิดหมด|ปิด\s+หมด)/, '/โพยปิดหมด')
+              .replace(/^\/โพย(?:เปิดหมด|เปิด\s+หมด)/, '/โพยเปิดหมด')
+              .replace(/^\/โพย(?:ปกติ|ปกติ)/, '/โพยปกติ');
+          }
 
           // Fetch group link details if in a group or room
           let groupLink = null;
@@ -2930,11 +2943,11 @@ serve(async (req) => {
             text.startsWith('/stats') || text.startsWith('/สมาชิก') || text.startsWith('/ยอดสมาชิก') ||
             text.startsWith('/ส่งแทน') ||
             text.startsWith('/ประกาศ') ||
-            text.startsWith('/โพยปิดหมด') || text.startsWith('/โพย ปิดหมด') ||
-            text.startsWith('/โพยเปิดหมด') || text.startsWith('/โพย เปิดหมด') ||
-            text.startsWith('/โพยปกติ') || text.startsWith('/โพย ปกติ') ||
-            text.startsWith('/โพยปิด ') || text.startsWith('/โพย ปิด ') ||
-            text.startsWith('/โพยเปิด ') || text.startsWith('/โพย เปิด ') ||
+            normText.startsWith('/โพยปิดหมด') ||
+            normText.startsWith('/โพยเปิดหมด') ||
+            normText.startsWith('/โพยปกติ') ||
+            normText.startsWith('/โพยปิด ') ||
+            normText.startsWith('/โพยเปิด ') ||
             text.startsWith('/total') || text.startsWith('/ยอดรวม') ||
             text.startsWith('/เลขรวม') || text.startsWith('/เลขเหลือ') ||
             text.startsWith('/เลขตี') || text.startsWith('/เลขตีออก') ||
@@ -7805,11 +7818,11 @@ serve(async (req) => {
 
             // ─── COMMAND: /โพยปิดหมด หรือ /โพยเปิดหมด หรือ /โพยปิด [รหัส] หรือ /โพยเปิด [รหัส] ───
             const isGlobalOrSpecificPoyCmd = 
-              text === '/โพยปิดหมด' || text === '/โพย ปิดหมด' ||
-              text === '/โพยเปิดหมด' || text === '/โพย เปิดหมด' ||
-              text === '/โพยปกติ' || text === '/โพย ปกติ' ||
-              (text.startsWith('/โพยปิด ') || text.startsWith('/โพย ปิด ')) ||
-              (text.startsWith('/โพยเปิด ') || text.startsWith('/โพย เปิด '));
+              normText === '/โพยปิดหมด' ||
+              normText === '/โพยเปิดหมด' ||
+              normText === '/โพยปกติ' ||
+              normText.startsWith('/โพยปิด ') ||
+              normText.startsWith('/โพยเปิด ');
 
             if (isGlobalOrSpecificPoyCmd) {
               if (!isStaff && (!manager || manager.role !== 'admin')) {
@@ -7820,22 +7833,22 @@ serve(async (req) => {
               // Determine command prefix and arguments
               let commandPrefix = '';
               let isSpecific = false;
-              if (text.startsWith('/โพยปิดหมด') || text.startsWith('/โพย ปิดหมด')) {
-                commandPrefix = text.startsWith('/โพยปิดหมด') ? '/โพยปิดหมด' : '/โพย ปิดหมด';
-              } else if (text.startsWith('/โพยเปิดหมด') || text.startsWith('/โพย เปิดหมด')) {
-                commandPrefix = text.startsWith('/โพยเปิดหมด') ? '/โพยเปิดหมด' : '/โพย เปิดหมด';
-              } else if (text.startsWith('/โพยปกติ') || text.startsWith('/โพย ปกติ')) {
-                commandPrefix = text.startsWith('/โพยปกติ') ? '/โพยปกติ' : '/โพย ปกติ';
-              } else if (text.startsWith('/โพยปิด ') || text.startsWith('/โพย ปิด ')) {
-                commandPrefix = text.startsWith('/โพยปิด ') ? '/โพยปิด ' : '/โพย ปิด ';
+              if (normText.startsWith('/โพยปิดหมด')) {
+                commandPrefix = '/โพยปิดหมด';
+              } else if (normText.startsWith('/โพยเปิดหมด')) {
+                commandPrefix = '/โพยเปิดหมด';
+              } else if (normText.startsWith('/โพยปกติ')) {
+                commandPrefix = '/โพยปกติ';
+              } else if (normText.startsWith('/โพยปิด ')) {
+                commandPrefix = '/โพยปิด ';
                 isSpecific = true;
-              } else if (text.startsWith('/โพยเปิด ') || text.startsWith('/โพย เปิด ')) {
-                commandPrefix = text.startsWith('/โพยเปิด ') ? '/โพยเปิด ' : '/โพย เปิด ';
+              } else if (normText.startsWith('/โพยเปิด ')) {
+                commandPrefix = '/โพยเปิด ';
                 isSpecific = true;
               }
 
               if (isSpecific) {
-                const searchKey = text.substring(commandPrefix.length).trim();
+                const searchKey = normText.substring(commandPrefix.length).trim();
                 if (!searchKey) {
                   await sendLineReply(replyToken, `❌ กรุณาระบุรหัสสมาชิกหรือชื่อสมาชิกที่ต้องการดำเนินการ เช่น /โพยปิด 00012`);
                   continue;
@@ -8577,9 +8590,8 @@ serve(async (req) => {
 
         // ─── COMMAND 4.5: จัดการการแสดงผลโพย ───
         const isPoySettingsCmd = 
-          text === '/โพยย่อ' || text === '/โพยเต็ม' || 
-          text === '/โพยปิด' || text === '/โพย ปิด' || 
-          text === '/โพยเปิด' || text === '/โพย เปิด';
+          normText === '/โพยย่อ' || normText === '/โพยเต็ม' || 
+          normText === '/โพยปิด' || normText === '/โพยเปิด';
 
         if (isPoySettingsCmd) {
           try {
@@ -8599,11 +8611,11 @@ serve(async (req) => {
             }
 
             let displayMode = 'short';
-            if (text === '/โพยเต็ม') {
+            if (normText === '/โพยเต็ม') {
               displayMode = 'full';
-            } else if (text === '/โพยปิด' || text === '/โพย ปิด') {
+            } else if (normText === '/โพยปิด') {
               displayMode = 'none';
-            } else if (text === '/โพยเปิด' || text === '/โพย เปิด') {
+            } else if (normText === '/โพยเปิด') {
               displayMode = 'short';
             }
 
@@ -10550,6 +10562,7 @@ serve(async (req) => {
           .eq('is_active', true)
           .maybeSingle();
 
+        const senderProfile = profile;
         let senderPoyDisplay = profile?.line_poy_display || 'short';
         const adminPoy = profile?.admin_poy_display || 'normal';
         console.log(`[LINE BOT MSG] profile lookup result:`, { profile, profileErr, senderPoyDisplay });
@@ -10649,24 +10662,33 @@ serve(async (req) => {
           }
         }
 
-        // Re-evaluate senderPoyDisplay based on final active profile
-        if (profile) {
-          senderPoyDisplay = profile.line_poy_display || 'short';
-          const finalAdminPoy = profile.admin_poy_display || 'normal';
-          if (globalPoy === 'force_close') {
-            senderPoyDisplay = 'none';
-          } else if (globalPoy === 'force_open') {
-            if (senderPoyDisplay === 'none') {
-              senderPoyDisplay = 'short';
-            }
-          } else if (finalAdminPoy === 'force_close') {
-            senderPoyDisplay = 'none';
-          } else if (finalAdminPoy === 'force_open') {
-            if (senderPoyDisplay === 'none') {
-              senderPoyDisplay = 'short';
+        // Re-evaluate senderPoyDisplay based on final active profile and sender role
+        let finalPoyDisplay = 'short';
+        if (isStaffSender) {
+          // Admin/Staff/Manager bypasses global overrides and specific member overrides.
+          // They use their own original sender profile settings.
+          finalPoyDisplay = senderProfile?.line_poy_display || 'short';
+        } else {
+          // Regular members are subject to global and specific admin overrides.
+          if (profile) {
+            finalPoyDisplay = profile.line_poy_display || 'short';
+            const finalAdminPoy = profile.admin_poy_display || 'normal';
+            if (globalPoy === 'force_close') {
+              finalPoyDisplay = 'none';
+            } else if (globalPoy === 'force_open') {
+              if (finalPoyDisplay === 'none') {
+                finalPoyDisplay = 'short';
+              }
+            } else if (finalAdminPoy === 'force_close') {
+              finalPoyDisplay = 'none';
+            } else if (finalAdminPoy === 'force_open') {
+              if (finalPoyDisplay === 'none') {
+                finalPoyDisplay = 'short';
+              }
             }
           }
         }
+        senderPoyDisplay = finalPoyDisplay;
 
         const submittedById = originalSenderId || (profile ? profile.id : null);
 
