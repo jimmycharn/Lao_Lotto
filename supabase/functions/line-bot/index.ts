@@ -9853,6 +9853,7 @@ serve(async (req) => {
             }
           }
 
+          let billCode = '';
           try {
             if (text.startsWith('/bill')) {
               billCode = text.substring('/bill'.length).trim();
