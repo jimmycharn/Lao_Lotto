@@ -2933,6 +2933,8 @@ serve(async (req) => {
             text.startsWith('/โพยปิดหมด') || text.startsWith('/โพย ปิดหมด') ||
             text.startsWith('/โพยเปิดหมด') || text.startsWith('/โพย เปิดหมด') ||
             text.startsWith('/โพยปกติ') || text.startsWith('/โพย ปกติ') ||
+            text.startsWith('/โพยปิด ') || text.startsWith('/โพย ปิด ') ||
+            text.startsWith('/โพยเปิด ') || text.startsWith('/โพย เปิด ') ||
             text.startsWith('/total') || text.startsWith('/ยอดรวม') ||
             text.startsWith('/เลขรวม') || text.startsWith('/เลขเหลือ') ||
             text.startsWith('/เลขตี') || text.startsWith('/เลขตีออก') ||
@@ -7801,40 +7803,147 @@ serve(async (req) => {
               continue;
             }
 
-            // ─── COMMAND: /โพยปิดหมด หรือ /โพยเปิดหมด ───
-            const isGlobalPoyCmd = 
+            // ─── COMMAND: /โพยปิดหมด หรือ /โพยเปิดหมด หรือ /โพยปิด [รหัส] หรือ /โพยเปิด [รหัส] ───
+            const isGlobalOrSpecificPoyCmd = 
               text === '/โพยปิดหมด' || text === '/โพย ปิดหมด' ||
               text === '/โพยเปิดหมด' || text === '/โพย เปิดหมด' ||
-              text === '/โพยปกติ' || text === '/โพย ปกติ';
+              text === '/โพยปกติ' || text === '/โพย ปกติ' ||
+              (text.startsWith('/โพยปิด ') || text.startsWith('/โพย ปิด ')) ||
+              (text.startsWith('/โพยเปิด ') || text.startsWith('/โพย เปิด '));
 
-            if (isGlobalPoyCmd) {
+            if (isGlobalOrSpecificPoyCmd) {
               if (!isStaff && (!manager || manager.role !== 'admin')) {
                 await sendLineReply(replyToken, `❌ เฉพาะเจ้ามือ แอดมิน หรือผู้จัดการหลักเท่านั้นที่มีสิทธิ์ใช้งานคำสั่งนี้`);
                 continue;
               }
 
-              let mode = 'normal';
-              let label = 'เคารพสิทธิ์ตั้งค่าส่วนบุคคลตามปกติ';
-              if (text === '/โพยปิดหมด' || text === '/โพย ปิดหมด') {
-                mode = 'force_close';
-                label = 'ปิดการแสดงผลทุกห้อง (ปิดหมด)';
-              } else if (text === '/โพยเปิดหมด' || text === '/โพย เปิดหมด') {
-                mode = 'force_open';
-                label = 'เปิดการแสดงผลทุกห้อง (เปิดหมด)';
+              // Determine command prefix and arguments
+              let commandPrefix = '';
+              let isSpecific = false;
+              if (text.startsWith('/โพยปิดหมด') || text.startsWith('/โพย ปิดหมด')) {
+                commandPrefix = text.startsWith('/โพยปิดหมด') ? '/โพยปิดหมด' : '/โพย ปิดหมด';
+              } else if (text.startsWith('/โพยเปิดหมด') || text.startsWith('/โพย เปิดหมด')) {
+                commandPrefix = text.startsWith('/โพยเปิดหมด') ? '/โพยเปิดหมด' : '/โพย เปิดหมด';
+              } else if (text.startsWith('/โพยปกติ') || text.startsWith('/โพย ปกติ')) {
+                commandPrefix = text.startsWith('/โพยปกติ') ? '/โพยปกติ' : '/โพย ปกติ';
+              } else if (text.startsWith('/โพยปิด ') || text.startsWith('/โพย ปิด ')) {
+                commandPrefix = text.startsWith('/โพยปิด ') ? '/โพยปิด ' : '/โพย ปิด ';
+                isSpecific = true;
+              } else if (text.startsWith('/โพยเปิด ') || text.startsWith('/โพย เปิด ')) {
+                commandPrefix = text.startsWith('/โพยเปิด ') ? '/โพยเปิด ' : '/โพย เปิด ';
+                isSpecific = true;
               }
 
-              const { error: updateErr } = await supabase
-                .from('profiles')
-                .update({ global_poy_display: mode })
-                .eq('id', dealerId);
+              if (isSpecific) {
+                const searchKey = text.substring(commandPrefix.length).trim();
+                if (!searchKey) {
+                  await sendLineReply(replyToken, `❌ กรุณาระบุรหัสสมาชิกหรือชื่อสมาชิกที่ต้องการดำเนินการ เช่น /โพยปิด 00012`);
+                  continue;
+                }
 
-              if (updateErr) {
-                console.error("Error setting global poy display:", updateErr);
-                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการตั้งค่าระบบแสดงผลรวม`);
+                const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(searchKey);
+                let query = supabase.from('profiles').select('id, full_name, role, is_active, member_code, admin_poy_display').eq('is_active', true);
+                if (isUUID) {
+                  query = query.eq('id', searchKey);
+                } else if (/^\d+$/.test(searchKey)) {
+                  query = query.eq('member_code', searchKey);
+                } else {
+                  query = query.ilike('full_name', `%${searchKey}%`);
+                }
+                const { data: matchedProfiles, error: searchErr } = await query;
+
+                if (searchErr) {
+                  console.error("Error searching member for specific poy:", searchErr);
+                  await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการค้นหาข้อมูลสมาชิก`);
+                  continue;
+                }
+
+                if (!matchedProfiles || matchedProfiles.length === 0) {
+                  await sendLineReply(replyToken, `❌ ไม่พบสมาชิกที่มีรหัสหรือชื่อตรงกับ "${searchKey}"`);
+                  continue;
+                }
+
+                const targetProfile = matchedProfiles[0];
+
+                // Verify membership in dealer
+                const { data: mship } = await supabase
+                  .from('user_dealer_memberships')
+                  .select('id')
+                  .eq('user_id', targetProfile.id)
+                  .eq('dealer_id', dealerId)
+                  .eq('status', 'active')
+                  .maybeSingle();
+
+                if (!mship) {
+                  await sendLineReply(replyToken, `❌ สมาชิก "${targetProfile.full_name}" (รหัส: ${targetProfile.member_code || '-'}) ไม่ได้เป็นสมาชิกที่อนุมัติของร้านค้านี้`);
+                  continue;
+                }
+
+                const isClosingCmd = commandPrefix.includes('ปิด');
+                const targetAdminMode = isClosingCmd ? 'force_close' : 'normal';
+                const targetLineMode = isClosingCmd ? 'none' : 'short';
+                const actionLabel = isClosingCmd ? 'ปิดการแสดงผลโพยเด็ดขาด' : 'เปิดการแสดงผลโพย';
+
+                const { error: updateErr } = await supabase
+                  .from('profiles')
+                  .update({ 
+                    admin_poy_display: targetAdminMode,
+                    line_poy_display: targetLineMode
+                  })
+                  .eq('id', targetProfile.id);
+
+                if (updateErr) {
+                  console.error("Error updating member specific poy display:", updateErr);
+                  await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการตั้งค่าการแสดงผลโพยของสมาชิก`);
+                } else {
+                  const codeStr = targetProfile.member_code ? ` (รหัส: ${targetProfile.member_code})` : '';
+                  await sendLineReply(replyToken, `✅ ตั้งค่าการแสดงผลโพยของ คุณ ${targetProfile.full_name}${codeStr} เป็น: "${actionLabel}" เรียบร้อยแล้วค่ะ!`);
+                }
+                continue;
               } else {
-                await sendLineReply(replyToken, `✅ ตั้งค่าระบบใบโพยในร้านค้าทั้งหมดเป็น: "${label}" เรียบร้อยแล้วค่ะ!\n(สิทธิ์ของผู้ดูแลร้านมีผลเหนือการตั้งค่ารายบุคคล)`);
+                // Global commands (เดิม)
+                let mode = 'normal';
+                let label = 'เคารพสิทธิ์ตั้งค่าส่วนบุคคลตามปกติ';
+                if (commandPrefix.includes('ปิดหมด')) {
+                  mode = 'force_close';
+                  label = 'ปิดการแสดงผลทุกห้อง (ปิดหมด)';
+                } else if (commandPrefix.includes('เปิดหมด')) {
+                  mode = 'force_open';
+                  label = 'เปิดการแสดงผลทุกห้อง (เปิดหมด)';
+                }
+
+                const { error: updateErr } = await supabase
+                  .from('profiles')
+                  .update({ global_poy_display: mode })
+                  .eq('id', dealerId);
+
+                if (updateErr) {
+                  console.error("Error setting global poy display:", updateErr);
+                  await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการตั้งค่าระบบแสดงผลรวม`);
+                  continue;
+                }
+
+                // Reset admin_poy_display for all members of this dealer
+                const { data: memberships } = await supabase
+                  .from('user_dealer_memberships')
+                  .select('user_id')
+                  .eq('dealer_id', dealerId)
+                  .eq('status', 'active');
+
+                if (memberships && memberships.length > 0) {
+                  const userIds = memberships.map(m => m.user_id);
+                  const { error: resetErr } = await supabase
+                    .from('profiles')
+                    .update({ admin_poy_display: 'normal' })
+                    .in('id', userIds);
+                  if (resetErr) {
+                    console.error("Error resetting members admin_poy_display:", resetErr);
+                  }
+                }
+
+                await sendLineReply(replyToken, `✅ ตั้งค่าระบบใบโพยในร้านค้าทั้งหมดเป็น: "${label}" เรียบร้อยแล้วและเคลียร์การตั้งค่าเฉพาะรายบุคคลทั้งหมดค่ะ!\n(สิทธิ์ของผู้ดูแลร้านมีผลเหนือการตั้งค่ารายบุคคล)`);
+                continue;
               }
-              continue;
             }
 
             // ─── COMMAND: /คำสั่ง หรือ /help ───
@@ -8477,7 +8586,7 @@ serve(async (req) => {
             // Find sender's profile
             const { data: senderProfile } = await supabase
               .from('profiles')
-              .select('id, full_name')
+              .select('id, full_name, admin_poy_display')
               .eq('line_user_id', userId)
               .maybeSingle();
 
@@ -8496,6 +8605,11 @@ serve(async (req) => {
               displayMode = 'none';
             } else if (text === '/โพยเปิด' || text === '/โพย เปิด') {
               displayMode = 'short';
+            }
+
+            if (senderProfile.admin_poy_display === 'force_close' && displayMode !== 'none') {
+              await sendLineReply(replyToken, `❌ ขออภัยค่ะ ผู้ดูแลระบบได้ปิดการแสดงผลโพยของคุณไว้เฉพาะตัว หากต้องการเปิดกรุณาติดต่อผู้ดูแลระบบค่ะ`);
+              continue;
             }
 
             const { error: updateErr } = await supabase
@@ -10431,12 +10545,13 @@ serve(async (req) => {
         // Verify if sender has a linked profile
         let { data: profile, error: profileErr } = await supabase
           .from('profiles')
-          .select('id, full_name, is_active, role, line_poy_display')
+          .select('id, full_name, is_active, role, line_poy_display, admin_poy_display')
           .eq('line_user_id', userId)
           .eq('is_active', true)
           .maybeSingle();
 
         let senderPoyDisplay = profile?.line_poy_display || 'short';
+        const adminPoy = profile?.admin_poy_display || 'normal';
         console.log(`[LINE BOT MSG] profile lookup result:`, { profile, profileErr, senderPoyDisplay });
 
         // Load dealer's global poy setting to override if set to force_open / force_close
@@ -10450,6 +10565,12 @@ serve(async (req) => {
         if (globalPoy === 'force_close') {
           senderPoyDisplay = 'none';
         } else if (globalPoy === 'force_open') {
+          if (senderPoyDisplay === 'none') {
+            senderPoyDisplay = 'short';
+          }
+        } else if (adminPoy === 'force_close') {
+          senderPoyDisplay = 'none';
+        } else if (adminPoy === 'force_open') {
           if (senderPoyDisplay === 'none') {
             senderPoyDisplay = 'short';
           }
@@ -10498,7 +10619,7 @@ serve(async (req) => {
             // Fetch representative member profile
             const { data: repProfile } = await supabase
               .from('profiles')
-              .select('id, full_name, role, is_active, line_poy_display')
+              .select('id, full_name, role, is_active, line_poy_display, admin_poy_display')
               .eq('id', groupLink.staff_member_id)
               .eq('is_active', true)
               .maybeSingle();
@@ -10525,6 +10646,25 @@ serve(async (req) => {
           if (groupLink.member_permissions?.bet === false) {
             await sendLineReply(replyToken, `❌ ดีลเลอร์ปิดการรับยอดแทงผ่านแชท LINE ในกลุ่มนี้สำหรับสมาชิกทั่วไป`);
             continue;
+          }
+        }
+
+        // Re-evaluate senderPoyDisplay based on final active profile
+        if (profile) {
+          senderPoyDisplay = profile.line_poy_display || 'short';
+          const finalAdminPoy = profile.admin_poy_display || 'normal';
+          if (globalPoy === 'force_close') {
+            senderPoyDisplay = 'none';
+          } else if (globalPoy === 'force_open') {
+            if (senderPoyDisplay === 'none') {
+              senderPoyDisplay = 'short';
+            }
+          } else if (finalAdminPoy === 'force_close') {
+            senderPoyDisplay = 'none';
+          } else if (finalAdminPoy === 'force_open') {
+            if (senderPoyDisplay === 'none') {
+              senderPoyDisplay = 'short';
+            }
           }
         }
 
