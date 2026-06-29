@@ -8309,42 +8309,103 @@ serve(async (req) => {
         }
 
         // ─── COMMAND: /ขอรหัส หรือ /ขอรหัสผูกกลุ่ม หรือ /bindcode ───
-        if (text === '/ขอรหัส' || text === '/ขอรหัสผูกกลุ่ม' || text.toLowerCase() === '/bindcode') {
+        const isKhorahasCmd = text.startsWith('/ขอรหัส') || text.startsWith('/ขอรหัสผูกกลุ่ม') || text.toLowerCase().startsWith('/bindcode');
+        if (isKhorahasCmd) {
           if (sourceType !== 'user') {
             await sendLineReply(replyToken, `⚠️ เพื่อความปลอดภัย กรุณาพิมพ์คำสั่งนี้ในแชทส่วนตัวกับบอท (1-on-1) เท่านั้นค่ะ`);
             continue;
           }
 
-          // Lookup profile by line_user_id
-          const { data: profile, error: profileErr } = await supabase
+          // 1. Get all dealer IDs this user is authorized to manage
+          // Check own dealer profile
+          const { data: ownDealer } = await supabase
             .from('profiles')
-            .select('id, full_name, role')
+            .select('id, full_name')
             .eq('line_user_id', userId)
+            .eq('role', 'dealer')
+            .eq('is_active', true)
             .maybeSingle();
 
-          const isStaffProfile = !profileErr && profile && (profile.role === 'dealer' || profile.role === 'superadmin' || profile.role === 'admin');
+          // Check managed dealer profiles
+          const { data: managedManagers } = await supabase
+            .from('line_managers')
+            .select('dealer_id')
+            .eq('line_user_id', userId)
+            .eq('role', 'admin')
+            .eq('is_active', true);
+
+          const dealerIds = (managedManagers || []).map(m => m.dealer_id).filter(Boolean);
+          if (ownDealer) {
+            dealerIds.push(ownDealer.id);
+          }
+
+          const uniqueDealerIds = [...new Set(dealerIds)];
+
+          if (uniqueDealerIds.length === 0) {
+            await sendLineReply(replyToken, `❌ ขออภัยค่ะ คำสั่งนี้สามารถใช้งานได้เฉพาะบัญชีดีลเลอร์ แอดมิน หรือผู้ช่วยแอดมินกลุ่มของดีลเลอร์เท่านั้นค่ะ\n(กรุณานำ User ID ที่ได้จากคำสั่ง /link ไปกรอกเชื่อมต่อในระบบ หรือแจ้งเจ้ามือเพื่อเพิ่มชื่อท่านในบทบาทแอดมินของบอทนะคะ)`);
+            continue;
+          }
+
+          // 2. Fetch the dealer profiles to get their names
+          const { data: dealerProfiles } = await supabase
+            .from('profiles')
+            .select('id, full_name')
+            .in('id', uniqueDealerIds)
+            .eq('is_active', true);
+
+          if (!dealerProfiles || dealerProfiles.length === 0) {
+            await sendLineReply(replyToken, `❌ ไม่พบข้อมูลร้านค้าที่เชื่อมโยงกับบัญชีของท่านในขณะนี้ค่ะ`);
+            continue;
+          }
+
+          // Parse argument if any
+          const parts = text.split(/\s+/);
           let targetDealerId: string | null = null;
 
-          if (isStaffProfile && profile) {
-            targetDealerId = profile.id;
-          } else {
-            // Check if user is an active admin manager for any dealer
-            const { data: adminManager } = await supabase
-              .from('line_managers')
-              .select('dealer_id')
-              .eq('line_user_id', userId)
-              .eq('role', 'admin')
-              .eq('is_active', true)
-              .maybeSingle();
-
-            if (adminManager) {
-              targetDealerId = adminManager.dealer_id;
+          if (parts.length > 1) {
+            const arg = parts[1].trim();
+            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(arg);
+            if (isUUID) {
+              if (uniqueDealerIds.includes(arg)) {
+                targetDealerId = arg;
+              } else {
+                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ในการขอรหัสผูกกลุ่มสำหรับร้านค้านี้ค่ะ`);
+                continue;
+              }
+            } else {
+              await sendLineReply(replyToken, `❌ รูปแบบรหัสร้านค้าไม่ถูกต้อง กรุณาเลือกจากปุ่มเมนูค่ะ`);
+              continue;
             }
           }
 
           if (!targetDealerId) {
-            await sendLineReply(replyToken, `❌ ขออภัยค่ะ คำสั่งนี้สามารถใช้งานได้เฉพาะบัญชีดีลเลอร์ แอดมิน หรือผู้ช่วยแอดมินกลุ่มของดีลเลอร์เท่านั้นค่ะ\n(กรุณานำ User ID ที่ได้จากคำสั่ง /link ไปกรอกเชื่อมต่อในระบบ หรือแจ้งเจ้ามือเพื่อเพิ่มชื่อท่านในบทบาทแอดมินของบอทนะคะ)`);
-            continue;
+            if (dealerProfiles.length === 1) {
+              targetDealerId = dealerProfiles[0].id;
+            } else {
+              // Present Quick Reply buttons
+              const quickReplyItems = dealerProfiles.map(dp => {
+                const shopName = dp.full_name || 'ดีลเลอร์';
+                return {
+                  type: "action",
+                  action: {
+                    type: "message",
+                    label: shopName.substring(0, 20), // LINE label limit: 20 chars
+                    text: `/ขอรหัส ${dp.id}`
+                  }
+                };
+              });
+
+              const quickReplyMessage = {
+                type: "text",
+                text: `💡 ท่านเป็นผู้ดูแลของร้านค้าหลายแห่ง กรุณาเลือกกดปุ่มด้านล่างเพื่อขอรหัสสำหรับร้านค้าที่ต้องการค่ะ:`,
+                quickReply: {
+                  items: quickReplyItems.slice(0, 13) // LINE max items: 13
+                }
+              };
+
+              await sendLineReply(replyToken, quickReplyMessage);
+              continue;
+            }
           }
 
           // Check if there is already an active pending code
