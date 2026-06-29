@@ -8364,7 +8364,7 @@ serve(async (req) => {
 
           if (parts.length > 1) {
             const arg = parts[1].trim();
-            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(arg);
+            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(arg);
             if (isUUID) {
               if (uniqueDealerIds.includes(arg)) {
                 targetDealerId = arg;
