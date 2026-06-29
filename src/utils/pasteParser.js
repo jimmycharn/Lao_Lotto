@@ -192,7 +192,7 @@ function findAmountIndex(tokens) {
 
 function expandLines(rawLines, lotteryType = 'lao', settings = {}) {
     const expanded = []
-    const hyphenBehavior = settings?.hyphen_separator_behavior || 'equal'
+    const hyphenBehavior = settings?.hyphen_separator_behavior || 'separator'
 
     for (let idx = 0; idx < rawLines.length; idx++) {
         const rawLine = rawLines[idx]
@@ -210,7 +210,7 @@ function expandLines(rawLines, lotteryType = 'lao', settings = {}) {
         line = cleaned || trimmed
 
         // --- Hyphen Separator Behavior Transformation ---
-        const hyphenMatch = line.match(/^(?<prefix>(?:(?:บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล|วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต)\.?\s*)?)(?<num1>\d{1,5})[-]+(?<num2>\d{1,5})[-*×\u00D7xX](?<rest>.*)$/i)
+        const hyphenMatch = line.match(/^(?<prefix>(?:(?:บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล|วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต)\.?\s*)?)(?<num1>\d{1,5})[-]+(?<num2>\d{1,5})[*×\u00D7xX](?<rest>.*)$/i)
         if (hyphenMatch) {
             const { prefix, num1, num2, rest } = hyphenMatch.groups
             if (hyphenBehavior === 'separator') {

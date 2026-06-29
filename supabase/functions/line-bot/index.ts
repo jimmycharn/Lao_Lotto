@@ -2393,6 +2393,7 @@ serve(async (req) => {
       })
     }
 
+
     // ─── BACKGROUND QUEUE PROCESSOR: process_queue ───
     if (apiPayload && apiPayload.action === 'process_queue') {
       const { data: secretRow } = await supabase
