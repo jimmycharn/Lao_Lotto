@@ -23,6 +23,7 @@ import {
 import { parseMultiLinePaste } from '../../utils/pasteParser'
 import { useDragReorder } from '../../utils/useDragReorder'
 import { useModalBackButton } from '../../utils/useModalBackButton'
+import { useAuth } from '../../contexts/AuthContext'
 
 // Classify bet type as 'top' or 'bottom' for color-coding
 const getBetPosition = (betType) => {
@@ -58,6 +59,7 @@ export default function WriteSubmissionModal({
     onClose, 
     onSuccess 
 }) {
+    const { profile } = useAuth()
     const { toast } = useToast()
     const numberInputRef = useRef(null)
     const amountInputRef = useRef(null)
@@ -737,7 +739,10 @@ export default function WriteSubmissionModal({
             return
         }
 
-        const parsed = parseMultiLinePaste(pasteText, round.lottery_type)
+        const parsed = parseMultiLinePaste(pasteText, round.lottery_type, {
+            x_separator_behavior: profile?.x_separator_behavior,
+            hyphen_separator_behavior: profile?.hyphen_separator_behavior
+        })
         if (parsed.length === 0) {
             toast.warning('ไม่พบรายการเลขในข้อความ')
             return
@@ -1662,7 +1667,10 @@ export default function WriteSubmissionModal({
                                     if (text.trim()) {
                                         setPasteText(text)
                                         setTimeout(() => {
-                                            const parsed = parseMultiLinePaste(text, round.lottery_type)
+                                            const parsed = parseMultiLinePaste(text, round.lottery_type, {
+                                                x_separator_behavior: profile?.x_separator_behavior,
+                                                hyphen_separator_behavior: profile?.hyphen_separator_behavior
+                                            })
                                             if (parsed.length === 0) {
                                                 toast.warning('ไม่พบรายการเลขในข้อความ')
                                                 setShowPasteModal(false)

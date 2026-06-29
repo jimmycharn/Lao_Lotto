@@ -2386,6 +2386,13 @@ serve(async (req) => {
       // not JSON or not the action we want
     }
 
+    if (apiPayload && apiPayload.action === 'ping') {
+      return new Response(JSON.stringify({ status: 'pong' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      })
+    }
+
     // ─── BACKGROUND QUEUE PROCESSOR: process_queue ───
     if (apiPayload && apiPayload.action === 'process_queue') {
       const { data: secretRow } = await supabase
@@ -2826,6 +2833,7 @@ serve(async (req) => {
           // Fetch group link details if in a group or room
           let groupLink = null;
           let xSeparatorBehavior = 'auto';
+          let hyphenSeparatorBehavior = 'equal';
           if (groupId && (groupId.startsWith('C') || groupId.startsWith('R'))) {
             const { data: gl } = await supabase
               .from('line_groups')
@@ -2838,18 +2846,93 @@ serve(async (req) => {
             if (gl && gl.dealer_id) {
               const { data: dealerProfile } = await supabase
                 .from('profiles')
-                .select('x_separator_behavior')
+                .select('x_separator_behavior, hyphen_separator_behavior')
                 .eq('id', gl.dealer_id)
                 .maybeSingle();
-              if (dealerProfile && dealerProfile.x_separator_behavior) {
-                xSeparatorBehavior = dealerProfile.x_separator_behavior;
+              if (dealerProfile) {
+                if (dealerProfile.x_separator_behavior) {
+                  xSeparatorBehavior = dealerProfile.x_separator_behavior;
+                }
+                if (dealerProfile.hyphen_separator_behavior) {
+                  hyphenSeparatorBehavior = dealerProfile.hyphen_separator_behavior;
+                }
               }
             }
+          }
+
+          // ─── GENERAL GROUP COMMAND: /หวย ───
+          if (text.startsWith('/หวย')) {
+            if (!groupLink) {
+              continue;
+            }
+
+            const currentType = groupLink.lottery_type || 'thai';
+            const typeNames: Record<string, string> = {
+              thai: 'หวยไทย',
+              lao: 'หวยลาว',
+              hanoi: 'หวยฮานอย',
+              stock: 'หวยหุ้น',
+              yeekee: 'หวยยี่กี',
+              other: 'อื่นๆ'
+            };
+
+            if (text === '/หวย') {
+              const currentName = typeNames[currentType] || currentType.toUpperCase();
+              await sendLineReply(replyToken, `📊 ขณะนี้กลุ่มนี้กำลังทำงานอยู่กับหวยประเภท: ${currentName}`);
+              continue;
+            }
+
+            const targetTypeText = text.substring(4).trim().toLowerCase();
+            const textToTypeMap: Record<string, string> = {
+              'ไทย': 'thai',
+              'หวยไทย': 'thai',
+              'thai': 'thai',
+              'ลาว': 'lao',
+              'หวยลาว': 'lao',
+              'lao': 'lao',
+              'ฮานอย': 'hanoi',
+              'หวยฮานอย': 'hanoi',
+              'hanoi': 'hanoi',
+              'หุ้น': 'stock',
+              'หวยหุ้น': 'stock',
+              'stock': 'stock',
+              'ยี่กี': 'yeekee',
+              'หวยยี่กี': 'yeekee',
+              'yeekee': 'yeekee',
+              'อื่นๆ': 'other',
+              'หวยอื่นๆ': 'other',
+              'other': 'other'
+            };
+
+            const targetType = textToTypeMap[targetTypeText];
+            if (!targetType) {
+              await sendLineReply(replyToken, `❌ ไม่พบประเภทหวยที่ระบุ กรุณาระบุ เช่น /หวยไทย, /หวยลาว, /หวยฮานอย, หรือ /หวยหุ้น`);
+              continue;
+            }
+
+            const { error: updateError } = await supabase
+              .from('line_groups')
+              .update({ lottery_type: targetType, updated_at: new Date().toISOString() })
+              .eq('line_group_id', groupId);
+
+            if (updateError) {
+              console.error('Error updating lottery type for line group:', updateError);
+              await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการเปลี่ยนประเภทหวย กรุณาลองใหม่อีกครั้ง หรือติดต่อผู้ดูแลระบบ`);
+            } else {
+              const newName = typeNames[targetType] || targetType.toUpperCase();
+              await sendLineReply(replyToken, `🔄 เปลี่ยนประเภทหวยของกลุ่มนี้เป็น: ${newName} เรียบร้อยแล้ว`);
+            }
+            continue;
           }
 
           // ─── MANAGER COMMANDS ROUTER ───
           const isManagerCommand = 
             text.startsWith('/stats') || text.startsWith('/สมาชิก') || text.startsWith('/ยอดสมาชิก') ||
+            text.startsWith('/ส่งแทน') ||
+            text.startsWith('/ประกาศ') ||
+            text.startsWith('/โพยปิดหมด') || text.startsWith('/โพย ปิดหมด') ||
+            text.startsWith('/โพยเปิดหมด') || text.startsWith('/โพย เปิดหมด') ||
+            text.startsWith('/โพยปกติ') || text.startsWith('/โพย ปกติ') ||
             text.startsWith('/total') || text.startsWith('/ยอดรวม') ||
             text.startsWith('/เลขรวม') || text.startsWith('/เลขเหลือ') ||
             text.startsWith('/เลขตี') || text.startsWith('/เลขตีออก') ||
@@ -2996,7 +3079,8 @@ serve(async (req) => {
                   profiles:user_id (
                     full_name,
                     balance,
-                    line_user_id
+                    line_user_id,
+                    member_code
                   )
                 `)
                 .eq('dealer_id', dealerId)
@@ -3010,10 +3094,11 @@ serve(async (req) => {
               let filteredMembers = memberships;
               if (searchName) {
                 filteredMembers = memberships.filter((m: any) => 
-                  m.profiles?.full_name?.toLowerCase().includes(searchName)
+                  m.profiles?.full_name?.toLowerCase().includes(searchName) ||
+                  m.profiles?.member_code?.includes(searchName)
                 );
                 if (filteredMembers.length === 0) {
-                  await sendLineReply(replyToken, `📊 ไม่พบสมาชิกที่มีชื่อสอดคล้องกับ "${searchName}"`);
+                  await sendLineReply(replyToken, `📊 ไม่พบสมาชิกที่มีชื่อหรือรหัสสอดคล้องกับ "${searchName}"`);
                   continue;
                 }
               }
@@ -3063,10 +3148,11 @@ serve(async (req) => {
               filteredMembers.forEach((m: any) => {
                 const profile = m.profiles || {};
                 const name = profile.full_name || 'Unknown User';
+                const codeStr = profile.member_code ? ` (รหัส: ${profile.member_code})` : '';
                 const betTotal = sumMap[m.user_id] || 0;
                 const commTotal = commMap[m.user_id] || 0;
                 const netTotal = betTotal - commTotal;
-                summaryText += `คุณ ${name}\n`;
+                summaryText += `คุณ ${name}${codeStr}\n`;
                 summaryText += `฿${betTotal.toLocaleString('th-TH')}     ฿${commTotal.toLocaleString('th-TH')}      ฿${netTotal.toLocaleString('th-TH')}\n`;
                 summaryText += `--------------------------\n`;
               });
@@ -7330,7 +7416,10 @@ serve(async (req) => {
                 }
                 continue;
               } else {
-                const parsedBets = parseMultiLinePaste(commandArg, groupLink.lottery_type, { x_separator_behavior: xSeparatorBehavior });
+                const parsedBets = parseMultiLinePaste(commandArg, groupLink.lottery_type, { 
+                  x_separator_behavior: xSeparatorBehavior,
+                  hyphen_separator_behavior: hyphenSeparatorBehavior
+                });
                 if (parsedBets.length === 0) {
                   await sendLineReply(replyToken, `❌ รูปแบบคำสั่งตีออกไม่ถูกต้อง\n\n- ตีออกยอดเกิน:พิมพ์ /ตีออก เกิน\n- ตีออกเจาะจง: พิมพ์ /ตีออก [เลข] [ประเภท] [จำนวน]\n(เช่น /ตีออก 362 บน 200)`);
                   continue;
@@ -7545,6 +7634,209 @@ serve(async (req) => {
               continue;
             }
 
+            // ─── COMMAND: /ส่งแทน ───
+            if (text.startsWith('/ส่งแทน')) {
+              try {
+                const param = text.substring('/ส่งแทน'.length).trim();
+                
+                if (param === '') {
+                  const activeMemberId = groupLink.impersonate_user_id || (groupLink.allow_staff_bet ? groupLink.staff_member_id : null);
+                  if (activeMemberId) {
+                    const { data: impProfile } = await supabase
+                      .from('profiles')
+                      .select('full_name, member_code')
+                      .eq('id', activeMemberId)
+                      .maybeSingle();
+                    
+                    const name = impProfile?.full_name || '-';
+                    const code = impProfile?.member_code || '-';
+                    
+                    const TYPE_NAMES: Record<string, string> = {
+                      lao: 'หวยลาว', thai: 'หวยไทย', hanoi: 'หวยฮานอย', stock: 'หวยหุ้น', yeekee: 'หวยยี่กี'
+                    };
+                    const ltype = groupLink.lottery_type || 'thai';
+                    const ltypeThai = TYPE_NAMES[ltype.toLowerCase()] || ltype;
+
+                    await sendLineReply(replyToken, `แอดมินกลุ่มนี้ส่งแทนคุณ ${name} id ${code} ประเภท ${ltypeThai}`);
+                  } else {
+                    await sendLineReply(replyToken, `กลุ่มนี้ปิดการส่งเลขแทนบัญชีอื่น`);
+                  }
+                  continue;
+                }
+
+                if (param.toLowerCase() === 'ปิด') {
+                  const { error: updateErr } = await supabase
+                    .from('line_groups')
+                    .update({ 
+                      impersonate_user_id: null, 
+                      staff_member_id: null,
+                      allow_staff_bet: false,
+                      updated_at: new Date().toISOString() 
+                    })
+                    .eq('line_group_id', groupId);
+
+                  if (updateErr) {
+                    console.error("Error disabling impersonation:", updateErr);
+                    await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการยกเลิกการส่งแทน`);
+                  } else {
+                    await sendLineReply(replyToken, `✅ ปิดระบบส่งแทนสมาชิกเรียบร้อยแล้ว (การแทงหลังจากนี้จะเป็นของแอดมินหรือสมาชิกตัวแทนกลุ่มตามปกติ)`);
+                  }
+                  continue;
+                }
+
+                let searchKey = param;
+                const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(searchKey);
+                let query = supabase.from('profiles').select('id, full_name, role, is_active, member_code').eq('is_active', true);
+                if (isUUID) {
+                  query = query.eq('id', searchKey);
+                } else if (/^\d{5}$/.test(searchKey)) {
+                  query = query.eq('member_code', searchKey);
+                } else {
+                  query = query.ilike('full_name', `%${searchKey}%`);
+                }
+                const { data: matchedProfiles, error: searchErr } = await query;
+
+                if (searchErr) {
+                  console.error("Error searching member for impersonation:", searchErr);
+                  await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในระบบค้นหาข้อมูลสมาชิก`);
+                  continue;
+                }
+
+                if (!matchedProfiles || matchedProfiles.length === 0) {
+                  await sendLineReply(replyToken, `❌ ไม่พบสมาชิกที่มีชื่อหรือตรงกับ "${searchKey}"`);
+                  continue;
+                }
+
+                const activeMemberProfiles = [];
+                for (const p of matchedProfiles) {
+                  const { data: mship } = await supabase
+                    .from('user_dealer_memberships')
+                    .select('id')
+                    .eq('user_id', p.id)
+                    .eq('dealer_id', dealerId)
+                    .eq('status', 'active')
+                    .maybeSingle();
+                  if (mship) {
+                    activeMemberProfiles.push(p);
+                  }
+                }
+
+                if (activeMemberProfiles.length === 0) {
+                  await sendLineReply(replyToken, `❌ ไม่พบสมาชิกที่ตรงกับ "${searchKey}" ในบัญชีร้านค้าของคุณ`);
+                  continue;
+                }
+
+                let targetProfile = activeMemberProfiles[0];
+                if (activeMemberProfiles.length > 1) {
+                  const exactMatch = activeMemberProfiles.find(p => p.full_name?.trim() === searchKey);
+                  if (exactMatch) {
+                    targetProfile = exactMatch;
+                  } else {
+                    const matchedList = activeMemberProfiles.map(p => `- ${p.full_name}`).join('\n');
+                    await sendLineReply(replyToken, `⚠️ พบสมาชิกมากกว่า 1 คนตรงกับ "${searchKey}" ในร้านค้าของคุณ:\n${matchedList}\nกรุณาระบุชื่อให้ชัดเจนขึ้น`);
+                    continue;
+                  }
+                }
+
+                const { error: updateErr } = await supabase
+                  .from('line_groups')
+                  .update({ 
+                    impersonate_user_id: targetProfile.id, 
+                    staff_member_id: targetProfile.id,
+                    allow_staff_bet: true,
+                    updated_at: new Date().toISOString() 
+                  })
+                  .eq('line_group_id', groupId);
+
+                if (updateErr) {
+                  console.error("Error enabling impersonation:", updateErr);
+                  await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการตั้งค่าส่งแทน`);
+                } else {
+                  const codeStr = targetProfile.member_code ? ` (รหัส: ${targetProfile.member_code})` : '';
+                  await sendLineReply(replyToken, `✅ เปิดระบบส่งแทน: สำหรับการแทงหลังจากนี้ในกลุ่มนี้ จะบันทึกเข้าบัญชีของ คุณ "${targetProfile.full_name}"${codeStr} เสมอ\n(พิมพ์ "/ส่งแทน ปิด" เพื่อยกเลิกระบบส่งแทน)`);
+                }
+              } catch (err: any) {
+                console.error("Error in /ส่งแทน command:", err);
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการทำรายการ: ${err.message}`);
+              }
+              continue;
+            }
+
+            // ─── COMMAND: /ประกาศ ───
+            if (text.startsWith('/ประกาศ')) {
+              if (showOwnOnly) {
+                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ใช้งานคำสั่งนี้`);
+                continue;
+              }
+
+              const param = text.substring('/ประกาศ'.length).trim();
+              if (param === '') {
+                await sendLineReply(replyToken, `❌ กรุณาระบุข้อความประกาศด้วยค่ะ\n\nตัวอย่างการใช้งาน:\n/ประกาศ\nสวัสดีค่ะวันนี้ปิดรับแทงหวยเวลา 15:00 น.`);
+                continue;
+              }
+
+              const announceMsg = `📢 ประกาศจากเภา:\n${param}`;
+
+              const { data: allGroups } = await supabase
+                .from('line_groups')
+                .select('line_group_id')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', groupLink.lottery_type)
+                .eq('is_active', true);
+
+              if (allGroups && allGroups.length > 0) {
+                for (const g of allGroups) {
+                  if (g.line_group_id === groupId) {
+                    continue;
+                  }
+                  try {
+                    await sendLinePush(g.line_group_id, announceMsg);
+                  } catch (e) {
+                    console.error(`Failed to push announce message to group ${g.line_group_id}:`, e);
+                  }
+                }
+              }
+
+              await sendLineReply(replyToken, announceMsg);
+              continue;
+            }
+
+            // ─── COMMAND: /โพยปิดหมด หรือ /โพยเปิดหมด ───
+            const isGlobalPoyCmd = 
+              text === '/โพยปิดหมด' || text === '/โพย ปิดหมด' ||
+              text === '/โพยเปิดหมด' || text === '/โพย เปิดหมด' ||
+              text === '/โพยปกติ' || text === '/โพย ปกติ';
+
+            if (isGlobalPoyCmd) {
+              if (!isStaff && (!manager || manager.role !== 'admin')) {
+                await sendLineReply(replyToken, `❌ เฉพาะเจ้ามือ แอดมิน หรือผู้จัดการหลักเท่านั้นที่มีสิทธิ์ใช้งานคำสั่งนี้`);
+                continue;
+              }
+
+              let mode = 'normal';
+              let label = 'เคารพสิทธิ์ตั้งค่าส่วนบุคคลตามปกติ';
+              if (text === '/โพยปิดหมด' || text === '/โพย ปิดหมด') {
+                mode = 'force_close';
+                label = 'ปิดการแสดงผลทุกห้อง (ปิดหมด)';
+              } else if (text === '/โพยเปิดหมด' || text === '/โพย เปิดหมด') {
+                mode = 'force_open';
+                label = 'เปิดการแสดงผลทุกห้อง (เปิดหมด)';
+              }
+
+              const { error: updateErr } = await supabase
+                .from('profiles')
+                .update({ global_poy_display: mode })
+                .eq('id', dealerId);
+
+              if (updateErr) {
+                console.error("Error setting global poy display:", updateErr);
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการตั้งค่าระบบแสดงผลรวม`);
+              } else {
+                await sendLineReply(replyToken, `✅ ตั้งค่าระบบใบโพยในร้านค้าทั้งหมดเป็น: "${label}" เรียบร้อยแล้วค่ะ!\n(สิทธิ์ของผู้ดูแลร้านมีผลเหนือการตั้งค่ารายบุคคล)`);
+              }
+              continue;
+            }
+
             // ─── COMMAND: /คำสั่ง หรือ /help ───
             if (text.startsWith('/คำสั่ง') || text.startsWith('/help')) {
               const lotteryLabel = groupLink.lottery_type?.toUpperCase() || 'LAO';
@@ -7603,6 +7895,8 @@ serve(async (req) => {
                         cmdRow("/โพย หรือ /bill", "ดูรายการบิลโพยของตัวเองในงวดนี้"),
                         cmdRow("/ยกเลิก", "ยกเลิกใบโพยล่าสุดของตัวเอง"),
                         cmdRow("/link หรือ /id", "ดู LINE User ID ของตัวเอง"),
+                        cmdRow("/หวย", "เช็คประเภทหวยของกลุ่ม หรือเปลี่ยนหวย (เช่น /หวยไทย, /หวยลาว)"),
+                        cmdRow("/โพยปิด หรือ /โพยเปิด", "ปิด/เปิดการแสดงใบโพยหลังแทงเลข"),
                         cmdRow("/คำสั่ง หรือ /help", "แสดงรายการคำสั่งนี้")
                       ]
                     },
@@ -7655,7 +7949,11 @@ serve(async (req) => {
                       cmdRow("/ยอดรวม", "รายงานยอดรับรวมแยกตามประเภทเลข"),
                       cmdRow("/กำไร [m/w/เดือน-ปี]", "สรุปกำไร/ขาดทุน (m=เดือน, w=สัปดาห์, ทั้งหมด)"),
                       cmdRow("/คนส่ง", "รายงานยอดรับแทงแยกตามสมาชิกแต่ละคน"),
-                      cmdRow("/สมาชิก [ชื่อ]", "ค้นหายอดคงเหลือและข้อมูลสมาชิก")
+                      cmdRow("/สมาชิก [ชื่อ]", "ค้นหายอดคงเหลือและข้อมูลสมาชิก"),
+
+                      sectionHeader("📋", "อัตราจ่าย & ค่าอั้น"),
+                      cmdRow("/ดูอัตรา [ชื่อ] [ประเภทหวย]", "ดูค่าคอมและอัตราจ่าย เช่น /ดูอัตรา พี่น้ำ ลาว"),
+                      cmdRow("/ดูอั้น", "ดูค่าอั้นตามประเภทเลขของงวดปัจจุบัน")
                     ]
                   },
                   "footer": {
@@ -7692,16 +7990,25 @@ serve(async (req) => {
                       sectionHeader("🎰", "จัดการงวดหวย", "none"),
                       cmdRow("/สร้าง [ประเภทหวย]", "สร้างงวดใหม่ เช่น /สร้าง ไทย, /สร้าง ลาว"),
                       cmdRow("/เริ่มขาย", "ประกาศเปิดรับแทงงวดล่าสุดไปยังทุกกลุ่ม"),
+                      cmdRow("/ประกาศ [ข้อความ]", "ส่งข้อความประกาศแจ้งข่าวสารไปยังทุกกลุ่มแชตของร้าน"),
                       cmdRow("/ปิด", "ปิดรับแทงงวดปัจจุบัน"),
                       cmdRow("/เปิด", "เปิดรับแทงงวดที่ปิดอยู่ (ยังไม่ประกาศผล)"),
                       cmdRow("/แจ้งผล [เลขรางวัล]", "ประกาศผลรางวัลและคำนวณผลได้เสีย"),
+                      cmdRow("/ส่งแทน [ชื่อ/รหัส]", "เปิดระบบส่งแทนสมาชิก (พิมพ์ '/ส่งแทน ปิด' เพื่อปิด)"),
+                      cmdRow("/โพยปิดหมด หรือ /โพยเปิดหมด", "บังคับ ปิด/เปิด การพ่นใบโพยของร้านค้าทุกกลุ่ม"),
+                      cmdRow("/โพยปกติ", "ยกเลิกการบังคับแสดงผล และเคารพสิทธิ์รายบุคคลตามปกติ"),
 
                       sectionHeader("💸", "จัดการยอดเกิน / ตีออก"),
                       cmdRow("/ยอดเกิน", "แสดงตัวเลขและยอดเงินที่เกินลิมิตอั้น"),
                       cmdRow("/ตีออก เกิน", "สั่งตีออกยอดเกินอั้นทั้งหมดไปเจ้ามือปลายทาง"),
                       cmdRow("/ตีออก [เลข] [ประเภท] [ยอด]", "ตีออกเจาะจง เช่น /ตีออก 123 บน 100"),
                       cmdRow("/เอาคืน", "แสดงรายการครั้งที่ตีออกที่สามารถเอาคืนได้"),
-                      cmdRow("/เอาคืน [ครั้งที่]", "ดึงยอดที่ตีออกกลับคืน เช่น /เอาคืน 3")
+                      cmdRow("/เอาคืน [ครั้งที่]", "ดึงยอดที่ตีออกกลับคืน เช่น /เอาคืน 3"),
+
+                      sectionHeader("⚙️", "ตั้งค่าอัตราจ่าย & ค่าอั้น"),
+                      cmdRow("/ตั้งอัตรา [ชื่อ] [ประเภทหวย]", "ตั้งค่าคอมและอัตราจ่ายสมาชิก"),
+                      cmdRow("/ตั้งอั้น", "ตั้งค่าอั้นตามประเภทเลข (หลายแบบ)"),
+                      cmdRow("/ตั้งอั้น [ตัวเลข]", "ตั้งค่าอั้นเหมาทุกประเภทเท่ากัน เช่น /ตั้งอั้น 1000")
                     ]
                   },
                   "footer": {
@@ -7742,6 +8049,8 @@ serve(async (req) => {
                       cmdRow("/โพย หรือ /bill", "ดูรายการบิลโพยของตัวเอง"),
                       cmdRow("/ยกเลิก", "ยกเลิกใบโพยล่าสุดของตัวเอง"),
                       cmdRow("/link หรือ /id", "ดู LINE User ID ของตัวเอง"),
+                      cmdRow("/หวย", "เช็คประเภทหวยของกลุ่ม หรือเปลี่ยนหวย (เช่น /หวยไทย, /หวยลาว)"),
+                      cmdRow("/โพยปิด หรือ /โพยเปิด", "ปิด/เปิดการแสดงใบโพยหลังแทงเลข"),
 
                       sectionHeader("📩", "ผูกกลุ่ม (แอดมินเท่านั้น)"),
                       cmdRow("/ขอรหัส", "ขอรหัสผูกกลุ่มใหม่ (ใช้ในแชทส่วนตัวกับบอท)"),
@@ -8157,8 +8466,13 @@ serve(async (req) => {
           continue;
         }
 
-        // ─── COMMAND 4.5: /โพยย่อ หรือ /โพยเต็ม ───
-        if (text === '/โพยย่อ' || text === '/โพยเต็ม') {
+        // ─── COMMAND 4.5: จัดการการแสดงผลโพย ───
+        const isPoySettingsCmd = 
+          text === '/โพยย่อ' || text === '/โพยเต็ม' || 
+          text === '/โพยปิด' || text === '/โพย ปิด' || 
+          text === '/โพยเปิด' || text === '/โพย เปิด';
+
+        if (isPoySettingsCmd) {
           try {
             // Find sender's profile
             const { data: senderProfile } = await supabase
@@ -8175,7 +8489,15 @@ serve(async (req) => {
               continue;
             }
 
-            const displayMode = text === '/โพยย่อ' ? 'short' : 'full';
+            let displayMode = 'short';
+            if (text === '/โพยเต็ม') {
+              displayMode = 'full';
+            } else if (text === '/โพยปิด' || text === '/โพย ปิด') {
+              displayMode = 'none';
+            } else if (text === '/โพยเปิด' || text === '/โพย เปิด') {
+              displayMode = 'short';
+            }
+
             const { error: updateErr } = await supabase
               .from('profiles')
               .update({ line_poy_display: displayMode })
@@ -8185,12 +8507,1155 @@ serve(async (req) => {
               console.error("Failed to update poy display mode:", updateErr);
               await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการตั้งค่าการแสดงผลโพย`);
             } else {
-              const displayLabel = displayMode === 'short' ? 'แบบย่อ' : 'แบบเต็ม';
+              let displayLabel = 'แบบย่อ';
+              if (displayMode === 'full') {
+                displayLabel = 'แบบเต็ม';
+              } else if (displayMode === 'none') {
+                displayLabel = 'ปิดการแสดงผล';
+              }
               await sendLineReply(replyToken, `✅ ตั้งค่าการแสดงผลโพยหลังบันทึกเป็น "${displayLabel}" สำเร็จแล้วค่ะ!`);
             }
           } catch (err) {
             console.error("Error setting poy display mode:", err);
             await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการทำรายการ: ${err.message}`);
+          }
+          continue;
+        }
+
+        // ─── HELPERS FOR LIMITS AND RATES ───
+        const mapThaiToLotteryType = (word: string): string | null => {
+          const w = word.trim().toLowerCase();
+          if (/^(ไทย|thai)$/.test(w)) return 'thai';
+          if (/^(ลาว|lao)$/.test(w)) return 'lao';
+          if (/^(ฮานอย|hanoi)$/.test(w)) return 'hanoi';
+          if (/^(หุ้น|stock)$/.test(w)) return 'stock';
+          if (/^(ยี่กี|yeekee)$/.test(w)) return 'yeekee';
+          return null;
+        };
+
+        const mapThaiToBetType = (thaiWord: string, isLaoOrHanoi: boolean): string | null => {
+          const w = thaiWord.trim().replace(/\s+/g, '');
+          if (/^(ลอยบน|วิ่งบน|วิ่ง)$/.test(w)) return 'run_top';
+          if (/^(ลอยล่าง|วิ่งล่าง)$/.test(w)) return 'run_bottom';
+          if (/^(ปักบน)$/.test(w)) return 'pak_top';
+          if (/^(ปักล่าง)$/.test(w)) return 'pak_bottom';
+          if (/^(2ตัวบน|2บน|บน2)$/.test(w)) return '2_top';
+          if (/^(2ตัวหน้า|2หน้า)$/.test(w)) return '2_front';
+          if (/^(2ตัวถ่าง|2ถ่าง)$/.test(w)) return '2_center';
+          if (/^(2ตัวลอย|2ลอย)$/.test(w)) return '2_run';
+          if (/^(2ตัวล่าง|2ล่าง|ล่าง2)$/.test(w)) return '2_bottom';
+          if (/^(3ตัวบน|3บน|3ตัวตรง|3ตรง|ตรง)$/.test(w)) {
+            return isLaoOrHanoi ? '3_straight' : '3_top';
+          }
+          if (/^(3ตัวโต๊ด|3โต๊ด|โต๊ด|โตด)$/.test(w)) {
+            return isLaoOrHanoi ? '3_tod_single' : '3_tod';
+          }
+          if (/^(3ตัวล่าง|3ล่าง)$/.test(w)) return '3_bottom';
+          if (/^(4ตัวลอย|4ลอย)$/.test(w)) return '4_float';
+          if (/^(5ตัวลอย|5ลอย)$/.test(w)) return '5_float';
+          if (/^(4ตัวชุด|4ชุด)$/.test(w)) return '4_set';
+          return null;
+        };
+
+        const getBetTypeThaiLabel = (betType: string, isLaoOrHanoi: boolean): string => {
+          const LABELS: Record<string, string> = {
+            'run_top': 'ลอยบน (วิ่งบน)',
+            'run_bottom': 'ลอยล่าง (วิ่งล่าง)',
+            'pak_top': 'ปักบน',
+            'pak_bottom': 'ปักล่าง',
+            '2_top': '2 ตัวบน',
+            '2_front': '2 ตัวหน้า',
+            '2_center': '2 ตัวถ่าง',
+            '2_run': '2 ตัวลอย',
+            '2_bottom': '2 ตัวล่าง',
+            '3_top': '3 ตัวบน (ตรง)',
+            '3_straight': '3 ตัวตรง',
+            '3_tod': '3 ตัวโต๊ด',
+            '3_tod_single': '3 ตัวโต๊ด',
+            '3_bottom': '3 ตัวล่าง',
+            '4_float': '4 ตัวลอย',
+            '5_float': '5 ตัวลอย',
+            '4_set': '4 ตัวชุด'
+          };
+          return LABELS[betType] || betType;
+        };
+
+        const getDefaultSettingsObject = (lotteryType: string): any => {
+          const defaults: Record<string, any> = {
+            thai: {
+              bonusEnabled: false,
+              returnExcessOnOverflow: false,
+              'run_top': { commission: 10, payout: 3, bonus: 0 },
+              'run_bottom': { commission: 10, payout: 4, bonus: 0 },
+              'pak_top': { commission: 15, payout: 8, bonus: 0 },
+              'pak_bottom': { commission: 15, payout: 6, bonus: 0 },
+              '2_top': { commission: 15, payout: 65, bonus: 0 },
+              '2_front': { commission: 15, payout: 65, bonus: 0 },
+              '2_center': { commission: 15, payout: 65, bonus: 0 },
+              '2_run': { commission: 15, payout: 10, bonus: 0 },
+              '2_bottom': { commission: 15, payout: 65, bonus: 0 },
+              '3_top': { commission: 30, payout: 550, bonus: 0 },
+              '3_tod': { commission: 15, payout: 100, bonus: 0 },
+              '3_bottom': { commission: 15, payout: 135, bonus: 0 },
+              '4_float': { commission: 15, payout: 20, bonus: 0 },
+              '5_float': { commission: 15, payout: 10, bonus: 0 }
+            },
+            lao: {
+              bonusEnabled: false,
+              returnExcessOnOverflow: false,
+              '4_set': {
+                commission: 25,
+                setPrice: 120,
+                isSet: true,
+                prizes: {
+                  '4_straight_set': 100000,
+                  '4_tod_set': 4000,
+                  '3_straight_set': 30000,
+                  '3_tod_set': 3000,
+                  '2_front_set': 1000,
+                  '2_back_set': 1000
+                }
+              },
+              'run_top': { commission: 10, payout: 3, bonus: 0 },
+              'run_bottom': { commission: 10, payout: 4, bonus: 0 },
+              'pak_top': { commission: 20, payout: 8, bonus: 0 },
+              'pak_bottom': { commission: 20, payout: 6, bonus: 0 },
+              '2_top': { commission: 20, payout: 70, bonus: 0 },
+              '2_front': { commission: 20, payout: 70, bonus: 0 },
+              '2_center': { commission: 20, payout: 70, bonus: 0 },
+              '2_run': { commission: 20, payout: 10, bonus: 0 },
+              '2_bottom': { commission: 20, payout: 70, bonus: 0 },
+              '3_straight': { commission: 20, payout: 550, bonus: 0 },
+              '3_tod_single': { commission: 20, payout: 100, bonus: 0 },
+              '4_float': { commission: 20, payout: 20, bonus: 0 },
+              '5_float': { commission: 20, payout: 10, bonus: 0 }
+            },
+            hanoi: {
+              bonusEnabled: false,
+              returnExcessOnOverflow: false,
+              '4_set': {
+                commission: 25,
+                setPrice: 120,
+                isSet: true,
+                prizes: {
+                  '4_straight_set': 100000,
+                  '4_tod_set': 4000,
+                  '3_straight_set': 30000,
+                  '3_tod_set': 3000,
+                  '2_front_set': 1000,
+                  '2_back_set': 1000
+                }
+              },
+              'run_top': { commission: 10, payout: 3, bonus: 0 },
+              'run_bottom': { commission: 10, payout: 4, bonus: 0 },
+              'pak_top': { commission: 20, payout: 8, bonus: 0 },
+              'pak_bottom': { commission: 20, payout: 6, bonus: 0 },
+              '2_top': { commission: 20, payout: 70, bonus: 0 },
+              '2_front': { commission: 20, payout: 70, bonus: 0 },
+              '2_center': { commission: 20, payout: 70, bonus: 0 },
+              '2_run': { commission: 20, payout: 10, bonus: 0 },
+              '2_bottom': { commission: 20, payout: 70, bonus: 0 },
+              '3_straight': { commission: 20, payout: 550, bonus: 0 },
+              '3_tod_single': { commission: 20, payout: 100, bonus: 0 },
+              '4_float': { commission: 20, payout: 20, bonus: 0 },
+              '5_float': { commission: 20, payout: 10, bonus: 0 }
+            },
+            stock: {
+              bonusEnabled: false,
+              returnExcessOnOverflow: false,
+              '2_top': { commission: 15, payout: 65, bonus: 0 },
+              '2_bottom': { commission: 15, payout: 65, bonus: 0 }
+            }
+          };
+          return defaults[lotteryType] || defaults['thai'];
+        };
+
+        // ─── COMMAND: /ดูอั้น ───
+        if (text === '/ดูอั้น' || text === '/limits') {
+          // 1. Group check
+          if (!groupLink) {
+            await sendLineReply(replyToken, `❌ กลุ่มนี้ยังไม่ได้ผูกกับเจ้ามือ ไม่สามารถเรียกดูข้อมูลยอดอั้นได้`);
+            continue;
+          }
+          const listDealerId = groupLink.dealer_id;
+          const listLotteryType = groupLink.lottery_type;
+
+          // 2. Sender profile check
+          const { data: senderProfile } = await supabase
+            .from('profiles')
+            .select('id, role')
+            .eq('line_user_id', userId)
+            .eq('is_active', true)
+            .maybeSingle();
+
+          if (!senderProfile) {
+            await sendLineReply(replyToken, [
+              `❌ คุณยังไม่ได้เชื่อมบัญชี LINE ของคุณกับระบบ Big Lotto`,
+              userId
+            ]);
+            continue;
+          }
+
+          // Check if sender has authority
+          const targetDealerId = listDealerId;
+          const isStaffSender = senderProfile?.id === targetDealerId || senderProfile?.role === 'superadmin' || senderProfile?.role === 'admin';
+          let isManagerSender = false;
+          if (!isStaffSender && targetDealerId) {
+            const { data: mgr } = await supabase
+              .from('line_managers')
+              .select('id')
+              .eq('dealer_id', targetDealerId)
+              .eq('line_user_id', userId)
+              .eq('is_active', true)
+              .maybeSingle();
+            isManagerSender = !!mgr;
+          }
+          const isAuthorized = isStaffSender || isManagerSender;
+
+          if (!isAuthorized) {
+            await sendLineReply(replyToken, `❌ ขออภัยค่ะ เฉพาะเจ้ามือหรือผู้จัดการกลุ่มเท่านั้นที่มีสิทธิ์ตรวจสอบยอดอั้นหลักได้`);
+            continue;
+          }
+
+          // Find the active round
+          const { data: targetRounds } = await supabase
+            .from('lottery_rounds')
+            .select('*')
+            .eq('dealer_id', listDealerId)
+            .eq('lottery_type', listLotteryType)
+            .in('status', ['open', 'closed'])
+            .order('close_time', { ascending: false })
+            .limit(1);
+
+          const activeRound = targetRounds?.[0];
+          if (!activeRound) {
+            await sendLineReply(replyToken, `❌ หวยประเภท ${listLotteryType.toUpperCase()} ในขณะนี้ยังไม่มีงวดที่เปิดรับแทงค่ะ`);
+            continue;
+          }
+
+          // Fetch type limits
+          const { data: typeLimits } = await supabase
+            .from('type_limits')
+            .select('bet_type, max_per_number')
+            .eq('round_id', activeRound.id);
+
+          const typeLimitsMap = new Map<string, number>();
+          typeLimits?.forEach(tl => {
+            typeLimitsMap.set(tl.bet_type, Number(tl.max_per_number));
+          });
+
+          const isLaoOrHanoi = ['lao', 'hanoi'].includes(listLotteryType);
+          const defaultTabSettings = getDefaultSettingsObject(listLotteryType);
+          const allKeys = Object.keys(defaultTabSettings);
+
+          const roundDateStr = getRoundDisplayDate(activeRound, false);
+          const lotteryNameThai = {
+            thai: 'หวยไทย',
+            lao: 'หวยลาว',
+            hanoi: 'หวยฮานอย',
+            stock: 'หวยหุ้น',
+            yeekee: 'หวยยี่กี'
+          }[listLotteryType] || listLotteryType.toUpperCase();
+
+          let out = `📋 ค่าอั้นตามประเภทเลข ${lotteryNameThai}\n`;
+          out += `งวดวันที่: ${roundDateStr}\n`;
+          out += `----------------------\n`;
+
+          if (isLaoOrHanoi) {
+            // Display set limits first in the top section
+            const setKeys = ['4_set', '3_set'];
+            const setLabels: Record<string, string> = {
+              '4_set': '4 ตัวชุด',
+              '3_set': '3 ตัวตรงชุด'
+            };
+            setKeys.forEach(k => {
+              const val = typeLimitsMap.has(k) ? typeLimitsMap.get(k)! : 999999999;
+              const limitLabel = val === 999999999 ? 'ไม่อั้น' : `${val.toLocaleString('th-TH')} ชุด`;
+              out += `${setLabels[k]}: ${limitLabel}\n`;
+            });
+            out += `----------------------\n`;
+          }
+
+          let displayKeys: string[] = [];
+          let labelsMap: Record<string, string> = {};
+
+          if (listLotteryType === 'thai') {
+            displayKeys = [
+              'run_top', 'run_bottom', 'pak_top', 'pak_bottom',
+              '2_top', '2_front', '2_center', '2_run', '2_bottom',
+              '3_top', '3_tod', '3_bottom', '4_float', '5_float'
+            ];
+            labelsMap = {
+              run_top: 'ลอยบน:',
+              run_bottom: 'ลอยล่าง:',
+              pak_top: 'ปักบน:',
+              pak_bottom: 'ปักล่าง:',
+              '2_top': '2 ตัวบน:',
+              '2_front': '2 ตัวหน้า:',
+              '2_center': '2 ตัวถ่าง:',
+              '2_run': '2 ตัวลอย:',
+              '2_bottom': '2 ตัวล่าง:',
+              '3_top': '3 ตัวบน:',
+              '3_tod': '3 ตัวโต๊ด:',
+              '3_bottom': '3 ตัวล่าง:',
+              '4_float': '4 ตัวลอย:',
+              '5_float': '5 ตัวลอย:'
+            };
+          } else if (isLaoOrHanoi) {
+            displayKeys = [
+              'run_top', 'run_bottom', 'pak_top', 'pak_bottom',
+              '2_top', '2_front', '2_center', '2_run', '2_bottom',
+              '3_top', '3_tod', '4_float', '5_float'
+            ];
+            labelsMap = {
+              run_top: 'ลอยบน:',
+              run_bottom: 'ลอยล่าง:',
+              pak_top: 'ปักบน:',
+              pak_bottom: 'ปักล่าง:',
+              '2_top': '2 ตัวบน:',
+              '2_front': '2 ตัวหน้า:',
+              '2_center': '2 ตัวถ่าง:',
+              '2_run': '2 ตัวลอย:',
+              '2_bottom': '2 ตัวล่าง:',
+              '3_top': '3 ตัวตรง:',
+              '3_tod': '3 ตัวโต๊ด:',
+              '4_float': '4 ตัวลอย:',
+              '5_float': '5 ตัวลอย:'
+            };
+          } else {
+            displayKeys = Object.keys(defaultTabSettings).filter(k => k !== 'bonusEnabled' && k !== 'returnExcessOnOverflow' && k !== '4_set' && k !== '3_set');
+            displayKeys.forEach(k => {
+              labelsMap[k] = getBetTypeThaiLabel(k, false) + ':';
+            });
+          }
+
+          // Helper to get length of Thai string without zero-width marks
+          const getThaiDisplayLength = (s: string): number => {
+            return s.replace(/[\u0e31\u0e34-\u0e3a\u0e47-\u0e4e]/g, '').length;
+          };
+
+          displayKeys.forEach(k => {
+            const label = labelsMap[k] || k;
+            const val = typeLimitsMap.has(k) ? typeLimitsMap.get(k)! : 999999999;
+            const limitLabel = val === 999999999 ? 'ไม่อั้น' : `${val.toLocaleString('th-TH')} บาท`;
+            
+            const visibleLen = getThaiDisplayLength(label);
+            const pad = ' '.repeat(Math.max(0, 11 - visibleLen));
+            out += `${label}${pad}${limitLabel}\n`;
+          });
+
+          await sendLineReply(replyToken, out);
+          continue;
+        }
+
+        // ─── COMMAND: /ตั้งอั้น ───
+        if (text.startsWith('/ตั้งอั้น')) {
+          // 1. Group check
+          if (!groupLink) {
+            await sendLineReply(replyToken, `❌ กลุ่มนี้ยังไม่ได้ผูกกับเจ้ามือ ไม่สามารถตั้งค่าอั้นได้`);
+            continue;
+          }
+          const listDealerId = groupLink.dealer_id;
+          const listLotteryType = groupLink.lottery_type;
+
+          // 2. Sender profile check
+          const { data: senderProfile } = await supabase
+            .from('profiles')
+            .select('id, role')
+            .eq('line_user_id', userId)
+            .eq('is_active', true)
+            .maybeSingle();
+
+          if (!senderProfile) {
+            await sendLineReply(replyToken, [
+              `❌ คุณยังไม่ได้เชื่อมบัญชี LINE ของคุณกับระบบ Big Lotto`,
+              userId
+            ]);
+            continue;
+          }
+
+          // Check if sender has authority
+          const targetDealerId = listDealerId;
+          const isStaffSender = senderProfile?.id === targetDealerId || senderProfile?.role === 'superadmin' || senderProfile?.role === 'admin';
+          let isManagerSender = false;
+          if (!isStaffSender && targetDealerId) {
+            const { data: mgr } = await supabase
+              .from('line_managers')
+              .select('id')
+              .eq('dealer_id', targetDealerId)
+              .eq('line_user_id', userId)
+              .eq('is_active', true)
+              .maybeSingle();
+            isManagerSender = !!mgr;
+          }
+          const isAuthorized = isStaffSender || isManagerSender;
+
+          if (!isAuthorized) {
+            await sendLineReply(replyToken, `❌ ขออภัยค่ะ เฉพาะเจ้ามือหรือผู้จัดการกลุ่มเท่านั้นที่มีสิทธิ์ตั้งค่าอั้นได้`);
+            continue;
+          }
+
+          // Find the active round
+          const { data: targetRounds } = await supabase
+            .from('lottery_rounds')
+            .select('*')
+            .eq('dealer_id', listDealerId)
+            .eq('lottery_type', listLotteryType)
+            .in('status', ['open', 'closed'])
+            .order('close_time', { ascending: false })
+            .limit(1);
+
+          const activeRound = targetRounds?.[0];
+          if (!activeRound) {
+            await sendLineReply(replyToken, `❌ หวยประเภท ${listLotteryType.toUpperCase()} ในขณะนี้ยังไม่มีงวดที่เปิดอยู่สำหรับการตั้งค่าอั้น`);
+            continue;
+          }
+
+          const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+          if (lines.length === 0) continue;
+
+          const isLaoOrHanoi = ['lao', 'hanoi'].includes(listLotteryType);
+          const defaultTabSettings = getDefaultSettingsObject(listLotteryType);
+          const allKeys = Object.keys(defaultTabSettings).filter(k => k !== 'bonusEnabled' && k !== 'returnExcessOnOverflow');
+          // For type_limits table, map 3_straight->3_top and 3_tod_single->3_tod to match Web UI
+          const limitsKeys = allKeys.map(k => {
+            if (k === '3_straight') return '3_top';
+            if (k === '3_tod_single') return '3_tod';
+            return k;
+          });
+          // Web UI creates 3_set separately for lao/hanoi but it's not in defaultTabSettings
+          if (isLaoOrHanoi && !limitsKeys.includes('3_set')) {
+            limitsKeys.push('3_set');
+          }
+
+          // Check if it's format B (e.g. "/ตั้งอั้น 1000" or "/ตั้งอั้น 0")
+          const firstLine = lines[0];
+          const param = firstLine.substring('/ตั้งอั้น'.length).trim();
+
+          if (lines.length === 1 && param && !isNaN(Number(param))) {
+            const targetLimit = parseFloat(param);
+            const upsertRows = limitsKeys.map(k => {
+              return {
+                round_id: activeRound.id,
+                bet_type: k,
+                max_per_number: targetLimit
+              };
+            });
+
+            // Fetch existing type_limits to preserve payout rates
+            const { data: existingLimits } = await supabase
+              .from('type_limits')
+              .select('bet_type, payout_rate')
+              .eq('round_id', activeRound.id);
+
+            const existingPayoutMap = new Map<string, number>();
+            existingLimits?.forEach(el => {
+              existingPayoutMap.set(el.bet_type, Number(el.payout_rate));
+            });
+
+            const rowsWithPayout = upsertRows.map(row => {
+              const existingPayout = existingPayoutMap.get(row.bet_type);
+              const settingsKey = isLaoOrHanoi
+                ? (row.bet_type === '3_top' ? '3_straight' : (row.bet_type === '3_tod' ? '3_tod_single' : row.bet_type))
+                : row.bet_type;
+              const defaultPayout = defaultTabSettings[settingsKey]?.payout || 1;
+              return {
+                ...row,
+                payout_rate: existingPayout !== undefined ? existingPayout : defaultPayout
+              };
+            });
+
+            const { error: upsertErr } = await supabase
+              .from('type_limits')
+              .upsert(rowsWithPayout, { onConflict: 'round_id,bet_type' });
+
+            if (upsertErr) {
+              console.error("Failed to set all limits:", upsertErr);
+              await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการตั้งค่าอั้นเหมาทุกประเภท`);
+            } else {
+              await sendLineReply(replyToken, `✅ ตั้งค่าอั้นทุกประเภทเลขของงวดนี้เป็น ฿${targetLimit.toLocaleString('th-TH')} เรียบร้อยแล้วค่ะ!`);
+            }
+            continue;
+          }
+
+          // Otherwise, it's format A (multi-line list)
+          const customLines = lines.slice(0);
+          let linesToParse = customLines;
+          if (firstLine.trim() === '/ตั้งอั้น') {
+            linesToParse = lines.slice(1);
+          } else {
+            const firstLineParsed = firstLine.substring('/ตั้งอั้น'.length).trim();
+            if (firstLineParsed) {
+              linesToParse = [firstLineParsed, ...lines.slice(1)];
+            } else {
+              linesToParse = lines.slice(1);
+            }
+          }
+
+          if (linesToParse.length === 0) {
+            await sendLineReply(replyToken, `❌ กรุณาระบุรายการประเภทหวยและยอดอั้นด้วยค่ะ\nตัวอย่าง:\n/ตั้งอั้น\n2 ตัวบน 1000\n3 ตัวบน 500`);
+            continue;
+          }
+
+          // Fetch existing type_limits to preserve payout rates
+          const { data: existingLimits } = await supabase
+            .from('type_limits')
+            .select('bet_type, payout_rate')
+            .eq('round_id', activeRound.id);
+
+          const existingPayoutMap = new Map<string, number>();
+          existingLimits?.forEach(el => {
+            existingPayoutMap.set(el.bet_type, Number(el.payout_rate));
+          });
+
+          const rowsToUpsert: any[] = [];
+          let successCount = 0;
+          let failCount = 0;
+          const updatedLabels: string[] = [];
+
+           linesToParse.forEach(line => {
+            const cleanLine = line.trim();
+            if (!cleanLine || cleanLine.startsWith('---') || cleanLine.startsWith('___')) return;
+
+            let keyName = '';
+            let valStr = '';
+
+            // Check if line contains a colon ':'
+            if (cleanLine.includes(':')) {
+              const parts = cleanLine.split(':');
+              keyName = parts[0].trim();
+              valStr = parts.slice(1).join(':').trim();
+            } else {
+              // Fallback to space-separated split (old format: e.g. "2 ตัวบน 1000")
+              const parts = cleanLine.split(/\s+/).filter(p => p);
+              if (parts.length >= 2) {
+                valStr = parts[parts.length - 1];
+                keyName = parts.slice(0, parts.length - 1).join(' ').trim();
+              } else {
+                failCount++;
+                return;
+              }
+            }
+
+            // Clean up the value (remove commas, spaces, units like บาท or ชุด, or Baht symbol)
+            const cleanedValStr = valStr.replace(/(บาท|ชุด|฿|,|\s)/g, '').trim();
+
+            let limitVal = parseFloat(cleanedValStr);
+            if (cleanedValStr === 'ไม่อั้น' || cleanedValStr === 'ไมอน' || cleanedValStr === 'ไม่อน') {
+              limitVal = 999999999;
+            }
+
+            if (isNaN(limitVal)) {
+              failCount++;
+              return;
+            }
+
+            // Map key name to bet_type key
+            let betTypeKey: string | null = null;
+            const w = keyName.replace(/\s+/g, '');
+            if (/^(4ตัวชุด|4ชุด)$/.test(w)) {
+              betTypeKey = '4_set';
+            } else if (/^(3ตัวตรงชุด|3ตรงชุด|3ชุด)$/.test(w)) {
+              betTypeKey = '3_set';
+            } else if (/^(3ตัวตรง|3ตรง|ตรง)$/.test(w)) {
+              // For limits, we map "3 ตัวตรง" to "3_top" across all lotteries
+              betTypeKey = '3_top';
+            } else if (/^(3ตัวโต๊ด|3โต๊ด|โต๊ด|โตด)$/.test(w)) {
+              // For limits, we map "3 ตัวโต๊ด" to "3_tod" across all lotteries
+              betTypeKey = '3_tod';
+            } else {
+              betTypeKey = mapThaiToBetType(keyName, isLaoOrHanoi);
+            }
+
+            if (!betTypeKey) {
+              failCount++;
+              return;
+            }
+
+            const existingPayout = existingPayoutMap.get(betTypeKey);
+            const settingsKey = isLaoOrHanoi
+              ? (betTypeKey === '3_top' ? '3_straight' : (betTypeKey === '3_tod' ? '3_tod_single' : betTypeKey))
+              : betTypeKey;
+            const defaultPayout = defaultTabSettings[settingsKey]?.payout || 1;
+
+            rowsToUpsert.push({
+              round_id: activeRound.id,
+              bet_type: betTypeKey,
+              max_per_number: limitVal,
+              payout_rate: existingPayout !== undefined ? existingPayout : defaultPayout
+            });
+
+            // Format correct label for confirmation message
+            let displayLabel = '';
+            let limitLabel = '';
+
+            if (betTypeKey === '4_set' || betTypeKey === '3_set') {
+              displayLabel = betTypeKey === '4_set' ? '4 ตัวชุด' : '3 ตัวตรงชุด';
+              limitLabel = limitVal === 999999999 ? 'ไม่อั้น' : `${limitVal.toLocaleString('th-TH')} ชุด`;
+            } else {
+              displayLabel = getBetTypeThaiLabel(betTypeKey, isLaoOrHanoi);
+              limitLabel = limitVal === 999999999 ? 'ไม่อั้น' : `฿${limitVal.toLocaleString('th-TH')}`;
+            }
+
+            updatedLabels.push(`${displayLabel}: อั้น ${limitLabel}`);
+            successCount++;
+          });
+
+          if (successCount > 0) {
+            const { error: upsertErr } = await supabase
+              .from('type_limits')
+              .upsert(rowsToUpsert, { onConflict: 'round_id,bet_type' });
+
+            if (upsertErr) {
+              console.error("Failed to update type limits:", upsertErr);
+              await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการบันทึกค่าอั้นลงฐานข้อมูล`);
+            } else {
+              let resStr = `✅ ตั้งค่าอั้นของงวดนี้สำเร็จ ${successCount} รายการ:\n`;
+              resStr += updatedLabels.join('\n');
+              if (failCount > 0) {
+                resStr += `\n⚠️ ข้ามรายการที่รูปแบบไม่ถูกต้อง ${failCount} รายการ`;
+              }
+              await sendLineReply(replyToken, resStr);
+            }
+          } else {
+            await sendLineReply(replyToken, `❌ ไม่พบรายการตั้งค่าอั้นที่ถูกต้อง กรุณาพิมพ์ประเภทเลขพร้อมระบุยอดอั้นแยกด้วยช่องว่าง เช่น:\n2 ตัวบน 1000`);
+          }
+          continue;
+        }
+
+        // ─── COMMAND: /ดูอัตรา ───
+        if (text.startsWith('/ดูอัตรา')) {
+          // 1. Group check
+          if (!groupLink) {
+            await sendLineReply(replyToken, `❌ กลุ่มนี้ยังไม่ได้ผูกกับเจ้ามือ ไม่สามารถเรียกดูข้อมูลอัตราได้`);
+            continue;
+          }
+          const listDealerId = groupLink.dealer_id;
+          const listLotteryType = groupLink.lottery_type;
+
+          // 2. Sender profile check
+          const { data: senderProfile } = await supabase
+            .from('profiles')
+            .select('id, full_name, role')
+            .eq('line_user_id', userId)
+            .eq('is_active', true)
+            .maybeSingle();
+
+          if (!senderProfile) {
+            await sendLineReply(replyToken, [
+              `❌ คุณยังไม่ได้เชื่อมบัญชี LINE ของคุณกับระบบ Big Lotto`,
+              userId
+            ]);
+            continue;
+          }
+
+          // Check if sender has authority
+          const targetDealerId = listDealerId;
+          const isStaffSender = senderProfile?.id === targetDealerId || senderProfile?.role === 'superadmin' || senderProfile?.role === 'admin';
+          let isManagerSender = false;
+          if (!isStaffSender && targetDealerId) {
+            const { data: mgr } = await supabase
+              .from('line_managers')
+              .select('id')
+              .eq('dealer_id', targetDealerId)
+              .eq('line_user_id', userId)
+              .eq('is_active', true)
+              .maybeSingle();
+            isManagerSender = !!mgr;
+          }
+          const isAuthorized = isStaffSender || isManagerSender;
+
+          const rawSearchKey = text.substring('/ดูอัตรา'.length).trim();
+          let targetLotteryType = listLotteryType;
+          let searchKey = rawSearchKey;
+
+          if (rawSearchKey) {
+            const parts = rawSearchKey.split(/\s+/);
+            if (parts.length > 0) {
+              const lastPart = parts[parts.length - 1];
+              const matchedType = mapThaiToLotteryType(lastPart);
+              if (matchedType) {
+                targetLotteryType = matchedType;
+                searchKey = parts.slice(0, parts.length - 1).join(' ').trim();
+              }
+            }
+          }
+
+          let targetMemberId = senderProfile.id;
+          let targetMemberName = senderProfile.full_name;
+
+          if (searchKey) {
+            // Authorized view of other member
+            if (!isAuthorized) {
+              await sendLineReply(replyToken, `❌ ขออภัยค่ะ เฉพาะเจ้ามือหรือผู้จัดการกลุ่มเท่านั้นที่สามารถเรียกดูอัตราจ่ายของสมาชิกท่านอื่นได้`);
+              continue;
+            }
+
+            // Search member in profiles
+            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(searchKey);
+            let query = supabase.from('profiles').select('id, full_name');
+            if (isUUID) {
+              query = query.or(`full_name.ilike.%${searchKey}%,id.eq.${searchKey}`);
+            } else {
+              query = query.ilike('full_name', `%${searchKey}%`);
+            }
+            const { data: profiles } = await query;
+
+            if (!profiles || profiles.length === 0) {
+              await sendLineReply(replyToken, `❌ ไม่พบสมาชิกที่ตรงกับ "${searchKey}"`);
+              continue;
+            }
+            
+            let matchedProfile = profiles[0];
+            if (profiles.length > 1) {
+              const exactMatch = profiles.find(p => p.full_name?.trim() === searchKey);
+              if (exactMatch) {
+                matchedProfile = exactMatch;
+              } else {
+                const matchedList = profiles.map(p => `- ${p.full_name} (ID: ${p.id})`).join('\n');
+                await sendLineReply(replyToken, `⚠️ พบสมาชิกมากกว่า 1 คนตรงกับ "${searchKey}" กรุณาระบุชื่อให้เจาะจงขึ้น หรือใช้ ID:\n${matchedList}`);
+                continue;
+              }
+            }
+
+            targetMemberId = matchedProfile.id;
+            targetMemberName = matchedProfile.full_name;
+          }
+
+          // Fetch member's user_settings
+          const { data: memberSettings } = await supabase
+            .from('user_settings')
+            .select('lottery_settings')
+            .eq('user_id', targetMemberId)
+            .eq('dealer_id', listDealerId)
+            .maybeSingle();
+
+          const activeTabSettings = memberSettings?.lottery_settings?.[targetLotteryType] || {};
+          const defaultTabSettings = getDefaultSettingsObject(targetLotteryType);
+          
+          // 3. Render output in requested table format
+          const lotteryNameThai = {
+            thai: 'หวยไทย',
+            lao: 'หวยลาว',
+            hanoi: 'หวยฮานอย',
+            stock: 'หวยหุ้น',
+            yeekee: 'หวยยี่กี'
+          }[targetLotteryType] || targetLotteryType.toUpperCase();
+
+          let out = `📋 ค่าคอมและอัตราจ่ายของ: คุณ ${targetMemberName}\n`;
+          out += `ประเภทหวย: ${lotteryNameThai}\n`;
+          out += `----------------------\n`;
+
+          const isLaoOrHanoi = ['lao', 'hanoi'].includes(targetLotteryType);
+
+          if (isLaoOrHanoi) {
+            // Render 4_set first
+            const setSettings = activeTabSettings['4_set'] || defaultTabSettings['4_set'] || {};
+            const setPrice = setSettings.setPrice || 120;
+            const comm = setSettings.commission !== undefined ? setSettings.commission : 25;
+            const prizes = setSettings.prizes || {};
+
+            out += `4 ตัวชุด | ค่าคอม | อัตราจ่าย\n`;
+            out += `ราคาขายชุดละ ${setPrice}  ค่าคอม ${comm} บาท\n`;
+            out += `ประเภทรางวัล\tเงินรางวัล (บาท/ชุด)\n`;
+            out += `4 ตัวตรงชุด  | ${prizes['4_straight_set'] || 100000}\n`;
+            out += `4 ตัวโต๊ดชุด | ${prizes['4_tod_set'] || 4000}\n`;
+            out += `3 ตัวตรงชุด  | ${prizes['3_straight_set'] || 30000}\n`;
+            out += `3 ตัวโต๊ดชุด | ${prizes['3_tod_set'] || 3000}\n`;
+            out += `2 ตัวหน้าชุด | ${prizes['2_front_set'] || 1000}\n`;
+            out += `2 ตัวหลังชุด | ${prizes['2_back_set'] || 1000}\n`;
+            out += `------------------------\n`;
+          }
+
+          out += `ประเภทเลข | ค่าคอม % | อัตราจ่าย (เท่า)\n`;
+
+          let displayKeys: string[] = [];
+          let labelsMap: Record<string, string> = {};
+
+          if (targetLotteryType === 'thai') {
+            displayKeys = [
+              'run_top', 'run_bottom', 'pak_top', 'pak_bottom',
+              '2_top', '2_front', '2_center', '2_run', '2_bottom',
+              '3_top', '3_tod', '3_bottom', '4_float', '5_float'
+            ];
+            labelsMap = {
+              run_top: 'ลอยบน:',
+              run_bottom: 'ลอยล่าง:',
+              pak_top: 'ปักบน:',
+              pak_bottom: 'ปักล่าง:',
+              '2_top': '2 ตัวบน:',
+              '2_front': '2 ตัวหน้า:',
+              '2_center': '2 ตัวถ่าง:',
+              '2_run': '2 ตัวลอย:',
+              '2_bottom': '2 ตัวล่าง:',
+              '3_top': '3 ตัวบน:',
+              '3_tod': '3 ตัวโต๊ด:',
+              '3_bottom': '3 ตัวล่าง',
+              '4_float': '4 ตัวลอย:',
+              '5_float': '5 ตัวลอย:'
+            };
+          } else if (isLaoOrHanoi) {
+            displayKeys = [
+              'run_top', 'run_bottom', 'pak_top', 'pak_bottom',
+              '2_top', '2_front', '2_center', '2_run', '2_bottom',
+              '3_straight', '3_tod_single', '4_float', '5_float'
+            ];
+            labelsMap = {
+              run_top: 'ลอยบน:',
+              run_bottom: 'ลอยล่าง:',
+              pak_top: 'ปักบน:',
+              pak_bottom: 'ปักล่าง:',
+              '2_top': '2 ตัวบน:',
+              '2_front': '2 ตัวหน้า:',
+              '2_center': '2 ตัวถ่าง:',
+              '2_run': '2 ตัวลอย:',
+              '2_bottom': '2 ตัวล่าง:',
+              '3_straight': '3 ตัวตรง:',
+              '3_tod_single': '3 ตัวโต๊ด:',
+              '4_float': '4 ตัวลอย:',
+              '5_float': '5 ตัวลอย:'
+            };
+          } else {
+            // General display for other lotteries
+            displayKeys = Object.keys(defaultTabSettings).filter(k => k !== 'bonusEnabled' && k !== 'returnExcessOnOverflow' && k !== '4_set');
+            displayKeys.forEach(k => {
+              labelsMap[k] = getBetTypeThaiLabel(k, false) + ':';
+            });
+          }
+
+          // Helper to get length of Thai string without zero-width marks
+          const getThaiDisplayLength = (s: string): number => {
+            return s.replace(/[\u0e31\u0e34-\u0e3a\u0e47-\u0e4e]/g, '').length;
+          };
+
+          displayKeys.forEach(k => {
+            const currentVal = activeTabSettings[k] || defaultTabSettings[k] || {};
+            const comm = currentVal.commission !== undefined ? currentVal.commission : 0;
+            const payout = currentVal.payout !== undefined ? currentVal.payout : 0;
+            const label = labelsMap[k] || k;
+            
+            const visibleLen = getThaiDisplayLength(label);
+            const pad = ' '.repeat(Math.max(0, 10 - visibleLen));
+            out += `${label}${pad} | ${comm} | ${payout}\n`;
+          });
+
+          await sendLineReply(replyToken, out);
+          continue;
+        }
+
+        // ─── COMMAND: /ตั้งอัตรา ───
+        if (text.startsWith('/ตั้งอัตรา')) {
+          // 1. Group check
+          if (!groupLink) {
+            await sendLineReply(replyToken, `❌ กลุ่มนี้ยังไม่ได้ผูกกับเจ้ามือ ไม่สามารถตั้งค่าอัตราได้`);
+            continue;
+          }
+          const listDealerId = groupLink.dealer_id;
+          const listLotteryType = groupLink.lottery_type;
+
+          // 2. Sender profile check
+          const { data: senderProfile } = await supabase
+            .from('profiles')
+            .select('id, role')
+            .eq('line_user_id', userId)
+            .eq('is_active', true)
+            .maybeSingle();
+
+          if (!senderProfile) {
+            await sendLineReply(replyToken, [
+              `❌ คุณยังไม่ได้เชื่อมบัญชี LINE ของคุณกับระบบ Big Lotto`,
+              userId
+            ]);
+            continue;
+          }
+
+          // Check if sender has authority
+          const targetDealerId = listDealerId;
+          const isStaffSender = senderProfile?.id === targetDealerId || senderProfile?.role === 'superadmin' || senderProfile?.role === 'admin';
+          let isManagerSender = false;
+          if (!isStaffSender && targetDealerId) {
+            const { data: mgr } = await supabase
+              .from('line_managers')
+              .select('id')
+              .eq('dealer_id', targetDealerId)
+              .eq('line_user_id', userId)
+              .eq('is_active', true)
+              .maybeSingle();
+            isManagerSender = !!mgr;
+          }
+          const isAuthorized = isStaffSender || isManagerSender;
+
+          if (!isAuthorized) {
+            await sendLineReply(replyToken, `❌ ขออภัยค่ะ เฉพาะเจ้ามือหรือผู้จัดการกลุ่มเท่านั้นที่มีสิทธิ์ตั้งค่าเรทสมาชิกได้`);
+            continue;
+          }
+
+          // Parse the lines
+          const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+          if (lines.length === 0) continue;
+
+          const firstLine = lines[0];
+          const rawSearchKey = firstLine.substring('/ตั้งอัตรา'.length).trim();
+
+          if (!rawSearchKey) {
+            await sendLineReply(replyToken, `❌ กรุณาระบุชื่อหรือ ID ของสมาชิกที่ต้องการตั้งค่า\nตัวอย่าง:\n/ตั้งอัตรา น้องน้ำ ไทย\n2 ตัวบน 15 65`);
+            continue;
+          }
+
+          const isResetDefault = rawSearchKey.includes('ค่าเริ่มต้น');
+          let cleanedRawSearchKey = rawSearchKey.replace('ค่าเริ่มต้น', '').trim();
+
+          let targetLotteryType = listLotteryType;
+          let searchKey = cleanedRawSearchKey;
+
+          const parts = cleanedRawSearchKey.split(/\s+/);
+          if (parts.length > 0) {
+            const lastPart = parts[parts.length - 1];
+            const matchedType = mapThaiToLotteryType(lastPart);
+            if (matchedType) {
+              targetLotteryType = matchedType;
+              searchKey = parts.slice(0, parts.length - 1).join(' ').trim();
+            }
+          }
+
+          // Search member
+          const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(searchKey);
+          let query = supabase.from('profiles').select('id, full_name');
+          if (isUUID) {
+            query = query.or(`full_name.ilike.%${searchKey}%,id.eq.${searchKey}`);
+          } else {
+            query = query.ilike('full_name', `%${searchKey}%`);
+          }
+          const { data: profiles } = await query;
+
+          if (!profiles || profiles.length === 0) {
+            await sendLineReply(replyToken, `❌ ไม่พบสมาชิกที่ตรงกับ "${searchKey}"`);
+            continue;
+          }
+
+          let matchedProfile = profiles[0];
+          if (profiles.length > 1) {
+            const exactMatch = profiles.find(p => p.full_name?.trim() === searchKey);
+            if (exactMatch) {
+              matchedProfile = exactMatch;
+            } else {
+              const matchedList = profiles.map(p => `- ${p.full_name} (ID: ${p.id})`).join('\n');
+              await sendLineReply(replyToken, `⚠️ พบสมาชิกมากกว่า 1 คนตรงกับ "${searchKey}" กรุณาระบุชื่อให้เจาะจงขึ้น หรือใช้ ID:\n${matchedList}`);
+              continue;
+            }
+          }
+
+          const targetMemberId = matchedProfile.id;
+          const targetMemberName = matchedProfile.full_name;
+
+          // Fetch current user settings
+          const { data: userSettings } = await supabase
+            .from('user_settings')
+            .select('lottery_settings')
+            .eq('user_id', targetMemberId)
+            .eq('dealer_id', listDealerId)
+            .maybeSingle();
+
+          const existingLotterySettings = userSettings?.lottery_settings || {};
+          let targetTabSettings = { ...(existingLotterySettings[targetLotteryType] || {}) };
+
+          const isLaoOrHanoi = ['lao', 'hanoi'].includes(targetLotteryType);
+          const defaultTabSettings = getDefaultSettingsObject(targetLotteryType);
+
+          if (isResetDefault) {
+            targetTabSettings = { ...defaultTabSettings };
+            existingLotterySettings[targetLotteryType] = targetTabSettings;
+
+            const { error: upsertErr } = await supabase
+              .from('user_settings')
+              .upsert({
+                user_id: targetMemberId,
+                dealer_id: listDealerId,
+                lottery_settings: existingLotterySettings,
+                updated_at: new Date().toISOString()
+              }, { onConflict: 'user_id,dealer_id' });
+
+            if (upsertErr) {
+              console.error("Failed to reset user settings to default:", upsertErr);
+              await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการตั้งค่าเรทเริ่มต้นสำหรับคุณ ${targetMemberName} (${targetLotteryType.toUpperCase()})`);
+            } else {
+              await sendLineReply(replyToken, `✅ ตั้งค่าอัตราจ่ายและคอมมิชชันของคุณ ${targetMemberName} ของหวยประเภท ${targetLotteryType.toUpperCase()} กลับสู่ "ค่าเริ่มต้น" สำเร็จแล้วค่ะ!`);
+            }
+            continue;
+          }
+
+          const customLines = lines.slice(1);
+          if (customLines.length === 0) {
+            await sendLineReply(replyToken, `❌ กรุณาระบุรายการเรทที่ต้องการตั้งค่าถัดจากบรรทัดแรก\nตัวอย่าง:\n/ตั้งอัตรา ${targetMemberName} ${targetLotteryType.toUpperCase()}\n2 ตัวบน 15 65\n3 ตัวบน 30 550`);
+            continue;
+          }
+
+          let successCount = 0;
+          let failCount = 0;
+          const updatedLabels: string[] = [];
+
+          // Helper to map prize name of set to key
+          const mapPrizeNameToKey = (name: string): string | null => {
+            const w = name.trim().replace(/\s+/g, '').replace('ชุด', '');
+            if (/^(4ตัวตรง|4ตรง)$/.test(w)) return '4_straight_set';
+            if (/^(4ตัวโต๊ด|4โต๊ด|4โตด)$/.test(w)) return '4_tod_set';
+            if (/^(3ตัวตรง|3ตรง)$/.test(w)) return '3_straight_set';
+            if (/^(3ตัวโต๊ด|3โต๊ด|3โตด)$/.test(w)) return '3_tod_set';
+            if (/^(2ตัวหน้า|2หน้า)$/.test(w)) return '2_front_set';
+            if (/^(2ตัวหลัง|2หลัง)$/.test(w)) return '2_back_set';
+            return null;
+          };
+
+          customLines.forEach(line => {
+            const cleanLine = line.trim();
+            if (!cleanLine || cleanLine.startsWith('---') || cleanLine.startsWith('___')) return;
+
+            // 1. Check if it matches: ราคาขายชุดละ 120  ค่าคอม 25 บาท
+            const matchPriceComm = cleanLine.match(/ราคาขายชุดละ\s*([\d.]+)\s*ค่าคอม\s*([\d.]+)\s*บาท/);
+            if (matchPriceComm) {
+              const setPrice = parseFloat(matchPriceComm[1]);
+              const comm = parseFloat(matchPriceComm[2]);
+              if (!isNaN(setPrice) && !isNaN(comm)) {
+                if (!targetTabSettings['4_set']) {
+                  targetTabSettings['4_set'] = { prizes: {} };
+                }
+                targetTabSettings['4_set'].setPrice = setPrice;
+                targetTabSettings['4_set'].commission = comm;
+                updatedLabels.push(`4 ตัวชุด: ราคาชุดละ ฿${setPrice} ค่าคอม ${comm} บาท`);
+                successCount++;
+                return;
+              }
+            }
+
+            // 2. Check if the line contains a pipe '|'
+            if (cleanLine.includes('|')) {
+              const parts = cleanLine.split('|').map(p => p.trim());
+              
+              if (parts.length === 2) {
+                // Could be a prize config: e.g. "4 ตัวตรงชุด | 100000"
+                const prizeKey = mapPrizeNameToKey(parts[0]);
+                if (prizeKey) {
+                  const val = parseFloat(parts[1]);
+                  if (!isNaN(val)) {
+                    if (!targetTabSettings['4_set']) {
+                      targetTabSettings['4_set'] = { prizes: {} };
+                    }
+                    if (!targetTabSettings['4_set'].prizes) {
+                      targetTabSettings['4_set'].prizes = {};
+                    }
+                    targetTabSettings['4_set'].prizes[prizeKey] = val;
+                    
+                    const labelMap: Record<string, string> = {
+                      '4_straight_set': '4 ตัวตรงชุด',
+                      '4_tod_set': '4 ตัวโต๊ดชุด',
+                      '3_straight_set': '3 ตัวตรงชุด',
+                      '3_tod_set': '3 ตัวโต๊ดชุด',
+                      '2_front_set': '2 ตัวหน้าชุด',
+                      '2_back_set': '2 ตัวหลังชุด'
+                    };
+                    const displayLabel = labelMap[prizeKey] || prizeKey;
+                    updatedLabels.push(`${displayLabel}: ฿${val.toLocaleString('th-TH')}`);
+                    successCount++;
+                    return;
+                  }
+                }
+                
+                failCount++;
+                return;
+              }
+
+              if (parts.length >= 3) {
+                // General rate line: e.g. "ลอยบน: | 10 | 3"
+                const typeName = parts[0].replace(':', '').trim();
+                const betTypeKey = mapThaiToBetType(typeName, isLaoOrHanoi);
+                if (!betTypeKey) {
+                  failCount++;
+                  return;
+                }
+
+                const comm = parseFloat(parts[1]);
+                const payout = parseFloat(parts[2]);
+
+                if (isNaN(comm) || isNaN(payout)) {
+                  failCount++;
+                  return;
+                }
+
+                if (!targetTabSettings[betTypeKey]) {
+                  targetTabSettings[betTypeKey] = {};
+                }
+                targetTabSettings[betTypeKey].commission = comm;
+                targetTabSettings[betTypeKey].payout = payout;
+
+                updatedLabels.push(`${getBetTypeThaiLabel(betTypeKey, isLaoOrHanoi)}: คอม ${comm}% จ่าย ${payout} เท่า`);
+                successCount++;
+                return;
+              }
+
+              failCount++;
+              return;
+            }
+
+            // 3. Fallback to space-separated values (old format): e.g. "2 ตัวบน 15 65"
+            const parts = cleanLine.split(/\s+/).filter(p => p);
+            if (parts.length >= 3) {
+              const payoutRateStr = parts[parts.length - 1];
+              const commissionStr = parts[parts.length - 2];
+              const typeName = parts.slice(0, parts.length - 2).join(' ').replace(':', '').trim();
+
+              const betTypeKey = mapThaiToBetType(typeName, isLaoOrHanoi);
+              if (!betTypeKey) {
+                failCount++;
+                return;
+              }
+
+              const comm = parseFloat(commissionStr);
+              const payout = parseFloat(payoutRateStr);
+
+              if (isNaN(comm) || isNaN(payout)) {
+                failCount++;
+                return;
+              }
+
+              if (!targetTabSettings[betTypeKey]) {
+                targetTabSettings[betTypeKey] = {};
+              }
+              targetTabSettings[betTypeKey].commission = comm;
+              targetTabSettings[betTypeKey].payout = payout;
+
+              updatedLabels.push(`${getBetTypeThaiLabel(betTypeKey, isLaoOrHanoi)}: คอม ${comm}% จ่าย ${payout} เท่า`);
+              successCount++;
+              return;
+            }
+
+            failCount++;
+          });
+
+          if (successCount > 0) {
+            existingLotterySettings[targetLotteryType] = targetTabSettings;
+
+            const { error: upsertErr } = await supabase
+              .from('user_settings')
+              .upsert({
+                user_id: targetMemberId,
+                dealer_id: listDealerId,
+                lottery_settings: existingLotterySettings,
+                updated_at: new Date().toISOString()
+              }, { onConflict: 'user_id,dealer_id' });
+
+            if (upsertErr) {
+              console.error("Failed to update user settings:", upsertErr);
+              await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในระบบฐานข้อมูลขณะบันทึกเรท`);
+            } else {
+              let resStr = `✅ ตั้งค่าเรทหวยประเภท ${targetLotteryType.toUpperCase()} ให้คุณ ${targetMemberName} สำเร็จ ${successCount} รายการ:\n`;
+              resStr += updatedLabels.join('\n');
+              if (failCount > 0) {
+                resStr += `\n⚠️ ข้ามรายการที่รูปแบบไม่ถูกต้อง ${failCount} รายการ`;
+              }
+              await sendLineReply(replyToken, resStr);
+            }
+          } else {
+            await sendLineReply(replyToken, `❌ ไม่พบรายการตั้งค่าที่ถูกต้อง กรุณาพิมพ์ประเภทเลขพร้อมระบุค่าคอมและราคาจ่ายแยกด้วยช่องว่าง เช่น:\n2 ตัวบน 15 65`);
           }
           continue;
         }
@@ -8223,11 +9688,298 @@ serve(async (req) => {
           }
 
           try {
-            let billCode = '';
             if (text.startsWith('/bill')) {
               billCode = text.substring('/bill'.length).trim();
             } else if (text.startsWith('/โพย')) {
               billCode = text.substring('/โพย'.length).trim();
+            }
+
+            const isWinningQuery = billCode === 'ถูก' || billCode === 'win' || billCode === 'won';
+
+            if (isWinningQuery) {
+              // 1. Group must be bound to a dealer
+              const { data: groupLink } = await supabase
+                .from('line_groups')
+                .select('dealer_id, lottery_type')
+                .eq('line_group_id', groupId)
+                .eq('is_active', true)
+                .maybeSingle();
+
+              if (!groupLink) {
+                await sendLineReply(replyToken, `❌ กลุ่มนี้ยังไม่ได้ผูกกับเจ้ามือ ไม่สามารถเรียกดูใบโพยได้`);
+                continue;
+              }
+
+              const listDealerId = groupLink.dealer_id;
+              const listLotteryType = groupLink.lottery_type;
+
+              // 2. Identify the sender's linked profile
+              const { data: senderProfile } = await supabase
+                .from('profiles')
+                .select('id, full_name, role')
+                .eq('line_user_id', userId)
+                .eq('is_active', true)
+                .maybeSingle();
+
+              if (!senderProfile) {
+                await sendLineReply(replyToken, [
+                  `❌ คุณยังไม่ได้เชื่อมบัญชี LINE ของคุณกับระบบ Big Lotto\nกรุณานำ LINE User ID ด้านล่างไปใส่ในเมนูโปรไฟล์บนเว็บเพื่อเชื่อมต่อ`,
+                  userId
+                ]);
+                continue;
+              }
+
+              // 3. Check sender permissions (Authorized roles: superadmin, admin, dealer, manager)
+              const targetDealerId = listDealerId;
+              const isStaffSender = senderProfile?.id === targetDealerId || senderProfile?.role === 'superadmin' || senderProfile?.role === 'admin';
+              let isManagerSender = false;
+              if (!isStaffSender && targetDealerId) {
+                const { data: mgr } = await supabase
+                  .from('line_managers')
+                  .select('id')
+                  .eq('dealer_id', targetDealerId)
+                  .eq('line_user_id', userId)
+                  .eq('is_active', true)
+                  .maybeSingle();
+                isManagerSender = !!mgr;
+              }
+              const isAuthorized = isStaffSender || isManagerSender;
+
+              // 4. Find the latest announced round (is_result_announced = true)
+              const { data: targetRounds } = await supabase
+                .from('lottery_rounds')
+                .select('*')
+                .eq('dealer_id', listDealerId)
+                .eq('lottery_type', listLotteryType)
+                .eq('is_result_announced', true)
+                .order('close_time', { ascending: false })
+                .limit(1);
+
+              const activeRound = targetRounds?.[0];
+              if (!activeRound) {
+                await sendLineReply(replyToken, `❌ หวยประเภท ${listLotteryType.toUpperCase()} ในขณะนี้ยังไม่มีงวดที่ประกาศผลรางวัลค่ะ`);
+                continue;
+              }
+
+              // 5. Fetch winning submissions
+              let winningSubs: any[] = [];
+              let fetchErr: any = null;
+              if (isAuthorized) {
+                const { data, error } = await supabase
+                  .from('submissions')
+                  .select('id, amount, user_id, prize_amount, is_winner, bet_type, numbers, bill_id, bill_note, entry_id, display_numbers, display_amount, display_bet_type')
+                  .eq('round_id', activeRound.id)
+                  .eq('is_winner', true)
+                  .eq('is_deleted', false)
+                  .order('created_at', { ascending: true });
+                winningSubs = data || [];
+                fetchErr = error;
+              } else {
+                const { data, error } = await supabase
+                  .from('submissions')
+                  .select('id, amount, user_id, prize_amount, is_winner, bet_type, numbers, bill_id, bill_note, entry_id, display_numbers, display_amount, display_bet_type')
+                  .eq('round_id', activeRound.id)
+                  .eq('user_id', senderProfile.id)
+                  .eq('is_winner', true)
+                  .eq('is_deleted', false)
+                  .order('created_at', { ascending: true });
+                winningSubs = data || [];
+                fetchErr = error;
+              }
+
+              if (fetchErr) {
+                console.error("Error fetching winning submissions:", fetchErr);
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลใบโพยที่ถูกรางวัล`);
+                continue;
+              }
+
+              const roundDateStr = getRoundDisplayDate(activeRound, false);
+
+              const setPrice = activeRound.set_prices?.['4_top'] || 120;
+              const calculatePayout = (sub: any) => {
+                const amt = Number(sub.amount || 0);
+                let win = 0;
+                if (sub.bet_type === '4_set') {
+                  const numSets = Math.max(1, Math.floor(amt / setPrice));
+                  win = (sub.prize_amount != null ? Number(sub.prize_amount) : 0) * numSets;
+                } else {
+                  win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
+                }
+                if (win === 0) {
+                  const winResult = checkTransferWin(
+                    sub.bet_type,
+                    sub.numbers,
+                    activeRound.winning_numbers,
+                    activeRound.lottery_type,
+                    amt,
+                    setPrice,
+                    DEFAULT_4_SET_SETTINGS.prizes
+                  );
+                  if (winResult.wins) {
+                    win = winResult.payout;
+                  }
+                }
+                return win;
+              };
+
+              const isLaoOrHanoi = activeRound.lottery_type === 'lao' || activeRound.lottery_type === 'hanoi';
+              const LABELS: Record<string, string> = {
+                '2_top': 'บน',
+                '2_bottom': 'ล่าง',
+                '3_top': isLaoOrHanoi ? 'ตรง' : 'บน',
+                '3_tod': 'โต๊ด',
+                '3_front': '3 ตัวหน้า',
+                '3_back': '3 ตัวหลัง',
+                '4_tod': '4 ตัวโต๊ด',
+                '4_set': '4 ตัวชุด',
+                '6_top': '6 ตัวบน',
+                '4_float': '4 ตัวลอยแพ',
+                '5_float': '5 ตัวลอยแพ',
+                'run_top': 'ลอยบน',
+                'run_bottom': 'ลอยล่าง'
+              };
+
+              if (!isAuthorized) {
+                // Member specific view
+                const billOrder: string[] = [];
+                const billMap = new Map<string, { billId: string; note: string; totalWin: number; lines: string[] }>();
+
+                winningSubs.forEach((s: any) => {
+                  const bid = s.bill_id || '-';
+                  if (!billMap.has(bid)) {
+                    billMap.set(bid, {
+                      billId: bid,
+                      note: s.bill_note || '-',
+                      totalWin: 0,
+                      lines: []
+                    });
+                    billOrder.push(bid);
+                  }
+                  const b = billMap.get(bid)!;
+                  const payout = calculatePayout(s);
+                  b.totalWin += payout;
+                  
+                  const label = LABELS[s.bet_type] || s.bet_type;
+                  b.lines.push(`- ${s.numbers}=${s.amount} (${label}) [ถูกรางวัล: ฿${payout.toLocaleString('th-TH')}]`);
+                });
+
+                if (billOrder.length === 0) {
+                  await sendLineReply(replyToken, `📭 ในงวดวันที่ ${roundDateStr} คุณ ${senderProfile.full_name} ยังไม่มีเลขที่ถูกรางวัลค่ะ`);
+                  continue;
+                }
+
+                const lotteryName = (activeRound.lottery_type || '').toUpperCase();
+                let out = `🏆 รายการถูกรางวัลของ คุณ ${senderProfile.full_name}\n`;
+                out += `ประเภท: ${lotteryName}\n`;
+                out += `งวดวันที่: ${roundDateStr}\n`;
+                out += `----------------------\n`;
+
+                let grandTotalWin = 0;
+                billOrder.forEach((bid) => {
+                  const b = billMap.get(bid)!;
+                  grandTotalWin += b.totalWin;
+                  out += `📄 ใบโพยเลขที่: ${b.billId}\n`;
+                  if (b.note && b.note !== '-') {
+                    out += `โน๊ต: ${b.note}\n`;
+                  }
+                  out += `เลขที่ถูกรางวัล:\n`;
+                  out += b.lines.join('\n') + '\n';
+                  out += `รวมถูกรางวัลในใบนี้: ฿${b.totalWin.toLocaleString('th-TH')}\n`;
+                  out += `----------------------\n`;
+                });
+
+                out += `รวมถูกรางวัลทั้งหมด: ${billOrder.length} ใบโพย\n`;
+                out += `🏆 ยอดรวมรางวัลรวม: ฿${grandTotalWin.toLocaleString('th-TH')}`;
+
+                await sendLineReply(replyToken, out);
+                continue;
+              } else {
+                // Dealer/Manager specific view
+                const winningUserIds = [...new Set(winningSubs.map((s: any) => s.user_id))];
+                const userProfileMap = new Map<string, string>();
+                if (winningUserIds.length > 0) {
+                  const { data: profiles } = await supabase
+                    .from('profiles')
+                    .select('id, full_name')
+                    .in('id', winningUserIds);
+                  profiles?.forEach((p: any) => {
+                    userProfileMap.set(p.id, p.full_name || 'ไม่ระบุชื่อ');
+                  });
+                }
+
+                if (winningUserIds.length === 0) {
+                  await sendLineReply(replyToken, `📭 ในงวดวันที่ ${roundDateStr} ยังไม่มีสมาชิกคนใดถูกรางวัลสำหรับหวยประเภท ${listLotteryType.toUpperCase()} ค่ะ`);
+                  continue;
+                }
+
+                const userOrder: string[] = [];
+                const userMap = new Map<string, {
+                  userName: string;
+                  totalWin: number;
+                  billOrder: string[];
+                  billMap: Map<string, { billId: string; note: string; totalWin: number; lines: string[] }>
+                }>();
+
+                winningSubs.forEach((s: any) => {
+                  const uid = s.user_id;
+                  if (!userMap.has(uid)) {
+                    userMap.set(uid, {
+                      userName: userProfileMap.get(uid) || 'ไม่ระบุชื่อ',
+                      totalWin: 0,
+                      billOrder: [],
+                      billMap: new Map()
+                    });
+                    userOrder.push(uid);
+                  }
+                  
+                  const u = userMap.get(uid)!;
+                  const payout = calculatePayout(s);
+                  u.totalWin += payout;
+
+                  const bid = s.bill_id || '-';
+                  if (!u.billMap.has(bid)) {
+                    u.billMap.set(bid, {
+                      billId: bid,
+                      note: s.bill_note || '-',
+                      totalWin: 0,
+                      lines: []
+                    });
+                    u.billOrder.push(bid);
+                  }
+                  
+                  const b = u.billMap.get(bid)!;
+                  b.totalWin += payout;
+                  const label = LABELS[s.bet_type] || s.bet_type;
+                  b.lines.push(`  • ${s.numbers}=${s.amount} (${label}) [฿${payout.toLocaleString('th-TH')}]`);
+                });
+
+                const lotteryName = (activeRound.lottery_type || '').toUpperCase();
+                let out = `🏆 รายงานสมาชิกที่ถูกรางวัล (${lotteryName})\n`;
+                out += `งวดวันที่: ${roundDateStr}\n`;
+                out += `----------------------\n`;
+
+                let grandTotalWin = 0;
+                userOrder.forEach((uid) => {
+                  const u = userMap.get(uid)!;
+                  grandTotalWin += u.totalWin;
+                  out += `👤 คุณ ${u.userName} (รวมถูก: ฿${u.totalWin.toLocaleString('th-TH')})\n`;
+                  
+                  u.billOrder.forEach((bid) => {
+                    const b = u.billMap.get(bid)!;
+                    out += `  📄 โพย: ${b.billId}\n`;
+                    if (b.note && b.note !== '-') {
+                      out += `  📝 โน๊ต: ${b.note}\n`;
+                    }
+                    out += b.lines.join('\n') + '\n';
+                  });
+                  out += `----------------------\n`;
+                });
+
+                out += `🏆 ยอดรวมจ่ายรางวัลทั้งหมด: ฿${grandTotalWin.toLocaleString('th-TH')}`;
+
+                await sendLineReply(replyToken, out);
+                continue;
+              }
             }
 
             if (!billCode) {
@@ -8684,8 +10436,24 @@ serve(async (req) => {
           .eq('is_active', true)
           .maybeSingle();
 
-        const senderPoyDisplay = profile?.line_poy_display || 'short';
+        let senderPoyDisplay = profile?.line_poy_display || 'short';
         console.log(`[LINE BOT MSG] profile lookup result:`, { profile, profileErr, senderPoyDisplay });
+
+        // Load dealer's global poy setting to override if set to force_open / force_close
+        const { data: dealerProfile } = await supabase
+          .from('profiles')
+          .select('global_poy_display')
+          .eq('id', dealerId)
+          .maybeSingle();
+        const globalPoy = dealerProfile?.global_poy_display || 'normal';
+
+        if (globalPoy === 'force_close') {
+          senderPoyDisplay = 'none';
+        } else if (globalPoy === 'force_open') {
+          if (senderPoyDisplay === 'none') {
+            senderPoyDisplay = 'short';
+          }
+        }
 
         // Check if sender is a manager for this dealer
         const { data: managerRecord, error: managerErr } = await supabase
@@ -8712,7 +10480,10 @@ serve(async (req) => {
           continue;
         }
 
-        const parsedBets = parseMultiLinePaste(text, lotteryType, { x_separator_behavior: xSeparatorBehavior });
+        const parsedBets = parseMultiLinePaste(text, lotteryType, { 
+          x_separator_behavior: xSeparatorBehavior,
+          hyphen_separator_behavior: hyphenSeparatorBehavior
+        });
         const isStaffSender = isDealer || isAdmin || isManager;
         let originalSenderId = profile?.id || null;
 
@@ -9433,8 +11204,10 @@ serve(async (req) => {
           summaryText = summaryText.trimEnd();
         }
 
-        const cancelMsg = `/ยกเลิก ${billId}`;
-        await sendLineReply(replyToken, [summaryText, cancelMsg]);
+        if (senderPoyDisplay !== 'none') {
+          const cancelMsg = `/ยกเลิก ${billId}`;
+          await sendLineReply(replyToken, [summaryText, cancelMsg]);
+        }
       }
       } catch (error: any) {
         console.error('Error handling loop event:', error);

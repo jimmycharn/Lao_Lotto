@@ -103,6 +103,14 @@ export function getPermutationCount(numStr: string): number {
     return perms.length;
 }
 
+function cleanPrefixNoiseButKeepContext(line: string): string {
+    if (!line) return '';
+    let s = line.trim();
+    // Remove optional timestamp and any non-digit/non-equals noise before context, betting keywords, or numbers
+    s = s.replace(/^(?:\d{1,2}[:.:]\d{2}([:.:]\d{2})?\s*)?([^=\d]*?)(?=(?:วิ่งบน|วิ่งล่าง|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล|พี่น้อง|พน|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|หาง|เบิ้ล|คู่|หน้าหลัง|น้าหลัง|นห|รูดหน้า|หน้า|น้า|น|รูดหลัง|หลัง|ลัง|ห|วิ่ง|ลอย|โต๊ด|โตด|ต)(?![ก-๛a-zA-Z])|\d)/i, '');
+    return s.trim();
+}
+
 function normalizeUnicode(str: string): string {
     if (!str) return '';
     let s = str
@@ -113,6 +121,7 @@ function normalizeUnicode(str: string): string {
         .replace(/[\u2013\u2014\u2212\u2012\u2015]/g, '-')
         .replace(/[\u00D7\u2715\u2716\u2A09\uFE61\u30FB\u2217\u204E\u2731\u2732\u2733\u066D\uFF0A\u22C6\u274C]/g, '*')
         .replace(/[\u2215\u2044]/g, '/')
+        .replace(/\\/g, '/')
         .replace(/[\uFF10-\uFF19]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFF10 + 0x30))
         .replace(/[\uFF21-\uFF3A]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFF21 + 0x41))
         .replace(/[\uFF41-\uFF5A]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFF41 + 0x61))
@@ -124,7 +133,10 @@ function normalizeUnicode(str: string): string {
         .replace(/\uFF0E/g, '.')
         .replace(/\u00A0/g, ' ')
         .replace(/[\u201C\u201D\u201E]/g, '"')
-        .replace(/[\u2018\u2019\u201A]/g, "'");
+        .replace(/[\u2018\u2019\u201A]/g, "'")
+        .replace(/@/g, '=')
+        // Strip thousand separators (commas followed by exactly 3 digits)
+        .replace(/(\d),(\d{3})(?!\d)/g, '$1$2');
 
     // Replace ทุกประตู / ทุกประตุ / ทุกตู / ทุกตุ with ชุด
     s = s.replace(/ทุกประตู|ทุกประตุ|ทุกตู|ทุกตุ/g, 'ชุด');
@@ -143,8 +155,8 @@ function normalizeUnicode(str: string): string {
 
     // Normalize x, X, z, and Z between digits (with optional spaces) to *
     s = s.replace(/(\d)\s*[xXzZ]\s*(\d)/g, '$1*$2');
-    // Normalize spaces around standard operators (*, -, +, /) between digits
-    s = s.replace(/(\d)\s*([*\-+/\/])\s*(\d)/g, '$1$2$3');
+    // Normalize spaces around standard operators (*, -, +, /, comma, single quote) between digits
+    s = s.replace(/(\d)\s*([*\-+/\/,'])\s*(\d)/g, '$1$2$3');
     // Normalize t, T, ต between digits (with optional spaces) to *
     s = s.replace(/(\d)\s*[tTต]\s*(\d)/g, '$1*$2');
 
@@ -248,10 +260,16 @@ function findAmountIndex(tokens: string[]): number {
     return -1;
 }
 
-function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_separator_behavior?: string }): string[] {
+function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_separator_behavior?: string, hyphen_separator_behavior?: string }): string[] {
     const expanded: string[] = [];
-    for (const rawLine of rawLines) {
+    const hyphenBehavior = settings?.hyphen_separator_behavior || 'equal';
+
+    for (let idx = 0; idx < rawLines.length; idx++) {
+        const rawLine = rawLines[idx];
         let line = rawLine.trim();
+        // Normalize trailing separators before amount indicators (e.g. "56,×10" -> "56×10")
+        line = line.replace(/[\/,']\s*([*×\u00D7xX=])/g, '$1');
+
         // --- Step 0: Strip leading list index prefix like "1) ", "2. " (1-2 digits followed by . or ) and space) ---
         line = line.replace(/^\s*\d{1,2}[\.)\uFF0E\uFF09]\s+/, '');
 
@@ -260,8 +278,88 @@ function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_sep
         if (isConversationalSingleNumberLine(trimmed)) continue;
         if (isDateLine(trimmed)) continue;
 
-        // Reset line to the trimmed normalized string
-        line = trimmed;
+        // Clean prefix noise (timestamps, names) but preserve context prefixes and numbers
+        const cleaned = cleanPrefixNoiseButKeepContext(trimmed);
+        line = cleaned || trimmed;
+
+        // --- Hyphen Separator Behavior Transformation ---
+        const hyphenMatch = line.match(/^(?<prefix>(?:(?:บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล|วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต)\.?\s*)?)(?<num1>\d{1,5})[-]+(?<num2>\d{1,5})[-*×\u00D7xX](?<rest>.*)$/i);
+        if (hyphenMatch) {
+            const { prefix, num1, num2, rest } = hyphenMatch.groups!;
+            if (hyphenBehavior === 'separator') {
+                const cleanRest = rest.trim();
+                const hasOperators = /[-*×\u00D7xX\-+/]/.test(cleanRest);
+                if (hasOperators) {
+                    line = `${prefix}${num1}/${num2}=${cleanRest}`;
+                } else {
+                    line = `${prefix}${num1}/${num2}=${cleanRest}*${cleanRest}`;
+                }
+            } else {
+                // Default: 'equal' behavior
+                line = `${prefix}${num1}=${num2}*${rest.trim()}`;
+            }
+        }
+
+        // --- Step 0.0.0: Normalize hyphen/double-hyphen separators before amount parts containing * or x ---
+        // e.g. "804-50*50" -> "804=50*50", "623--20*20" -> "623=20*20", "509-10x6" -> "509=10x6"
+        if (!line.includes('=')) {
+            const hyphenStarMatch = line.match(/^(\d{2,4})\s*-+\s*(\d+(?:\s*[*×xX\-]\s*\d+)+)$/);
+            if (hyphenStarMatch) {
+                line = `${hyphenStarMatch[1]}=${hyphenStarMatch[2]}`;
+            }
+        }
+
+        const hasPending = hasPendingBareNumbersBefore(rawLines, idx);
+        if (hasPending && isPureAmountLine(line)) {
+            expanded.push(line);
+            continue;
+        }
+
+        // Strip trailing "= total" from lines like "91,81*75=300.-" or "77=100=200.-"
+        const sumRegex = /^(.*?\b\d+\s*[*=]\s*\d+)\s*=\s*\d+(?:\.\d+)?(?:\s*บาท|\s*บ|\s*.-|\s*฿)?(?:\s*(.*))?$/i;
+        const sumMatch = line.match(sumRegex);
+        if (sumMatch) {
+            const base = sumMatch[1].trim();
+            const suffix = sumMatch[2] ? sumMatch[2].trim() : '';
+            line = suffix ? `${base} ${suffix}` : base;
+        }
+
+        // --- Step 0.0.1: Split compound lines and apply inline bare number grouping ---
+        // e.g. "04,47*100,54,52*50" -> ["04*100", "47*100", "54*50", "52*50"]
+        // Also supports ' (single quote) as a number separator: "48'57'70×50" -> ["48*50", "57*50", "70*50"]
+        if (line.includes('/') || line.includes(',') || line.includes("'")) {
+            const tokens = line.split(/[\/,'']/).map(t => t.trim()).filter(t => t);
+            const hasSeparator = tokens.some(t => {
+                const normalizedToken = normalizeUnicode(t);
+                return /[*×xX=]/.test(normalizedToken);
+            });
+            if (tokens.length >= 2 && hasSeparator) {
+                let activeAmount: string | null = null;
+                let activeContext: string | null = null;
+                let activeSeparator = '*'; // Track separator type: '*' for reverse, '=' for direct
+                const subLines: string[] = [];
+                for (let j = tokens.length - 1; j >= 0; j--) {
+                    const token = tokens[j];
+                    const parsed = extractTokenAmountAndContext(token);
+                    if (parsed) {
+                        activeAmount = parsed.amount;
+                        activeContext = parsed.context;
+                        activeSeparator = parsed.separator || '*';
+                        subLines.unshift(token);
+                    } else {
+                        if (activeAmount) {
+                            const ctxStr = activeContext ? ` ${activeContext}` : '';
+                            subLines.unshift(`${token}${activeSeparator}${activeAmount}${ctxStr}`);
+                        } else {
+                            subLines.unshift(token);
+                        }
+                    }
+                }
+                const subExpanded = expandLines(subLines, lotteryType, settings);
+                expanded.push(...subExpanded);
+                continue;
+            }
+        }
 
         // --- Step 0.0.5: Handle "Smart Auto-Default x/*" separator for 2-3 digits (e.g. 25x30, 123*20) ---
         const xMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(\d{2,3})\s*([*×xX])\s*(\d+)\s*(.*)$/i);
@@ -464,7 +562,7 @@ function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_sep
         }
 
         // --- Step 0.3: Handle "รูดหน้า" (น[เลข] [เงิน], หน้า[เลข] [เงิน], รูดหน้า[เลข] [เงิน]) ---
-        const rudNaMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(รูดหน้า|หน้า|น้า|น)\s*(\d)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
+        const rudNaMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(รูดหน้า|หน้า|น้า|(?<!บ)น)\s*(\d)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
         if (rudNaMatch) {
             const prefixCtx = rudNaMatch[1] ? rudNaMatch[1] + ' ' : '';
             const fixedDigit = rudNaMatch[3];
@@ -529,22 +627,58 @@ function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_sep
             line = beforeEq + '=' + afterEq;
         }
 
+        // --- Step 2.7: Convert (numbers and separators) * (amount) to = format ---
+        // e.g. "48,26*50" -> "48,26=50", "48'26*50" -> "48'26=50"
+        if (!line.includes('=')) {
+            const starBetMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*)?([\d,/\-')]+)\s*[*×xX]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?(?:\s*ชุด)?)(.*)$/i);
+            if (starBetMatch) {
+                const prefixCtx = starBetMatch[1] ? starBetMatch[1] + ' ' : '';
+                let numsPart = starBetMatch[2].trim();
+                // Strip trailing quote/separators from numsPart
+                numsPart = numsPart.replace(/[,/\-')]+$/, '');
+                const amt = starBetMatch[3].trim();
+                const suffix = starBetMatch[4] || '';
+                
+                // If numsPart contains any list separator, split it and keep the '*' separator
+                // so that recursive expansion can trigger auto-reversion/permutation rules!
+                if (/[,/\-')]/.test(numsPart)) {
+                    const numTokens = numsPart.split(/[,/\-')]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s));
+                    if (numTokens.length >= 2) {
+                        const subLines = numTokens.map(num => `${prefixCtx}${num}*${amt}${suffix}`);
+                        const subExpanded = expandLines(subLines, lotteryType, settings);
+                        expanded.push(...subExpanded);
+                        continue;
+                    }
+                }
+                
+                // Otherwise (single number), convert to standard '=' format
+                // If it had a trailing separator and we cleaned it, re-expand to trigger auto-reversion rules!
+                if (numsPart !== starBetMatch[2].trim()) {
+                    const subExpanded = expandLines([`${prefixCtx}${numsPart}*${amt}${suffix}`], lotteryType, settings);
+                    expanded.push(...subExpanded);
+                    continue;
+                }
+                line = `${prefixCtx}${numsPart}=${amt}${suffix}`;
+            }
+        }
+
         // --- Step 2.5: If the line is a bare list of numbers (with optional leading context prefix)
         // split them into individual bare numbers so they can be buffered properly!
         if (!line.includes('=')) {
             const prefixMatch = line.match(/^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*/i);
             const prefix = prefixMatch ? prefixMatch[0] : '';
             const rest = prefixMatch ? line.substring(prefix.length) : line;
-            if (/^[\d,\s\-)]+$/.test(rest)) {
+            if (/^[\d,\s\-')]+$/.test(rest)) {
                 const hasComma = rest.includes(',');
                 const hasParen = rest.includes(')');
+                const hasQuote = rest.includes("'");
                 const hyphenCount = (rest.match(/-/g) || []).length;
-                if (hyphenCount === 1 && !hasComma && !hasParen) {
+                if (hyphenCount === 1 && !hasComma && !hasParen && !hasQuote) {
                     expanded.push(line);
                     continue;
                 }
 
-                const numTokens = rest.split(/[,\-)]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s));
+                const numTokens = rest.split(/[,\-')]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s));
                 if (numTokens.length >= 2) {
                     const firstLen = numTokens[0].length;
                     const allSameLen = numTokens.every(tok => tok.length === firstLen);
@@ -568,8 +702,8 @@ function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_sep
             const prefix = prefixMatch ? prefixMatch[0] : '';
             const cleanNumsPart = prefixMatch ? numsPart.substring(prefix.length) : numsPart;
 
-            if (/[,/\-)]/.test(cleanNumsPart)) {
-                const numTokens = cleanNumsPart.split(/[,/\-)]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s));
+            if (/[,/\-')]/.test(cleanNumsPart)) {
+                const numTokens = cleanNumsPart.split(/[,/\-')]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s));
                 if (numTokens.length >= 2) {
                     for (const num of numTokens) {
                         expanded.push(`${prefix}${num}=${amtPart}`);
@@ -580,7 +714,7 @@ function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_sep
         } else {
             // No = sign: check for "nums space amount" pattern
             // e.g., "123,456 20*20" or "บ05-50 20*20"
-            const spaceAmtMatch = line.match(/^((?:[ก-๛a-zA-Z.]+\s*)?[\d,/\-\s)]+?)\s+(\d+[*]\d+.*)$/);
+            const spaceAmtMatch = line.match(/^((?:[ก-๛a-zA-Z.]+\s*)?[\d,/\-\s')]+?)\s+(\d+[*]\d+.*)$/);
             if (spaceAmtMatch) {
                 const numsPart = spaceAmtMatch[1].trim();
                 const amtPart = spaceAmtMatch[2].trim();
@@ -589,8 +723,8 @@ function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_sep
                 const prefix = prefixMatch ? prefixMatch[0] : '';
                 const cleanNumsPart = prefixMatch ? numsPart.substring(prefix.length) : numsPart;
 
-                if (/[,/\-)]/.test(cleanNumsPart)) {
-                    const numTokens = cleanNumsPart.split(/[,/\-)]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s));
+                if (/[,/\-')]/.test(cleanNumsPart)) {
+                    const numTokens = cleanNumsPart.split(/[,/\-')]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s));
                     if (numTokens.length >= 2) {
                         for (const num of numTokens) {
                             expanded.push(`${prefix}${num}=${amtPart}`);
@@ -617,7 +751,7 @@ function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_sep
     return expanded;
 }
 
-export function parseMultiLinePaste(text: string, lotteryType = 'lao', settings?: { x_separator_behavior?: string }): ParsedBet[] {
+export function parseMultiLinePaste(text: string, lotteryType = 'lao', settings?: { x_separator_behavior?: string, hyphen_separator_behavior?: string }): ParsedBet[] {
     if (!text || !text.trim()) return [];
 
     // Filter out laughter (555, 5555, etc.) that are standalone and not part of a bet specification
@@ -633,10 +767,10 @@ export function parseMultiLinePaste(text: string, lotteryType = 'lao', settings?
 
     function flushBareBuffer() {
         for (const bareNum of bareNumberBuffer) {
-            const parsed = parseNumberLine(bareNum, contextMode, isLaoOrHanoi, lotteryType);
+            const parsed = parseNumberLine(bareNum, contextMode, isLaoOrHanoi, lotteryType, settings);
             if (parsed) {
                 if (contextMode === 'both') {
-                    results.push(...emitBoth(bareNum, isLaoOrHanoi, lotteryType));
+                    results.push(...emitBoth(bareNum, isLaoOrHanoi, lotteryType, settings));
                 } else {
                     results.push(...parsed);
                 }
@@ -650,10 +784,10 @@ export function parseMultiLinePaste(text: string, lotteryType = 'lao', settings?
         for (const bareNum of bareNumberBuffer) {
             const synthLine = `${bareNum}=${amountStr}`;
             if (ctx === 'both') {
-                const bothEntries = emitBoth(synthLine, isLaoOrHanoi, lotteryType);
+                const bothEntries = emitBoth(synthLine, isLaoOrHanoi, lotteryType, settings);
                 results.push(...bothEntries);
             } else {
-                const parsed = parseNumberLine(synthLine, ctx, isLaoOrHanoi, lotteryType);
+                const parsed = parseNumberLine(synthLine, ctx, isLaoOrHanoi, lotteryType, settings);
                 if (parsed) results.push(...parsed);
             }
         }
@@ -784,10 +918,10 @@ export function parseMultiLinePaste(text: string, lotteryType = 'lao', settings?
         }
 
         if (lineCtx === 'both') {
-            const bothResults = emitBoth(processLine, isLaoOrHanoi, lotteryType);
+            const bothResults = emitBoth(processLine, isLaoOrHanoi, lotteryType, settings);
             results.push(...bothResults);
         } else {
-            const parsed = parseNumberLine(processLine, lineCtx, isLaoOrHanoi, lotteryType);
+            const parsed = parseNumberLine(processLine, lineCtx, isLaoOrHanoi, lotteryType, settings);
             if (parsed) results.push(...parsed);
         }
     }
@@ -871,6 +1005,8 @@ interface AmountInfo {
 
 function extractAmountFromLine(line: string): AmountInfo | null {
     let s = normalizeUnicode(line.trim());
+    // Strip optional trailing กลับ keyword
+    s = s.replace(/\s*(กลับ|กลับตัว|กลับด้วย)\s*$/, '').trim();
     s = s.replace(/(\d+)\s*[*×xX\-+]?\s*ชุด/g, '$1*ชุด');
     s = s.replace(/(\d)\s*[tTต]\s*(\d)/g, '$1*$2');
     s = s.replace(/(\d)\s*[/+]\s*(\d)/g, '$1*$2');
@@ -1004,6 +1140,104 @@ function extractAmountFromLine(line: string): AmountInfo | null {
     return null;
 }
 
+function hasPendingBareNumbersBefore(rawLines: string[], currentIndex: number): boolean {
+    for (let j = currentIndex - 1; j >= 0; j--) {
+        const raw = rawLines[j];
+        if (!raw) continue;
+        const trimmed = normalizeUnicode(raw.trim());
+        if (!trimmed) continue;
+        if (isConversationalSingleNumberLine(trimmed)) continue;
+        if (isDateLine(trimmed)) continue;
+
+        const cleaned = cleanPrefixNoiseButKeepContext(trimmed);
+        const line = cleaned || trimmed;
+
+        // If it's a context line, it doesn't resolve the buffer
+        if (parseContextLine(line) !== null) {
+            continue;
+        }
+
+        // If it's a bare number line, then we have at least one pending bare number!
+        if (isBareNumberLine(line)) {
+            return true;
+        }
+
+        // If it's a line that contains a bet separator or amount, it would resolve/flush the buffer,
+        // so any bare numbers before it are already flushed. We stop here.
+        if (line.includes('=') || isAmountPattern(line) || isPureAmountLine(line)) {
+            return false;
+        }
+        
+        // Also check if it's a standard bet line format (e.g. has x or * separator between digits, like "25*20")
+        if (/^\d{1,5}\s*[*×xX\-+/tTต]\s*\d+/.test(line)) {
+            return false;
+        }
+    }
+    return false;
+}
+
+function isPureAmountLine(line: string): boolean {
+    if (!line) return false;
+    let s = normalizeUnicode(line.trim());
+    
+    // Check for equals-only prefix (e.g. "=100")
+    if (s.startsWith('=')) {
+        const amt = s.substring(1).trim();
+        if (isAmountPattern(amt) || /^\d+$/.test(amt)) return true;
+    }
+    
+    // Strip optional leading/trailing กลับ keywords
+    s = s.replace(/^(กลับ|กลับตัว|กลับด้วย)\s*/, '');
+    s = s.replace(/\s*(กลับ|กลับตัว|กลับด้วย)$/, '');
+    
+    // Strip leading context
+    s = s.replace(/^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*/i, '');
+    
+    // Strip trailing context
+    s = s.replace(/\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?$/i, '');
+    
+    // Check if the remaining part is an amount pattern
+    return isAmountPattern(s);
+}
+
+interface TokenAmountInfo {
+    number: string;
+    amount: string;
+    context: string | null;
+    separator: string;
+}
+
+function extractTokenAmountAndContext(token: string): TokenAmountInfo | null {
+    const s = normalizeUnicode(token.trim());
+    // If the entire token is clearly a pure amount (contains ชุด/บาท, or is a symmetric pattern like 50*50),
+    // don't treat it as a number-amount pair
+    if (/ชุด|บาท/i.test(s)) return null;
+    const symMatch = s.match(/^(\d+)\s*[*×xX\-+/]\s*(\d+)$/);
+    if (symMatch && symMatch[1] === symMatch[2]) return null;
+    const match = s.match(/^(\d{1,5})\s*([*×xX=])\s*(.+)$/);
+    if (match) {
+        const num = match[1];
+        const sep = match[2] === '=' ? '=' : '*';
+        const rest = match[3].trim();
+        const ctxMatch = rest.match(/^(.*?)\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*$/i);
+        if (ctxMatch) {
+            return {
+                number: num,
+                amount: ctxMatch[1].trim(),
+                context: ctxMatch[2].trim(),
+                separator: sep
+            };
+        }
+        return {
+            number: num,
+            amount: rest,
+            context: null,
+            separator: sep
+        };
+    }
+    return null;
+}
+
 function isAmountPattern(s: string): boolean {
     if (!s || !s.trim()) return false;
     const t = s.trim();
@@ -1044,19 +1278,19 @@ function getLineEffectiveContext(line: string, contextMode: string): string {
     return contextMode;
 }
 
-function emitBoth(rawLine: string, isLaoOrHanoi: boolean, lotteryType: string): ParsedBet[] {
+function emitBoth(rawLine: string, isLaoOrHanoi: boolean, lotteryType: string, settings?: { x_separator_behavior?: string }): ParsedBet[] {
     const results: ParsedBet[] = [];
     const inlineCtx = extractInlineContext(rawLine.trim());
     const cleanLine = inlineCtx.mode ? inlineCtx.cleaned : rawLine;
     const eqCtx = cleanLine.match(/^(\d{1,5}\s*=\s*)(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(.+)$/);
     const finalLine = eqCtx ? `${eqCtx[1]}${eqCtx[3]}` : cleanLine;
     
-    const topParsed = parseNumberLine(finalLine, 'top', isLaoOrHanoi, lotteryType);
+    const topParsed = parseNumberLine(finalLine, 'top', isLaoOrHanoi, lotteryType, settings);
     if (topParsed) results.push(...topParsed);
 
     const numDigits = topParsed && topParsed.length > 0 ? topParsed[0].numbers.length : 0;
     if (numDigits <= 2) {
-        const botParsed = parseNumberLine(finalLine, 'bottom', isLaoOrHanoi, lotteryType);
+        const botParsed = parseNumberLine(finalLine, 'bottom', isLaoOrHanoi, lotteryType, settings);
         if (botParsed) results.push(...botParsed);
     }
     return results;
@@ -1305,7 +1539,7 @@ function extractInlineContext(line: string): InlineContextInfo {
     return { cleaned: line, mode: null };
 }
 
-function parseNumberLine(line: string, contextMode: string, isLaoOrHanoi: boolean, lotteryType: string): ParsedBet[] | null {
+function parseNumberLine(line: string, contextMode: string, isLaoOrHanoi: boolean, lotteryType: string, settings?: { x_separator_behavior?: string }): ParsedBet[] | null {
     const preClean = normalizeUnicode(line.trim());
     if (isDateLine(preClean)) return null;
     let inlineCtx = extractInlineContext(preClean);
@@ -1394,7 +1628,7 @@ function parseNumberLine(line: string, contextMode: string, isLaoOrHanoi: boolea
     const numLen = numbers.length;
     const permCount = numLen >= 2 ? getPermutationCount(numbers) : 1;
 
-    return determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, parseContext, isLaoOrHanoi, lotteryType, line);
+    return determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, parseContext, isLaoOrHanoi, lotteryType, line, settings);
 }
 
 interface ParsedAmount {
@@ -1478,11 +1712,15 @@ function determineBetType(
     contextMode: string,
     isLaoOrHanoi: boolean,
     lotteryType: string,
-    rawLine: string
+    rawLine: string,
+    settings?: { x_separator_behavior?: string }
 ): ParsedBet[] | null {
     const isFloat = contextMode === 'float_top' || contextMode === 'float_bottom';
     const isTop = contextMode === 'top' || contextMode === 'float_top';
     const results: ParsedBet[] = [];
+
+    const behavior = settings?.x_separator_behavior || 'auto';
+    const shouldStraightOnly = behavior === 'straight';
 
     // === 1 digit ===
     if (numLen === 1) {
@@ -1530,7 +1768,7 @@ function determineBetType(
             return results;
         }
 
-        if (amount2 !== null) {
+        if (amount2 !== null && !shouldStraightOnly) {
             const betType = isTop ? '2_top' : '2_bottom';
             const typeLabel = isTop ? 'บนกลับ' : 'ล่างกลับ';
             results.push({
@@ -1576,7 +1814,7 @@ function determineBetType(
             return results;
         }
 
-        if (amount3 !== null && amount1 !== null && amount2 !== null) {
+        if (amount3 !== null && amount1 !== null && amount2 !== null && !shouldStraightOnly) {
             const isAmt2PermMinusOne = (amount2 === permCount - 1);
             const isAmt2Perm = (amount2 === permCount);
             const isAmt3PermMinusOne = (amount3 === permCount - 1);
@@ -1623,7 +1861,7 @@ function determineBetType(
         if (amount2 !== null || hasChud) {
             const effectiveAmount2 = hasChud ? permCount : amount2;
 
-            if (effectiveAmount2 === permCount) {
+            if (effectiveAmount2 === permCount && !shouldStraightOnly) {
                 const typeLabel = 'คูณชุด';
                 results.push({
                     numbers,

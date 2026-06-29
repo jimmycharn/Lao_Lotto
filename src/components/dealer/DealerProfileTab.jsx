@@ -36,12 +36,14 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
         full_name: profile?.full_name || '',
         phone: profile?.phone || '',
         role: profile?.role || 'dealer',
-        x_separator_behavior: profile?.x_separator_behavior || 'auto'
+        x_separator_behavior: profile?.x_separator_behavior || 'auto',
+        hyphen_separator_behavior: profile?.hyphen_separator_behavior || 'equal'
     })
     const [formData, setFormData] = useState({
         full_name: profile?.full_name || '',
         phone: profile?.phone || '',
-        x_separator_behavior: profile?.x_separator_behavior || 'auto'
+        x_separator_behavior: profile?.x_separator_behavior || 'auto',
+        hyphen_separator_behavior: profile?.hyphen_separator_behavior || 'equal'
     })
 
     // Bank form data
@@ -76,12 +78,14 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                 full_name: profile.full_name || '',
                 phone: profile.phone || '',
                 role: profile.role || 'dealer',
-                x_separator_behavior: profile.x_separator_behavior || 'auto'
+                x_separator_behavior: profile.x_separator_behavior || 'auto',
+                hyphen_separator_behavior: profile.hyphen_separator_behavior || 'equal'
             })
             setFormData({
                 full_name: profile.full_name || '',
                 phone: profile.phone || '',
-                x_separator_behavior: profile.x_separator_behavior || 'auto'
+                x_separator_behavior: profile.x_separator_behavior || 'auto',
+                hyphen_separator_behavior: profile.hyphen_separator_behavior || 'equal'
             })
         }
     }, [profile])
@@ -129,7 +133,8 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                 .update({
                     full_name: formData.full_name,
                     phone: formData.phone,
-                    x_separator_behavior: formData.x_separator_behavior
+                    x_separator_behavior: formData.x_separator_behavior,
+                    hyphen_separator_behavior: formData.hyphen_separator_behavior
                 })
                 .eq('id', user.id)
 
@@ -139,7 +144,8 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                 ...profileData,
                 full_name: formData.full_name,
                 phone: formData.phone,
-                x_separator_behavior: formData.x_separator_behavior
+                x_separator_behavior: formData.x_separator_behavior,
+                hyphen_separator_behavior: formData.hyphen_separator_behavior
             })
 
             setIsEditing(false)
@@ -393,6 +399,17 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                                 <option value="straight">ซื้อตรงอย่างเดียว (ทุกหวย)</option>
                             </select>
                         </div>
+                        <div className="form-group">
+                            <label className="form-label">การตีความเครื่องหมายลบ (-)</label>
+                            <select
+                                className="form-input"
+                                value={formData.hyphen_separator_behavior}
+                                onChange={e => setFormData({ ...formData, hyphen_separator_behavior: e.target.value })}
+                            >
+                                <option value="equal">เปลี่ยนเป็นเครื่องหมายเท่ากับ = (เช่น 123-100*100 เป็น 123=100*100)</option>
+                                <option value="separator">เปลี่ยนเป็นเครื่องหมายคั่น / (เช่น 123-100*100 เป็น 123/100=100*100)</option>
+                            </select>
+                        </div>
                         <div className="form-actions">
                             <button
                                 className="btn btn-secondary"
@@ -401,7 +418,8 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                                     setFormData({
                                         full_name: profileData.full_name || '',
                                         phone: profileData.phone || '',
-                                        x_separator_behavior: profileData.x_separator_behavior || 'auto'
+                                        x_separator_behavior: profileData.x_separator_behavior || 'auto',
+                                        hyphen_separator_behavior: profileData.hyphen_separator_behavior || 'equal'
                                     })
                                 }}
                             >
@@ -436,6 +454,14 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                                 {profileData.x_separator_behavior === 'revert' ? 'ซื้อไป-กลับอัตโนมัติ (ทุกหวย)' :
                                  profileData.x_separator_behavior === 'straight' ? 'ซื้อตรงอย่างเดียว (ทุกหวย)' :
                                  'อัตโนมัติ (ตามประเภทหวย)'}
+                            </span>
+                        </div>
+                        <div className="info-row">
+                            <span className="info-label">การตีความเครื่องหมายลบ (-)</span>
+                            <span className="info-value">
+                                {profileData.hyphen_separator_behavior === 'separator' 
+                                    ? 'เปลี่ยนเป็นเครื่องหมายคั่น / (เช่น 123-100*100 เป็น 123/100=100*100)' 
+                                    : 'เปลี่ยนเป็นเครื่องหมายเท่ากับ = (เช่น 123-100*100 เป็น 123=100*100)'}
                             </span>
                         </div>
                     </div>

@@ -1937,7 +1937,10 @@ export default function WriteSubmissionModal({
             return
         }
 
-        const parsed = parseMultiLinePaste(pasteText, lotteryType, { x_separator_behavior: profile?.x_separator_behavior })
+        const parsed = parseMultiLinePaste(pasteText, lotteryType, { 
+            x_separator_behavior: profile?.x_separator_behavior,
+            hyphen_separator_behavior: profile?.hyphen_separator_behavior
+        })
         if (parsed.length === 0) {
             setError('ไม่พบรายการเลขในข้อความ')
             return
@@ -2993,7 +2996,10 @@ export default function WriteSubmissionModal({
                                             setPasteText(text)
                                             // Auto-submit after a tick so state updates
                                             setTimeout(() => {
-                                                const parsed = parseMultiLinePaste(text, lotteryType, { x_separator_behavior: profile?.x_separator_behavior })
+                                                const parsed = parseMultiLinePaste(text, lotteryType, { 
+                                                    x_separator_behavior: profile?.x_separator_behavior,
+                                                    hyphen_separator_behavior: profile?.hyphen_separator_behavior
+                                                })
                                                 if (parsed.length === 0) {
                                                     setError('ไม่พบรายการเลขในข้อความ')
                                                     setShowPasteModal(false)
