@@ -7915,47 +7915,51 @@ serve(async (req) => {
                 }
                 continue;
               } else {
-                // Global commands (เดิม)
+                // Group/Room specific commands (เดิมทีเป็น Global ทั้งร้าน)
                 let mode = 'normal';
-                let label = 'เคารพสิทธิ์ตั้งค่าส่วนบุคคลตามปกติ';
+                let label = 'เคารพสิทธิ์ตั้งค่าส่วนบุคคลตามปกติของกลุ่มนี้';
                 if (commandPrefix.includes('ปิดหมด')) {
                   mode = 'force_close';
-                  label = 'ปิดการแสดงผลทุกห้อง (ปิดหมด)';
+                  label = 'ปิดการแสดงผลของทุกคนเฉพาะในกลุ่มนี้';
                 } else if (commandPrefix.includes('เปิดหมด')) {
                   mode = 'force_open';
-                  label = 'เปิดการแสดงผลทุกห้อง (เปิดหมด)';
+                  label = 'เปิดการแสดงผลของทุกคนเฉพาะในกลุ่มนี้';
                 }
 
                 const { error: updateErr } = await supabase
-                  .from('profiles')
-                  .update({ global_poy_display: mode })
-                  .eq('id', dealerId);
+                  .from('line_groups')
+                  .update({ poy_display: mode })
+                  .eq('id', groupLink.id);
 
                 if (updateErr) {
-                  console.error("Error setting global poy display:", updateErr);
-                  await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการตั้งค่าระบบแสดงผลรวม`);
+                  console.error("Error setting group poy display:", updateErr);
+                  await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการตั้งค่าระบบแสดงผลเฉพาะกลุ่ม`);
                   continue;
                 }
 
-                // Reset admin_poy_display for all members of this dealer
-                const { data: memberships } = await supabase
-                  .from('user_dealer_memberships')
-                  .select('user_id')
-                  .eq('dealer_id', dealerId)
-                  .eq('status', 'active');
+                // Update local object reference
+                groupLink.poy_display = mode;
 
-                if (memberships && memberships.length > 0) {
-                  const userIds = memberships.map(m => m.user_id);
-                  const { error: resetErr } = await supabase
-                    .from('profiles')
-                    .update({ admin_poy_display: 'normal' })
-                    .in('id', userIds);
-                  if (resetErr) {
-                    console.error("Error resetting members admin_poy_display:", resetErr);
+                // Reset admin_poy_display for all members of this group
+                const { data: grpMembers } = await supabase
+                  .from('line_group_members')
+                  .select('user_id')
+                  .eq('line_group_id', groupLink.line_group_id);
+
+                if (grpMembers && grpMembers.length > 0) {
+                  const userIds = grpMembers.map(m => m.user_id).filter(Boolean);
+                  if (userIds.length > 0) {
+                    const { error: resetErr } = await supabase
+                      .from('profiles')
+                      .update({ admin_poy_display: 'normal' })
+                      .in('id', userIds);
+                    if (resetErr) {
+                      console.error("Error resetting members admin_poy_display in group:", resetErr);
+                    }
                   }
                 }
 
-                await sendLineReply(replyToken, `✅ ตั้งค่าระบบใบโพยในร้านค้าทั้งหมดเป็น: "${label}" เรียบร้อยแล้วและเคลียร์การตั้งค่าเฉพาะรายบุคคลทั้งหมดค่ะ!\n(สิทธิ์ของผู้ดูแลร้านมีผลเหนือการตั้งค่ารายบุคคล)`);
+                await sendLineReply(replyToken, `✅ ตั้งค่าระบบใบโพยเฉพาะกลุ่มนี้เป็น: "${label}" เรียบร้อยแล้วและเคลียร์การตั้งค่าล็อกรายบุคคลเฉพาะสมาชิกในกลุ่มนี้ค่ะ!`);
                 continue;
               }
             }
@@ -10568,13 +10572,8 @@ serve(async (req) => {
         const adminPoy = profile?.admin_poy_display || 'normal';
         console.log(`[LINE BOT MSG] profile lookup result:`, { profile, profileErr, senderPoyDisplay });
 
-        // Load dealer's global poy setting to override if set to force_open / force_close
-        const { data: dealerProfile } = await supabase
-          .from('profiles')
-          .select('global_poy_display')
-          .eq('id', dealerId)
-          .maybeSingle();
-        const globalPoy = dealerProfile?.global_poy_display || 'normal';
+        // Load group specific poy setting to override if set to force_open / force_close
+        const globalPoy = groupLink?.poy_display || 'normal';
 
         if (globalPoy === 'force_close') {
           senderPoyDisplay = 'none';
