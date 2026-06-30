@@ -10659,26 +10659,20 @@ serve(async (req) => {
           .maybeSingle();
 
         const senderProfile = profile;
-        let senderPoyDisplay = profile?.line_poy_display || 'short';
-        const adminPoy = profile?.admin_poy_display || 'normal';
-        console.log(`[LINE BOT MSG] profile lookup result:`, { profile, profileErr, senderPoyDisplay });
 
-        // Load group specific poy setting to override if set to force_open / force_close
+        // Verify sender's group membership for display settings
+        const { data: memberRecord } = await supabase
+          .from('line_group_members')
+          .select('poy_display, admin_poy_display')
+          .eq('line_group_id', groupId)
+          .eq('line_user_id', userId)
+          .maybeSingle();
+
+        const groupMemberPoy = memberRecord?.poy_display || 'short';
+        const groupMemberAdminPoy = memberRecord?.admin_poy_display || 'normal';
         const globalPoy = groupLink?.poy_display || 'normal';
 
-        if (globalPoy === 'force_close') {
-          senderPoyDisplay = 'none';
-        } else if (globalPoy === 'force_open') {
-          if (senderPoyDisplay === 'none') {
-            senderPoyDisplay = 'short';
-          }
-        } else if (adminPoy === 'force_close') {
-          senderPoyDisplay = 'none';
-        } else if (adminPoy === 'force_open') {
-          if (senderPoyDisplay === 'none') {
-            senderPoyDisplay = 'short';
-          }
-        }
+        let senderPoyDisplay = groupMemberPoy;
 
         // Check if sender is a manager for this dealer
         const { data: managerRecord, error: managerErr } = await supabase
@@ -10753,26 +10747,26 @@ serve(async (req) => {
           }
         }
 
-        // Re-evaluate senderPoyDisplay based on final active profile and sender role
+        // Re-evaluate senderPoyDisplay based on active profile/membership and sender role
         let finalPoyDisplay = 'short';
         if (isStaffSender) {
-          // Admin/Staff/Manager bypasses global overrides and specific member overrides.
-          // They use their own original sender profile settings.
-          finalPoyDisplay = senderProfile?.line_poy_display || 'short';
+          // Admin/Staff/Manager bypasses global overrides and specific overrides.
+          finalPoyDisplay = groupMemberPoy;
         } else {
-          // Regular members are subject to global and specific admin overrides.
-          if (profile) {
-            finalPoyDisplay = profile.line_poy_display || 'short';
-            const finalAdminPoy = profile.admin_poy_display || 'normal';
+          // Regular members are subject to group-level settings and specific overrides.
+          finalPoyDisplay = groupMemberPoy;
+          
+          if (groupMemberAdminPoy === 'force_close') {
+            finalPoyDisplay = 'none';
+          } else if (groupMemberAdminPoy === 'force_open') {
+            if (finalPoyDisplay === 'none') {
+              finalPoyDisplay = 'short';
+            }
+          } else {
+            // Respect global group settings when no specific admin override
             if (globalPoy === 'force_close') {
               finalPoyDisplay = 'none';
             } else if (globalPoy === 'force_open') {
-              if (finalPoyDisplay === 'none') {
-                finalPoyDisplay = 'short';
-              }
-            } else if (finalAdminPoy === 'force_close') {
-              finalPoyDisplay = 'none';
-            } else if (finalAdminPoy === 'force_open') {
               if (finalPoyDisplay === 'none') {
                 finalPoyDisplay = 'short';
               }
