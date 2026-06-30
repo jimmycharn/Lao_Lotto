@@ -7933,51 +7933,35 @@ serve(async (req) => {
                 }
                 continue;
               } else {
-                // Group/Room specific commands (เดิมทีเป็น Global ทั้งร้าน)
+                // Group lottery type scoped commands (ปิดหมด/เปิดหมด ทุกกลุ่มของหวยประเภทนี้)
                 let mode = 'normal';
-                let label = 'เคารพสิทธิ์ตั้งค่าส่วนบุคคลตามปกติของกลุ่มนี้';
-                if (commandPrefix.includes('ปิดหมด')) {
+                const lotName = groupLink.lottery_type === 'lao' ? 'หวยลาว' : groupLink.lottery_type === 'thai' ? 'หวยไทย' : groupLink.lottery_type === 'hanoi' ? 'หวยฮานอย' : groupLink.lottery_type === 'stock' ? 'หวยหุ้น' : 'หวยประเภทนี้';
+                let label = `เคารพสิทธิ์ตั้งค่าส่วนบุคคลตามปกติของทุกกลุ่มที่ผูกกับ ${lotName}`;
+                
+                if (commandPrefix === '/โพยปิดหมด') {
                   mode = 'force_close';
-                  label = 'ปิดการแสดงผลของทุกคนเฉพาะในกลุ่มนี้';
-                } else if (commandPrefix.includes('เปิดหมด')) {
+                  label = `ปิดการแสดงผลของทุกคนในทุกกลุ่มที่ผูกกับ ${lotName}`;
+                } else if (commandPrefix === '/โพยเปิดหมด') {
                   mode = 'force_open';
-                  label = 'เปิดการแสดงผลของทุกคนเฉพาะในกลุ่มนี้';
+                  label = `เปิดการแสดงผลของทุกคนในทุกกลุ่มที่ผูกกับ ${lotName}`;
                 }
 
                 const { error: updateErr } = await supabase
                   .from('line_groups')
                   .update({ poy_display: mode })
-                  .eq('id', groupLink.id);
+                  .eq('dealer_id', dealerId)
+                  .eq('lottery_type', groupLink.lottery_type);
 
                 if (updateErr) {
-                  console.error("Error setting group poy display:", updateErr);
-                  await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการตั้งค่าระบบแสดงผลเฉพาะกลุ่ม`);
+                  console.error("Error setting group lottery poy display:", updateErr);
+                  await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการตั้งค่าระบบแสดงผลหวย ${lotName}`);
                   continue;
                 }
 
                 // Update local object reference
                 groupLink.poy_display = mode;
 
-                // Reset admin_poy_display for all members of this group
-                const { data: grpMembers } = await supabase
-                  .from('line_group_members')
-                  .select('user_id')
-                  .eq('line_group_id', groupLink.line_group_id);
-
-                if (grpMembers && grpMembers.length > 0) {
-                  const userIds = grpMembers.map(m => m.user_id).filter(Boolean);
-                  if (userIds.length > 0) {
-                    const { error: resetErr } = await supabase
-                      .from('profiles')
-                      .update({ admin_poy_display: 'normal' })
-                      .in('id', userIds);
-                    if (resetErr) {
-                      console.error("Error resetting members admin_poy_display in group:", resetErr);
-                    }
-                  }
-                }
-
-                await sendLineReply(replyToken, `✅ ตั้งค่าระบบใบโพยเฉพาะกลุ่มนี้เป็น: "${label}" เรียบร้อยแล้วและเคลียร์การตั้งค่าล็อกรายบุคคลเฉพาะสมาชิกในกลุ่มนี้ค่ะ!`);
+                await sendLineReply(replyToken, `✅ ตั้งค่าระบบใบโพยสลากเรียบร้อยแล้ว:\n👉 "${label}"\n(การตั้งค่ารายบุคคลของสมาชิกที่แอดมินกำหนดข้อยกเว้นไว้จะยังคงอยู่ปกติ)`);
                 continue;
               }
             }
