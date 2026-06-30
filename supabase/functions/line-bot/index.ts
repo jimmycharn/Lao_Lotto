@@ -6173,6 +6173,7 @@ serve(async (req) => {
               const LABELS: Record<string, string> = {
                 '2_top': '2 ตัวบน',
                 '2_bottom': '2 ตัวล่าง',
+                '2_run': '2 ตัวลอย',
                 '3_top': groupLink.lottery_type === 'lao' || groupLink.lottery_type === 'hanoi' ? '3 ตัวตรง' : '3 ตัวบน',
                 '3_tod': '3 ตัวโต๊ด',
                 '3_front': '3 ตัวหน้า',
@@ -6466,6 +6467,7 @@ serve(async (req) => {
               const LABELS: Record<string, string> = {
                 '2_top': '2 ตัวบน',
                 '2_bottom': '2 ตัวล่าง',
+                '2_run': '2 ตัวลอย',
                 '3_top': groupLink.lottery_type === 'lao' || groupLink.lottery_type === 'hanoi' ? '3 ตัวตรง' : '3 ตัวบน',
                 '3_tod': '3 ตัวโต๊ด',
                 '3_front': '3 ตัวหน้า',
@@ -7333,6 +7335,7 @@ serve(async (req) => {
                 const LABELS: Record<string, string> = {
                   '2_top': '2 ตัวบน',
                   '2_bottom': '2 ตัวล่าง',
+                  '2_run': '2 ตัวลอย',
                   '3_top': groupLink.lottery_type === 'lao' || groupLink.lottery_type === 'hanoi' ? '3 ตัวตรง' : '3 ตัวบน',
                   '3_tod': '3 ตัวโต๊ด',
                   '3_front': '3 ตัวหน้า',
@@ -7535,6 +7538,7 @@ serve(async (req) => {
               const LABELS: Record<string, string> = {
                 '2_top': '2 ตัวบน',
                 '2_bottom': '2 ตัวล่าง',
+                '2_run': '2 ตัวลอย',
                 '3_top': groupLink.lottery_type === 'lao' || groupLink.lottery_type === 'hanoi' ? '3 ตัวตรง' : '3 ตัวบน',
                 '3_tod': '3 ตัวโต๊ด',
                 '3_front': '3 ตัวหน้า',
@@ -10048,6 +10052,7 @@ serve(async (req) => {
               const LABELS: Record<string, string> = {
                 '2_top': 'บน',
                 '2_bottom': 'ล่าง',
+                '2_run': '2 ตัวลอย',
                 '3_top': isLaoOrHanoi ? 'ตรง' : 'บน',
                 '3_tod': 'โต๊ด',
                 '3_front': '3 ตัวหน้า',
@@ -10438,6 +10443,7 @@ serve(async (req) => {
             const LABELS = {
               '2_top': 'บน',
               '2_bottom': 'ล่าง',
+              '2_run': '2 ตัวลอย',
               '3_top': isLaoOrHanoi ? 'ตรง' : 'บน',
               '3_tod': 'โต๊ด',
               '3_front': '3 ตัวหน้า',
