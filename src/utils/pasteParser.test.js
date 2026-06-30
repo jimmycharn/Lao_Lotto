@@ -17,6 +17,7 @@ describe('pasteParser - parseMultiLinePaste', () => {
   it('should parse top-bottom when context is set to both (e.g., บล 45x50)', () => {
     const text = 'บล 45x50'
     const result = parseMultiLinePaste(text, 'lao')
+    console.log("RESULT BOTH 45x50:", JSON.stringify(result, null, 2))
     expect(result.length).toBe(2) // 45 บน 50 and 45 ล่าง 50
     expect(result[0]).toMatchObject({
       numbers: '45',
@@ -1071,13 +1072,23 @@ describe('pasteParser - parseMultiLinePaste', () => {
       const result = parseMultiLinePaste(text, 'stock')
       expect(result.length).toBe(10)
       for (let i = 0; i <= 9; i++) {
-        expect(result[i]).toMatchObject({
-          numbers: `1${i}`,
-          amount: 50,
-          amount2: 50,
-          betType: '2_top',
-          specialType: 'reverse'
-        })
+        if (i === 1) {
+          expect(result[i]).toMatchObject({
+            numbers: '11',
+            amount: 100,
+            amount2: null,
+            betType: '2_top'
+          })
+          expect(result[i].specialType).toBeUndefined()
+        } else {
+          expect(result[i]).toMatchObject({
+            numbers: `1${i}`,
+            amount: 50,
+            amount2: 50,
+            betType: '2_top',
+            specialType: 'reverse'
+          })
+        }
       }
     })
   })
@@ -1142,13 +1153,23 @@ describe('pasteParser - parseMultiLinePaste', () => {
       const result = parseMultiLinePaste(text, 'stock')
       expect(result.length).toBe(10)
       for (let i = 0; i <= 9; i++) {
-        expect(result[i]).toMatchObject({
-          numbers: `${i}1`,
-          amount: 50,
-          amount2: 50,
-          betType: '2_top',
-          specialType: 'reverse'
-        })
+        if (i === 1) {
+          expect(result[i]).toMatchObject({
+            numbers: '11',
+            amount: 100,
+            amount2: null,
+            betType: '2_top'
+          })
+          expect(result[i].specialType).toBeUndefined()
+        } else {
+          expect(result[i]).toMatchObject({
+            numbers: `${i}1`,
+            amount: 50,
+            amount2: 50,
+            betType: '2_top',
+            specialType: 'reverse'
+          })
+        }
       }
     })
   })

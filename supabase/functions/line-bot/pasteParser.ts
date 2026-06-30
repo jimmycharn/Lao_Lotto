@@ -281,6 +281,7 @@ function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_sep
         // Clean prefix noise (timestamps, names) but preserve context prefixes and numbers
         const cleaned = cleanPrefixNoiseButKeepContext(trimmed);
         line = cleaned || trimmed;
+        if (isDateLine(line)) continue;
 
         // --- Hyphen Separator Behavior Transformation ---
         const hyphenMatch = line.match(/^(?<prefix>(?:(?:บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล|วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต)\.?\s*)?)(?<num1>\d{1,5})[-]+(?<num2>\d{1,5})[*×\u00D7xX](?<rest>.*)$/i);
@@ -1769,18 +1770,34 @@ function determineBetType(
         }
 
         if (amount2 !== null && !shouldStraightOnly) {
-            const betType = isTop ? '2_top' : '2_bottom';
-            const typeLabel = isTop ? 'บนกลับ' : 'ล่างกลับ';
-            results.push({
-                numbers,
-                amount: amount1,
-                amount2,
-                betType,
-                specialType: 'reverse',
-                typeLabel,
-                rawLine,
-                formattedLine: `${numbers}=${amount1}*${amount2} ${typeLabel}`
-            });
+            const isDouble = numbers[0] === numbers[1];
+            if (isDouble) {
+                const betType = isTop ? '2_top' : '2_bottom';
+                const typeLabel = isTop ? 'บน' : 'ล่าง';
+                const totalAmount = amount1 + amount2;
+                results.push({
+                    numbers,
+                    amount: totalAmount,
+                    amount2: null,
+                    betType,
+                    typeLabel,
+                    rawLine,
+                    formattedLine: `${numbers}=${totalAmount} ${typeLabel}`
+                });
+            } else {
+                const betType = isTop ? '2_top' : '2_bottom';
+                const typeLabel = isTop ? 'บนกลับ' : 'ล่างกลับ';
+                results.push({
+                    numbers,
+                    amount: amount1,
+                    amount2,
+                    betType,
+                    specialType: 'reverse',
+                    typeLabel,
+                    rawLine,
+                    formattedLine: `${numbers}=${amount1}*${amount2} ${typeLabel}`
+                });
+            }
         } else {
             const betType = isTop ? '2_top' : '2_bottom';
             const typeLabel = isTop ? 'บน' : 'ล่าง';

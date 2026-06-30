@@ -1,115 +1,137 @@
-import { getPermutations } from '../constants/lotteryTypes'
-
-// Debug flag for paste parser — set to true only when troubleshooting paste issues
-const DEBUG_PASTE = false
-
-/**
- * Parse multi-line pasted text into bet entries.
- * 
- * Supports:
- * - Context lines: "บน", "บ", "บ.", "ล่าง", "ล", "ล.", "บนล่าง", "บล", "ลบ", etc.
- * - Bare number buffering: bare digit lines accumulate until an amount-bearing line resolves them
- * - Trailing amount line: "15*ชุด", "=100", "20×20" applies amount to all buffered bare numbers
- * - Last line with number+amount: "395=15*ชุด" adds 395 to buffer then applies amount to all
- * - Inline context: "บน.77=30", "72=20*20 ล่าง", "39=บล10*10"
- * - "บนล่าง" mode: duplicates entries as both top and bottom
- * 
- * @param {string} text - Raw pasted text (multi-line)
- * @param {string} lotteryType - 'thai', 'lao', or 'hanoi'
- * @returns {Array<{ numbers: string, amount: number, amount2: number|null, betType: string, typeLabel: string, rawLine: string, formattedLine: string }>}
- */
-export { get3DigitPermCount, normalizeUnicode, extractInlineContext }
-
-function cleanPrefixNoiseButKeepContext(line) {
-    if (!line) return ''
-    let s = line.trim()
-    // Remove optional timestamp and any non-digit/non-equals noise before context, betting keywords, or numbers
-    s = s.replace(/^(?:\d{1,2}[:.:]\d{2}([:.:]\d{2})?\s*)?([^=\d]*?)(?=(?:บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล|พี่น้อง|พน|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|หาง|เบิ้ล|คู่|หน้าหลัง|น้าหลัง|นห|รูดหน้า|หน้า|น้า|น|รูดหลัง|หลัง|ลัง|ห|วิ่ง|ลอย|โต๊ด|โตด|ต)(?![ก-๛a-zA-Z])|\d)/i, '')
-    return s.trim()
+export function getPermutations(str) {
+    if (str.length <= 1)
+        return [str];
+    const perms = [];
+    for (let i = 0; i < str.length; i++) {
+        const char = str[i];
+        const remainingChars = str.slice(0, i) + str.slice(i + 1);
+        for (const subPerm of getPermutations(remainingChars)) {
+            perms.push(char + subPerm);
+        }
+    }
+    return [...new Set(perms)];
 }
-
-/**
- * Normalize Unicode characters commonly found in LINE chat / social media pastes.
- * Converts various dash, multiplication, and full-width variants to standard ASCII.
- */
+export function getUnique3DigitPermsFrom4(str) {
+    if (str.length !== 4)
+        return [];
+    const results = new Set();
+    for (let i = 0; i < 4; i++) {
+        const combination = str.slice(0, i) + str.slice(i + 1);
+        const perms = getPermutations(combination);
+        perms.forEach(p => results.add(p));
+    }
+    return Array.from(results);
+}
+export function getUnique3DigitPermsFrom5(str) {
+    if (str.length !== 5)
+        return [];
+    const results = new Set();
+    const chars = str.split('');
+    for (let i = 0; i < 5; i++) {
+        for (let j = i + 1; j < 5; j++) {
+            for (let k = j + 1; k < 5; k++) {
+                const combination = chars[i] + chars[j] + chars[k];
+                const perms = getPermutations(combination);
+                perms.forEach(p => results.add(p));
+            }
+        }
+    }
+    return Array.from(results);
+}
+export function get3DigitPermCount(numbers) {
+    const digits = numbers.split('');
+    const combinations = new Set();
+    for (let i = 0; i < digits.length; i++) {
+        for (let j = 0; j < digits.length; j++) {
+            if (j === i)
+                continue;
+            for (let k = 0; k < digits.length; k++) {
+                if (k === i || k === j)
+                    continue;
+                combinations.add(digits[i] + digits[j] + digits[k]);
+            }
+        }
+    }
+    return combinations.size;
+}
+function get2DigitPermutations(numberStr) {
+    const digits = numberStr.split('');
+    const combinations = new Set([
+        numberStr,
+        digits[1] + digits[0]
+    ]);
+    return [...combinations];
+}
+function get3DigitPermutations(numberStr) {
+    const digits = numberStr.split('');
+    const combinations = new Set();
+    for (let i = 0; i < digits.length; i++) {
+        for (let j = 0; j < digits.length; j++) {
+            if (j === i)
+                continue;
+            for (let k = 0; k < digits.length; k++) {
+                if (k === i || k === j)
+                    continue;
+                combinations.add(digits[i] + digits[j] + digits[k]);
+            }
+        }
+    }
+    return [...combinations];
+}
+export function getPermutationCount(numStr) {
+    if (!numStr || numStr.length < 2)
+        return 1;
+    const perms = getPermutations(numStr);
+    return perms.length;
+}
+function cleanPrefixNoiseButKeepContext(line) {
+    if (!line)
+        return '';
+    let s = line.trim();
+    s = s.replace(/^(?:\d{1,2}[:.:]\d{2}([:.:]\d{2})?\s*)?([^=\d]*?)(?=(?:วิ่งบน|วิ่งล่าง|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล|พี่น้อง|พน|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|หาง|เบิ้ล|คู่|หน้าหลัง|น้าหลัง|นห|รูดหน้า|หน้า|น้า|น|รูดหลัง|หลัง|ลัง|ห|วิ่ง|ลอย|โต๊ด|โตด|ต)(?![ก-๛a-zA-Z])|\d)/i, '');
+    return s.trim();
+}
 function normalizeUnicode(str) {
-    if (!str) return ''
+    if (!str)
+        return '';
     let s = str
-        // Remove zero-width, invisible characters, and variation selectors that break regex matching
         .replace(/[\u200B\u200C\u200D\uFEFF\u00AD\u2060\u200E\u200F\uFE00-\uFE0F]/g, '')
-        // Heavy math sign emojis: ➕ (U+2795), ➖ (U+2796), ➗ (U+2797) → standard ASCII
         .replace(/\u2795/g, '+')
         .replace(/\u2796/g, '-')
         .replace(/\u2797/g, '/')
-        // Dashes: en-dash (–), em-dash (—), minus sign (−), figure dash (‒), horizontal bar (―) → hyphen-minus (-)
         .replace(/[\u2013\u2014\u2212\u2012\u2015]/g, '-')
-        // Multiplication/asterisk variants: × (U+00D7), ✕ (U+2715), ✖ (U+2716), ⨉ (U+2A09),
-        // ﹡ (U+FE61), ・ (U+30FB), ∗ (U+2217), ⁎ (U+204E), ✱ (U+2731), ✲ (U+2732),
-        // ✳ (U+2733), ٭ (U+066D), ＊ (U+FF0A), ⋆ (U+22C6), ★ (U+2605), ☆ (U+2606), ❌ (U+274C) → *
         .replace(/[\u00D7\u2715\u2716\u2A09\uFE61\u30FB\u2217\u204E\u2731\u2732\u2733\u066D\uFF0A\u22C6\u274C]/g, '*')
-        // Solidus variants: ∕ (U+2215), ⁄ (U+2044) → /
         .replace(/[\u2215\u2044]/g, '/')
         .replace(/\\/g, '/')
-        // Full-width digits → ASCII digits
         .replace(/[\uFF10-\uFF19]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFF10 + 0x30))
-        // Full-width letters → ASCII letters (for x, X, t, T etc.)
         .replace(/[\uFF21-\uFF3A]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFF21 + 0x41))
         .replace(/[\uFF41-\uFF5A]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFF41 + 0x61))
-        // Full-width symbols: ＝ → =, ＊ → *, ＋ → +, ／ → /, ，→ ,, ．→ .
         .replace(/\uFF1D/g, '=')
         .replace(/\uFF0A/g, '*')
         .replace(/\uFF0B/g, '+')
         .replace(/\uFF0F/g, '/')
         .replace(/\uFF0C/g, ',')
         .replace(/\uFF0E/g, '.')
-        // Non-breaking space → regular space
         .replace(/\u00A0/g, ' ')
-        .replace(/[\u201c\u201d\u201e]/g, '"')
-        .replace(/[\u2018\u2019\u201a]/g, "'")
+        .replace(/[\u201C\u201D\u201E]/g, '"')
+        .replace(/[\u2018\u2019\u201A]/g, "'")
         .replace(/@/g, '=')
-        // Strip thousand separators (commas followed by exactly 3 digits)
-        .replace(/(\d),(\d{3})(?!\d)/g, '$1$2')
-
-    // Replace ทุกประตู / ทุกประตุ / ทุกตู / ทุกตุ with ชุด
-    s = s.replace(/ทุกประตู|ทุกประตุ|ทุกตู|ทุกตุ/g, 'ชุด')
-
-    // Normalize permutation keywords like "กลับตูละ", "กลับตัวละ", "กลับประตูละ" to "กลับชุด="
-    s = s.replace(/กลับ(?:ตู|ตัว|ประตู)\s*ละ/g, 'กลับชุด=')
-    // Normalize "กลับตู", "กลับตัว", "กลับประตู" to "กลับชุด"
-    s = s.replace(/กลับ(?:ตู|ตัว|ประตู)(?!\s*ละ)/g, 'กลับชุด')
-
-    // Normalize ช / ซ (abbreviations for ชุด) to ชุด when following a digit or operator
-    s = s.replace(/(\d+)\s*[*×xX\-+]?\s*[ชซ](?![ก-๛a-zA-Z0-9])/g, '$1*ชุด')
-
-    // "ตัวละ" / "ตูละ" (= per number) means "=" followed by the bet amount.
-    // e.g. a trailing line "ตัวละ10 บาท" applies amount 10 to all buffered bare numbers above.
-    s = s.replace(/ตัว\s*ละ|ตู\s*ละ/g, '=')
-
-    // Normalize x, X, z, and Z between digits (with optional spaces) to *
-    s = s.replace(/(\d)\s*[xXzZ]\s*(\d)/g, '$1*$2')
-    // Normalize spaces around standard operators (*, -, +, /, comma, single quote) between digits
-    s = s.replace(/(\d)\s*([*\-+/\/,'])\s*(\d)/g, '$1$2$3')
-    // Normalize t, T, ต between digits (with optional spaces) to *
-    s = s.replace(/(\d)\s*[tTต]\s*(\d)/g, '$1*$2')
-
-    // Replace dash connecting digit and Thai keyword with a space (e.g. "47-ล่าง" -> "47 ล่าง", "บน-47" -> "บน 47")
-    s = s.replace(/(\d)\s*-\s*(?=[ก-๛])/g, '$1 ')
-    s = s.replace(/([ก-๛])\s*-\s*(?=\d)/g, '$1 ')
-
-    // Add space between digit and Thai keyword if directly adjacent (e.g. "49บน" -> "49 บน", "บน49" -> "บน 49")
-    s = s.replace(/(\d)(?=[ก-๛])/g, '$1 ')
-    s = s.replace(/([ก-๛])(?=\d)/g, '$1 ')    // Normalize "มี" to "=" when acting as a bet separator between a number/context and amount digits
-    // e.g. "8บนมี300" -> "8บน=300", "8บน มี 300" -> "8บน=300", "8มี300" -> "8=300"
-    s = s.replace(/(\d+|บน|ล่าง|บ\.?|ล\.?|บล|ลบ|วิ่ง|ลอย|โต๊ด)\s*มี\s*(\d+)/g, '$1=$2')
-
-    // Normalize colons to equals when they act as bet separators:
-    // Case 1: 3-5 digit number followed by colon and digits (e.g. 610:10)
-    s = s.replace(/(\b\d{3,5})\s*:\s*(\d+)/g, '$1=$2')
-    // Case 2: 1-5 digit number followed by colon and amount with operator/suffix (e.g. 12:10*10, 12:10ช)
-    s = s.replace(/(\b\d{1,5})\s*:\s*(\d+(?:\s*[*×xX\-+/]|\s*ชุด|\s*บาท|\s*บ\.?|\s*[ชซ](?![ก-๛a-zA-Z0-9])))/g, '$1=$2')
-
-    // Normalize dot-separated triplets (e.g. 450.55.30 -> 450=55*30)
-    // To avoid matching dates (like 21.06.26 or 21.06.2026), we ensure it doesn't look like a date
+        .replace(/(\d),(\d{3})(?!\d)/g, '$1$2');
+    s = s.replace(/ทุกประตู|ทุกประตุ|ทุกตู|ทุกตุ/g, 'ชุด');
+    s = s.replace(/กลับ(?:ตู|ตัว|ประตู)\s*ละ/g, 'กลับชุด=');
+    s = s.replace(/กลับ(?:ตู|ตัว|ประตู)(?!\s*ละ)/g, 'กลับชุด');
+    s = s.replace(/(\d+)\s*[*×xX\-+]?\s*[ชซ](?![ก-๛a-zA-Z0-9])/g, '$1*ชุด');
+    s = s.replace(/ตัว\s*ละ|ตู\s*ละ/g, '=');
+    s = s.replace(/(\d)\s*[xXzZ]\s*(\d)/g, '$1*$2');
+    s = s.replace(/(\d)\s*([*\-+/\/,'])\s*(\d)/g, '$1$2$3');
+    s = s.replace(/(\d)\s*[tTต]\s*(\d)/g, '$1*$2');
+    s = s.replace(/(\d)\s*-\s*(?=[ก-๛])/g, '$1 ');
+    s = s.replace(/([ก-๛])\s*-\s*(?=\d)/g, '$1 ');
+    s = s.replace(/(\d)(?=[ก-๛])/g, '$1 ');
+    s = s.replace(/([ก-๛])(?=\d)/g, '$1 ');
+    s = s.replace(/(\d+|บน|ล่าง|บ\.?|ล\.?|บล|ลบ|วิ่ง|ลอย|โต๊ด)\s*มี\s*(\d+)/g, '$1=$2');
+    s = s.replace(/(\b\d{3,5})\s*:\s*(\d+)/g, '$1=$2');
+    s = s.replace(/(\b\d{1,5})\s*:\s*(\d+(?:\s*[*×xX\-+/]|\s*ชุด|\s*บาท|\s*บ\.?|\s*[ชซ](?![ก-๛a-zA-Z0-9])))/g, '$1=$2');
     s = s.replace(/(\b\d{1,5})\s*\.\s*(\d+)\s*\.\s*(\d+)(?!\s*\.)/g, (match, p1, p2, p3) => {
         const num1 = parseInt(p1, 10);
         const num2 = parseInt(p2, 10);
@@ -118,45 +140,27 @@ function normalizeUnicode(str) {
         }
         return `${p1}=${p2}*${p3}`;
     });
-
-    // Normalize dots to equals when they act as bet separators (e.g. 68.50*50 -> 68=50*50, 68.50 -> 68=50)
     s = s.replace(/(\b\d{1,5})\s*\.\s*(\d+)(?!\s*\.)/g, (match, p1, p2, offset, string) => {
         const num1 = parseInt(p1, 10);
         const num2 = parseInt(p2, 10);
         const rest = string.substring(offset + match.length).trim();
         const hasBetSuffix = /^[*×xX\-+/=ชุดบาทบ]/.test(rest);
-
-        // If it looks like a valid timestamp (hour 0-23, minute 0-59) AND doesn't have a bet suffix, keep it as dot.
         if (p1.length <= 2 && p2.length === 2 && num1 >= 0 && num1 <= 23 && num2 >= 0 && num2 <= 59 && !hasBetSuffix) {
             return match;
         }
         return `${p1}=${p2}`;
     });
-
-    // Convert parenthetical multipliers like "20(10x5)" or "20(10*5)" or "20 (10 x 5)" to "*"-separated format "20*10*5"
-    s = s.replace(/(\d+)\s*\(\s*(\d+)\s*[*×xX\-+/tTต\s]\s*(\d+)\s*\)/g, '$1*$2*$3')
-
-    // Convert typos like -= or =- (with optional spacing and multiple dashes) to =
-    s = s.replace(/\s*-+\s*=/g, '=').replace(/=\s*-+\s*/g, '=')
-
-    // Convert typos like .= or =. (with optional spacing and multiple dots) to =
-    s = s.replace(/\s*\.+\s*=/g, '=').replace(/=\s*\.+\s*/g, '=')
-
-    // Remove "4 ตัว", "3 ตัว", "2 ตัว" noise to clean numbers and prevent blocking prefix noise stripping
-    s = s.replace(/\b\d+\s*ตัว\s*/g, '')
-
-    // Strip optional lottery type prefixes (ท, ฮ, ห, and ล when followed by context)
-    s = s.replace(/^([ทฮห]\.?(?![ก-๛])\s*(?!\s*\d(?!\d))|ล\.?(?=ลอย|วิ่ง|โต๊ด|ล่าง|บนล่าง|บล|ลบ))/i, '')
-
-    // Normalize both-context shorthand variants to standard บล / ลบ / บนล่าง / ล่างบน
-    s = s.replace(/(?<![ก-๛a-zA-Z0-9])บน[\s./+\-]?ล่าง(?![ก-๛a-zA-Z0-9])/g, 'บนล่าง')
-    s = s.replace(/(?<![ก-๛a-zA-Z0-9])ล่าง[\s./+\-]?บน(?![ก-๛a-zA-Z0-9])/g, 'ล่างบน')
-    s = s.replace(/(?<![ก-๛a-zA-Z0-9])บ[\s./+\-]?ล\.?(?![ก-๛a-zA-Z0-9])/g, 'บล')
-    s = s.replace(/(?<![ก-๛a-zA-Z0-9])ล[\s./+\-]?บ\.?(?![ก-๛a-zA-Z0-9])/g, 'ลบ')
-
+    s = s.replace(/(\d+)\s*\(\s*(\d+)\s*[*×xX\-+/tTต\s]\s*(\d+)\s*\)/g, '$1*$2*$3');
+    s = s.replace(/\s*-+\s*=/g, '=').replace(/=\s*-+\s*/g, '=');
+    s = s.replace(/\s*\.+\s*=/g, '=').replace(/=\s*\.+\s*/g, '=');
+    s = s.replace(/\b\d+\s*ตัว\s*/g, '');
+    s = s.replace(/^([ทฮห]\.?(?![ก-๛])\s*(?!\s*\d(?!\d))|ล\.?(?=ลอย|วิ่ง|โต๊ด|ล่าง|บนล่าง|บล|ลบ))/i, '');
+    s = s.replace(/(?<![ก-๛a-zA-Z0-9])บน[\s./+\-]?ล่าง(?![ก-๛a-zA-Z0-9])/g, 'บนล่าง');
+    s = s.replace(/(?<![ก-๛a-zA-Z0-9])ล่าง[\s./+\-]?บน(?![ก-๛a-zA-Z0-9])/g, 'ล่างบน');
+    s = s.replace(/(?<![ก-๛a-zA-Z0-9])บ[\s./+\-]?ล\.?(?![ก-๛a-zA-Z0-9])/g, 'บล');
+    s = s.replace(/(?<![ก-๛a-zA-Z0-9])ล[\s./+\-]?บ\.?(?![ก-๛a-zA-Z0-9])/g, 'ลบ');
     return s;
 }
-
 function findAmountIndex(tokens) {
     let rightmostCandidateIdx = -1;
     for (let i = tokens.length - 1; i >= 0; i--) {
@@ -166,15 +170,12 @@ function findAmountIndex(tokens) {
             break;
         }
     }
-    
-    if (rightmostCandidateIdx === -1) return -1;
-    
+    if (rightmostCandidateIdx === -1)
+        return -1;
     const candidate = tokens[rightmostCandidateIdx].trim();
-    
     if (isAmountPattern(candidate)) {
         return rightmostCandidateIdx;
     }
-    
     if (/^\d+$/.test(candidate) && rightmostCandidateIdx > 0) {
         const preceding = tokens.slice(0, rightmostCandidateIdx).map(t => t.trim());
         const allPrecedingAreNumbers = preceding.every(t => /^\d+$/.test(t));
@@ -186,150 +187,138 @@ function findAmountIndex(tokens) {
             }
         }
     }
-    
     return -1;
 }
-
-function expandLines(rawLines, lotteryType = 'lao', settings = {}) {
-    const expanded = []
-    const hyphenBehavior = settings?.hyphen_separator_behavior || 'separator'
-
+function expandLines(rawLines, lotteryType = 'lao', settings) {
+    const expanded = [];
+    const hyphenBehavior = settings?.hyphen_separator_behavior || 'separator';
     for (let idx = 0; idx < rawLines.length; idx++) {
-        const rawLine = rawLines[idx]
-        let line = rawLine.trim()
-        // --- Step 0: Strip leading list index prefix like "1) ", "2. " (1-2 digits followed by . or ) and space) ---
-        line = line.replace(/^\s*\d{1,2}[\.)\uFF0E\uFF09]\s+/, '')
-
-        const trimmed = normalizeUnicode(line)
-        if (!trimmed) { expanded.push(trimmed); continue }
-        if (isConversationalSingleNumberLine(trimmed)) continue
-        if (isDateLine(trimmed)) continue
-
-        // Clean prefix noise (timestamps, names) but preserve context prefixes and numbers
-        const cleaned = cleanPrefixNoiseButKeepContext(trimmed)
-        line = cleaned || trimmed
-
-        // --- Hyphen Separator Behavior Transformation ---
-        const hyphenMatch = line.match(/^(?<prefix>(?:(?:บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล|วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต)\.?\s*)?)(?<num1>\d{1,5})[-]+(?<num2>\d{1,5})[*×\u00D7xX](?<rest>.*)$/i)
+        const rawLine = rawLines[idx];
+        let line = rawLine.trim();
+        line = line.replace(/[\/,']\s*([*×\u00D7xX=])/g, '$1');
+        line = line.replace(/^\s*\d{1,2}[\.)\uFF0E\uFF09]\s+/, '');
+        const trimmed = normalizeUnicode(line);
+        if (!trimmed) {
+            expanded.push(trimmed);
+            continue;
+        }
+        if (isConversationalSingleNumberLine(trimmed))
+            continue;
+        if (isDateLine(trimmed))
+            continue;
+        const cleaned = cleanPrefixNoiseButKeepContext(trimmed);
+        line = cleaned || trimmed;
+        if (isDateLine(line))
+            continue;
+        const hyphenMatch = line.match(/^(?<prefix>(?:(?:บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล|วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต)\.?\s*)?)(?<num1>\d{1,5})[-]+(?<num2>\d{1,5})[*×\u00D7xX](?<rest>.*)$/i);
         if (hyphenMatch) {
-            const { prefix, num1, num2, rest } = hyphenMatch.groups
+            const { prefix, num1, num2, rest } = hyphenMatch.groups;
             if (hyphenBehavior === 'separator') {
-                const cleanRest = rest.trim()
-                const hasOperators = /[-*×\u00D7xX\-+/]/.test(cleanRest)
+                const cleanRest = rest.trim();
+                const hasOperators = /[-*×\u00D7xX\-+/]/.test(cleanRest);
                 if (hasOperators) {
-                    line = `${prefix}${num1}/${num2}=${cleanRest}`
-                } else {
-                    line = `${prefix}${num1}/${num2}=${cleanRest}*${cleanRest}`
+                    line = `${prefix}${num1}/${num2}=${cleanRest}`;
                 }
-            } else {
-                // Default: 'equal' behavior
-                line = `${prefix}${num1}=${num2}*${rest.trim()}`
+                else {
+                    line = `${prefix}${num1}/${num2}=${cleanRest}*${cleanRest}`;
+                }
+            }
+            else {
+                line = `${prefix}${num1}=${num2}*${rest.trim()}`;
             }
         }
-
-        const hasPending = hasPendingBareNumbersBefore(rawLines, idx)
+        if (!line.includes('=')) {
+            const hyphenStarMatch = line.match(/^(\d{2,4})\s*-+\s*(\d+(?:\s*[*×xX\-]\s*\d+)+)$/);
+            if (hyphenStarMatch) {
+                line = `${hyphenStarMatch[1]}=${hyphenStarMatch[2]}`;
+            }
+        }
+        const hasPending = hasPendingBareNumbersBefore(rawLines, idx);
         if (hasPending && isPureAmountLine(line)) {
-            expanded.push(line)
-            continue
+            expanded.push(line);
+            continue;
         }
-
-        // Strip trailing "= total" from lines like "91,81*75=300.-" or "77=100=200.-"
-        const sumRegex = /^(.*?\b\d+\s*[*=]\s*\d+)\s*=\s*\d+(?:\.\d+)?(?:\s*บาท|\s*บ|\s*.-|\s*฿)?(?:\s*(.*))?$/i
-        const sumMatch = line.match(sumRegex)
+        const sumRegex = /^(.*?\b\d+\s*[*=]\s*\d+)\s*=\s*\d+(?:\.\d+)?(?:\s*บาท|\s*บ|\s*.-|\s*฿)?(?:\s*(.*))?$/i;
+        const sumMatch = line.match(sumRegex);
         if (sumMatch) {
-            const base = sumMatch[1].trim()
-            const suffix = sumMatch[2] ? sumMatch[2].trim() : ''
-            line = suffix ? `${base} ${suffix}` : base
+            const base = sumMatch[1].trim();
+            const suffix = sumMatch[2] ? sumMatch[2].trim() : '';
+            line = suffix ? `${base} ${suffix}` : base;
         }
-
-        // --- Step 0.0.1: Split compound lines and apply inline bare number grouping ---
-        // e.g. "04,47*100,54,52*50" -> ["04*100", "47*100", "54*50", "52*50"]
-        // Also supports ' (single quote) as a number separator: "48'57'70×50" -> ["48*50", "57*50", "70*50"]
         if (line.includes('/') || line.includes(',') || line.includes("'")) {
-            const tokens = line.split(/[\/,'']/).map(t => t.trim()).filter(t => t)
+            const tokens = line.split(/[\/,'']/).map(t => t.trim()).filter(t => t);
             const hasSeparator = tokens.some(t => {
-                const normalizedToken = normalizeUnicode(t)
-                return /[*×xX=]/.test(normalizedToken)
-            })
+                const normalizedToken = normalizeUnicode(t);
+                return /[*×xX=]/.test(normalizedToken);
+            });
             if (tokens.length >= 2 && hasSeparator) {
-                let activeAmount = null
-                let activeContext = null
-                let activeSeparator = '*' // Track separator type: '*' for reverse, '=' for direct
-                const subLines = []
+                let activeAmount = null;
+                let activeContext = null;
+                let activeSeparator = '*';
+                const subLines = [];
                 for (let j = tokens.length - 1; j >= 0; j--) {
-                    const token = tokens[j]
-                    const parsed = extractTokenAmountAndContext(token)
+                    const token = tokens[j];
+                    const parsed = extractTokenAmountAndContext(token);
                     if (parsed) {
-                        activeAmount = parsed.amount
-                        activeContext = parsed.context
-                        activeSeparator = parsed.separator || '*'
-                        subLines.unshift(token)
-                    } else {
+                        activeAmount = parsed.amount;
+                        activeContext = parsed.context;
+                        activeSeparator = parsed.separator || '*';
+                        subLines.unshift(token);
+                    }
+                    else {
                         if (activeAmount) {
-                            const ctxStr = activeContext ? ` ${activeContext}` : ''
-                            subLines.unshift(`${token}${activeSeparator}${activeAmount}${ctxStr}`)
-                        } else {
-                            subLines.unshift(token)
+                            const ctxStr = activeContext ? ` ${activeContext}` : '';
+                            subLines.unshift(`${token}${activeSeparator}${activeAmount}${ctxStr}`);
+                        }
+                        else {
+                            subLines.unshift(token);
                         }
                     }
                 }
-                const subExpanded = expandLines(subLines, lotteryType, settings)
-                expanded.push(...subExpanded)
-                continue
+                const subExpanded = expandLines(subLines, lotteryType, settings);
+                expanded.push(...subExpanded);
+                continue;
             }
         }
-
-        // --- Step 0.0.5: Handle "Smart Auto-Default x/*" separator for 2-3 digits (e.g. 25x30, 123*20) ---
-        const xMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(\d{2,3})\s*([*×xX])\s*(\d+)\s*(.*)$/i)
+        const xMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(\d{2,3})\s*([*×xX])\s*(\d+)\s*(.*)$/i);
         if (xMatch) {
-            const prefixCtx = xMatch[1] ? xMatch[1] + ' ' : ''
-            const numberStr = xMatch[2]
-            const amount = xMatch[4]
-            const suffix = xMatch[5] || ''
-
-            // If suffix contains other digits or separators (e.g. "x20" in 25x20x20, or "*6" in 456*20*6),
-            // it has more than 2 parts, so we do NOT apply auto-reversal/permutation.
-            const hasOtherParts = /[\d*×xX=:\-]/.test(suffix)
-            
-            const behavior = settings?.x_separator_behavior || 'auto'
-            const shouldRevert = 
-                behavior === 'revert' || 
-                (behavior === 'auto' && lotteryType === 'stock')
-
+            const prefixCtx = xMatch[1] ? xMatch[1] + ' ' : '';
+            const numberStr = xMatch[2];
+            const amount = xMatch[4];
+            const suffix = xMatch[5] || '';
+            const hasOtherParts = /[\d*×xX=:\-]/.test(suffix);
+            const behavior = settings?.x_separator_behavior || 'auto';
+            const shouldRevert = behavior === 'revert' ||
+                (behavior === 'auto' && lotteryType === 'stock');
             if (!hasOtherParts && shouldRevert) {
-                const perms = numberStr.length === 2 
-                    ? get2DigitPermutations(numberStr) 
-                    : get3DigitPermutations(numberStr)
-                    
+                const perms = numberStr.length === 2
+                    ? get2DigitPermutations(numberStr)
+                    : get3DigitPermutations(numberStr);
                 for (const num of perms) {
-                    expanded.push(`${prefixCtx}${num}=${amount}${suffix}`)
+                    expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
                 }
-                continue
+                continue;
             }
         }
-
-        // --- Step 0.1: Handle "เลขพี่น้อง" (พน [เงิน], พี่น้อง [เงิน], พน=[เงิน], พี่น้อง=[เงิน]) ---
-        const siblingMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(พี่น้อง|พน)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i)
+        const siblingMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(พี่น้อง|พน)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
         if (siblingMatch) {
-            const prefixCtx = siblingMatch[1] ? siblingMatch[1] + ' ' : ''
-            const amount = siblingMatch[3]
-            const suffix = siblingMatch[4] || ''
+            const prefixCtx = siblingMatch[1] ? siblingMatch[1] + ' ' : '';
+            const amount = siblingMatch[3];
+            const suffix = siblingMatch[4] || '';
             const siblingNumbers = [
                 '01', '12', '23', '34', '45', '56', '67', '78', '89', '90',
                 '10', '21', '32', '43', '54', '65', '76', '87', '98', '09'
-            ]
+            ];
             for (const num of siblingNumbers) {
-                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`)
+                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
             }
-            continue
+            continue;
         }
-
-        // --- Step 0.1.2: Handle "คู่คี่/คู่คี" (คู่คี่ [เงิน], คู่คี่=[เงิน], คู่คี [เงิน], คู่คี=[เงิน]) ---
-        const evenOddMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(คู่คี่|คู่คี)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i)
+        const evenOddMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(คู่คี่|คู่คี)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
         if (evenOddMatch) {
-            const prefixCtx = evenOddMatch[1] ? evenOddMatch[1] + ' ' : ''
-            const amount = evenOddMatch[3]
-            const suffix = evenOddMatch[4] || ''
+            const prefixCtx = evenOddMatch[1] ? evenOddMatch[1] + ' ' : '';
+            const amount = evenOddMatch[3];
+            const suffix = evenOddMatch[4] || '';
             const evenOddNumbers = [
                 '98', '96', '94', '92', '90',
                 '89', '87', '85', '83', '81',
@@ -341,1575 +330,1136 @@ function expandLines(rawLines, lotteryType = 'lao', settings = {}) {
                 '29', '27', '25', '23', '21',
                 '18', '16', '14', '12', '10',
                 '09', '07', '05', '03', '01'
-            ]
+            ];
             for (const num of evenOddNumbers) {
-                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`)
+                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
             }
-            continue
+            continue;
         }
-
-        // --- Step 0.1.3: Handle "คู่คู่/คู่คู" (คู่คู่ [เงิน], คู่คู่=[เงิน], คู่คู [เงิน], คู่คู=[เงิน]) ---
-        const evenEvenMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(คู่คู่|คู่คู)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i)
+        const evenEvenMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(คู่คู่|คู่คู)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
         if (evenEvenMatch) {
-            const prefixCtx = evenEvenMatch[1] ? evenEvenMatch[1] + ' ' : ''
-            const amount = evenEvenMatch[3]
-            const suffix = evenEvenMatch[4] || ''
+            const prefixCtx = evenEvenMatch[1] ? evenEvenMatch[1] + ' ' : '';
+            const amount = evenEvenMatch[3];
+            const suffix = evenEvenMatch[4] || '';
             const evenEvenNumbers = [
                 '88', '86', '84', '82', '80',
                 '68', '66', '64', '62', '60',
                 '48', '46', '44', '42', '40',
                 '28', '26', '24', '22', '20',
                 '08', '06', '04', '02', '00'
-            ]
+            ];
             for (const num of evenEvenNumbers) {
-                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`)
+                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
             }
-            continue
+            continue;
         }
-
-        // --- Step 0.1.4: Handle "คี่คี่/คี่คี" (คี่คี่ [เงิน], คี่คี่=[เงิน], คี่คี [เงิน], คี่คี=[เงิน]) ---
-        const oddOddMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(คี่คี่|คี่คี)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i)
+        const oddOddMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(คี่คี่|คี่คี)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
         if (oddOddMatch) {
-            const prefixCtx = oddOddMatch[1] ? oddOddMatch[1] + ' ' : ''
-            const amount = oddOddMatch[3]
-            const suffix = oddOddMatch[4] || ''
+            const prefixCtx = oddOddMatch[1] ? oddOddMatch[1] + ' ' : '';
+            const amount = oddOddMatch[3];
+            const suffix = oddOddMatch[4] || '';
             const oddOddNumbers = [
                 '99', '97', '95', '93', '91',
                 '79', '77', '75', '73', '71',
                 '59', '57', '55', '53', '51',
                 '39', '37', '35', '33', '31',
                 '19', '17', '15', '13', '11'
-            ]
+            ];
             for (const num of oddOddNumbers) {
-                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`)
+                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
             }
-            continue
+            continue;
         }
-
-        // --- Step 0.1.6: Handle "วิน/วินกลับ/วินเบิ้ล" (วิน 12345 20, วินกลับ 12345=20, วินเบิ้ล 12345 20) ---
-        const winMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(วินกลับ|วินเบิ้ล|วิน)\s*(\d{2,10})\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i)
+        const winMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(วินกลับ|วินเบิ้ล|วิน)\s*(\d{2,10})\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
         if (winMatch) {
-            const prefixCtx = winMatch[1] ? winMatch[1] + ' ' : ''
-            const winType = winMatch[2].toLowerCase()
-            const digitStr = winMatch[3]
-            const amount = winMatch[4]
-            const suffix = winMatch[5] || ''
-            
-            const digits = [...new Set(digitStr.split(''))]
-            const winNumbers = []
-            
+            const prefixCtx = winMatch[1] ? winMatch[1] + ' ' : '';
+            const winType = winMatch[2].toLowerCase();
+            const digitStr = winMatch[3];
+            const amount = winMatch[4];
+            const suffix = winMatch[5] || '';
+            const digits = [...new Set(digitStr.split(''))];
+            const winNumbers = [];
             if (winType === 'วิน') {
                 for (let i = 0; i < digits.length; i++) {
                     for (let j = i + 1; j < digits.length; j++) {
-                        winNumbers.push(digits[i] + digits[j])
+                        winNumbers.push(digits[i] + digits[j]);
                     }
                 }
-            } else {
-                // winType is 'วินกลับ' or 'วินเบิ้ล' -> generate both direct and reverse pairs
+            }
+            else {
                 for (let i = 0; i < digits.length; i++) {
                     for (let j = i + 1; j < digits.length; j++) {
-                        winNumbers.push(digits[i] + digits[j])
-                        winNumbers.push(digits[j] + digits[i])
+                        winNumbers.push(digits[i] + digits[j]);
+                        winNumbers.push(digits[j] + digits[i]);
                     }
                 }
             }
-            
             for (const num of winNumbers) {
-                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`)
+                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
             }
-            continue
+            continue;
         }
-
-        // --- Step 0.1.7: Handle "หาง" (หาง 1=20, หาง 1 20, 19หาง 1=20) ---
-        const hangMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(19\s*หาง|หาง)\s*(\d)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i)
+        const hangMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(19\s*หาง|หาง)\s*(\d)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
         if (hangMatch) {
-            const prefixCtx = hangMatch[1] ? hangMatch[1] + ' ' : ''
-            const fixedDigit = hangMatch[3]
-            const amount = hangMatch[4]
-            const suffix = hangMatch[5] || ''
-            const hangNumbers = []
-            
-            // 1. Front fixed (e.g. 10, 11, 12, ..., 19)
+            const prefixCtx = hangMatch[1] ? hangMatch[1] + ' ' : '';
+            const fixedDigit = hangMatch[3];
+            const amount = hangMatch[4];
+            const suffix = hangMatch[5] || '';
+            const hangNumbers = [];
             for (let d = 0; d <= 9; d++) {
-                hangNumbers.push(`${fixedDigit}${d}`)
+                hangNumbers.push(`${fixedDigit}${d}`);
             }
-            // 2. Back fixed (e.g. 01, 21, ..., 91) - skip double to keep it 19 unique numbers
             for (let d = 0; d <= 9; d++) {
                 if (String(d) !== fixedDigit) {
-                    hangNumbers.push(`${d}${fixedDigit}`)
+                    hangNumbers.push(`${d}${fixedDigit}`);
                 }
             }
-            
             for (const num of hangNumbers) {
-                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`)
+                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
             }
-            continue
+            continue;
         }
-
-        // --- Step 0.1.5: Handle "เลขคู่/เลขเบิ้ล" (คู่ [เงิน], เลขคู่ [เงิน], คู่=[เงิน], เลขคู่=[เงิน], เบิ้ล [เงิน], เบิ้ล=[เงิน], เลขเบิ้ล [เงิน], เลขเบิ้ล=[เงิน]) ---
-        const doubleMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(เลขคู่|คู่|เลขเบิ้ล|เบิ้ล)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i)
+        const doubleMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(เลขคู่|คู่|เลขเบิ้ล|เบิ้ล)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
         if (doubleMatch) {
-            const prefixCtx = doubleMatch[1] ? doubleMatch[1] + ' ' : ''
-            const amount = doubleMatch[3]
-            const suffix = doubleMatch[4] || ''
+            const prefixCtx = doubleMatch[1] ? doubleMatch[1] + ' ' : '';
+            const amount = doubleMatch[3];
+            const suffix = doubleMatch[4] || '';
             const doubleNumbers = [
                 '00', '11', '22', '33', '44', '55', '66', '77', '88', '99'
-            ]
+            ];
             for (const num of doubleNumbers) {
-                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`)
+                expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
             }
-            continue
+            continue;
         }
-
-        // --- Step 0.2: Handle "หน้าหลัง" (นห[เลข] [เงิน], หน้าหลัง[เลข] [เงิน], น้าหลัง[เลข] [เงิน]) ---
-        const rudBothMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(หน้าหลัง|น้าหลัง|นห)\s*(\d)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i)
+        const rudBothMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(หน้าหลัง|น้าหลัง|นห)\s*(\d)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
         if (rudBothMatch) {
-            const prefixCtx = rudBothMatch[1] ? rudBothMatch[1] + ' ' : ''
-            const fixedDigit = rudBothMatch[3]
-            const amount = rudBothMatch[4]
-            const suffix = rudBothMatch[5] || ''
-            // 1. Front fixed
+            const prefixCtx = rudBothMatch[1] ? rudBothMatch[1] + ' ' : '';
+            const fixedDigit = rudBothMatch[3];
+            const amount = rudBothMatch[4];
+            const suffix = rudBothMatch[5] || '';
             for (let d = 0; d <= 9; d++) {
-                expanded.push(`${prefixCtx}${fixedDigit}${d}=${amount}${suffix}`)
+                expanded.push(`${prefixCtx}${fixedDigit}${d}=${amount}${suffix}`);
             }
-            // 2. Back fixed
             for (let d = 0; d <= 9; d++) {
-                expanded.push(`${prefixCtx}${d}${fixedDigit}=${amount}${suffix}`)
+                expanded.push(`${prefixCtx}${d}${fixedDigit}=${amount}${suffix}`);
             }
-            continue
+            continue;
         }
-
-        // --- Step 0.3: Handle "รูดหน้า" (น[เลข] [เงิน], หน้า[เลข] [เงิน], รูดหน้า[เลข] [เงิน]) ---
-        const rudNaMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(รูดหน้า|หน้า|น้า|น)\s*(\d)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i)
+        const rudNaMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(รูดหน้า|หน้า|น้า|(?<!บ)น)\s*(\d)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
         if (rudNaMatch) {
-            const prefixCtx = rudNaMatch[1] ? rudNaMatch[1] + ' ' : ''
-            const fixedDigit = rudNaMatch[3]
-            const amount = rudNaMatch[4]
-            const suffix = rudNaMatch[5] || ''
+            const prefixCtx = rudNaMatch[1] ? rudNaMatch[1] + ' ' : '';
+            const fixedDigit = rudNaMatch[3];
+            const amount = rudNaMatch[4];
+            const suffix = rudNaMatch[5] || '';
             for (let d = 0; d <= 9; d++) {
-                expanded.push(`${prefixCtx}${fixedDigit}${d}=${amount}${suffix}`)
+                expanded.push(`${prefixCtx}${fixedDigit}${d}=${amount}${suffix}`);
             }
-            continue
+            continue;
         }
-
-        // --- Step 0.4: Handle "รูดหลัง" (ห[เลข] [เงิน], หลัง[เลข] [เงิน], ลัง[เลข] [เงิน], รูดหลัง[เลข] [เงิน]) ---
-        const rudLangMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(รูดหลัง|หลัง|ลัง|ห)\s*(\d)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i)
+        const rudLangMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(รูดหลัง|หลัง|ลัง|ห)\s*(\d)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);
         if (rudLangMatch) {
-            const prefixCtx = rudLangMatch[1] ? rudLangMatch[1] + ' ' : ''
-            const fixedDigit = rudLangMatch[3]
-            const amount = rudLangMatch[4]
-            const suffix = rudLangMatch[5] || ''
+            const prefixCtx = rudLangMatch[1] ? rudLangMatch[1] + ' ' : '';
+            const fixedDigit = rudLangMatch[3];
+            const amount = rudLangMatch[4];
+            const suffix = rudLangMatch[5] || '';
             for (let d = 0; d <= 9; d++) {
-                expanded.push(`${prefixCtx}${d}${fixedDigit}=${amount}${suffix}`)
+                expanded.push(`${prefixCtx}${d}${fixedDigit}=${amount}${suffix}`);
             }
-            continue
+            continue;
         }
-
-        // --- Step 0.5: Split multi-bet lines (copied from PDF grid) ---
-        const eqCount = (trimmed.match(/[=:]/g) || []).length
+        const eqCount = (trimmed.match(/[=:]/g) || []).length;
         if (eqCount >= 2) {
             const subLines = trimmed.split(/\s+(?=[ก-๛a-zA-Z0-9]*\d+\s*[=:])/);
             if (subLines.length > 1) {
                 for (const subLine of subLines) {
-                    const subTrimmed = subLine.trim()
+                    const subTrimmed = subLine.trim();
                     if (subTrimmed) {
-                        const subExpanded = expandLines([subTrimmed])
-                        expanded.push(...subExpanded)
+                        const subExpanded = expandLines([subTrimmed]);
+                        expanded.push(...subExpanded);
                     }
                 }
-                continue
+                continue;
             }
         }
-
-        // --- Step 1: Normalize "ต" / "t" between amounts to "*" ---
-        // "123=50 ต 50" → "123=50*50", "456=20t20" → "456=20*20"
-        line = line.replace(/(\d)\s*[tTตt]\s*(\d)/g, '$1*$2')
-
-        // --- Step 1.5: If line has slashes but no =, try to detect trailing amount ---
+        line = line.replace(/(\d)\s*[tTตt]\s*(\d)/g, '$1*$2');
         if (!line.includes('=') && line.includes('/')) {
-            const tokens = line.split('/')
-            const amountIdx = findAmountIndex(tokens)
+            const tokens = line.split('/');
+            const amountIdx = findAmountIndex(tokens);
             if (amountIdx > 0) {
-                const numsPart = tokens.slice(0, amountIdx).join('/')
-                const amtPart = tokens.slice(amountIdx).join('/')
-                line = `${numsPart}=${amtPart}`
+                const numsPart = tokens.slice(0, amountIdx).join('/');
+                const amtPart = tokens.slice(amountIdx).join('/');
+                line = `${numsPart}=${amtPart}`;
             }
         }
-
-        // --- Step 2: Normalize "/" and "+" between amounts to "*" ---
-        // Only AFTER = sign: "789=50/50" → "789=50*50", "587=20+20" → "587=20*20"
-        // Also handle space-separated: "174 10-10" → handled later in parseNumberLine
         if (line.includes('=')) {
-            const eqIdx = line.indexOf('=')
-            const beforeEq = line.substring(0, eqIdx)
-            let afterEq = line.substring(eqIdx + 1)
-            // Strip commas in amounts after = (formatted numbers like 1,000)
-            afterEq = afterEq.replace(/(\d),(\d{3})/g, '$1$2')
-            // Normalize / and + between digit groups in amount part to *
-            afterEq = afterEq.replace(/(\d)\s*[/+]\s*(\d)/g, '$1*$2')
-            line = beforeEq + '=' + afterEq
+            const eqIdx = line.indexOf('=');
+            const beforeEq = line.substring(0, eqIdx);
+            let afterEq = line.substring(eqIdx + 1);
+            afterEq = afterEq.replace(/(\d),(\d{3})/g, '$1$2');
+            afterEq = afterEq.replace(/(\d)\s*[/+]\s*(\d)/g, '$1*$2');
+            line = beforeEq + '=' + afterEq;
         }
-
-        // --- Step 2.7: Convert (numbers and separators) * (amount) to = format ---
-        // e.g. "48,26*50" -> "48,26=50", "48'26*50" -> "48'26=50"
         if (!line.includes('=')) {
-            const starBetMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*)?([\d,/\-')]+)\s*[*×xX]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?(?:\s*ชุด)?)(.*)$/i)
+            const starBetMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*)?([\d,/\-')]+)\s*[*×xX]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?(?:\s*ชุด)?)(.*)$/i);
             if (starBetMatch) {
-                const prefixCtx = starBetMatch[1] ? starBetMatch[1] + ' ' : ''
-                let numsPart = starBetMatch[2].trim()
-                // Strip trailing quote/separators from numsPart
-                numsPart = numsPart.replace(/[,/\-')]+$/, '')
-                const amt = starBetMatch[3].trim()
-                const suffix = starBetMatch[4] || ''
-                
-                // If numsPart contains any list separator, split it and keep the '*' separator
-                // so that recursive expansion can trigger auto-reversion/permutation rules!
+                const prefixCtx = starBetMatch[1] ? starBetMatch[1] + ' ' : '';
+                let numsPart = starBetMatch[2].trim();
+                numsPart = numsPart.replace(/[,/\-')]+$/, '');
+                const amt = starBetMatch[3].trim();
+                const suffix = starBetMatch[4] || '';
                 if (/[,/\-')]/.test(numsPart)) {
-                    const numTokens = numsPart.split(/[,/\-')]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s))
+                    const numTokens = numsPart.split(/[,/\-')]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s));
                     if (numTokens.length >= 2) {
-                        const subLines = numTokens.map(num => `${prefixCtx}${num}*${amt}${suffix}`)
-                        const subExpanded = expandLines(subLines, lotteryType, settings)
-                        expanded.push(...subExpanded)
-                        continue
+                        const subLines = numTokens.map(num => `${prefixCtx}${num}*${amt}${suffix}`);
+                        const subExpanded = expandLines(subLines, lotteryType, settings);
+                        expanded.push(...subExpanded);
+                        continue;
                     }
                 }
-                
-                // Otherwise (single number), convert to standard '=' format
-                // If it had a trailing separator and we cleaned it, re-expand to trigger auto-reversion rules!
                 if (numsPart !== starBetMatch[2].trim()) {
-                    const subExpanded = expandLines([`${prefixCtx}${numsPart}*${amt}${suffix}`], lotteryType, settings)
-                    expanded.push(...subExpanded)
-                    continue
+                    const subExpanded = expandLines([`${prefixCtx}${numsPart}*${amt}${suffix}`], lotteryType, settings);
+                    expanded.push(...subExpanded);
+                    continue;
                 }
-                line = `${prefixCtx}${numsPart}=${amt}${suffix}`
+                line = `${prefixCtx}${numsPart}=${amt}${suffix}`;
             }
         }
-
-        // --- Step 2.5: If the line is a bare list of numbers (with optional leading context prefix)
-        // split them into individual bare numbers so they can be buffered properly!
         if (!line.includes('=')) {
-            const prefixMatch = line.match(/^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*/i)
-            const prefix = prefixMatch ? prefixMatch[0] : ''
-            const rest = prefixMatch ? line.substring(prefix.length) : line
+            const prefixMatch = line.match(/^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*/i);
+            const prefix = prefixMatch ? prefixMatch[0] : '';
+            const rest = prefixMatch ? line.substring(prefix.length) : line;
             if (/^[\d,\s\-')]+$/.test(rest)) {
-                const hasComma = rest.includes(',')
-                const hasParen = rest.includes(')')
-                const hasQuote = rest.includes("'")
-                const hyphenCount = (rest.match(/-/g) || []).length
+                const hasComma = rest.includes(',');
+                const hasParen = rest.includes(')');
+                const hasQuote = rest.includes("'");
+                const hyphenCount = (rest.match(/-/g) || []).length;
                 if (hyphenCount === 1 && !hasComma && !hasParen && !hasQuote) {
-                    expanded.push(line)
-                    continue
+                    expanded.push(line);
+                    continue;
                 }
-
-                const numTokens = rest.split(/[,\-')]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s))
+                const numTokens = rest.split(/[,\-')]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s));
                 if (numTokens.length >= 2) {
-                    const firstLen = numTokens[0].length
-                    const allSameLen = numTokens.every(tok => tok.length === firstLen)
+                    const firstLen = numTokens[0].length;
+                    const allSameLen = numTokens.every(tok => tok.length === firstLen);
                     if (allSameLen) {
                         for (const num of numTokens) {
-                            expanded.push(`${prefix}${num}`)
+                            expanded.push(`${prefix}${num}`);
                         }
-                        continue
+                        continue;
                     }
                 }
             }
         }
-
-        // --- Step 3: Check for comma/slash/dash/parenthesis-separated numbers BEFORE = or space+amount ---
-        // "บ05-50=20" → ["บ05=20", "บ50=20"]
-        // "123,456,712=10*ชุด" → ["123=10*ชุด", "456=10*ชุด", "712=10*ชุด"]
-        // "145/237/201/308=20*20" → ["145=20*20", "237=20*20", ...]
-        // "305)307)=50*ชุด" → ["305=50*ชุด", "307=50*ชุด"]
-        let didExpand = false
+        let didExpand = false;
         if (line.includes('=')) {
-            const eqIdx = line.indexOf('=')
-            const numsPart = line.substring(0, eqIdx).trim()
-            const amtPart = line.substring(eqIdx + 1).trim()
-            
-            const prefixMatch = numsPart.match(/^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*/i)
-            const prefix = prefixMatch ? prefixMatch[0] : ''
-            const cleanNumsPart = prefixMatch ? numsPart.substring(prefix.length) : numsPart
-
+            const eqIdx = line.indexOf('=');
+            const numsPart = line.substring(0, eqIdx).trim();
+            const amtPart = line.substring(eqIdx + 1).trim();
+            const prefixMatch = numsPart.match(/^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*/i);
+            const prefix = prefixMatch ? prefixMatch[0] : '';
+            const cleanNumsPart = prefixMatch ? numsPart.substring(prefix.length) : numsPart;
             if (/[,/\-')]/.test(cleanNumsPart)) {
-                const numTokens = cleanNumsPart.split(/[,/\-')]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s))
+                const numTokens = cleanNumsPart.split(/[,/\-')]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s));
                 if (numTokens.length >= 2) {
                     for (const num of numTokens) {
-                        expanded.push(`${prefix}${num}=${amtPart}`)
+                        expanded.push(`${prefix}${num}=${amtPart}`);
                     }
-                    didExpand = true
+                    didExpand = true;
                 }
             }
-        } else {
-            // No = sign: check for "nums space amount" pattern
-            // e.g., "123,456 20*20" or "บ05-50 20*20"
-            const spaceAmtMatch = line.match(/^((?:[ก-๛a-zA-Z.]+\s*)?[\d,/\-\s')]+?)\s+(\d+[*]\d+.*)$/)
+        }
+        else {
+            const spaceAmtMatch = line.match(/^((?:[ก-๛a-zA-Z.]+\s*)?[\d,/\-\s')]+?)\s+(\d+[*]\d+.*)$/);
             if (spaceAmtMatch) {
-                const numsPart = spaceAmtMatch[1].trim()
-                const amtPart = spaceAmtMatch[2].trim()
-
-                const prefixMatch = numsPart.match(/^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*/i)
-                const prefix = prefixMatch ? prefixMatch[0] : ''
-                const cleanNumsPart = prefixMatch ? numsPart.substring(prefix.length) : numsPart
-
+                const numsPart = spaceAmtMatch[1].trim();
+                const amtPart = spaceAmtMatch[2].trim();
+                const prefixMatch = numsPart.match(/^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*/i);
+                const prefix = prefixMatch ? prefixMatch[0] : '';
+                const cleanNumsPart = prefixMatch ? numsPart.substring(prefix.length) : numsPart;
                 if (/[,/\-')]/.test(cleanNumsPart)) {
-                    const numTokens = cleanNumsPart.split(/[,/\-')]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s))
+                    const numTokens = cleanNumsPart.split(/[,/\-')]/).map(s => s.trim()).filter(s => /^\d{1,5}$/.test(s));
                     if (numTokens.length >= 2) {
                         for (const num of numTokens) {
-                            expanded.push(`${prefix}${num}=${amtPart}`)
+                            expanded.push(`${prefix}${num}=${amtPart}`);
                         }
-                        didExpand = true
+                        didExpand = true;
                     }
                 }
             }
         }
-        if (didExpand) continue
-
-        // --- Step 4: Handle various separator formats without = sign ---
+        if (didExpand)
+            continue;
         if (!line.includes('=')) {
-            // Strip trailing dot/period after number: "579. 11-10" → "579 11-10"
-            line = line.replace(/^(\d{1,5})\.\s/, '$1 ')
-
-            // "741/20/20" → "741=20*20" (num/amt/amt triple)
-            const slashTriple = line.match(/^(\d{1,5})\s*\/\s*(\d+)\s*\/\s*(\d+)$/)
+            line = line.replace(/^(\d{1,5})\.\s/, '$1 ');
+            const slashTriple = line.match(/^(\d{1,5})\s*\/\s*(\d+)\s*\/\s*(\d+)$/);
             if (slashTriple) {
-                line = `${slashTriple[1]}=${slashTriple[2]}*${slashTriple[3]}`
-            } else {
-                // Normalize -, /, +, : between amounts in space-separated format:
-                // "736 11-10" → "736 11*10", "52 20/20" → "52 20*20", "87 20+20" → "87 20*20", "713 33:20" → "713 33*20"
-                line = line.replace(/^(\d{1,5}\.?\s+\d+)\s*[\-/+:]\s*(\d+)/, '$1*$2')
+                line = `${slashTriple[1]}=${slashTriple[2]}*${slashTriple[3]}`;
+            }
+            else {
+                line = line.replace(/^(\d{1,5}\.?\s+\d+)\s*[\-/+:]\s*(\d+)/, '$1*$2');
             }
         }
-
-        expanded.push(line)
+        expanded.push(line);
     }
-    return expanded
+    return expanded;
 }
-
-export function parseMultiLinePaste(text, lotteryType = 'lao', settings = {}) {
-    if (!text || !text.trim()) return []
-
-    const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
-    const rawLines = text.split('\n')
-    // Pre-process: expand lines with comma/slash-separated numbers and normalize amounts
-    const lines = expandLines(rawLines, lotteryType, settings)
-    const results = []
-    let contextMode = 'top' // default: บน
-    let bareNumberBuffer = [] // accumulate bare numbers waiting for a trailing amount line
-    let lastProcessedNumLen = null // track length of last processed number
-
-    /**
-     * Flush bare number buffer: process each number individually (no trailing amount found).
-     * For lao/hanoi 4-digit bare numbers → 4_set=1, others get skipped if no amount.
-     */
+export function parseMultiLinePaste(text, lotteryType = 'lao', settings) {
+    if (!text || !text.trim())
+        return [];
+    const filteredText = text.replace(/(?<!\d)5{3,}\+*(?!\d)(?!\s*([=\*xX×tTต\-/]|\d|\+\s*\d))/g, '');
+    const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType);
+    const rawLines = filteredText.split('\n');
+    const lines = expandLines(rawLines, lotteryType, settings);
+    const results = [];
+    let contextMode = 'top';
+    let bareNumberBuffer = [];
+    let lastProcessedNumLen = null;
     function flushBareBuffer() {
         for (const bareNum of bareNumberBuffer) {
-            const parsed = parseNumberLine(bareNum, contextMode, isLaoOrHanoi, lotteryType)
+            const parsed = parseNumberLine(bareNum, contextMode, isLaoOrHanoi, lotteryType, settings);
             if (parsed) {
                 if (contextMode === 'both') {
-                    results.push(...emitBoth(bareNum, isLaoOrHanoi, lotteryType))
-                } else {
-                    results.push(...parsed)
+                    results.push(...emitBoth(bareNum, isLaoOrHanoi, lotteryType, settings));
+                }
+                else {
+                    results.push(...parsed);
                 }
             }
         }
-        bareNumberBuffer = []
+        bareNumberBuffer = [];
     }
-
-    /**
-     * Apply an amount string to all buffered bare numbers, then clear the buffer.
-     */
     function applyAmountToBuffer(amountStr, mode) {
-        const ctx = mode || contextMode
-        if (DEBUG_PASTE) console.log(`[applyAmountToBuffer] amountStr="${amountStr}" mode=${mode} ctx=${ctx} buffer=[${bareNumberBuffer.join(',')}]`)
+        const ctx = mode || contextMode;
         for (const bareNum of bareNumberBuffer) {
-            const synthLine = `${bareNum}=${amountStr}`
+            const synthLine = `${bareNum}=${amountStr}`;
             if (ctx === 'both') {
-                const bothEntries = emitBoth(synthLine, isLaoOrHanoi, lotteryType)
-                if (DEBUG_PASTE) console.log(`[applyAmountToBuffer] emitBoth("${synthLine}") → ${bothEntries.length} entries:`, bothEntries.map(e => e.formattedLine))
-                results.push(...bothEntries)
-            } else {
-                const parsed = parseNumberLine(synthLine, ctx, isLaoOrHanoi, lotteryType)
-                if (parsed) results.push(...parsed)
+                const bothEntries = emitBoth(synthLine, isLaoOrHanoi, lotteryType, settings);
+                results.push(...bothEntries);
+            }
+            else {
+                const parsed = parseNumberLine(synthLine, ctx, isLaoOrHanoi, lotteryType, settings);
+                if (parsed)
+                    results.push(...parsed);
             }
         }
-        bareNumberBuffer = []
+        bareNumberBuffer = [];
     }
-
     for (let i = 0; i < lines.length; i++) {
-        const trimmed = normalizeUnicode(lines[i].trim())
-        if (!trimmed) continue
-
-        if (DEBUG_PASTE) console.log(`[pasteParser] Line ${i}: "${trimmed}" | buffer=[${bareNumberBuffer.join(',')}] | contextMode=${contextMode}`)
-
-        // Check if this line is a context-setting line (บน/ล่าง/บนล่าง)
-        const modeResult = parseContextLine(trimmed)
+        const trimmed = normalizeUnicode(lines[i].trim());
+        if (!trimmed)
+            continue;
+        const modeResult = parseContextLine(trimmed);
         if (modeResult !== null) {
-            if (DEBUG_PASTE) console.log(`[pasteParser]   → context line: ${modeResult}`)
-            // Flush pending bare numbers before switching context
-            if (bareNumberBuffer.length > 0) flushBareBuffer()
-            contextMode = modeResult
-            continue
+            if (bareNumberBuffer.length > 0)
+                flushBareBuffer();
+            contextMode = modeResult;
+            continue;
         }
-
-        // Check if this is a bare number line (digits only, 1-5 digits)
         if (isBareNumberLine(trimmed)) {
-            if (DEBUG_PASTE) console.log(`[pasteParser]   → bare number, added to buffer`)
-            const currentNumLen = trimmed.length
+            const currentNumLen = trimmed.length;
             if (currentNumLen === 3 && lastProcessedNumLen !== null && lastProcessedNumLen !== 3) {
                 if (['float_top', 'float_bottom'].includes(contextMode)) {
-                    contextMode = 'top'
+                    contextMode = 'top';
                 }
             }
-            lastProcessedNumLen = currentNumLen
-            bareNumberBuffer.push(trimmed)
-            continue
+            lastProcessedNumLen = currentNumLen;
+            bareNumberBuffer.push(trimmed);
+            continue;
         }
-
-        // Strip prefix noise (timestamps, Thai names, etc.) and re-check
-        const stripped = stripPrefixNoise(trimmed)
-        let lineToProcess = stripped || trimmed
-        const digitMatches = lineToProcess.match(/\d+/g) || []
+        const stripped = stripPrefixNoise(trimmed);
+        let lineToProcess = stripped || trimmed;
+        const digitMatches = lineToProcess.match(/\d+/g) || [];
         if (digitMatches.length === 1 && /^\d+/.test(lineToProcess)) {
-            const hasEquals = lineToProcess.includes('=') || lineToProcess.includes(':')
-            const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19\s*หาง|หาง/.test(lineToProcess) || 
-                                   /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(lineToProcess)
+            const hasEquals = lineToProcess.includes('=') || lineToProcess.includes(':');
+            const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19\s*หาง|หาง/.test(lineToProcess) ||
+                /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(lineToProcess);
             if (!hasEquals && !hasBetKeywords) {
-                // If it contains letters (Thai/English), skip it completely as text/noise
                 if (/[ก-๛a-zA-Z]/.test(lineToProcess)) {
-                    continue
+                    continue;
                 }
-                lineToProcess = digitMatches[0]
+                lineToProcess = digitMatches[0];
             }
         }
-        if (DEBUG_PASTE) console.log(`[pasteParser]   → stripped: "${stripped}" from "${trimmed}", lineToProcess: "${lineToProcess}"`)
-
-        // After stripping noise, re-check if the result is a context line
-        // e.g. "12:48 ไอซ์(ร้านตัดผม) ล่าง" → stripped still has noise but ends with "ล่าง"
-        const strippedMode = parseContextLine(stripped)
+        const strippedMode = parseContextLine(stripped);
         if (strippedMode !== null) {
-            if (DEBUG_PASTE) console.log(`[pasteParser]   → stripped to context line: ${strippedMode}`)
-            if (bareNumberBuffer.length > 0) flushBareBuffer()
-            contextMode = strippedMode
-            continue
+            if (bareNumberBuffer.length > 0)
+                flushBareBuffer();
+            contextMode = strippedMode;
+            continue;
         }
-        // Also check if the original line ends with a trailing context keyword (after noise)
-        const trailingCtx = extractTrailingContext(trimmed)
+        const trailingCtx = extractTrailingContext(trimmed);
         if (trailingCtx !== null) {
-            if (DEBUG_PASTE) console.log(`[pasteParser]   → trailing context detected: ${trailingCtx}`)
-            if (bareNumberBuffer.length > 0) flushBareBuffer()
-            contextMode = trailingCtx
-            continue
+            if (bareNumberBuffer.length > 0)
+                flushBareBuffer();
+            contextMode = trailingCtx;
+            continue;
         }
-
-        // After stripping noise, the cleaned line might be a bare number
         if (lineToProcess && isBareNumberLine(lineToProcess)) {
-            if (DEBUG_PASTE) console.log(`[pasteParser]   → lineToProcess to bare number, added to buffer`)
-            const currentNumLen = lineToProcess.length
+            const currentNumLen = lineToProcess.length;
             if (currentNumLen === 3 && lastProcessedNumLen !== null && lastProcessedNumLen !== 3) {
                 if (['float_top', 'float_bottom'].includes(contextMode)) {
-                    contextMode = 'top'
+                    contextMode = 'top';
                 }
             }
-            lastProcessedNumLen = currentNumLen
-            bareNumberBuffer.push(lineToProcess)
-            continue
+            lastProcessedNumLen = currentNumLen;
+            bareNumberBuffer.push(lineToProcess);
+            continue;
         }
-
-        // Not a bare number — check if it can resolve the buffer
         if (bareNumberBuffer.length > 0) {
-            // Try to extract amount info from this line (try ORIGINAL first to preserve context like บล, fallback to stripped)
-            const amountInfo = extractAmountFromLine(trimmed) || extractAmountFromLine(lineToProcess)
-            if (DEBUG_PASTE) console.log(`[pasteParser]   → extractAmountFromLine:`, JSON.stringify(amountInfo))
+            const amountInfo = extractAmountFromLine(trimmed) || extractAmountFromLine(lineToProcess);
             if (amountInfo) {
-                // If this line also has its own number, add it to the buffer first
                 if (amountInfo.number) {
-                    const currentNumLen = amountInfo.number.length
+                    const currentNumLen = amountInfo.number.length;
                     if (currentNumLen === 3 && lastProcessedNumLen !== null && lastProcessedNumLen !== 3) {
                         if (['float_top', 'float_bottom'].includes(contextMode)) {
-                            contextMode = 'top'
+                            contextMode = 'top';
                         }
                     }
-                    lastProcessedNumLen = currentNumLen
-                    bareNumberBuffer.push(amountInfo.number)
+                    lastProcessedNumLen = currentNumLen;
+                    bareNumberBuffer.push(amountInfo.number);
                 }
-                applyAmountToBuffer(amountInfo.amountStr, amountInfo.mode)
-                continue
+                applyAmountToBuffer(amountInfo.amountStr, amountInfo.mode);
+                continue;
             }
-            // This line is not an amount line — flush buffer individually first
-            if (DEBUG_PASTE) console.log(`[pasteParser]   → flushing buffer (no amount found)`)
-            flushBareBuffer()
+            flushBareBuffer();
         }
-
-        // Process as a normal number+amount line
-        // IMPORTANT: Check inline context from ORIGINAL line first (before stripping noise)
-        // because stripPrefixNoise removes Thai text like "ล่าง" which is a context keyword.
-        let processLine = (stripped && stripped !== trimmed) ? stripped : trimmed
-
-        // Auto-reset context: when contextMode is 'bottom' or 'both' and we encounter a 3+ digit number,
-        // reset to 'top' because 'bottom'/'both' context only applies to 1-2 digit numbers.
-        // This handles cases like: "ล่าง 25=20*20 / 36=10*10 / 123=10*6 / 48=20" where
-        // 123 and 48 should be treated as top (คูณชุด / บน) not bottom.
+        let processLine = (stripped && stripped !== trimmed) ? stripped : trimmed;
         if (contextMode === 'bottom' || contextMode === 'both') {
-            const numMatch = (processLine || '').match(/^(\d+)/)
+            const numMatch = (processLine || '').match(/^(\d+)/);
             if (numMatch && numMatch[1].length >= 3) {
-                if (DEBUG_PASTE) console.log(`[pasteParser]   → auto-reset context from '${contextMode}' to 'top' (${numMatch[1].length}-digit number)`)
-                contextMode = 'top'
+                contextMode = 'top';
             }
         }
-
-        // Auto-reset context from float to 'top' when encountering a 3-digit number
-        // and the previous processed number was NOT 3-digit.
-        const numMatch = (processLine || '').match(/^(\d+)/)
+        const numMatch = (processLine || '').match(/^(\d+)/);
         if (numMatch) {
-            const currentNumLen = numMatch[1].length
+            const currentNumLen = numMatch[1].length;
             if (currentNumLen === 3 && lastProcessedNumLen !== null && lastProcessedNumLen !== 3) {
                 if (['float_top', 'float_bottom'].includes(contextMode)) {
-                    if (DEBUG_PASTE) console.log(`[pasteParser]   → auto-reset context from '${contextMode}' to 'top' (3-digit number after non-3-digit)`)
-                    contextMode = 'top'
+                    contextMode = 'top';
                 }
             }
-            lastProcessedNumLen = currentNumLen
+            lastProcessedNumLen = currentNumLen;
         }
-
-        let lineCtx = getLineEffectiveContext(processLine, contextMode)
-        // If stripped version lost context, try extracting from original trimmed line
+        let lineCtx = getLineEffectiveContext(processLine, contextMode);
         if (lineCtx === contextMode && stripped && stripped !== trimmed) {
-            const origCtx = getLineEffectiveContext(trimmed, contextMode)
+            const origCtx = getLineEffectiveContext(trimmed, contextMode);
             if (origCtx !== contextMode) {
-                lineCtx = origCtx
-                // Also use the cleaned line from extractInlineContext on the original
-                const origInline = extractInlineContext(trimmed)
+                lineCtx = origCtx;
+                const origInline = extractInlineContext(trimmed);
                 if (origInline.mode) {
-                    processLine = origInline.cleaned
+                    processLine = origInline.cleaned;
                 }
             }
         }
-
-        // When a line has an explicit inline context (anywhere in the line — prefix, suffix,
-        // middle, attached to number/amount), update contextMode so subsequent lines inherit it.
-        // This makes "ล่าง 25=20*20" or "25=20*20 ล่าง" or "25 ล่าง 20*20" etc.
-        // all set contextMode to 'bottom' for following 1-2 digit lines.
         if (lineCtx !== contextMode) {
-            if (DEBUG_PASTE) console.log(`[pasteParser]   → inline context updates contextMode: ${contextMode} → ${lineCtx}`)
-            contextMode = lineCtx
+            contextMode = lineCtx;
         }
-
-        if (DEBUG_PASTE) console.log(`[pasteParser]   → normal line: "${processLine}", lineCtx=${lineCtx}`)
         if (lineCtx === 'both') {
-            const bothResults = emitBoth(processLine, isLaoOrHanoi, lotteryType)
-            if (DEBUG_PASTE) console.log(`[pasteParser]   → emitBoth produced ${bothResults.length} entries`)
-            results.push(...bothResults)
-        } else {
-            const parsed = parseNumberLine(processLine, lineCtx, isLaoOrHanoi, lotteryType)
-            if (DEBUG_PASTE) console.log(`[pasteParser]   → parseNumberLine produced ${parsed ? parsed.length : 0} entries`)
-            if (parsed) results.push(...parsed)
+            const bothResults = emitBoth(processLine, isLaoOrHanoi, lotteryType, settings);
+            results.push(...bothResults);
+        }
+        else {
+            const parsed = parseNumberLine(processLine, lineCtx, isLaoOrHanoi, lotteryType, settings);
+            if (parsed)
+                results.push(...parsed);
         }
     }
-
-    // Flush remaining bare numbers at end of input
-    if (bareNumberBuffer.length > 0) flushBareBuffer()
-
-    return results
+    if (bareNumberBuffer.length > 0)
+        flushBareBuffer();
+    return results;
 }
-
-/**
- * Check if a line is a conversational sentence with only a single set of numbers.
- * E.g. "มีลูกค้าโอนทะลุไปออกนั้น200" or "โอนแล้ว 200" or "ยอด 500" should be ignored.
- */
 function isConversationalSingleNumberLine(line) {
-    const trimmed = line.trim()
-    const digitMatches = trimmed.match(/\d+/g) || []
+    const trimmed = line.trim();
+    const digitMatches = trimmed.match(/\d+/g) || [];
     if (digitMatches.length !== 1) {
-        return false
+        return false;
     }
-
-    // A single set of numbers on the same line as text is not a bet,
-    // unless it has an equals/colon sign or betting keywords.
-    const hasLetters = /[ก-๛a-zA-Z]/.test(trimmed)
+    const hasLetters = /[ก-๛a-zA-Z]/.test(trimmed);
     if (hasLetters) {
-        const hasEquals = trimmed.includes('=') || trimmed.includes(':')
-        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19\s*หาง|หาง/.test(trimmed) || 
-                               /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(trimmed)
+        const hasEquals = trimmed.includes('=') || trimmed.includes(':');
+        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19\s*หาง|หาง/.test(trimmed) ||
+            /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(trimmed);
         if (!hasEquals && !hasBetKeywords) {
-            return true
+            return true;
         }
     }
-
-    const numStr = digitMatches[0]
-    const textOnly = trimmed.replace(numStr, '').trim()
+    const numStr = digitMatches[0];
+    const textOnly = trimmed.replace(numStr, '').trim();
     if (textOnly.length === 0) {
-        return false
+        return false;
     }
-
-    let cleaned = textOnly.toLowerCase()
-    cleaned = cleaned.replace(/[\s.+\-*×xX\/=\(\)\[\]{}]/g, '')
-    cleaned = cleaned.replace(/ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บ\.?|ล\.?|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|ช|ซ|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19หาง|หาง/g, '')
-
+    let cleaned = textOnly.toLowerCase();
+    cleaned = cleaned.replace(/[\s.+\-*×xX\/=\(\)\[\]{}]/g, '');
+    cleaned = cleaned.replace(/ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บ\.?|ล\.?|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|ช|ซ|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19หาง|หาง/g, '');
     if (cleaned.length === 0) {
-        return false
+        return false;
     }
-
-    // New check: if the line has text followed by a single digit group, and contains no equals/colon or betting keywords, ignore it.
-    const textFirstMatch = trimmed.match(/^([ก-๛a-zA-Z\s\(\)\[\]{}#.]+?)\s*(\d+)$/)
+    const textFirstMatch = trimmed.match(/^([ก-๛a-zA-Z\s\(\)\[\]{}#.]+?)\s*(\d+)$/);
     if (textFirstMatch) {
-        const hasEquals = trimmed.includes('=') || trimmed.includes(':')
-        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19\s*หาง|หาง/.test(trimmed) || 
-                               /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(trimmed)
+        const hasEquals = trimmed.includes('=') || trimmed.includes(':');
+        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19\s*หาง|หาง/.test(trimmed) ||
+            /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(trimmed);
         if (!hasEquals && !hasBetKeywords) {
-            return true
+            return true;
         }
     }
-
     const conversationalKeywords = [
-        'โอน', 'จ่าย', 'ส่ง', 'เงิน', 'สลิป', 'แจ้ง', 'กิน', 'กาแฟ', 
-        'รวม', 'ยอด', 'คะ', 'ค่ะ', 'ครับ', 'จ้า', 'ลูกค้า', 'ขอบคุณ', 
+        'โอน', 'จ่าย', 'ส่ง', 'เงิน', 'สลิป', 'แจ้ง', 'กิน', 'กาแฟ',
+        'รวม', 'ยอด', 'คะ', 'ค่ะ', 'ครับ', 'จ้า', 'ลูกค้า', 'ขอบคุณ',
         'ทะลุ', 'ออก', 'นั้น', 'นี้', 'แล้ว', 'ได้', 'มี', 'ไป', 'มา'
-    ]
-
-    const hasConversationalKeyword = conversationalKeywords.some(kw => cleaned.includes(kw))
+    ];
+    const hasConversationalKeyword = conversationalKeywords.some(kw => cleaned.includes(kw));
     if (hasConversationalKeyword || cleaned.length > 10) {
-        return true
+        return true;
     }
-
-    return false
+    return false;
 }
-
-/**
- * Check if a line is a bare number (digits only, no amount, no separators)
- */
 function isBareNumberLine(line) {
-    const trimmed = line.trim()
+    const trimmed = line.trim();
     if (trimmed.length === 4 && /^\d{4}$/.test(trimmed)) {
-        return false
+        return false;
     }
-    return /^\d{1,5}$/.test(trimmed)
+    return /^\d{1,5}$/.test(trimmed);
 }
-
-/**
- * Extract amount information from a non-bare line to apply to buffered bare numbers.
- * 
- * Returns { amountStr, mode, number } or null.
- *   - amountStr: the amount portion (e.g. "15*ชุด", "100", "20*20")
- *   - mode: 'top', 'bottom', 'both', or null (inherit from contextMode)
- *   - number: if this line has its own number (e.g. "395=15*ชุด" → number="395"), else null
- * 
- * Cases:
- *   "15*ชุด"         → { amountStr: "15*ชุด", number: null }
- *   "=100"           → { amountStr: "100", number: null }
- *   "20×20"          → { amountStr: "20×20", number: null }
- *   "20×20 บนล่าง"   → { amountStr: "20×20", mode: "both", number: null }
- *   "395=15*ชุด"     → { amountStr: "15*ชุด", number: "395" }
- *   "395 15*ชุด"     → { amountStr: "15*ชุด", number: "395" }
- *   "39=บล10*10"     → { amountStr: "10*10", mode: "both", number: "39" }
- */
 function extractAmountFromLine(line) {
-    let s = normalizeUnicode(line.trim())
-    // Strip optional trailing กลับ keyword
-    s = s.replace(/\s*(กลับ|กลับตัว|กลับด้วย)\s*$/, '').trim()
-    // --- Normalize ชุด variants: "20ชุด", "20 ชุด", "20-ชุด", "20+ชุด" → "20*ชุด" ---
-    s = s.replace(/(\d+)\s*[*×xX\-+]?\s*ชุด/g, '$1*ชุด')
-
-    // --- Normalize "ต" / "t" between amounts to "*": "50 ต 50" → "50*50", "20t20" → "20*20" ---
-    s = s.replace(/(\d)\s*[tTต]\s*(\d)/g, '$1*$2')
-    // --- Normalize "/" and "+" between amounts to "*": "50/50" → "50*50", "20+20" → "20*20" ---
-    s = s.replace(/(\d)\s*[/+]\s*(\d)/g, '$1*$2')
-    // --- Strip commas in formatted amounts: "1,000" → "1000" ---
-    s = s.replace(/(\d),(\d{3})/g, '$1$2')
-
-    // --- Extract trailing context suffix (วิ่ง/ลอย/โต๊ด/บนล่าง/ลบ/ล่างบน/บน/ล่าง etc.) ---
-    let mode = null
-    // Float suffix: "วิ่งล่าง", "ลอยล่าง" → float_bottom
-    const floatBotSuffix = s.match(/\s*(วิ่งล่าง|ลอยล่าง)\s*$/)
+    let s = normalizeUnicode(line.trim());
+    s = s.replace(/\s*(กลับ|กลับตัว|กลับด้วย)\s*$/, '').trim();
+    s = s.replace(/(\d+)\s*[*×xX\-+]?\s*ชุด/g, '$1*ชุด');
+    s = s.replace(/(\d)\s*[tTต]\s*(\d)/g, '$1*$2');
+    s = s.replace(/(\d)\s*[/+]\s*(\d)/g, '$1*$2');
+    s = s.replace(/(\d),(\d{3})/g, '$1$2');
+    let mode = null;
+    const floatBotSuffix = s.match(/\s*(วิ่งล่าง|ลอยล่าง)\s*$/);
     if (floatBotSuffix) {
-        mode = 'float_bottom'
-        s = s.slice(0, floatBotSuffix.index).trim()
+        mode = 'float_bottom';
+        s = s.slice(0, floatBotSuffix.index).trim();
     }
-    // Float suffix: "วิ่งบน", "ลอยบน", "วิ่ง", "ลอย", "โต๊ด", "โตด", "ต" → float_top
     if (!mode) {
-        const floatTopSuffix = s.match(/\s*(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?)\s*$/)
+        const floatTopSuffix = s.match(/\s*(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?)\s*$/);
         if (floatTopSuffix) {
-            mode = 'float_top'
-            s = s.slice(0, floatTopSuffix.index).trim()
+            mode = 'float_top';
+            s = s.slice(0, floatTopSuffix.index).trim();
         }
     }
     if (!mode) {
-        const bothSuffix = s.match(/\s*(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล\.?|ล[+\-]?บ\.?|บล\.?|ลบ\.?)\s*$/)
+        const bothSuffix = s.match(/\s*(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล\.?|ล[+\-]?บ\.?|บล\.?|ลบ\.?)\s*$/);
         if (bothSuffix) {
-            mode = 'both'
-            s = s.slice(0, bothSuffix.index).trim()
-        } else {
-            const singleCtx = s.match(/\s*(บน|บ\.?|ล่าง|ล\.?)\s*$/)
+            mode = 'both';
+            s = s.slice(0, bothSuffix.index).trim();
+        }
+        else {
+            const singleCtx = s.match(/\s*(บน|บ\.?|ล่าง|ล\.?)\s*$/);
             if (singleCtx) {
-                const modeStr = singleCtx[1].replace('.', '')
-                mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
-                s = s.slice(0, singleCtx.index).trim()
+                const modeStr = singleCtx[1].replace('.', '');
+                mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom';
+                s = s.slice(0, singleCtx.index).trim();
             }
         }
     }
-
-    const split = splitAmountAndTrailingText(s)
+    const split = splitAmountAndTrailingText(s);
     if (split) {
-        s = split.amountStr
+        s = split.amountStr;
     }
-
-    // --- Check for inline context prefix right after = (e.g. "39=บล10*10", "39=ลบ10*10") ---
-    const eqInlineMatch = s.match(/^(\d{1,5})\s*=\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(.+)$/)
+    const eqInlineMatch = s.match(/^(\d{1,5})\s*=\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(.+)$/);
     if (eqInlineMatch) {
-        return { amountStr: eqInlineMatch[3].trim(), mode: 'both', number: eqInlineMatch[1] }
+        return { amountStr: eqInlineMatch[3].trim(), mode: 'both', number: eqInlineMatch[1] };
     }
-
-    // --- Context prefix followed by = and amount (no number before =): "บนล่าง=10บาท", "บล=10", "บน=20" ---
-    const ctxEqMatch = s.match(/^(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*=\s*(.+)$/)
+    const ctxEqMatch = s.match(/^(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*=\s*(.+)$/);
     if (ctxEqMatch) {
-        const ctxStr = ctxEqMatch[1]
-        const amt = ctxEqMatch[2].trim()
+        const ctxStr = ctxEqMatch[1];
+        const amt = ctxEqMatch[2].trim();
         if (isAmountPattern(amt) || /^\d+$/.test(amt)) {
-            let mode = 'both'
-            if (/^(บน|บ)$/.test(ctxStr)) mode = 'top'
-            else if (/^(ล่าง|ล)$/.test(ctxStr)) mode = 'bottom'
-            return { amountStr: amt, mode, number: null }
+            let mode = 'both';
+            if (/^(บน|บ)$/.test(ctxStr))
+                mode = 'top';
+            else if (/^(ล่าง|ล)$/.test(ctxStr))
+                mode = 'bottom';
+            return { amountStr: amt, mode, number: null };
         }
     }
-
-    // --- Context prefix attached to amount (no =): "บล50*50", "89 บล50*50", "89=บล50*50" ---
-    // "both" prefix variants: บล, ลบ, บนล่าง, ล่างบน, บ+ล, ล+บ, etc.
-    const floatPrefixRe = /^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\.?\s*(\d.+)$/
-    const floatPrefixMatch = s.match(floatPrefixRe)
+    const floatPrefixRe = /^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\.?\s*(\d.+)$/;
+    const floatPrefixMatch = s.match(floatPrefixRe);
     if (floatPrefixMatch) {
-        const kw = floatPrefixMatch[1]
-        const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top'
-        const amt = floatPrefixMatch[2].trim()
+        const kw = floatPrefixMatch[1];
+        const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
+        const amt = floatPrefixMatch[2].trim();
         if (isAmountPattern(amt) || /^\d+$/.test(amt)) {
-            return { amountStr: amt, mode, number: null }
+            return { amountStr: amt, mode, number: null };
         }
     }
-
-    const bothPrefixRe = /^(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(\d.+)$/
-    const singlePrefixRe = /^(บน|บ|ล่าง|ล)\.?\s*(\d.+)$/
-
-    // Case: "number space/= contextAmount" e.g. "89 บล50*50" or "89=บล50*50"
-    const numCtxMatch = s.match(/^(\d{1,5})\s*[=\s]\s*((?:บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*\d.+)$/)
+    const bothPrefixRe = /^(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(\d.+)$/;
+    const singlePrefixRe = /^(บน|บ|ล่าง|ล)\.?\s*(\d.+)$/;
+    const numCtxMatch = s.match(/^(\d{1,5})\s*[=\s]\s*((?:บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*\d.+)$/);
     if (numCtxMatch) {
-        const ctxPart = numCtxMatch[2].trim()
-        const bothM = ctxPart.match(bothPrefixRe)
+        const ctxPart = numCtxMatch[2].trim();
+        const bothM = ctxPart.match(bothPrefixRe);
         if (bothM) {
-            const amt = bothM[2].trim()
-            if (isAmountPattern(amt)) return { amountStr: amt, mode: 'both', number: numCtxMatch[1] }
+            const amt = bothM[2].trim();
+            if (isAmountPattern(amt))
+                return { amountStr: amt, mode: 'both', number: numCtxMatch[1] };
         }
-        const singleM = ctxPart.match(singlePrefixRe)
+        const singleM = ctxPart.match(singlePrefixRe);
         if (singleM) {
-            const amt = singleM[2].trim()
-            const mStr = singleM[1]
-            const m = (mStr === 'บน' || mStr === 'บ') ? 'top' : 'bottom'
-            if (isAmountPattern(amt)) return { amountStr: amt, mode: m, number: numCtxMatch[1] }
+            const amt = singleM[2].trim();
+            const mStr = singleM[1];
+            const m = (mStr === 'บน' || mStr === 'บ') ? 'top' : 'bottom';
+            if (isAmountPattern(amt))
+                return { amountStr: amt, mode: m, number: numCtxMatch[1] };
         }
     }
-
-    // Case: pure context-prefixed amount (no number): "บล50*50", "บน20*20"
-    const pureBothM = s.match(bothPrefixRe)
+    const pureBothM = s.match(bothPrefixRe);
     if (pureBothM) {
-        const amt = pureBothM[2].trim()
-        if (isAmountPattern(amt)) return { amountStr: amt, mode: 'both', number: null }
+        const amt = pureBothM[2].trim();
+        if (isAmountPattern(amt))
+            return { amountStr: amt, mode: 'both', number: null };
     }
-    const pureSingleM = s.match(singlePrefixRe)
+    const pureSingleM = s.match(singlePrefixRe);
     if (pureSingleM) {
-        const amt = pureSingleM[2].trim()
-        const mStr = pureSingleM[1]
-        const m = (mStr === 'บน' || mStr === 'บ') ? 'top' : 'bottom'
-        if (isAmountPattern(amt)) return { amountStr: amt, mode: m, number: null }
+        const amt = pureSingleM[2].trim();
+        const mStr = pureSingleM[1];
+        const m = (mStr === 'บน' || mStr === 'บ') ? 'top' : 'bottom';
+        if (isAmountPattern(amt))
+            return { amountStr: amt, mode: m, number: null };
     }
-
-    // --- Normalize -/* separated formats to = format ---
-    // e.g., "258*20*20" → "258=20*20", "967-40*40" → "967=40*40", "213-50" → "213=50"
-    // Only apply when there's no = already AND the string is NOT a valid amount pattern
-    // (to avoid converting "20*20" buffer-amount into "20=20")
     if (!s.includes('=') && !isAmountPattern(s)) {
-        const sepNorm = s.match(/^(\d{1,5})\s*[\-*]\s*(\d.*)$/)
+        const sepNorm = s.match(/^(\d{1,5})\s*[\-*]\s*(\d.*)$/);
         if (sepNorm) {
-            let amtPart = sepNorm[2]
-            amtPart = amtPart.replace(/(\d)\s*\-\s*(\d)/g, '$1*$2')
-            s = `${sepNorm[1]}=${amtPart}`
+            let amtPart = sepNorm[2];
+            amtPart = amtPart.replace(/(\d)\s*\-\s*(\d)/g, '$1*$2');
+            s = `${sepNorm[1]}=${amtPart}`;
         }
     }
-
-    // --- "=amountStr" (no number before =) ---
-    const eqOnlyMatch = s.match(/^=\s*(.+)$/)
+    const eqOnlyMatch = s.match(/^=\s*(.+)$/);
     if (eqOnlyMatch) {
-        const amt = eqOnlyMatch[1].trim()
-        if (isAmountPattern(amt) || /^\d+$/.test(amt)) return { amountStr: amt, mode, number: null }
-        return null
+        const amt = eqOnlyMatch[1].trim();
+        if (isAmountPattern(amt) || /^\d+$/.test(amt))
+            return { amountStr: amt, mode, number: null };
+        return null;
     }
-
-    // --- "number=amountStr" or "number amountStr" ---
-    const eqMatch = s.match(/^(\d{1,5})\s*=\s*(.+)$/)
+    const eqMatch = s.match(/^(\d{1,5})\s*=\s*(.+)$/);
     if (eqMatch) {
-        const amt = eqMatch[2].trim()
-        if (isAmountPattern(amt) || /^\d+$/.test(amt)) return { amountStr: amt, mode, number: eqMatch[1] }
-        return null
+        const amt = eqMatch[2].trim();
+        if (isAmountPattern(amt) || /^\d+$/.test(amt))
+            return { amountStr: amt, mode, number: eqMatch[1] };
+        return null;
     }
-    const spaceMatch = s.match(/^(\d{1,5})\s+(.+)$/)
+    const spaceMatch = s.match(/^(\d{1,5})\s+(.+)$/);
     if (spaceMatch) {
-        const amt = spaceMatch[2].trim()
-        if (isAmountPattern(amt) || /^\d+$/.test(amt)) return { amountStr: amt, mode, number: spaceMatch[1] }
-        return null
+        const amt = spaceMatch[2].trim();
+        if (isAmountPattern(amt) || /^\d+$/.test(amt))
+            return { amountStr: amt, mode, number: spaceMatch[1] };
+        return null;
     }
-
-    // --- Pure amount pattern (no number, no =) e.g. "15*ชุด", "20×20" ---
-    if (isAmountPattern(s)) return { amountStr: s, mode, number: null }
-
-    return null
+    if (isAmountPattern(s))
+        return { amountStr: s, mode, number: null };
+    return null;
 }
-
 function hasPendingBareNumbersBefore(rawLines, currentIndex) {
     for (let j = currentIndex - 1; j >= 0; j--) {
-        const raw = rawLines[j]
-        if (!raw) continue
-        const trimmed = normalizeUnicode(raw.trim())
-        if (!trimmed) continue
-        if (isConversationalSingleNumberLine(trimmed)) continue
-        if (isDateLine(trimmed)) continue
-
-        const cleaned = cleanPrefixNoiseButKeepContext(trimmed)
-        const line = cleaned || trimmed
-
-        // If it's a context line, it doesn't resolve the buffer
+        const raw = rawLines[j];
+        if (!raw)
+            continue;
+        const trimmed = normalizeUnicode(raw.trim());
+        if (!trimmed)
+            continue;
+        if (isConversationalSingleNumberLine(trimmed))
+            continue;
+        if (isDateLine(trimmed))
+            continue;
+        const cleaned = cleanPrefixNoiseButKeepContext(trimmed);
+        const line = cleaned || trimmed;
         if (parseContextLine(line) !== null) {
-            continue
+            continue;
         }
-
-        // If it's a bare number line, then we have at least one pending bare number!
         if (isBareNumberLine(line)) {
-            return true
+            return true;
         }
-
-        // If it's a line that contains a bet separator or amount, it would resolve/flush the buffer,
-        // so any bare numbers before it are already flushed. We stop here.
         if (line.includes('=') || isAmountPattern(line) || isPureAmountLine(line)) {
-            return false
+            return false;
         }
-        
-        // Also check if it's a standard bet line format (e.g. has x or * separator between digits, like "25*20")
         if (/^\d{1,5}\s*[*×xX\-+/tTต]\s*\d+/.test(line)) {
-            return false
+            return false;
         }
     }
-    return false
+    return false;
 }
-
 function isPureAmountLine(line) {
-    if (!line) return false
-    let s = normalizeUnicode(line.trim())
-    
-    // Check for equals-only prefix (e.g. "=100")
+    if (!line)
+        return false;
+    let s = normalizeUnicode(line.trim());
     if (s.startsWith('=')) {
-        const amt = s.substring(1).trim()
-        if (isAmountPattern(amt) || /^\d+$/.test(amt)) return true
+        const amt = s.substring(1).trim();
+        if (isAmountPattern(amt) || /^\d+$/.test(amt))
+            return true;
     }
-    
-    // Strip optional leading/trailing กลับ keywords
-    s = s.replace(/^(กลับ|กลับตัว|กลับด้วย)\s*/, '')
-    s = s.replace(/\s*(กลับ|กลับตัว|กลับด้วย)$/, '')
-    
-    // Strip leading context
-    s = s.replace(/^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*/i, '')
-    
-    // Strip trailing context
-    s = s.replace(/\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?$/i, '')
-    
-    // Check if the remaining part is an amount pattern
-    return isAmountPattern(s)
+    s = s.replace(/^(กลับ|กลับตัว|กลับด้วย)\s*/, '');
+    s = s.replace(/\s*(กลับ|กลับตัว|กลับด้วย)$/, '');
+    s = s.replace(/^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*/i, '');
+    s = s.replace(/\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?$/i, '');
+    return isAmountPattern(s);
 }
-
 function extractTokenAmountAndContext(token) {
-    const s = normalizeUnicode(token.trim())
-    // If the entire token is clearly a pure amount (contains ชุด/บาท, or is a symmetric pattern like 50*50),
-    // don't treat it as a number-amount pair
-    if (/ชุด|บาท/i.test(s)) return null
-    const symMatch = s.match(/^(\d+)\s*[*×xX\-+/]\s*(\d+)$/)
-    if (symMatch && symMatch[1] === symMatch[2]) return null
-    const match = s.match(/^(\d{1,5})\s*([*×xX=])\s*(.+)$/)
+    const s = normalizeUnicode(token.trim());
+    if (/ชุด|บาท/i.test(s))
+        return null;
+    const symMatch = s.match(/^(\d+)\s*[*×xX\-+/]\s*(\d+)$/);
+    if (symMatch && symMatch[1] === symMatch[2])
+        return null;
+    const match = s.match(/^(\d{1,5})\s*([*×xX=])\s*(.+)$/);
     if (match) {
-        const num = match[1]
-        const sep = match[2] === '=' ? '=' : '*'
-        const rest = match[3].trim()
-        const ctxMatch = rest.match(/^(.*?)\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*$/i)
+        const num = match[1];
+        const sep = match[2] === '=' ? '=' : '*';
+        const rest = match[3].trim();
+        const ctxMatch = rest.match(/^(.*?)\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*$/i);
         if (ctxMatch) {
             return {
                 number: num,
                 amount: ctxMatch[1].trim(),
                 context: ctxMatch[2].trim(),
                 separator: sep
-            }
+            };
         }
         return {
             number: num,
             amount: rest,
             context: null,
             separator: sep
-        }
+        };
     }
-    return null
+    return null;
 }
-
-/**
- * Check if a string is a pure amount pattern (digits with separators/ชุด, NOT a bare number).
- * Must contain at least one non-digit character (*, ×, x, -, +, ชุด) to distinguish from bare numbers.
- */
 function isAmountPattern(s) {
-    if (!s || !s.trim()) return false
-    const t = s.trim()
-    // Must have at least one separator or ชุด or currency suffix to be an amount pattern
-    if (/^\d+$/.test(t)) return false // pure digits = bare number, not amount
-
-    // Check if it's a hyphen separator (e.g. 9-500 or 123-50)
-    const hyphenMatch = t.match(/^(\d+)-(\d+)$/)
+    if (!s || !s.trim())
+        return false;
+    const t = s.trim();
+    if (/^\d+$/.test(t))
+        return false;
+    const hyphenMatch = t.match(/^(\d+)-(\d+)$/);
     if (hyphenMatch) {
-        const len1 = hyphenMatch[1].length
-        const len2 = hyphenMatch[2].length
-        const val1 = hyphenMatch[1]
-        const val2 = hyphenMatch[2]
-        // If they have different lengths, or first is 1 or 3 digits (like runner 9-500, or 3-digit 123-50),
-        // OR if it's a 2-digit pair but the values are not equal (e.g. 77-50),
-        // it is NOT an amount pattern; it's a number-amount pair!
+        const len1 = hyphenMatch[1].length;
+        const len2 = hyphenMatch[2].length;
+        const val1 = hyphenMatch[1];
+        const val2 = hyphenMatch[2];
         if (len1 !== len2 || len1 === 1 || len1 === 3 || (len1 === 2 && val1 !== val2)) {
-            return false
+            return false;
         }
     }
-
-    // Match common amount patterns:
-    //   50*50, 20×20, 10x10, 10+10, 10-10
-    //   15*ชุด, 20ชุด, 20 ชุด, 20-ชุด, 20+ชุด
-    //   50*50*ชุด
-    return /^\d+[*×xX\-+/](\d+|ชุด)$/.test(t) ||  // "50*50", "50/50", "15*ชุด"
-           /^\d+[*×xX\-+/]\d+[*×xX\-+/]\d+$/.test(t) || // "20*10*5" (normalized from parenthetical)
-           /^\d+[*×xX\-+/]\d+[*×xX\-+/]ชุด$/.test(t) ||  // "50*50*ชุด"
-           /^\d+\s*[tTต]\s*\d+$/.test(t) ||  // "50 ต 50", "20t20"
-           /^\d+\s*ชุด$/.test(t) ||  // "20ชุด" or "20 ชุด"
-           /^\d+\s*(?:บาท|บ\.?)$/i.test(t) // "10บาท", "10บ", "10 บ."
+    return /^\d+[*×xX\-+/](\d+|ชุด)$/.test(t) ||
+        /^\d+[*×xX\-+/]\d+[*×xX\-+/]\d+$/.test(t) ||
+        /^\d+[*×xX\-+/]\d+[*×xX\-+/]ชุด$/.test(t) ||
+        /^\d+\s*[tTต]\s*\d+$/.test(t) ||
+        /^\d+\s*ชุด$/.test(t) ||
+        /^\d+\s*(?:บาท|บ\.?)$/i.test(t);
 }
-
-/**
- * Get the effective context for a line (checks inline context).
- * Returns 'top', 'bottom', 'both', or the passed contextMode.
- */
 function getLineEffectiveContext(line, contextMode) {
-    const preClean = line.trim()
-    let inlineCtx = extractInlineContext(preClean)
-    if (inlineCtx.mode) return inlineCtx.mode
-    const normalized = stripPrefixNoise(preClean)
+    const preClean = line.trim();
+    let inlineCtx = extractInlineContext(preClean);
+    if (inlineCtx.mode)
+        return inlineCtx.mode;
+    const normalized = stripPrefixNoise(preClean);
     if (normalized) {
-        inlineCtx = extractInlineContext(normalized)
-        if (inlineCtx.mode) return inlineCtx.mode
+        inlineCtx = extractInlineContext(normalized);
+        if (inlineCtx.mode)
+            return inlineCtx.mode;
     }
-    return contextMode
+    return contextMode;
 }
-
-/**
- * Emit entries for both top and bottom context (for "บนล่าง" mode).
- * Strips inline context from the line, then parses with 'top' and 'bottom' separately.
- */
-function emitBoth(rawLine, isLaoOrHanoi, lotteryType) {
-    const results = []
-    const inlineCtx = extractInlineContext(rawLine.trim())
-    const cleanLine = inlineCtx.mode ? inlineCtx.cleaned : rawLine
-    // Also strip "บล/ลบ" from after = sign
-    const eqCtx = cleanLine.match(/^(\d{1,5}\s*=\s*)(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(.+)$/)
-    const finalLine = eqCtx ? `${eqCtx[1]}${eqCtx[3]}` : cleanLine
-    if (DEBUG_PASTE) console.log(`[emitBoth] rawLine="${rawLine}" cleanLine="${cleanLine}" finalLine="${finalLine}"`)
-    const topParsed = parseNumberLine(finalLine, 'top', isLaoOrHanoi, lotteryType)
-    if (topParsed) results.push(...topParsed)
-
-    // Only emit bottom version for 1-2 digit numbers.
-    // 3+ digit numbers don't have separate top/bottom bet types,
-    // so "บน-ล่าง" context should NOT duplicate them.
-    const numDigits = topParsed && topParsed.length > 0 ? topParsed[0].numbers.length : 0
+function emitBoth(rawLine, isLaoOrHanoi, lotteryType, settings) {
+    const results = [];
+    const inlineCtx = extractInlineContext(rawLine.trim());
+    const cleanLine = inlineCtx.mode ? inlineCtx.cleaned : rawLine;
+    const eqCtx = cleanLine.match(/^(\d{1,5}\s*=\s*)(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(.+)$/);
+    const finalLine = eqCtx ? `${eqCtx[1]}${eqCtx[3]}` : cleanLine;
+    const topParsed = parseNumberLine(finalLine, 'top', isLaoOrHanoi, lotteryType, settings);
+    if (topParsed)
+        results.push(...topParsed);
+    const numDigits = topParsed && topParsed.length > 0 ? topParsed[0].numbers.length : 0;
     if (numDigits <= 2) {
-        const botParsed = parseNumberLine(finalLine, 'bottom', isLaoOrHanoi, lotteryType)
-        if (DEBUG_PASTE) console.log(`[emitBoth] topParsed=${topParsed ? topParsed.length : 'null'} botParsed=${botParsed ? botParsed.length : 'null'}`)
-        if (DEBUG_PASTE && botParsed) console.log(`[emitBoth] botParsed:`, JSON.stringify(botParsed.map(e => e.formattedLine || e.rawLine)))
-        if (botParsed) results.push(...botParsed)
-    } else {
-        if (DEBUG_PASTE) console.log(`[emitBoth] ${numDigits}-digit number, skipping bottom (no top/bottom distinction for 3+ digits)`)
+        const botParsed = parseNumberLine(finalLine, 'bottom', isLaoOrHanoi, lotteryType, settings);
+        if (botParsed)
+            results.push(...botParsed);
     }
-    return results
+    return results;
 }
-
-/**
- * Strip timestamp, Thai text, and other noise prefixes from a line.
- * Examples:
- *   "08:18 ไอซ์(ร้านตัดผม) 528=20*20" → "528=20*20"
- *   "12:30 ข้อความ 285=10*6" → "285=10*6"
- *   "285=10*6" → "285=10*6" (no change)
- *   "1234" → "1234" (no change)
- */
 function stripPrefixNoise(line) {
-    let s = line.trim()
-
-    // Remove leading timestamp patterns: HH:MM, HH:MM:SS, HH.MM, etc.
-    s = s.replace(/^\d{1,2}[:.:]\d{2}([:.:]\d{2})?\s*/, '')
-
-    // Remove leading Thai text (and parenthesized text) until we hit a digit
-    // Keep stripping Thai chars, spaces, parens, punctuation until a digit block
-    s = s.replace(/^[^=\d]*(?=[=\d])/, '')
-
-    return s.trim()
+    let s = line.trim();
+    s = s.replace(/^\d{1,2}[:.:]\d{2}([:.:]\d{2})?\s*/, '');
+    s = s.replace(/^[^=\d]*(?=[=\d])/, '');
+    return s.trim();
 }
-
-/**
- * Check if a string contains BOTH a บน-variant and a ล่าง-variant,
- * indicating "บนล่าง" (top+bottom) context regardless of separators between them.
- * Examples: "บน-ล่าง", "บ/ล", "บน----ล่าง", "บนและล่าง", "บน กับ ล่าง", 
- *           "ล่าง*บน", "บ.ล", "บ-ล", "บล.", "บล", "บ+ล"
- * Must NOT contain digits (to avoid matching "บน 77=30" as context line).
- */
 function isBothContext(line) {
-    const s = line.trim().replace(/(?:กลับ|กลับตัว|กลับด้วย)\s*$/, '').trim()
-    // Quick check: must not contain digits (context-only line)
-    if (/\d/.test(s)) return false
-    // Remove all non-Thai characters to get just Thai letters
-    let thaiOnly = s.replace(/[^ก-๛]/g, '')
-    // Remove non-lottery-abbreviation Thai characters containing 'ล' to prevent false positives (e.g. ลอย, เล่น, เลข)
-    thaiOnly = thaiOnly.replace(/ลอย|เล่น|เลข|ลูกค้า|แล้ว|ละ|สลิป/g, '')
-    // Check known combined patterns: บล, ลบ, บนล่าง, ล่างบน
-    if (/^(บนล่าง|ล่างบน|บล|ลบ)$/.test(thaiOnly)) return true
-    // Check if the string contains both a บน-variant and a ล่าง-variant somewhere
-    const hasTop = /(บน|บ)/.test(thaiOnly)
-    const hasBottom = /(ล่าง|ล)/.test(thaiOnly)
-    // Must contain both, and the Thai content should be short (context line, not a sentence)
-    if (hasTop && hasBottom && thaiOnly.length <= 10) return true
-    return false
+    const s = line.trim().replace(/(?:กลับ|กลับตัว|กลับด้วย)\s*$/, '').trim();
+    if (/\d/.test(s))
+        return false;
+    let thaiOnly = s.replace(/[^ก-๛]/g, '');
+    thaiOnly = thaiOnly.replace(/ลอย|เล่น|เลข|ลูกค้า|แล้ว|ละ|สลิป/g, '');
+    if (/^(บนล่าง|ล่างบน|บล|ลบ)$/.test(thaiOnly))
+        return true;
+    const hasTop = /(บน|บ)/.test(thaiOnly);
+    const hasBottom = /(ล่าง|ล)/.test(thaiOnly);
+    if (hasTop && hasBottom && thaiOnly.length <= 10)
+        return true;
+    return false;
 }
-
-/**
- * Check if a line is a context-setting line (บน/ล่าง/บนล่าง)
- * Returns 'top', 'bottom', 'both', or null if not a context line
- */
 function parseContextLine(line) {
-    const withPunct = line.trim().replace(/(?:กลับ|กลับตัว|กลับด้วย)\s*$/, '').trim()
-
-    // --- Bracketed/prefixed context: [2 ตัวล่าง], [3 ตัวบน], [2 ตัวบนล่าง] ---
-    // Also handles without brackets: "2ตัวล่าง", "2 ตัว ล่าง", "3ตัวบน"
-    const bracketCleaned = withPunct.replace(/[\[\](){}]/g, '').replace(/[\s.+\-]/g, '')
-    // "2ตัวบนล่าง", "3ตัวบนล่าง", "2ตัวลบ", "2ตัวบล" → both
-    if (/^\d*ตัว(บนล่าง|ล่างบน|บล|ลบ)$/.test(bracketCleaned)) return 'both'
-    // "2ตัวล่าง", "2ตัวล" → bottom
-    if (/^\d*ตัว(ล่าง|ล)$/.test(bracketCleaned)) return 'bottom'
-    // "3ตัวบน", "2ตัวบ" → top
-    if (/^\d*ตัว(บน|บ)$/.test(bracketCleaned)) return 'top'
-    // "2ตัววิ่งล่าง", "2ตัวลอยล่าง" → float_bottom
-    if (/^\d*ตัว(วิ่งล่าง|ลอยล่าง)$/.test(bracketCleaned)) return 'float_bottom'
-    // "2ตัววิ่งบน", "2ตัวลอยบน", "2ตัววิ่ง", "2ตัวลอย", "2ตัวโต๊ด", "2ตัวโตด", "2ตัวต" → float_top
-    if (/^\d*ตัว(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|มี)$/.test(bracketCleaned)) return 'float_top'
-
-    // Check for "วิ่ง/ลอย/โต๊ด/มี" float context FIRST (before บน/ล่าง checks)
-    // These keywords indicate "ลอย" (float/run) bet type
-    const cleanedFloat = withPunct.replace(/[\s.+\-]/g, '')
-    // "วิ่งบน", "ลอยบน", "วิ่ง บน", "ลอยทั่วไป" → float_top
-    if (/^(วิ่งบน|ลอยบน|วิ่งบ|ลอยบ|ลอยทั่วไป)$/.test(cleanedFloat)) return 'float_top'
-    // "วิ่งล่าง", "ลอยล่าง", "วิ่ง ล่าง" → float_bottom
-    if (/^(วิ่งล่าง|ลอยล่าง|วิ่งล|ลอยล)$/.test(cleanedFloat)) return 'float_bottom'
-    // "วิ่ง", "ลอย", "โต๊ด", "โตด", "ต" standalone → float_top (default to บน)
-    if (/^(วิ่ง|ลอย|โต๊ด|โตด|ต\.?)$/.test(cleanedFloat)) return 'float_top'
-    // "2ตัวมี", "2 ตัว มี", "2ตัววิ่ง", "2ตัวลอย", "2ตัวโต๊ด", "2ตัวโตด", "2ตัวต" → float_top
-    if (/^2ตัว(มี|วิ่ง|ลอย|โต๊ด|โตด|ต\.?)$/.test(cleanedFloat)) return 'float_top'
-
-    // Check for "บนล่าง" / "ล่างบน" variants first (must come before single checks)
-    // If a line contains BOTH a บน-variant AND a ล่าง-variant (in any order, with any separators),
-    // treat it as 'both'. E.g. "บน-ล่าง", "บ/ล", "บน----ล่าง", "บนและล่าง", "บน กับ ล่าง", "ล่าง*บน"
-    if (isBothContext(withPunct)) return 'both'
-
-    // Match standalone "บ", "บ.", "บน"
-    // Match standalone "ล", "ล.", "ล่าง"
-    const cleaned = withPunct.replace(/[^ก-๛a-zA-Z0-9]/g, '').trim()
-
-    if (/^(บน|บ)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(cleaned)) return 'top'
-    if (/^(ล่าง|ล)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(cleaned)) return 'bottom'
-
-    const testStr = cleaned.replace(/^\d+ตัว/, '')
-    if (/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(testStr)) return 'float_top'
-    if (/^(วิ่งล่าง|ลอยล่าง)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(testStr)) return 'float_bottom'
-
-    // Also check original line with punctuation: "บ.", "ล."
-    if (/^บ\.?$/.test(withPunct)) return 'top'
-    if (/^ล\.?$/.test(withPunct)) return 'bottom'
-    if (/^บน$/.test(withPunct)) return 'top'
-    if (/^ล่าง$/.test(withPunct)) return 'bottom'
-
-    return null
+    const withPunct = line.trim().replace(/(?:กลับ|กลับตัว|กลับด้วย)\s*$/, '').trim();
+    const bracketCleaned = withPunct.replace(/[\[\](){}]/g, '').replace(/[\s.+\-]/g, '');
+    if (/^\d*ตัว(บนล่าง|ล่างบน|บล|ลบ)$/.test(bracketCleaned))
+        return 'both';
+    if (/^\d*ตัว(ล่าง|ล)$/.test(bracketCleaned))
+        return 'bottom';
+    if (/^\d*ตัว(บน|บ)$/.test(bracketCleaned))
+        return 'top';
+    if (/^\d*ตัว(วิ่งล่าง|ลอยล่าง)$/.test(bracketCleaned))
+        return 'float_bottom';
+    if (/^\d*ตัว(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|มี)$/.test(bracketCleaned))
+        return 'float_top';
+    const cleanedFloat = withPunct.replace(/[\s.+\-]/g, '');
+    if (/^(วิ่งบน|ลอยบน|วิ่งบ|ลอยบ|ลอยทั่วไป)$/.test(cleanedFloat))
+        return 'float_top';
+    if (/^(วิ่งล่าง|ลอยล่าง|วิ่งล|ลอยล)$/.test(cleanedFloat))
+        return 'float_bottom';
+    if (/^(วิ่ง|ลอย|โต๊ด|โตด|ต\.?)$/.test(cleanedFloat))
+        return 'float_top';
+    if (/^2ตัว(มี|วิ่ง|ลอย|โต๊ด|โตด|ต\.?)$/.test(cleanedFloat))
+        return 'float_top';
+    if (isBothContext(withPunct))
+        return 'both';
+    const cleaned = withPunct.replace(/[^ก-๛a-zA-Z0-9]/g, '').trim();
+    if (/^(บน|บ)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(cleaned))
+        return 'top';
+    if (/^(ล่าง|ล)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(cleaned))
+        return 'bottom';
+    const testStr = cleaned.replace(/^\d+ตัว/, '');
+    if (/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(testStr))
+        return 'float_top';
+    if (/^(วิ่งล่าง|ลอยล่าง)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(testStr))
+        return 'float_bottom';
+    if (/^บ\.?$/.test(withPunct))
+        return 'top';
+    if (/^ล\.?$/.test(withPunct))
+        return 'bottom';
+    if (/^บน$/.test(withPunct))
+        return 'top';
+    if (/^ล่าง$/.test(withPunct))
+        return 'bottom';
+    return null;
 }
-
-/**
- * Extract a trailing context keyword from a noisy line.
- * Handles cases like "12:48 ไอซ์(ร้านตัดผม) ล่าง" where the line is mostly noise
- * but ends with a context keyword that should set the mode.
- * Returns 'top', 'bottom', 'both', or null.
- */
 function extractTrailingContext(line) {
-    const s = line.trim()
-
-    // Helper: strip timestamp from the "before" portion so it doesn't count as having digits
+    const s = line.trim();
     function stripTimestamp(str) {
-        return str.replace(/^\d{1,2}[:.:]\d{2}([:.:]\d{2})?\s*/, '').trim()
+        return str.replace(/^\d{1,2}[:.:]\d{2}([:.:]\d{2})?\s*/, '').trim();
     }
-
-    // Helper: check if the "before" part is pure noise (no bet-related digits after removing timestamp)
     function isPureNoise(before) {
-        if (!before) return false
-        const noTs = stripTimestamp(before)
-        // After removing timestamp, should have no digits (only Thai text, parens, spaces, etc.)
-        return !/\d/.test(noTs)
+        if (!before)
+            return false;
+        const noTs = stripTimestamp(before);
+        return !/\d/.test(noTs);
     }
-
-    // Check if the line ends with a "both" context keyword
-    const bothMatch = s.match(/(?:^|\s)(บนล่าง|ล่างบน|บล\.?|ลบ\.?|บ[+\-]?ล\.?|ล[+\-]?บ\.?)\s*$/)
+    const bothMatch = s.match(/(?:^|\s)(บนล่าง|ล่างบน|บล\.?|ลบ\.?|บ[+\-]?ล\.?|ล[+\-]?บ\.?)\s*$/);
     if (bothMatch) {
-        const before = s.slice(0, bothMatch.index).trim()
-        if (isPureNoise(before)) return 'both'
+        const before = s.slice(0, bothMatch.index).trim();
+        if (isPureNoise(before))
+            return 'both';
     }
-
-    // Check if the line ends with a "single" context keyword
-    const singleMatch = s.match(/(?:^|\s)(บน|บ\.?|ล่าง|ล\.?)\s*$/)
+    const singleMatch = s.match(/(?:^|\s)(บน|บ\.?|ล่าง|ล\.?)\s*$/);
     if (singleMatch) {
-        const before = s.slice(0, singleMatch.index).trim()
+        const before = s.slice(0, singleMatch.index).trim();
         if (isPureNoise(before)) {
-            const kw = singleMatch[1].replace('.', '')
-            return (kw === 'บน' || kw === 'บ') ? 'top' : 'bottom'
+            const kw = singleMatch[1].replace('.', '');
+            return (kw === 'บน' || kw === 'บ') ? 'top' : 'bottom';
         }
     }
-
-    return null
+    return null;
 }
-
-/**
- * Get unique permutation count for a number string
- */
-function getPermutationCount(numStr) {
-    if (!numStr || numStr.length < 2) return 1
-    const perms = getPermutations(numStr)
-    return perms.length
-}
-
 function refineFloatMode(mode, text) {
-    const lower = text.toLowerCase()
+    const lower = text.toLowerCase();
     if (/บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ/.test(lower)) {
-        return 'both'
+        return 'both';
     }
     if (/ล่าง|ล\.?(?![ก-๛a-zA-Z])/.test(lower)) {
-        return 'float_bottom'
+        return 'float_bottom';
     }
     if (/บน|บ\.?(?![ก-๛a-zA-Z])/.test(lower)) {
-        return 'float_top'
+        return 'float_top';
     }
-    return mode
+    return mode;
 }
-
-/**
- * Extract inline context (บน/ล่าง/บนล่าง) from a line as prefix or suffix.
- * Returns { cleaned, mode } where mode is 'top', 'bottom', 'both', or null.
- */
 function extractInlineContext(line) {
-    let s = line.trim()
-
-    // --- FLOAT PREFIX: "วิ่ง83=100", "ลอย25=20", "โต๊ด78=500" followed by digit ---
-    const floatPrefixTop = s.match(/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\.?\s*(\d.*)$/)
+    let s = line.trim();
+    const floatPrefixTop = s.match(/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\.?\s*(\d.*)$/);
     if (floatPrefixTop) {
-        const kw = floatPrefixTop[1]
-        let mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top'
-        mode = refineFloatMode(mode, s)
-        return { cleaned: floatPrefixTop[2].trim(), mode }
+        const kw = floatPrefixTop[1];
+        let mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
+        mode = refineFloatMode(mode, s);
+        return { cleaned: floatPrefixTop[2].trim(), mode };
     }
-    const floatPrefixBot = s.match(/^(วิ่งล่าง|ลอยล่าง)\.?\s*(\d.*)$/)
+    const floatPrefixBot = s.match(/^(วิ่งล่าง|ลอยล่าง)\.?\s*(\d.*)$/);
     if (floatPrefixBot) {
-        let mode = 'float_bottom'
-        mode = refineFloatMode(mode, s)
-        return { cleaned: floatPrefixBot[2].trim(), mode }
+        let mode = 'float_bottom';
+        mode = refineFloatMode(mode, s);
+        return { cleaned: floatPrefixBot[2].trim(), mode };
     }
-
-    // --- FLOAT SUFFIX: "83=100 วิ่ง", "83=100 ลอย", "2=150 วิ่งล่าง" ---
-    const floatSuffixBot = s.match(/^(.+?)\s*(วิ่งล่าง|ลอยล่าง)\s*$/)
+    const floatSuffixBot = s.match(/^(.+?)\s*(วิ่งล่าง|ลอยล่าง)\s*$/);
     if (floatSuffixBot) {
-        let mode = 'float_bottom'
-        mode = refineFloatMode(mode, s)
-        return { cleaned: floatSuffixBot[1].trim(), mode }
+        let mode = 'float_bottom';
+        mode = refineFloatMode(mode, s);
+        return { cleaned: floatSuffixBot[1].trim(), mode };
     }
-    const floatSuffix = s.match(/^(.+?)\s*(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\s*$/)
+    const floatSuffix = s.match(/^(.+?)\s*(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\s*$/);
     if (floatSuffix) {
-        let mode = 'float_top'
-        mode = refineFloatMode(mode, s)
-        return { cleaned: floatSuffix[1].trim(), mode }
+        let mode = 'float_top';
+        mode = refineFloatMode(mode, s);
+        return { cleaned: floatSuffix[1].trim(), mode };
     }
-
-    // --- FLOAT MIDDLE: "78 โต๊ด 500", "78 วิ่ง 500", "78 ลอย 500", "78 มี 500" ---
-    const floatMiddle = s.match(/^(\d+)\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|มี)\s+(\d[\d*=\-+]*)$/)
+    const floatMiddle = s.match(/^(\d+)\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|มี)\s+(\d[\d*=\-+]*)$/);
     if (floatMiddle) {
-        const kw = floatMiddle[2]
-        let mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top'
-        mode = refineFloatMode(mode, s)
-        return { cleaned: `${floatMiddle[1]}=${floatMiddle[3].trim()}`, mode }
+        const kw = floatMiddle[2];
+        let mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
+        mode = refineFloatMode(mode, s);
+        return { cleaned: `${floatMiddle[1]}=${floatMiddle[3].trim()}`, mode };
     }
-
-    // --- PREFIX "บนล่าง/ลบ/บล" variants followed by digit or = ---
-    const bothPrefix = s.match(/^(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(\d.*)$/)
+    const bothPrefix = s.match(/^(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(\d.*)$/);
     if (bothPrefix) {
-        return { cleaned: bothPrefix[2].trim(), mode: 'both' }
+        return { cleaned: bothPrefix[2].trim(), mode: 'both' };
     }
-
-    // --- PREFIX patterns: "บน.", "บน", "บ.", "บ", "ล่าง.", "ล่าง", "ล.", "ล" followed by digit ---
-    const prefixMatch = s.match(/^(บน|บ|ล่าง|ล)\.?\s*(\d.*)$/)
+    const prefixMatch = s.match(/^(บน|บ|ล่าง|ล)\.?\s*(\d.*)$/);
     if (prefixMatch) {
-        const modeStr = prefixMatch[1]
-        const rest = prefixMatch[2]
-        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
-        return { cleaned: rest.trim(), mode }
+        const modeStr = prefixMatch[1];
+        const rest = prefixMatch[2];
+        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom';
+        return { cleaned: rest.trim(), mode };
     }
-
-    // --- SUFFIX "บนล่าง/ลบ/ล่างบน" variants ---
-    const bothSuffix = s.match(/^(.+?)\s*(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล|ล[+\-]?บ|บล|ลบ)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/)
+    const bothSuffix = s.match(/^(.+?)\s*(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล|ล[+\-]?บ|บล|ลบ)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/);
     if (bothSuffix) {
-        return { cleaned: bothSuffix[1].trim(), mode: 'both' }
+        return { cleaned: bothSuffix[1].trim(), mode: 'both' };
     }
-
-    // --- SUFFIX patterns: "บน", "บ", "ล่าง", "ล" at end ---
-    const suffixMatch = s.match(/^(.+?)\s*(บน|บ|ล่าง|ล)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/)
+    const suffixMatch = s.match(/^(.+?)\s*(บน|บ|ล่าง|ล)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/);
     if (suffixMatch) {
-        const rest = suffixMatch[1]
-        const modeStr = suffixMatch[2].replace('.', '')
-        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
-        return { cleaned: rest.trim(), mode }
+        const rest = suffixMatch[1];
+        const modeStr = suffixMatch[2].replace('.', '');
+        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom';
+        return { cleaned: rest.trim(), mode };
     }
-
-    // --- MIDDLE pattern: "number contextAmount" e.g. "89 บล50*50", "89 บน50*50" ---
-    // "both" context prefix attached to amount
-    const midBothMatch = s.match(/^(\d+)\s+(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(\d.+)$/)
+    const midBothMatch = s.match(/^(\d+)\s+(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(\d.+)$/);
     if (midBothMatch) {
-        return { cleaned: `${midBothMatch[1]} ${midBothMatch[3].trim()}`, mode: 'both' }
+        return { cleaned: `${midBothMatch[1]} ${midBothMatch[3].trim()}`, mode: 'both' };
     }
-    // "single" context prefix attached to amount
-    const midSingleMatch = s.match(/^(\d+)\s+(บน|บ|ล่าง|ล)\.?\s*(\d.+)$/)
+    const midSingleMatch = s.match(/^(\d+)\s+(บน|บ|ล่าง|ล)\.?\s*(\d.+)$/);
     if (midSingleMatch) {
-        const modeStr = midSingleMatch[2]
-        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
-        return { cleaned: `${midSingleMatch[1]} ${midSingleMatch[3].trim()}`, mode }
+        const modeStr = midSingleMatch[2];
+        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom';
+        return { cleaned: `${midSingleMatch[1]} ${midSingleMatch[3].trim()}`, mode };
     }
-
-    // --- MIDDLE pattern: "2 ล่าง 500" or "2 บน 500" (context with spaces around it) ---
-    const middleMatch = s.match(/^(\d+)\s+(บน|บ|ล่าง|ล)\s+(\d[\d*=\-+]*)$/)
+    const middleMatch = s.match(/^(\d+)\s+(บน|บ|ล่าง|ล)\s+(\d[\d*=\-+]*)$/);
     if (middleMatch) {
-        const num = middleMatch[1]
-        const modeStr = middleMatch[2]
-        const amt = middleMatch[3]
-        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
-        return { cleaned: `${num} ${amt}`, mode }
+        const num = middleMatch[1];
+        const modeStr = middleMatch[2];
+        const amt = middleMatch[3];
+        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom';
+        return { cleaned: `${num} ${amt}`, mode };
     }
-
-    // --- Inline context after = sign: "39=บล10*10", "39=ลบ10*10" ---
-    const eqInline = s.match(/^(\d+\s*=\s*)(บนล่าง|ล่างบน|บล\.?|ลบ\.?|บ[+\-]?ล\.?|ล[+\-]?บ\.?)(.+)$/)
+    const eqInline = s.match(/^(\d+\s*=\s*)(บนล่าง|ล่างบน|บล\.?|ลบ\.?|บ[+\-]?ล\.?|ล[+\-]?บ\.?)(.+)$/);
     if (eqInline) {
-        return { cleaned: `${eqInline[1]}${eqInline[3]}`.trim(), mode: 'both' }
+        return { cleaned: `${eqInline[1]}${eqInline[3]}`.trim(), mode: 'both' };
     }
-    // --- Inline "both" context after = with space: "25= บล 20*20" ---
-    const eqBothSpace = s.match(/^(\d+)\s*=\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s+(\d.+)$/)
+    const eqBothSpace = s.match(/^(\d+)\s*=\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s+(\d.+)$/);
     if (eqBothSpace) {
-        return { cleaned: `${eqBothSpace[1]}=${eqBothSpace[3].trim()}`, mode: 'both' }
+        return { cleaned: `${eqBothSpace[1]}=${eqBothSpace[3].trim()}`, mode: 'both' };
     }
-    // --- Inline single context after = with space: "25= ล่าง 20*20", "25=บน20*20" ---
-    const eqSingleInline = s.match(/^(\d+)\s*=\s*(บน|บ|ล่าง|ล)\.?\s*(\d.+)$/)
+    const eqSingleInline = s.match(/^(\d+)\s*=\s*(บน|บ|ล่าง|ล)\.?\s*(\d.+)$/);
     if (eqSingleInline) {
-        const modeStr = eqSingleInline[2]
-        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
-        return { cleaned: `${eqSingleInline[1]}=${eqSingleInline[3].trim()}`, mode }
+        const modeStr = eqSingleInline[2];
+        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom';
+        return { cleaned: `${eqSingleInline[1]}=${eqSingleInline[3].trim()}`, mode };
     }
-    // --- Inline float context after =: "25= วิ่งบน 20", "25=โต๊ด20", "25=ต20" ---
-    const eqFloatInline = s.match(/^(\d+)\s*=\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\.?\s*(\d.+)$/)
+    const eqFloatInline = s.match(/^(\d+)\s*=\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\.?\s*(\d.+)$/);
     if (eqFloatInline) {
-        const kw = eqFloatInline[2]
-        const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top'
-        return { cleaned: `${eqFloatInline[1]}=${eqFloatInline[3].trim()}`, mode }
+        const kw = eqFloatInline[2];
+        const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
+        return { cleaned: `${eqFloatInline[1]}=${eqFloatInline[3].trim()}`, mode };
     }
-
-    // --- "num context=amt" pattern: "25 ล่าง=20*20", "25 ล่าง =20*20", "25ล่าง=20*20" ---
-    const numCtxEqBoth = s.match(/^(\d+)\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*=\s*(.+)$/)
+    const numCtxEqBoth = s.match(/^(\d+)\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*=\s*(.+)$/);
     if (numCtxEqBoth) {
-        return { cleaned: `${numCtxEqBoth[1]}=${numCtxEqBoth[3].trim()}`, mode: 'both' }
+        return { cleaned: `${numCtxEqBoth[1]}=${numCtxEqBoth[3].trim()}`, mode: 'both' };
     }
-    const numCtxEqSingle = s.match(/^(\d+)\s*(บน|บ|ล่าง|ล)\.?\s*=\s*(.+)$/)
+    const numCtxEqSingle = s.match(/^(\d+)\s*(บน|บ|ล่าง|ล)\.?\s*=\s*(.+)$/);
     if (numCtxEqSingle) {
-        const modeStr = numCtxEqSingle[2]
-        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
-        return { cleaned: `${numCtxEqSingle[1]}=${numCtxEqSingle[3].trim()}`, mode }
+        const modeStr = numCtxEqSingle[2];
+        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom';
+        return { cleaned: `${numCtxEqSingle[1]}=${numCtxEqSingle[3].trim()}`, mode };
     }
-
-    // --- NO SPACE MIDDLE patterns (e.g. "79ล่าง100", "79บน100", "79บล100", "123โต๊ด50", "2วิ่ง10") ---
-    const noSpaceBoth = s.match(/^(\d+)(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?([=\d].*)$/)
+    const noSpaceBoth = s.match(/^(\d+)(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?([=\d].*)$/);
     if (noSpaceBoth) {
-        return { cleaned: `${noSpaceBoth[1]} ${noSpaceBoth[3].trim()}`, mode: 'both' }
+        return { cleaned: `${noSpaceBoth[1]} ${noSpaceBoth[3].trim()}`, mode: 'both' };
     }
-
-    const noSpaceSingle = s.match(/^(\d+)(บน|บ|ล่าง|ล)\.?([=\d].*)$/)
+    const noSpaceSingle = s.match(/^(\d+)(บน|บ|ล่าง|ล)\.?([=\d].*)$/);
     if (noSpaceSingle) {
-        const modeStr = noSpaceSingle[2]
-        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom'
-        return { cleaned: `${noSpaceSingle[1]} ${noSpaceSingle[3].trim()}`, mode }
+        const modeStr = noSpaceSingle[2];
+        const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom';
+        return { cleaned: `${noSpaceSingle[1]} ${noSpaceSingle[3].trim()}`, mode };
     }
-
-    const noSpaceFloat = s.match(/^(\d+)(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|มี)\.?([=\d].*)$/)
+    const noSpaceFloat = s.match(/^(\d+)(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|มี)\.?([=\d].*)$/);
     if (noSpaceFloat) {
-        const kw = noSpaceFloat[2]
-        const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top'
-        return { cleaned: `${noSpaceFloat[1]}=${noSpaceFloat[3].trim()}`, mode }
+        const kw = noSpaceFloat[2];
+        const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
+        return { cleaned: `${noSpaceFloat[1]}=${noSpaceFloat[3].trim()}`, mode };
     }
-
-    return { cleaned: line, mode: null }
+    return { cleaned: line, mode: null };
 }
-
-/**
- * Parse a single number line into one or more bet entries
- */
-function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType) {
-    // Extract inline context
-    const preClean = normalizeUnicode(line.trim())
-    if (isDateLine(preClean)) return null
-    let inlineCtx = extractInlineContext(preClean)
-    let normalized
+function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType, settings) {
+    const preClean = normalizeUnicode(line.trim());
+    if (isDateLine(preClean))
+        return null;
+    let inlineCtx = extractInlineContext(preClean);
+    let normalized = null;
     if (inlineCtx.mode) {
-        normalized = stripPrefixNoise(inlineCtx.cleaned)
-    } else {
-        normalized = stripPrefixNoise(preClean)
+        normalized = stripPrefixNoise(inlineCtx.cleaned);
+    }
+    else {
+        normalized = stripPrefixNoise(preClean);
         if (normalized) {
-            inlineCtx = extractInlineContext(normalized)
+            inlineCtx = extractInlineContext(normalized);
             if (inlineCtx.mode) {
-                normalized = inlineCtx.cleaned
+                normalized = inlineCtx.cleaned;
             }
         }
     }
-    const effectiveContext = inlineCtx.mode || contextMode
-    const parseContext = (effectiveContext === 'both') ? 'top' : effectiveContext
-    // float_top and float_bottom pass through to determineBetType as-is
-    if (!normalized) return null
-    if (isDateLine(normalized)) return null
-
-    // Normalize separators:
-    // Replace &, ×, · between amounts with *
-    // Replace . between digit groups with * (e.g., "258.33.20" → "258*33*20")
-    // Replace - and + between amounts with *
-    // Also handle "ชุด" keyword
-
-    // Handle "ชุด" variants: "123=50ชุด", "123=50 ชุด", "123=50-ชุด" → "123=50*ชุด"
-    normalized = normalized.replace(/(\d+)\s*[*×xX\-+]?\s*ชุด/g, '$1*ชุด')
-
-    // Normalize dot-separated format: "258.33.20" → "258=33*20"
-    // Pattern: digits.digits.digits (3 groups separated by dots)
-    const dotTriple = normalized.match(/^(\d+)\.(\d+)\.(\d+)$/)
+    const effectiveContext = inlineCtx.mode || contextMode;
+    const parseContext = (effectiveContext === 'both') ? 'top' : effectiveContext;
+    if (!normalized)
+        return null;
+    if (isDateLine(normalized))
+        return null;
+    normalized = normalized.replace(/(\d+)\s*[*×xX\-+]?\s*ชุด/g, '$1*ชุด');
+    const dotTriple = normalized.match(/^(\d+)\.(\d+)\.(\d+)$/);
     if (dotTriple) {
-        normalized = `${dotTriple[1]}=${dotTriple[2]}*${dotTriple[3]}`
+        normalized = `${dotTriple[1]}=${dotTriple[2]}*${dotTriple[3]}`;
     }
-
-    // Normalize & and × between amount parts to *
-    // e.g., "54=50&50" → "54=50*50", "304=11×10" → "304=11*10"
-    normalized = normalized.replace(/[&×]/g, '*')
-    // Replace 'x' or 'X' only when between digits: "11x10" → "11*10"
-    normalized = normalized.replace(/(\d)[xX](\d)/g, '$1*$2')
-
-    // Normalize "ต" / "t" between digit amounts to * (เต็งโต๊ด separator)
-    // e.g., "123=50 ต 50" → "123=50*50", "456=20t20" → "456=20*20"
-    normalized = normalized.replace(/(\d)\s*[tTต]\s*(\d)/g, '$1*$2')
-
-    // Normalize / and + between digit amounts to * (after = sign)
-    // e.g., "789=50/50" → "789=50*50", "587=20+20" → "587=20*20"
+    normalized = normalized.replace(/[&×]/g, '*');
+    normalized = normalized.replace(/(\d)[xX](\d)/g, '$1*$2');
+    normalized = normalized.replace(/(\d)\s*[tTต]\s*(\d)/g, '$1*$2');
     if (normalized.includes('=')) {
-        const eqIdx = normalized.indexOf('=')
-        let afterEq = normalized.substring(eqIdx + 1)
-        // Strip commas in formatted amounts: "1,000" → "1000"
-        afterEq = afterEq.replace(/(\d),(\d{3})/g, '$1$2')
-        afterEq = afterEq.replace(/(\d)\s*[/+]\s*(\d)/g, '$1*$2')
-        normalized = normalized.substring(0, eqIdx + 1) + afterEq
+        const eqIdx = normalized.indexOf('=');
+        let afterEq = normalized.substring(eqIdx + 1);
+        afterEq = afterEq.replace(/(\d),(\d{3})/g, '$1$2');
+        afterEq = afterEq.replace(/(\d)\s*[/+]\s*(\d)/g, '$1*$2');
+        normalized = normalized.substring(0, eqIdx + 1) + afterEq;
     }
-
-    // === KEY NORMALIZATION: Convert -/*/+// separated formats to = format ===
-    // If no = sign present, and the line has 2-3 digit groups separated by -, *, /, +
-    // convert the FIRST separator to = so it becomes "number=amount" or "number=amount*amount".
-    //
-    // Examples:
-    //   258*20*20      → 258=20*20   (เต็งโต๊ด)
-    //   967-40*40      → 967=40*40   (เต็งโต๊ด)
-    //   213-50         → 213=50      (บน)
-    //   375-100*6      → 375=100*6   (ชุด)
-    //   220-50*ชุด     → 220=50*ชุด  (ชุด)
-    //   23*10*10       → 23=10*10    (บนกลับ)
-    //   45*20-20       → 45=20*20    (กลับ — normalize remaining - to *)
-    //   741/20/20      → 741=20*20   (เต็งโต๊ด)
-    //   87+20+20       → 87=20*20    (บนกลับ)
-    //
-    // ONLY apply when there's no = already and the first group is 1-5 digit number
     if (!normalized.includes('=')) {
-        // Match: digits{1-5} followed by -, *, /, or + followed by more content containing digits
-        const sepMatch = normalized.match(/^(\d{1,5})\s*[\-*/+]\s*(\d.*)$/)
+        const sepMatch = normalized.match(/^(\d{1,5})\s*[\-*/+]\s*(\d.*)$/);
         if (sepMatch) {
-            const numPart = sepMatch[1]
-            let amtPart = sepMatch[2]
-            // Normalize remaining -, /, + between digit groups in amount part to *
-            amtPart = amtPart.replace(/(\d)\s*[\-/+]\s*(\d)/g, '$1*$2')
-            normalized = `${numPart}=${amtPart}`
+            const numPart = sepMatch[1];
+            let amtPart = sepMatch[2];
+            amtPart = amtPart.replace(/(\d)\s*[\-/+]\s*(\d)/g, '$1*$2');
+            normalized = `${numPart}=${amtPart}`;
         }
     }
-
-    // Extract numbers and amounts from the line
-    // Supported formats:
-    //   123=20          → numbers=123, amount1=20
-    //   123=20*20       → numbers=123, amount1=20, amount2=20
-    //   123=20-20       → numbers=123, amount1=20, amount2=20
-    //   123=20+20       → numbers=123, amount1=20, amount2=20
-    //   123 20*20       → numbers=123, amount1=20, amount2=20
-    //   123 20          → numbers=123, amount1=20
-    //   1234            → numbers=1234 (bare 4-digit for lao/hanoi → 4_set=1)
-    //   258.33.20       → numbers=258, amount1=33, amount2=20
-    //   54=50&50        → numbers=54, amount1=50, amount2=50
-    //   304=11×10       → numbers=304, amount1=11, amount2=10
-    //   258*20*20       → numbers=258, amount1=20, amount2=20
-    //   967-40*40       → numbers=967, amount1=40, amount2=40
-    //   213-50          → numbers=213, amount1=50
-    //   375-100*6       → numbers=375, amount1=100, amount2=6
-
-    let numbers = null
-    let amount1 = null
-    let amount2 = null
-    let amount3 = null
-    let hasChud = false // "ชุด" keyword present
-
-    // Try format with = first
-    const eqMatch = normalized.match(/^(\d+)\s*[=]\s*(.+)$/)
+    let numbers = null;
+    let amount1 = null;
+    let amount2 = null;
+    let amount3 = null;
+    let hasChud = false;
+    const eqMatch = normalized.match(/^(\d+)\s*[=]\s*(.+)$/);
     if (eqMatch) {
-        numbers = eqMatch[1]
-        const amountPart = eqMatch[2].trim()
-        const parsed = parseAmountPart(amountPart)
-        amount1 = parsed.amount1
-        amount2 = parsed.amount2
-        amount3 = parsed.amount3
-        hasChud = parsed.hasChud
-    } else {
-        // Try format with space: "123 20*20" or "123 20"
-        const spaceMatch = normalized.match(/^(\d+)\s+(.+)$/)
+        numbers = eqMatch[1];
+        const amountPart = eqMatch[2].trim();
+        const parsed = parseAmountPart(amountPart);
+        amount1 = parsed.amount1;
+        amount2 = parsed.amount2;
+        amount3 = parsed.amount3;
+        hasChud = parsed.hasChud;
+    }
+    else {
+        const spaceMatch = normalized.match(/^(\d+)\s+(.+)$/);
         if (spaceMatch) {
-            numbers = spaceMatch[1]
-            const amountPart = spaceMatch[2].trim()
-            const parsed = parseAmountPart(amountPart)
-            amount1 = parsed.amount1
-            amount2 = parsed.amount2
-            amount3 = parsed.amount3
-            hasChud = parsed.hasChud
-        } else {
-            // Bare number (no amount): e.g., "1234" for 4_set
-            const bareMatch = normalized.match(/^(\d+)$/)
+            numbers = spaceMatch[1];
+            const amountPart = spaceMatch[2].trim();
+            const parsed = parseAmountPart(amountPart);
+            amount1 = parsed.amount1;
+            amount2 = parsed.amount2;
+            amount3 = parsed.amount3;
+            hasChud = parsed.hasChud;
+        }
+        else {
+            const bareMatch = normalized.match(/^(\d+)$/);
             if (bareMatch) {
-                numbers = bareMatch[1]
+                numbers = bareMatch[1];
             }
         }
     }
-
-    if (!numbers || numbers.length < 1 || numbers.length > 5) return null
-    if (!/^\d+$/.test(numbers)) return null
-
-    const numLen = numbers.length
-    const permCount = numLen >= 2 ? getPermutationCount(numbers) : 1
-
-    // Determine bet type and format based on digit count, amounts, context
-    if (DEBUG_PASTE) console.log(`[parseNumberLine] FINAL: numbers=${numbers}, amt1=${amount1}, amt2=${amount2}, amt3=${amount3}, hasChud=${hasChud}, permCount=${permCount}, ctx=${parseContext}, normalized="${normalized}"`)
-    return determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, parseContext, isLaoOrHanoi, lotteryType, line)
+    if (!numbers || numbers.length < 1 || numbers.length > 5)
+        return null;
+    if (!/^\d+$/.test(numbers))
+        return null;
+    const numLen = numbers.length;
+    const permCount = numLen >= 2 ? getPermutationCount(numbers) : 1;
+    return determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, parseContext, isLaoOrHanoi, lotteryType, line, settings);
 }
-
-/**
- * Parse the amount part of a line (after = or space)
- * Returns { amount1, amount2, amount3, hasChud }
- */
 function parseAmountPart(str) {
-    let hasChud = false
-    let cleaned = normalizeUnicode(str.trim())
-    // Normalize x/X between digits to *: "220x5x44" → "220*5*44"
-    cleaned = cleaned.replace(/(\d)[xX](\d)/g, '$1*$2')
-
-    // Check for "ชุด" keyword
+    let hasChud = false;
+    let cleaned = normalizeUnicode(str.trim());
+    cleaned = cleaned.replace(/(\d)[xX](\d)/g, '$1*$2');
     if (cleaned.includes('ชุด')) {
-        hasChud = true
-        cleaned = cleaned.replace(/\*?ชุด/g, '').trim()
+        hasChud = true;
+        cleaned = cleaned.replace(/\*?ชุด/g, '').trim();
     }
-
-    // Strip leading non-digits (like =, space, text) from start of amount part: e.g. "กลับ=30" -> "30", "=30" -> "30"
-    cleaned = cleaned.replace(/^[^0-9]+/, '').trim()
-
-    // Strip commas in formatted amounts: "1,000" → "1000"
-    cleaned = cleaned.replace(/(\d),(\d{3})/g, '$1$2')
-    // Normalize /, +, :, t/ต between digit amounts to *
-    cleaned = cleaned.replace(/(\d)\s*[/+:tTต]\s*(\d)/g, '$1*$2')
-
-    // Split by * or - (amount separators)
-    const parts = cleaned.split(/[*\-]/).map(s => s.trim()).filter(s => s)
-
-    const amount1 = parts[0] ? parseInt(parts[0]) : null
-    const amount2 = parts[1] ? parseInt(parts[1]) : null
-    const amount3 = parts[2] ? parseInt(parts[2]) : null
-
-    // If hasChud but no amount2, amount2 will be calculated as permutation count later
+    cleaned = cleaned.replace(/^[^0-9]+/, '').trim();
+    cleaned = cleaned.replace(/(\d),(\d{3})/g, '$1$2');
+    cleaned = cleaned.replace(/(\d)\s*[/+:tTต]\s*(\d)/g, '$1*$2');
+    const parts = cleaned.split(/[*\-]/).map(s => s.trim()).filter(s => s);
+    const amount1 = parts[0] ? parseInt(parts[0]) : null;
+    const amount2 = parts[1] ? parseInt(parts[1]) : null;
+    const amount3 = parts[2] ? parseInt(parts[2]) : null;
     return {
         amount1: (amount1 && amount1 > 0) ? amount1 : null,
         amount2: (amount2 && amount2 > 0) ? amount2 : null,
         amount3: (amount3 && amount3 > 0) ? amount3 : null,
         hasChud
-    }
+    };
 }
-
-/**
- * Helper to check if a string is a valid date (DD/MM/YYYY, DD-MM-YYYY, etc. or YYYY/MM/DD)
- */
 function isDateLine(line) {
-    if (!line) return false
-    const s = line.trim()
-    // Pattern 1: DD/MM/YYYY or DD-MM-YYYY or DD\MM\YYYY (Day/Month/Year)
-    // Supports 1-2 digits for Day/Month, and 2 or 4 digits for Year
-    const dmyMatch = s.match(/^(\d{1,2})\s*[\/\-\\]\s*(\d{1,2})\s*[\/\-\\]\s*(\d{2,4})$/)
+    if (!line)
+        return false;
+    const s = line.trim();
+    const dmyMatch = s.match(/^(\d{1,2})\s*[\/\-\\]\s*(\d{1,2})\s*[\/\-\\]\s*(\d{2,4})$/);
     if (dmyMatch) {
-        const day = parseInt(dmyMatch[1], 10)
-        const month = parseInt(dmyMatch[2], 10)
+        const day = parseInt(dmyMatch[1], 10);
+        const month = parseInt(dmyMatch[2], 10);
         if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
-            return true
+            return true;
         }
     }
-    // Pattern 2: YYYY/MM/DD or YYYY-MM-DD or YYYY\MM\DD (Year/Month/Day)
-    const ymdMatch = s.match(/^(\d{4})\s*[\/\-\\]\s*(\d{1,2})\s*[\/\-\\]\s*(\d{1,2})$/)
+    const ymdMatch = s.match(/^(\d{4})\s*[\/\-\\]\s*(\d{1,2})\s*[\/\-\\]\s*(\d{1,2})$/);
     if (ymdMatch) {
-        const month = parseInt(ymdMatch[2], 10)
-        const day = parseInt(ymdMatch[3], 10)
+        const month = parseInt(ymdMatch[2], 10);
+        const day = parseInt(ymdMatch[3], 10);
         if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
-            return true
+            return true;
         }
     }
-    return false
+    return false;
 }
-
-/**
- * Helper to check if a line is a valid bare 4-digit number line.
- * It removes the 4-digit number and checks if the remaining characters are only allowed keywords/separators.
- */
 function isValidBare4DigitLine(rawLine, numbers) {
-    const trimmed = (rawLine || '').trim()
-    const remaining = trimmed.replace(numbers, '').trim()
-    if (!remaining) return true
-    const allowedRegex = /^[=\s]*(?:ชุด|ตัวชุด|ชุดลอยแพ|บน|ล่าง|บล|ลบ|บนล่าง|ล่างบน|บ\.?|ล\.?)?$/
-    return allowedRegex.test(remaining)
+    const trimmed = (rawLine || '').trim();
+    const remaining = trimmed.replace(numbers, '').trim();
+    if (!remaining)
+        return true;
+    const allowedRegex = /^[=\s]*(?:ชุด|ตัวชุด|ชุดลอยแพ|บน|ล่าง|บล|ลบ|บนล่าง|ล่างบน|บ\.?|ล\.?)?$/;
+    return allowedRegex.test(remaining);
 }
-
-/**
- * Determine bet type and return formatted entries
- */
-function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, contextMode, isLaoOrHanoi, lotteryType, rawLine) {
-    const isFloat = contextMode === 'float_top' || contextMode === 'float_bottom'
-    const isTop = contextMode === 'top' || contextMode === 'float_top'
-    const results = []
-
-    // === 1 digit ===
+function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, contextMode, isLaoOrHanoi, lotteryType, rawLine, settings) {
+    const isFloat = contextMode === 'float_top' || contextMode === 'float_bottom';
+    const isTop = contextMode === 'top' || contextMode === 'float_top';
+    const results = [];
+    const behavior = settings?.x_separator_behavior || 'auto';
+    const shouldStraightOnly = behavior === 'straight';
     if (numLen === 1) {
-        if (amount1 === null) return null
-        const betType = isTop ? 'run_top' : 'run_bottom'
-        const typeLabel = isTop ? 'ลอยบน' : 'ลอยล่าง'
+        if (amount1 === null)
+            return null;
+        const betType = isTop ? 'run_top' : 'run_bottom';
+        const typeLabel = isTop ? 'ลอยบน' : 'ลอยล่าง';
         results.push({
             numbers,
             amount: amount1,
@@ -1918,16 +1468,12 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
             typeLabel,
             rawLine,
             formattedLine: `${numbers}=${amount1} ${typeLabel}`
-        })
-        return results
+        });
+        return results;
     }
-
-    // === 2 digits ===
     if (numLen === 2) {
-        if (amount1 === null) return null
-
-        // Float mode (วิ่ง/ลอย/โต๊ด/มี) → 2_run (ลอย)
-        // BUT if it is float_bottom, it maps to 2_bottom (ล่าง) because "ลอยล่าง" doesn't exist for 2 digits.
+        if (amount1 === null)
+            return null;
         if (isFloat) {
             if (contextMode === 'float_bottom') {
                 results.push({
@@ -1938,8 +1484,8 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
                     typeLabel: 'ล่าง',
                     rawLine,
                     formattedLine: `${numbers}=${amount1} ล่าง`
-                })
-                return results
+                });
+                return results;
             }
             results.push({
                 numbers,
@@ -1949,28 +1495,43 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
                 typeLabel: 'ลอย',
                 rawLine,
                 formattedLine: `${numbers}=${amount1} ลอย`
-            })
-            return results
+            });
+            return results;
         }
-
-        if (amount2 !== null) {
-            // 2 amounts → กลับ (reverse)
-            const betType = isTop ? '2_top' : '2_bottom'
-            const typeLabel = isTop ? 'บนกลับ' : 'ล่างกลับ'
-            results.push({
-                numbers,
-                amount: amount1,
-                amount2,
-                betType,
-                specialType: 'reverse',
-                typeLabel,
-                rawLine,
-                formattedLine: `${numbers}=${amount1}*${amount2} ${typeLabel}`
-            })
-        } else {
-            // 1 amount → บน or ล่าง
-            const betType = isTop ? '2_top' : '2_bottom'
-            const typeLabel = isTop ? 'บน' : 'ล่าง'
+        if (amount2 !== null && !shouldStraightOnly) {
+            const isDouble = numbers[0] === numbers[1];
+            if (isDouble) {
+                const betType = isTop ? '2_top' : '2_bottom';
+                const typeLabel = isTop ? 'บน' : 'ล่าง';
+                const totalAmount = amount1 + amount2;
+                results.push({
+                    numbers,
+                    amount: totalAmount,
+                    amount2: null,
+                    betType,
+                    typeLabel,
+                    rawLine,
+                    formattedLine: `${numbers}=${totalAmount} ${typeLabel}`
+                });
+            }
+            else {
+                const betType = isTop ? '2_top' : '2_bottom';
+                const typeLabel = isTop ? 'บนกลับ' : 'ล่างกลับ';
+                results.push({
+                    numbers,
+                    amount: amount1,
+                    amount2,
+                    betType,
+                    specialType: 'reverse',
+                    typeLabel,
+                    rawLine,
+                    formattedLine: `${numbers}=${amount1}*${amount2} ${typeLabel}`
+                });
+            }
+        }
+        else {
+            const betType = isTop ? '2_top' : '2_bottom';
+            const typeLabel = isTop ? 'บน' : 'ล่าง';
             results.push({
                 numbers,
                 amount: amount1,
@@ -1979,15 +1540,13 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
                 typeLabel,
                 rawLine,
                 formattedLine: `${numbers}=${amount1} ${typeLabel}`
-            })
+            });
         }
-        return results
+        return results;
     }
-
-    // === 3 digits ===
     if (numLen === 3) {
-        if (amount1 === null) return null
-
+        if (amount1 === null)
+            return null;
         if (isFloat) {
             results.push({
                 numbers,
@@ -1997,57 +1556,39 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
                 typeLabel: 'โต๊ด',
                 rawLine,
                 formattedLine: `${numbers}=${amount1} โต๊ด`
-            })
-            return results
+            });
+            return results;
         }
-
-        // --- 4-group pattern: num=A*B*C (3-digit number with 3 amount parts) ---
-        // One of amt2/amt3 is a permutation indicator (permCount or permCount-1).
-        // The OTHER non-indicator value is the reverse bet amount (otherAmt).
-        //
-        // perm-1 indicator: keep amt1, use otherAmt as amt2 → กลับ
-        //   e.g. 123=30*20*5 → 123=30*20 กลับ  (perm=6, indicator=5=perm-1)
-        //   e.g. 334=50*2*10 → 334=50*10 กลับ  (perm=3, indicator=2=perm-1)
-        //
-        // perm indicator: amt1 += otherAmt, use otherAmt as amt2 → กลับ
-        //   e.g. 123=30*20*6 → 123=50*20 กลับ  (perm=6, indicator=6=perm, 30+20=50)
-        //   e.g. 122=100*20*3 → 122=120*20 กลับ (perm=3, indicator=3=perm, 100+20=120)
-        if (amount3 !== null && amount1 !== null && amount2 !== null) {
-            // 4-group: num=amt1*amt2*amt3
-            // Check if amt2 or amt3 is a permutation indicator
-            const isAmt2PermMinusOne = (amount2 === permCount - 1)
-            const isAmt2Perm = (amount2 === permCount)
-            const isAmt3PermMinusOne = (amount3 === permCount - 1)
-            const isAmt3Perm = (amount3 === permCount)
-
-            let finalAmt1 = null
-            let finalAmt2 = null
-            let matched = false
-
+        if (amount3 !== null && amount1 !== null && amount2 !== null && !shouldStraightOnly) {
+            const isAmt2PermMinusOne = (amount2 === permCount - 1);
+            const isAmt2Perm = (amount2 === permCount);
+            const isAmt3PermMinusOne = (amount3 === permCount - 1);
+            const isAmt3Perm = (amount3 === permCount);
+            let finalAmt1 = null;
+            let finalAmt2 = null;
+            let matched = false;
             if (isAmt2PermMinusOne) {
-                // amt2 is perm-1 indicator, amt3 is the reverse amount
-                finalAmt1 = amount1
-                finalAmt2 = amount3
-                matched = true
-            } else if (isAmt2Perm) {
-                // amt2 is perm indicator, amt3 is the reverse amount, add to amt1
-                finalAmt1 = amount1 + amount3
-                finalAmt2 = amount3
-                matched = true
-            } else if (isAmt3PermMinusOne) {
-                // amt3 is perm-1 indicator, amt2 is the reverse amount
-                finalAmt1 = amount1
-                finalAmt2 = amount2
-                matched = true
-            } else if (isAmt3Perm) {
-                // amt3 is perm indicator, amt2 is the reverse amount, add to amt1
-                finalAmt1 = amount1 + amount2
-                finalAmt2 = amount2
-                matched = true
+                finalAmt1 = amount1;
+                finalAmt2 = amount3;
+                matched = true;
             }
-
-            if (matched) {
-                const typeLabel = 'กลับ'
+            else if (isAmt2Perm) {
+                finalAmt1 = amount1 + amount3;
+                finalAmt2 = amount3;
+                matched = true;
+            }
+            else if (isAmt3PermMinusOne) {
+                finalAmt1 = amount1;
+                finalAmt2 = amount2;
+                matched = true;
+            }
+            else if (isAmt3Perm) {
+                finalAmt1 = amount1 + amount2;
+                finalAmt2 = amount2;
+                matched = true;
+            }
+            if (matched && finalAmt1 !== null && finalAmt2 !== null) {
+                const typeLabel = 'กลับ';
                 results.push({
                     numbers,
                     amount: finalAmt1,
@@ -2057,19 +1598,14 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
                     typeLabel,
                     rawLine,
                     formattedLine: `${numbers}=${finalAmt1}*${finalAmt2} ${typeLabel}`
-                })
-                return results
+                });
+                return results;
             }
-            // If no perm indicator matched, fall through to normal 2-amount handling
         }
-
         if (amount2 !== null || hasChud) {
-            // 2 amounts for 3-digit number: determine เต็งโต๊ด or คูณชุด
-            const effectiveAmount2 = hasChud ? permCount : amount2
-
-            if (effectiveAmount2 === permCount) {
-                // amount2 matches permutation count → คูณชุด (multiply by permutations)
-                const typeLabel = 'คูณชุด'
+            const effectiveAmount2 = hasChud ? permCount : amount2;
+            if (effectiveAmount2 === permCount && !shouldStraightOnly) {
+                const typeLabel = 'คูณชุด';
                 results.push({
                     numbers,
                     amount: amount1,
@@ -2079,10 +1615,10 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
                     typeLabel,
                     rawLine,
                     formattedLine: `${numbers}=${amount1}*${effectiveAmount2} ${typeLabel}`
-                })
-            } else {
-                // amount2 does NOT match permutation count → เต็งโต๊ด (straight + tod)
-                const typeLabel = 'เต็งโต๊ด'
+                });
+            }
+            else if (effectiveAmount2 !== null) {
+                const typeLabel = 'เต็งโต๊ด';
                 results.push({
                     numbers,
                     amount: amount1,
@@ -2092,12 +1628,12 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
                     typeLabel,
                     rawLine,
                     formattedLine: `${numbers}=${amount1}*${effectiveAmount2} ${typeLabel}`
-                })
+                });
             }
-        } else {
-            // Single amount → ตรง/บน (for lao/hanoi → ตรง, for thai → บน)
-            const betType = isLaoOrHanoi ? '3_top' : (isTop ? '3_top' : '3_bottom')
-            const typeLabel = isLaoOrHanoi ? 'ตรง' : (isTop ? 'บน' : 'ล่าง')
+        }
+        else {
+            const betType = isLaoOrHanoi ? '3_top' : (isTop ? '3_top' : '3_bottom');
+            const typeLabel = isLaoOrHanoi ? 'ตรง' : (isTop ? 'บน' : 'ล่าง');
             results.push({
                 numbers,
                 amount: amount1,
@@ -2106,19 +1642,15 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
                 typeLabel,
                 rawLine,
                 formattedLine: `${numbers}=${amount1} ${typeLabel}`
-            })
+            });
         }
-        return results
+        return results;
     }
-
-    // === 4 digits ===
     if (numLen === 4) {
-        // Bare 4-digit number (no amount) for lao/hanoi → 4_set=1
         if (amount1 === null) {
             if (isLaoOrHanoi) {
-                // Verify if the raw line is actually a bare 4-digit line and not conversational text
                 if (!isValidBare4DigitLine(rawLine, numbers)) {
-                    return null
+                    return null;
                 }
                 results.push({
                     numbers,
@@ -2128,16 +1660,14 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
                     typeLabel: '4ตัวชุด',
                     rawLine,
                     formattedLine: `${numbers}=1 4ตัวชุด`
-                })
-                return results
+                });
+                return results;
             }
-            return null // Thai needs amount
+            return null;
         }
-
         if (amount2 !== null || hasChud) {
-            // 3 parts → คูณชุด (generate 3-digit combinations)
-            const effectiveAmount2 = hasChud ? get3DigitPermCount(numbers) : amount2
-            const typeLabel = 'คูณชุด'
+            const effectiveAmount2 = hasChud ? get3DigitPermCount(numbers) : amount2;
+            const typeLabel = 'คูณชุด';
             results.push({
                 numbers,
                 amount: amount1,
@@ -2147,45 +1677,27 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
                 typeLabel,
                 rawLine,
                 formattedLine: `${numbers}=${amount1}*${effectiveAmount2} ${typeLabel}`
-            })
-        } else {
-            // 2 parts (numbers=amount)
-            // Check if amount is small → could be 4_set (set count) for lao/hanoi
-            if (isLaoOrHanoi && amount1 <= 99) {
-                // Ambiguous: could be 4_set (set count) or 4_float (amount)
-                // Use ลอยแพ by default when amount > 1, 4ตัวชุด when amount <= 10
-                // Actually per spec: "1234=50 → ลอยแพ" regardless
-                results.push({
-                    numbers,
-                    amount: amount1,
-                    amount2: null,
-                    betType: '4_float',
-                    typeLabel: 'ลอยแพ',
-                    rawLine,
-                    formattedLine: `${numbers}=${amount1} ลอยแพ`
-                })
-            } else {
-                results.push({
-                    numbers,
-                    amount: amount1,
-                    amount2: null,
-                    betType: '4_float',
-                    typeLabel: 'ลอยแพ',
-                    rawLine,
-                    formattedLine: `${numbers}=${amount1} ลอยแพ`
-                })
-            }
+            });
         }
-        return results
+        else {
+            results.push({
+                numbers,
+                amount: amount1,
+                amount2: null,
+                betType: '4_float',
+                typeLabel: 'ลอยแพ',
+                rawLine,
+                formattedLine: `${numbers}=${amount1} ลอยแพ`
+            });
+        }
+        return results;
     }
-
-    // === 5 digits ===
     if (numLen === 5) {
-        if (amount1 === null) return null
-
+        if (amount1 === null)
+            return null;
         if (amount2 !== null || hasChud) {
-            const effectiveAmount2 = hasChud ? get3DigitPermCount(numbers) : amount2
-            const typeLabel = 'คูณชุด'
+            const effectiveAmount2 = hasChud ? get3DigitPermCount(numbers) : amount2;
+            const typeLabel = 'คูณชุด';
             results.push({
                 numbers,
                 amount: amount1,
@@ -2195,8 +1707,9 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
                 typeLabel,
                 rawLine,
                 formattedLine: `${numbers}=${amount1}*${effectiveAmount2} ${typeLabel}`
-            })
-        } else {
+            });
+        }
+        else {
             results.push({
                 numbers,
                 amount: amount1,
@@ -2205,183 +1718,125 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
                 typeLabel: 'ลอยแพ',
                 rawLine,
                 formattedLine: `${numbers}=${amount1} ลอยแพ`
-            })
+            });
         }
-        return results
+        return results;
     }
-
-    return null
+    return null;
 }
-
-/**
- * Get 3-digit permutation count from 4 or 5 digit number
- * (number of unique 3-digit combinations × their permutations)
- */
-function get3DigitPermCount(numbers) {
-    const digits = numbers.split('')
-    const combinations = new Set()
-
-    for (let i = 0; i < digits.length; i++) {
-        for (let j = 0; j < digits.length; j++) {
-            if (j === i) continue
-            for (let k = 0; k < digits.length; k++) {
-                if (k === i || k === j) continue
-                combinations.add(digits[i] + digits[j] + digits[k])
-            }
-        }
-    }
-
-    return combinations.size
-}
-
-function get2DigitPermutations(numberStr) {
-    const digits = numberStr.split('')
-    const combinations = new Set([
-        numberStr,
-        digits[1] + digits[0]
-    ])
-    return [...combinations]
-}
-
-function get3DigitPermutations(numberStr) {
-    const digits = numberStr.split('')
-    const combinations = new Set()
-    for (let i = 0; i < digits.length; i++) {
-        for (let j = 0; j < digits.length; j++) {
-            if (j === i) continue
-            for (let k = 0; k < digits.length; k++) {
-                if (k === i || k === j) continue
-                combinations.add(digits[i] + digits[j] + digits[k])
-            }
-        }
-    }
-    return [...combinations]
-}
-
 export function extractBuyerNote(text, lotteryType = 'lao') {
-    if (!text || !text.trim()) return ''
-    const rawLines = text.split('\n')
-    const nonEmptyLines = rawLines.map(l => l.trim()).filter(l => l.length > 0 && !isConversationalSingleNumberLine(l))
-    if (nonEmptyLines.length === 0) return ''
-
-    const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType)
-
+    if (!text || !text.trim())
+        return '';
+    const rawLines = text.split('\n');
+    const nonEmptyLines = rawLines.map(l => l.trim()).filter(l => l.length > 0 && !isConversationalSingleNumberLine(l));
+    if (nonEmptyLines.length === 0)
+        return '';
+    const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType);
     function getTrailingNote(line) {
-        const cleaned = cleanNoteText(line)
+        const cleaned = cleanNoteText(line);
         if (cleaned && cleaned !== line) {
             if (!isAmountPattern(cleaned) && !/^[\d/,\s\-+*xX×=\(\)]+$/.test(cleaned)) {
-                const cleanLower = cleaned.toLowerCase()
-                const ignoreKeywords = ['รวม', 'ยอด', 'ทั้งหมด', 'total', 'net', 'sum', 'บ.', 'บาท']
+                const cleanLower = cleaned.toLowerCase();
+                const ignoreKeywords = ['รวม', 'ยอด', 'ทั้งหมด', 'total', 'net', 'sum', 'บ.', 'บาท'];
                 if (!ignoreKeywords.some(kw => cleanLower.includes(kw))) {
-                    return cleaned
+                    return cleaned;
                 }
             }
         }
-        return null
+        return null;
     }
-
     const isNoteLine = (line) => {
-        const trimmed = line.trim()
-        if (!trimmed) return false
-        if (/^[\d/,\s\-+*xX×=\(\)]+$/.test(trimmed)) return false // ignore lottery numbers and operators
-        if (trimmed.startsWith('/')) return false
-        if (isDateLine(trimmed)) return false
-        if (parseContextLine(trimmed)) return false
-
-        const cleaned = cleanNoteText(trimmed)
-        if (!cleaned) return false
-        if (isAmountPattern(cleaned) || /^[\d/,\s\-+*xX×=\(\)]+$/.test(cleaned)) return false
-
-        const cleanLower = cleaned.toLowerCase()
-        const ignoreKeywords = ['รวม', 'ยอด', 'ทั้งหมด', 'total', 'net', 'sum', 'บ.', 'บาท']
+        const trimmed = line.trim();
+        if (!trimmed)
+            return false;
+        if (/^[\d/,\s\-+*xX×=\(\)]+$/.test(trimmed))
+            return false;
+        if (trimmed.startsWith('/'))
+            return false;
+        if (isDateLine(trimmed))
+            return false;
+        if (parseContextLine(trimmed))
+            return false;
+        const cleaned = cleanNoteText(trimmed);
+        if (!cleaned)
+            return false;
+        if (isAmountPattern(cleaned) || /^[\d/,\s\-+*xX×=\(\)]+$/.test(cleaned))
+            return false;
+        const cleanLower = trimmed.toLowerCase();
+        const ignoreKeywords = ['รวม', 'ยอด', 'ทั้งหมด', 'total', 'net', 'sum', 'บ.', 'บาท'];
         if (ignoreKeywords.some(kw => cleanLower.includes(kw))) {
-            return false
+            return false;
         }
-
-        // If it can be parsed as a valid bet line, it is not a note
-        const parsed = parseNumberLine(trimmed, 'top', isLaoOrHanoi, lotteryType)
-        if (parsed && parsed.length > 0) return false
-
-        return true
-    }
-
-    const first = nonEmptyLines[0]
-    const last = nonEmptyLines[nonEmptyLines.length - 1]
-
-    const lastTrailing = getTrailingNote(last)
+        const parsed = parseNumberLine(trimmed, 'top', isLaoOrHanoi, lotteryType);
+        if (parsed && parsed.length > 0)
+            return false;
+        return true;
+    };
+    const first = nonEmptyLines[0];
+    const last = nonEmptyLines[nonEmptyLines.length - 1];
+    const lastTrailing = getTrailingNote(last);
     if (lastTrailing) {
-        return lastTrailing
+        return lastTrailing;
     }
-
-    const firstTrailing = getTrailingNote(first)
+    const firstTrailing = getTrailingNote(first);
     if (firstTrailing) {
-        return firstTrailing
+        return firstTrailing;
     }
-
     if (isNoteLine(last)) {
-        return cleanNoteText(last)
+        return cleanNoteText(last);
     }
     if (isNoteLine(first)) {
-        return cleanNoteText(first)
+        return cleanNoteText(first);
     }
-
-    return ''
+    return '';
 }
-
 function splitAmountAndTrailingText(line) {
-    let s = normalizeUnicode(line.trim())
-    const pat0 = s.match(/^(\d+[*×xX\-+/]\d+[*×xX\-+/]\d+)(?:\s+(.+))?$/)
+    let s = normalizeUnicode(line.trim());
+    const pat0 = s.match(/^(\d+[*×xX\-+/]\d+[*×xX\-+/]\d+)(?:\s+(.+))?$/);
     if (pat0) {
-        return { amountStr: pat0[1].trim(), trailingText: pat0[2] ? pat0[2].trim() : '' }
+        return { amountStr: pat0[1].trim(), trailingText: pat0[2] ? pat0[2].trim() : '' };
     }
-    const pat1 = s.match(/^(\d+[*×xX\-+/](?:\d+|ชุด)(?:[*×xX\-+/]ชุด)?)(?:\s+(.+))?$/)
+    const pat1 = s.match(/^(\d+[*×xX\-+/](?:\d+|ชุด)(?:[*×xX\-+/]ชุด)?)(?:\s+(.+))?$/);
     if (pat1) {
-        return { amountStr: pat1[1].trim(), trailingText: pat1[2] ? pat1[2].trim() : '' }
+        return { amountStr: pat1[1].trim(), trailingText: pat1[2] ? pat1[2].trim() : '' };
     }
-    const pat2 = s.match(/^(\d+\s*[tTต]\s*\d+)(?:\s+(.+))?$/)
+    const pat2 = s.match(/^(\d+\s*[tTต]\s*\d+)(?:\s+(.+))?$/);
     if (pat2) {
-        return { amountStr: pat2[1].trim(), trailingText: pat2[2] ? pat2[2].trim() : '' }
+        return { amountStr: pat2[1].trim(), trailingText: pat2[2] ? pat2[2].trim() : '' };
     }
-    const pat3 = s.match(/^(\d+\s*ชุด)(?:\s+(.+))?$/)
+    const pat3 = s.match(/^(\d+\s*ชุด)(?:\s+(.+))?$/);
     if (pat3) {
-        return { amountStr: pat3[1].trim(), trailingText: pat3[2] ? pat3[2].trim() : '' }
+        return { amountStr: pat3[1].trim(), trailingText: pat3[2] ? pat3[2].trim() : '' };
     }
-    const pat4 = s.match(/^(\d+\s*(?:บาท|บ\.?))(?:\s+(.+))?$/i)
+    const pat4 = s.match(/^(\d+\s*(?:บาท|บ\.?))(?:\s+(.+))?$/i);
     if (pat4) {
-        return { amountStr: pat4[1].trim(), trailingText: pat4[2] ? pat4[2].trim() : '' }
+        return { amountStr: pat4[1].trim(), trailingText: pat4[2] ? pat4[2].trim() : '' };
     }
-    const pat5 = s.match(/^(=[^=\s]+)(?:\s+(.+))?$/)
+    const pat5 = s.match(/^(=[^=\s]+)(?:\s+(.+))?$/);
     if (pat5) {
-        return { amountStr: pat5[1].trim(), trailingText: pat5[2] ? pat5[2].trim() : '' }
+        return { amountStr: pat5[1].trim(), trailingText: pat5[2] ? pat5[2].trim() : '' };
     }
-    return null
+    return null;
 }
-
 function cleanNoteText(str) {
-    let s = normalizeUnicode(str.trim())
-    // Remove leading number and context prefix if present (e.g. "47-ล่าง 50*50 น้ำค้าง" -> "50*50 น้ำค้าง")
-    const startCtxMatch = s.match(/^(\d{1,5})\s*[-/]?\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล|วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด)\.?\s*(?:=|\s+)?\s*(\d.+)$/i)
+    let s = normalizeUnicode(str.trim());
+    const startCtxMatch = s.match(/^(\d{1,5})\s*[-/]?\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล|วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด)\.?\s*(?:=|\s+)?\s*(\d.+)$/i);
     if (startCtxMatch) {
-        s = startCtxMatch[3].trim()
-    } else {
-        // Remove leading number list prefix if present (e.g. "123=", "123 ", "305)307)=")
-        const prefixMatch = s.match(/^([\d,/\s)]+?)\s*(?:=|\s)\s*(\d.+)$/)
+        s = startCtxMatch[3].trim();
+    }
+    else {
+        const prefixMatch = s.match(/^([\d,/\s)]+?)\s*(?:=|\s)\s*(\d.+)$/);
         if (prefixMatch) {
-            s = prefixMatch[2].trim()
+            s = prefixMatch[2].trim();
         }
     }
-
-    const split = splitAmountAndTrailingText(s)
+    const split = splitAmountAndTrailingText(s);
     if (split && split.trailingText) {
-        return split.trailingText
+        return split.trailingText;
     }
-
-    // Check if s is just digits followed by text (e.g. "20 พี่รี" or "50 พี่รี")
-    const spaceMatch = s.match(/^(\d+)(?:\s+(.+))?$/)
+    const spaceMatch = s.match(/^(\d+)(?:\s+(.+))?$/);
     if (spaceMatch && spaceMatch[2]) {
-        return spaceMatch[2].trim()
+        return spaceMatch[2].trim();
     }
-
-    return s
+    return s;
 }
-
