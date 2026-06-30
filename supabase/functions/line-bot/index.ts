@@ -7900,8 +7900,8 @@ serve(async (req) => {
                   continue;
                 }
 
-                const isClosingCmd = commandPrefix.includes('ปิด');
-                const isNormalCmd = commandPrefix.includes('ปกติ');
+                const isClosingCmd = commandPrefix === '/โพยปิด ';
+                const isNormalCmd = commandPrefix === '/โพยปกติ ';
                 const targetAdminMode = isClosingCmd ? 'force_close' : (isNormalCmd ? 'normal' : 'force_open');
                 const targetLineMode = isClosingCmd ? 'none' : 'short';
                 const lotName = groupLink.lottery_type === 'lao' ? 'หวยลาว' : groupLink.lottery_type === 'thai' ? 'หวยไทย' : groupLink.lottery_type === 'hanoi' ? 'หวยฮานอย' : groupLink.lottery_type === 'stock' ? 'หวยหุ้น' : 'หวยประเภทนี้';
