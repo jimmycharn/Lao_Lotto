@@ -7673,7 +7673,14 @@ serve(async (req) => {
                     const ltype = groupLink.lottery_type || 'thai';
                     const ltypeThai = TYPE_NAMES[ltype.toLowerCase()] || ltype;
 
-                    await sendLineReply(replyToken, `แอดมินกลุ่มนี้ส่งแทนคุณ ${name} id ${code} ประเภท ${ltypeThai}`);
+                    const { data: dealerProfile } = await supabase
+                      .from('profiles')
+                      .select('full_name')
+                      .eq('id', groupLink.dealer_id)
+                      .maybeSingle();
+                    const dealerName = dealerProfile?.full_name || 'เจ้ามือ';
+
+                    await sendLineReply(replyToken, `แอดมินกลุ่มนี้ส่งแทน ${dealerName} ในชื่อบัญชี ${name} id ${code} ประเภท ${ltypeThai}`);
                   } else {
                     await sendLineReply(replyToken, `กลุ่มนี้ปิดการส่งเลขแทนบัญชีอื่น`);
                   }
