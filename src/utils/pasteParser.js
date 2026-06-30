@@ -91,7 +91,7 @@ function cleanPrefixNoiseButKeepContext(line) {
     s = s.replace(/^(?:\d{1,2}[:.:]\d{2}([:.:]\d{2})?\s*)?([^=\d]*?)(?=(?:วิ่งบน|วิ่งล่าง|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล|พี่น้อง|พน|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|หาง|เบิ้ล|คู่|หน้าหลัง|น้าหลัง|นห|รูดหน้า|หน้า|น้า|น|รูดหลัง|หลัง|ลัง|ห|วิ่ง|ลอย|โต๊ด|โตด|ต)(?![ก-๛a-zA-Z])|\d)/i, '');
     return s.trim();
 }
-function normalizeUnicode(str) {
+export function normalizeUnicode(str) {
     if (!str)
         return '';
     let s = str
@@ -1186,7 +1186,7 @@ function refineFloatMode(mode, text) {
     }
     return mode;
 }
-function extractInlineContext(line) {
+export function extractInlineContext(line) {
     let s = line.trim();
     const floatPrefixTop = s.match(/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\.?\s*(\d.*)$/);
     if (floatPrefixTop) {
