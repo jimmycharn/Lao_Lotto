@@ -1209,9 +1209,15 @@ function extractInlineContext(line) {
     }
     const floatSuffix = s.match(/^(.+?)\s*(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\s*$/);
     if (floatSuffix) {
-        let mode = 'float_top';
-        mode = refineFloatMode(mode, s);
-        return { cleaned: floatSuffix[1].trim(), mode };
+        const kw = floatSuffix[2];
+        const beforeKw = floatSuffix[1].trim();
+        if ((kw === 'โต๊ด' || kw === 'โตด') && (beforeKw.endsWith('เต็ง') || beforeKw.endsWith('เต็ง-') || beforeKw.endsWith('เต็ง/'))) {
+            // Rejection: it's part of a compound keyword "เต็งโต๊ด", not a float suffix
+        } else {
+            let mode = 'float_top';
+            mode = refineFloatMode(mode, s);
+            return { cleaned: floatSuffix[1].trim(), mode };
+        }
     }
     const floatMiddle = s.match(/^(\d+)\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|มี)\s+(\d[\d*=\-+]*)$/);
     if (floatMiddle) {

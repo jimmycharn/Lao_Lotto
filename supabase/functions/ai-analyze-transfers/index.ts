@@ -64,7 +64,8 @@ function getSettingsKey(betType: string, lotteryKey: string): string {
 }
 
 function getLotteryKey(lotteryType: string): string {
-  if (lotteryType === 'lao' || lotteryType === 'hanoi') return lotteryType
+  if (lotteryType === 'thai') return 'thai'
+  if (lotteryType === 'lao' || lotteryType === 'hanoi') return 'lao'
   if (lotteryType === 'stock') return 'stock'
   return 'thai'
 }
@@ -158,6 +159,37 @@ function calc4SetPrize(betNum: string, winNum: string, prizes: Record<string, nu
   return matched.length > 0 ? Math.max(...matched) : 0
 }
 
+async function fetchAllRows(
+  queryBuilder: (from: number, to: number) => any,
+  pageSize = 1000
+): Promise<{ data: any[] | null; error: any }> {
+  let allData: any[] = [];
+  let from = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const to = from + pageSize - 1;
+    const { data, error } = await queryBuilder(from, to);
+
+    if (error) {
+      return { data: allData.length > 0 ? allData : null, error };
+    }
+
+    if (data && data.length > 0) {
+      allData = allData.concat(data);
+      if (data.length < pageSize) {
+        hasMore = false;
+      } else {
+        from += pageSize;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+
+  return { data: allData, error: null };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -193,19 +225,25 @@ serve(async (req) => {
     const lotteryKey = getLotteryKey(roundData?.lottery_type || lottery_type || 'lao')
 
     // Fetch submissions
-    const { data: submissions, error: subError } = await supabase
-      .from('submissions')
-      .select('id, bet_type, numbers, amount, user_id, prize_amount')
-      .eq('round_id', round_id)
-      .eq('is_deleted', false)
+    const { data: submissions, error: subError } = await fetchAllRows(
+      (from, to) => supabase
+        .from('submissions')
+        .select('id, bet_type, numbers, amount, user_id, prize_amount')
+        .eq('round_id', round_id)
+        .eq('is_deleted', false)
+        .range(from, to)
+    )
 
     if (subError) throw subError
 
     // Fetch existing transfers
-    const { data: transfers, error: trError } = await supabase
-      .from('bet_transfers')
-      .select('bet_type, numbers, amount')
-      .eq('round_id', round_id)
+    const { data: transfers, error: trError } = await fetchAllRows(
+      (from, to) => supabase
+        .from('bet_transfers')
+        .select('bet_type, numbers, amount')
+        .eq('round_id', round_id)
+        .range(from, to)
+    )
 
     if (trError) throw trError
 
