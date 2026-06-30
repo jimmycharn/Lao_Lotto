@@ -7680,7 +7680,7 @@ serve(async (req) => {
                       .maybeSingle();
                     const dealerName = dealerProfile?.full_name || 'เจ้ามือ';
 
-                    await sendLineReply(replyToken, `แอดมินกลุ่มนี้ส่งแทน ${dealerName} ในชื่อบัญชี ${name} id ${code} ประเภท ${ltypeThai}`);
+                    await sendLineReply(replyToken, `แอดมินกลุ่มนี้ส่งเภา ${dealerName} ในชื่อบัญชี ${name} id ${code} ประเภท ${ltypeThai}`);
                   } else {
                     await sendLineReply(replyToken, `กลุ่มนี้ปิดการส่งเลขแทนบัญชีอื่น`);
                   }
