@@ -150,7 +150,7 @@ export function normalizeUnicode(str) {
         }
         return `${p1}=${p2}`;
     });
-    s = s.replace(/(\d+)\s*\(\s*(\d+)\s*[*×xX\-+/tTต\s]\s*(\d+)\s*\)/g, '$1*$2*$3');
+    s = s.replace(/(\d+)\s*\(\s*(\d+)\s*[*×xX\-+/tTต\s]\s*(\d+)\s*\)/g, '$1*$2 กลับ');
     s = s.replace(/\s*-+\s*=/g, '=').replace(/=\s*-+\s*/g, '=');
     s = s.replace(/\s*\.+\s*=/g, '=').replace(/=\s*\.+\s*/g, '=');
     s = s.replace(/\b\d+\s*ตัว\s*/g, '');
@@ -1292,6 +1292,12 @@ export function extractInlineContext(line) {
         const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom';
         return { cleaned: rest.trim(), mode };
     }
+    // Handle กลับ suffix for 3-digit reverse bets (only when not preceded by บน/ล่าง)
+    const reverseSuffix = s.match(/^(.+?)\s*กลับ\s*$/);
+    if (reverseSuffix) {
+        return { cleaned: reverseSuffix[1].trim(), mode: 'reverse' };
+    }
+
     const midBothMatch = s.match(/^(\d+)\s+(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(\d.+)$/);
     if (midBothMatch) {
         return { cleaned: `${midBothMatch[1]} ${midBothMatch[3].trim()}`, mode: 'both' };
@@ -1377,7 +1383,8 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType, settings)
         }
     }
     const effectiveContext = inlineCtx.mode || contextMode;
-    const parseContext = (effectiveContext === 'both') ? 'top' : effectiveContext;
+    const isReverseBet = effectiveContext === 'reverse';
+    const parseContext = (effectiveContext === 'both') ? 'top' : (isReverseBet ? 'top' : effectiveContext);
     if (!normalized)
         return null;
     if (isDateLine(normalized))
@@ -1445,7 +1452,7 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType, settings)
         return null;
     const numLen = numbers.length;
     const permCount = numLen >= 2 ? getPermutationCount(numbers) : 1;
-    return determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, parseContext, isLaoOrHanoi, lotteryType, line, settings);
+    return determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, parseContext, isLaoOrHanoi, lotteryType, line, settings, isReverseBet);
 }
 function parseAmountPart(str) {
     let hasChud = false;
@@ -1499,7 +1506,7 @@ function isValidBare4DigitLine(rawLine, numbers) {
     const allowedRegex = /^[=\s]*(?:ชุด|ตัวชุด|ชุดลอยแพ|บน|ล่าง|บล|ลบ|บนล่าง|ล่างบน|บ\.?|ล\.?)?$/;
     return allowedRegex.test(remaining);
 }
-function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, contextMode, isLaoOrHanoi, lotteryType, rawLine, settings) {
+function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, contextMode, isLaoOrHanoi, lotteryType, rawLine, settings, isReverseBet = false) {
     const isFloat = contextMode === 'float_top' || contextMode === 'float_bottom';
     const isTop = contextMode === 'top' || contextMode === 'float_top';
     const results = [];
@@ -1651,6 +1658,23 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
                 });
                 return results;
             }
+        }
+        // Handle explicit กลับ keyword (from parenthetical NxM format or direct keyword)
+        if (isReverseBet && amount2 !== null && amount1 !== null && !shouldStraightOnly) {
+            const finalAmt1 = amount1 + amount2 * (permCount - 1);
+            const finalAmt2 = amount2;
+            const typeLabel = 'กลับ';
+            results.push({
+                numbers,
+                amount: finalAmt1,
+                amount2: finalAmt2,
+                betType: '3_top',
+                specialType: 'reverse',
+                typeLabel,
+                rawLine,
+                formattedLine: `${numbers}=${finalAmt1}*${finalAmt2} ${typeLabel}`
+            });
+            return results;
         }
         if (amount2 !== null || hasChud) {
             const effectiveAmount2 = hasChud ? permCount : amount2;

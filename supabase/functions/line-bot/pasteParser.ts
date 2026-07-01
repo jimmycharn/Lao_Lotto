@@ -203,8 +203,8 @@ function normalizeUnicode(str: string): string {
         return `${p1}=${p2}`;
     });
 
-    // Convert parenthetical multipliers like "20(10x5)" or "20(10*5)" or "20 (10 x 5)" to "*"-separated format "20*10*5"
-    s = s.replace(/(\d+)\s*\(\s*(\d+)\s*[*×xX\-+/tTต\s]\s*(\d+)\s*\)/g, '$1*$2*$3');
+    // Convert parenthetical multipliers like "411=100(20x5)" to "411=100*20 กลับ" (marks as reverse bet)
+    s = s.replace(/(\d+)\s*\(\s*(\d+)\s*[*×xX\-+/tTต\s]\s*(\d+)\s*\)/g, '$1*$2 กลับ');
 
     // Convert typos like -= or =- (with optional spacing and multiple dashes) to =
     s = s.replace(/\s*-+\s*=/g, '=').replace(/=\s*-+\s*/g, '=');
@@ -1508,6 +1508,12 @@ function extractInlineContext(line: string): InlineContextInfo {
         return { cleaned: rest.trim(), mode };
     }
 
+    // Handle กลับ suffix for 3-digit reverse bets (only when not preceded by บน/ล่าง)
+    const reverseSuffix = s.match(/^(.+?)\s*กลับ\s*$/);
+    if (reverseSuffix) {
+        return { cleaned: reverseSuffix[1].trim(), mode: 'reverse' };
+    }
+
     const midBothMatch = s.match(/^(\d+)\s+(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(\d.+)$/);
     if (midBothMatch) {
         return { cleaned: `${midBothMatch[1]} ${midBothMatch[3].trim()}`, mode: 'both' };
@@ -1604,7 +1610,8 @@ function parseNumberLine(line: string, contextMode: string, isLaoOrHanoi: boolea
         }
     }
     const effectiveContext = inlineCtx.mode || contextMode;
-    const parseContext = (effectiveContext === 'both') ? 'top' : effectiveContext;
+    const isReverseBet = effectiveContext === 'reverse';
+    const parseContext = (effectiveContext === 'both') ? 'top' : (isReverseBet ? 'top' : effectiveContext);
     if (!normalized) return null;
     if (isDateLine(normalized)) return null;
 
@@ -1676,7 +1683,7 @@ function parseNumberLine(line: string, contextMode: string, isLaoOrHanoi: boolea
     const numLen = numbers.length;
     const permCount = numLen >= 2 ? getPermutationCount(numbers) : 1;
 
-    return determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, parseContext, isLaoOrHanoi, lotteryType, line, settings);
+    return determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, parseContext, isLaoOrHanoi, lotteryType, line, settings, isReverseBet);
 }
 
 interface ParsedAmount {
@@ -1761,7 +1768,8 @@ function determineBetType(
     isLaoOrHanoi: boolean,
     lotteryType: string,
     rawLine: string,
-    settings?: { x_separator_behavior?: string }
+    settings?: { x_separator_behavior?: string },
+    isReverseBet: boolean = false
 ): ParsedBet[] | null {
     const isFloat = contextMode === 'float_top' || contextMode === 'float_bottom';
     const isTop = contextMode === 'top' || contextMode === 'float_top';
@@ -1920,6 +1928,24 @@ function determineBetType(
                 });
                 return results;
             }
+        }
+
+        // Handle explicit กลับ keyword (from parenthetical NxM format or direct keyword)
+        if (isReverseBet && amount2 !== null && amount1 !== null && !shouldStraightOnly) {
+            const finalAmt1 = amount1 + amount2 * (permCount - 1);
+            const finalAmt2 = amount2;
+            const typeLabel = 'กลับ';
+            results.push({
+                numbers,
+                amount: finalAmt1,
+                amount2: finalAmt2,
+                betType: '3_top',
+                specialType: 'reverse',
+                typeLabel,
+                rawLine,
+                formattedLine: `${numbers}=${finalAmt1}*${finalAmt2} ${typeLabel}`
+            });
+            return results;
         }
 
         if (amount2 !== null || hasChud) {
