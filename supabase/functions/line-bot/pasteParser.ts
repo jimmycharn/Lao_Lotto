@@ -264,14 +264,55 @@ function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_sep
     const expanded: string[] = [];
     const hyphenBehavior = settings?.hyphen_separator_behavior || 'separator';
 
+    // Parse sequential list prefixes once
+    const listIndices = new Set<number>();
+    const listPrefixRegex = /^\s*(\d{1,2})([\.)\uFF0E\uFF09])\s+/;
+    const parsedLines = rawLines.map(line => {
+        const match = line.match(listPrefixRegex);
+        if (match) {
+            return {
+                num: parseInt(match[1], 10),
+                sep: match[2]
+            };
+        }
+        return null;
+    });
+    for (let i = 0; i < rawLines.length; i++) {
+        if (!parsedLines[i]) continue;
+        const current = parsedLines[i]!;
+        let isSequence = false;
+        if (i > 0 && parsedLines[i - 1]) {
+            if (parsedLines[i - 1]!.num === current.num - 1) isSequence = true;
+        }
+        if (i < rawLines.length - 1 && parsedLines[i + 1]) {
+            if (parsedLines[i + 1]!.num === current.num + 1) isSequence = true;
+        }
+        if (isSequence) listIndices.add(i);
+    }
+
     for (let idx = 0; idx < rawLines.length; idx++) {
         const rawLine = rawLines[idx];
         let line = rawLine.trim();
         // Normalize trailing separators before amount indicators (e.g. "56,×10" -> "56×10")
         line = line.replace(/[\/,']\s*([*×\u00D7xX=])/g, '$1');
 
-        // --- Step 0: Strip leading list index prefix like "1) ", "2. " (1-2 digits followed by . or ) and space) ---
-        line = line.replace(/^\s*\d{1,2}[\.)\uFF0E\uFF09]\s+/, '');
+        // Conditional list prefix stripping
+        const match = line.match(listPrefixRegex);
+        if (match) {
+            const num = parseInt(match[1], 10);
+            const remaining = line.substring(match[0].length).trim();
+            const hasLeadingZero = match[1].length > 1 && match[1].startsWith('0');
+            
+            if (!hasLeadingZero) {
+                const isSequential = listIndices.has(idx);
+                const hasMoreNumbers = /^\s*\d{1,5}(?:\s*[*×\u00D7xX=:,\-\s+]\s*\d+)+/.test(remaining);
+                const isSmallNumWithDigits = num <= 15 && hasMoreNumbers;
+                
+                if (isSequential || isSmallNumWithDigits) {
+                    line = remaining;
+                }
+            }
+        }
 
         const trimmed = normalizeUnicode(line);
         if (!trimmed) { expanded.push(trimmed); continue; }
