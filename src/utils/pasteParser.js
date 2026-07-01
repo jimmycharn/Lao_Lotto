@@ -1241,7 +1241,7 @@ export function extractInlineContext(line) {
     if (bothSuffix) {
         return { cleaned: bothSuffix[1].trim(), mode: 'both' };
     }
-    const suffixMatch = s.match(/^(.+?)\s*(บน|บ|ล่าง|ล)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/);
+    const suffixMatch = s.match(/^(.+?)(?<=\d|\s|=)(บน|บ|ล่าง|ล)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/);
     if (suffixMatch) {
         const rest = suffixMatch[1];
         const modeStr = suffixMatch[2].replace('.', '');
