@@ -431,6 +431,28 @@ function parseRoundDateParam(param: string): string | null {
   return `${yStr}-${mStr}-${dStr}`;
 }
 
+// Helper: Find a round within a list of rounds matching a Gregorian date string (YYYY-MM-DD).
+// Checks both round_date (opening/start date) and the date portion of close_time (closing/draw date).
+function findRoundByDate(rounds: any[], dateStr: string): any | null {
+  if (!rounds || rounds.length === 0) return null;
+  return rounds.find((r: any) => {
+    if (r.round_date === dateStr) return true;
+    if (r.close_time) {
+      try {
+        const dateObj = new Date(r.close_time);
+        const day = dateObj.toLocaleDateString('en-US', { day: '2-digit', timeZone: 'Asia/Bangkok' });
+        const month = dateObj.toLocaleDateString('en-US', { month: '2-digit', timeZone: 'Asia/Bangkok' });
+        const year = dateObj.toLocaleDateString('en-US', { year: 'numeric', timeZone: 'Asia/Bangkok' });
+        const formattedCloseDate = `${year}-${month}-${day}`;
+        if (formattedCloseDate === dateStr) return true;
+      } catch (e) {
+        console.error('Error parsing close_time in findRoundByDate:', e);
+      }
+    }
+    return false;
+  }) || null;
+}
+
 // Helper: Parse a month-year param (e.g. 6-69, 6-2569, 6-26, 6-2026, 6/69, 6/2026).
 // Returns { month: number, year: number } or null.
 function parseMonthYearParam(param: string): { month: number; year: number } | null {
@@ -3985,13 +4007,15 @@ serve(async (req) => {
                   continue;
                 }
 
-                const { data: targetRound } = await supabase
+                const { data: recentRounds } = await supabase
                   .from('lottery_rounds')
                   .select('*')
                   .eq('dealer_id', dealerId)
                   .eq('lottery_type', groupLink.lottery_type)
-                  .eq('round_date', dateStr)
-                  .maybeSingle();
+                  .order('created_at', { ascending: false })
+                  .limit(20);
+
+                const targetRound = findRoundByDate(recentRounds || [], dateStr);
 
                 if (!targetRound || !targetRound.is_result_announced || (targetRound.status !== 'announced' && targetRound.status !== 'closed')) {
                   await sendLineReply(replyToken, `❌ ไม่มีงวดหวยที่ท่านต้องการให้แจ้งผล`);
@@ -5042,15 +5066,15 @@ serve(async (req) => {
 
               let activeRound: any;
               if (requestedRoundDate) {
-                const { data: dateRound } = await supabase
+                const { data: recentRounds } = await supabase
                   .from('lottery_rounds')
                   .select('*')
                   .eq('dealer_id', dealerId)
                   .eq('lottery_type', groupLink.lottery_type)
-                  .eq('round_date', requestedRoundDate)
                   .order('created_at', { ascending: false })
-                  .limit(1)
-                  .maybeSingle();
+                  .limit(20);
+
+                const dateRound = findRoundByDate(recentRounds || [], requestedRoundDate);
 
                 if (!dateRound) {
                   await sendLineReply(replyToken, `❌ ไม่พบงวดหวย ${groupLink.lottery_type.toUpperCase()} ของวันที่ ${param}\n(งวดอาจถูกลบไปแล้ว หรือยังไม่ได้สร้างงวดของวันนั้น)`);
