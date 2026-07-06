@@ -3008,6 +3008,8 @@ serve(async (req) => {
             text.startsWith('/ประกาศ') ||
             normText.startsWith('/โพยปิดหมด') ||
             normText.startsWith('/โพยเปิดหมด') ||
+            normText.startsWith('/โพยเต็มหมด') ||
+            normText.startsWith('/โพยย่อหมด') ||
             normText.startsWith('/โพยปกติ') ||
             normText.startsWith('/โพยปิด ') ||
             normText.startsWith('/โพยเปิด ') ||
@@ -8178,11 +8180,13 @@ serve(async (req) => {
               continue;
             }
 
-            // ─── COMMAND: /โพยปิดหมด หรือ /โพยเปิดหมด หรือ /โพยปิด [รหัส] หรือ /โพยเปิด [รหัส] หรือ /โพยเต็ม [รหัส] หรือ /โพยย่อ [รหัส] ───
+            // ─── COMMAND: /โพยปิดหมด หรือ /โพยเปิดหมด หรือ /โพยปิด [รหัส] หรือ /โพยเปิด [รหัส] หรือ /โพยเต็ม [รหัส] หรือ /โพยย่อ [รหัส] หรือ /โพยเต็มหมด หรือ /โพยย่อหมด ───
             const isGlobalOrSpecificPoyCmd = 
               normText === '/โพยปิดหมด' ||
               normText === '/โพยเปิดหมด' ||
               normText === '/โพยปกติ' ||
+              normText === '/โพยเต็มหมด' ||
+              normText === '/โพยย่อหมด' ||
               normText.startsWith('/โพยปิด ') ||
               normText.startsWith('/โพยเปิด ') ||
               normText.startsWith('/โพยเต็ม ') ||
@@ -8201,6 +8205,10 @@ serve(async (req) => {
                 commandPrefix = '/โพยปิดหมด';
               } else if (normText.startsWith('/โพยเปิดหมด')) {
                 commandPrefix = '/โพยเปิดหมด';
+              } else if (normText.startsWith('/โพยเต็มหมด')) {
+                commandPrefix = '/โพยเต็มหมด';
+              } else if (normText.startsWith('/โพยย่อหมด')) {
+                commandPrefix = '/โพยย่อหมด';
               } else if (normText.startsWith('/โพยปกติ ')) {
                 commandPrefix = '/โพยปกติ ';
                 isSpecific = true;
@@ -8317,8 +8325,39 @@ serve(async (req) => {
                 continue;
               } else {
                 // Group lottery type scoped commands (ปิดหมด/เปิดหมด ทุกกลุ่มของหวยประเภทนี้)
-                let mode = 'normal';
                 const lotName = groupLink.lottery_type === 'lao' ? 'หวยลาว' : groupLink.lottery_type === 'thai' ? 'หวยไทย' : groupLink.lottery_type === 'hanoi' ? 'หวยฮานอย' : groupLink.lottery_type === 'stock' ? 'หวยหุ้น' : 'หวยประเภทนี้';
+
+                if (commandPrefix === '/โพยเต็มหมด' || commandPrefix === '/โพยย่อหมด') {
+                  const targetPoy = commandPrefix === '/โพยเต็มหมด' ? 'full' : 'short';
+                  const label = commandPrefix === '/โพยเต็มหมด' ? `เปิดการแสดงผลโพยเต็มของทุกคนในทุกกลุ่มที่ผูกกับ ${lotName}` : `เปิดการแสดงผลโพยย่อของทุกคนในทุกกลุ่มที่ผูกกับ ${lotName}`;
+
+                  // Fetch all groups of this dealer sharing the same lottery_type
+                  const { data: grps } = await supabase
+                    .from('line_groups')
+                    .select('line_group_id')
+                    .eq('dealer_id', dealerId)
+                    .eq('lottery_type', groupLink.lottery_type);
+                   
+                  const grpIds = (grps || []).map(g => g.line_group_id).filter(Boolean);
+
+                  const { error: updateErr } = await supabase
+                    .from('line_group_members')
+                    .update({ 
+                      admin_poy_display: 'force_open',
+                      poy_display: targetPoy
+                    })
+                    .in('line_group_id', grpIds);
+
+                  if (updateErr) {
+                    console.error("Error setting bulk poy display:", updateErr);
+                    await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการตั้งค่าระบบแสดงผลหวย ${lotName}`);
+                  } else {
+                    await sendLineReply(replyToken, `✅ ทำการ "${label}" เรียบร้อยแล้วค่ะ!`);
+                  }
+                  continue;
+                }
+
+                let mode = 'normal';
                 let label = `เคารพสิทธิ์ตั้งค่าส่วนบุคคลตามปกติของทุกกลุ่มที่ผูกกับ ${lotName}`;
                 
                 if (commandPrefix === '/โพยปิดหมด') {
