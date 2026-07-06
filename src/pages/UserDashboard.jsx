@@ -42,6 +42,7 @@ import {
 import './UserDashboard.css'
 import './ViewToggle.css'
 import WriteSubmissionModal from '../components/WriteSubmissionModal'
+import { BET_TYPES_BY_LOTTERY } from '../constants/lotteryTypes'
 import DealerInfoTab from '../components/user/DealerInfoTab'
 import UserQRScannerModal from '../components/user/UserQRScannerModal'
 import { createBill } from '../services/submissionService'
@@ -1521,6 +1522,23 @@ export default function UserDashboard() {
             if (dealerProfile?.is_active === false) {
                 throw new Error('เจ้ามือถูกระงับการใช้งาน ไม่สามารถส่งเลขได้')
             }
+        }
+
+        // Check specific bet type close times
+        const now = new Date()
+        const closedTypes = []
+        const lk = selectedRound.lottery_type === 'lao' || selectedRound.lottery_type === 'hanoi' ? 'lao' : selectedRound.lottery_type
+        for (const entry of entries) {
+            const matchingLimit = selectedRound.type_limits?.find(tl => tl.bet_type === entry.betType)
+            const specificCloseTime = matchingLimit?.close_time ? new Date(matchingLimit.close_time) : new Date(selectedRound.close_time)
+            if (now >= specificCloseTime) {
+                const label = BET_TYPES_BY_LOTTERY[lk]?.[entry.betType]?.label || entry.betType
+                closedTypes.push(label)
+            }
+        }
+        if (closedTypes.length > 0) {
+            const uniqueClosedLabels = [...new Set(closedTypes)]
+            throw new Error(`🔴 ปิดรับแทงแล้วเฉพาะประเภทเลข: ${uniqueClosedLabels.join(', ')}`)
         }
 
         // Check number limits

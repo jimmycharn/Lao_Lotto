@@ -201,7 +201,8 @@ export default function Dealer() {
         currency_name: 'บาท',
         notify_close_to_groups: true,
         type_limits: getDefaultLimitsForType('lao'),
-        set_prices: getDefaultSetPricesForType('lao')
+        set_prices: getDefaultSetPricesForType('lao'),
+        type_close_times: {}
     })
 
     // Update limits when lottery type changes
@@ -242,7 +243,8 @@ export default function Dealer() {
                 delete_before_minutes,
                 notify_close_to_groups,
                 type_limits: getDefaultLimitsForType(newType),
-                set_prices: getDefaultSetPricesForType(newType)
+                set_prices: getDefaultSetPricesForType(newType),
+                type_close_times: {}
             }
         })
     }
@@ -1890,12 +1892,21 @@ export default function Dealer() {
             // Allow 0 value for dealers who want to transfer all numbers (0 = no limit acceptance)
             const typeLimitsData = Object.entries(roundForm.type_limits)
                 .filter(([, maxAmount]) => maxAmount !== undefined && maxAmount !== null && maxAmount !== '')
-                .map(([betType, maxAmount]) => ({
-                    round_id: round.id,
-                    bet_type: betType,
-                    max_per_number: maxAmount,
-                    payout_rate: 0 // Placeholder - actual payout from user_settings
-                }))
+                .map(([betType, maxAmount]) => {
+                    const specificTime = roundForm.type_close_times?.[betType];
+                    let typeCloseTime = null;
+                    if (specificTime) {
+                        const specificDateTime = new Date(`${roundForm.close_date}T${specificTime}:00`);
+                        typeCloseTime = formatLocalDateTime(specificDateTime);
+                    }
+                    return {
+                        round_id: round.id,
+                        bet_type: betType,
+                        max_per_number: maxAmount,
+                        payout_rate: 0, // Placeholder - actual payout from user_settings
+                        close_time: typeCloseTime
+                    };
+                })
 
             const { error: limitsError } = await supabase
                 .from('type_limits')
@@ -1917,7 +1928,8 @@ export default function Dealer() {
                 currency_name: 'บาท',
                 notify_close_to_groups: true,
                 type_limits: getDefaultLimitsForType('lao'),
-                set_prices: getDefaultSetPricesForType('lao')
+                set_prices: getDefaultSetPricesForType('lao'),
+                type_close_times: {}
             })
             fetchData()
             toast.success('สร้างงวดสำเร็จ!')
@@ -2441,10 +2453,17 @@ export default function Dealer() {
 
         // Build type_limits object from fetched data
         const limitsObj = {}
+        const typeCloseTimesObj = {}
         const setPricesObj = round.set_prices || {}
         if (typeLimits) {
             typeLimits.forEach(limit => {
                 limitsObj[limit.bet_type] = limit.max_per_number || 0
+                if (limit.close_time) {
+                    const dt = new Date(limit.close_time)
+                    typeCloseTimesObj[limit.bet_type] = `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`
+                } else {
+                    typeCloseTimesObj[limit.bet_type] = ''
+                }
             })
         }
 
@@ -2476,6 +2495,7 @@ export default function Dealer() {
             currency_name: round.currency_name || 'บาท',
             type_limits: { ...getDefaultLimitsForType(round.lottery_type), ...limitsObj },
             set_prices: { ...getDefaultSetPricesForType(round.lottery_type), ...setPricesObj },
+            type_close_times: typeCloseTimesObj,
             notify_close_to_groups: round.notify_close_to_groups ?? false
         })
 
@@ -2544,12 +2564,21 @@ export default function Dealer() {
             const validBetTypes = Object.keys(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {})
             const typeLimitsData = Object.entries(roundForm.type_limits)
                 .filter(([betType, maxAmount]) => maxAmount !== undefined && maxAmount !== null && maxAmount !== '' && validBetTypes.includes(betType))
-                .map(([betType, maxAmount]) => ({
-                    round_id: editingRound.id,
-                    bet_type: betType,
-                    max_per_number: maxAmount,
-                    payout_rate: 0
-                }))
+                .map(([betType, maxAmount]) => {
+                    const specificTime = roundForm.type_close_times?.[betType];
+                    let typeCloseTime = null;
+                    if (specificTime) {
+                        const specificDateTime = new Date(`${roundForm.close_date}T${specificTime}:00`);
+                        typeCloseTime = formatLocalDateTime(specificDateTime);
+                    }
+                    return {
+                        round_id: editingRound.id,
+                        bet_type: betType,
+                        max_per_number: maxAmount,
+                        payout_rate: 0,
+                        close_time: typeCloseTime
+                    };
+                })
 
             if (typeLimitsData.length > 0) {
                 const { error: limitsError } = await supabase
@@ -3893,7 +3922,7 @@ export default function Dealer() {
 
                                 <div style={{
                                     display: 'grid',
-                                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                                    gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
                                     gap: '0.5rem'
                                 }}>
                                     {Object.entries(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {}).map(([key, config]) => (
@@ -3917,7 +3946,7 @@ export default function Dealer() {
                                                 <input
                                                     type="number"
                                                     className="form-input small"
-                                                    style={{ width: '90px', textAlign: 'center', padding: '0.35rem 0.5rem', fontSize: '0.95rem' }}
+                                                    style={{ width: '80px', textAlign: 'center', padding: '0.35rem 0.5rem', fontSize: '0.9rem' }}
                                                     value={roundForm.type_limits[key] || 0}
                                                     onChange={e => setRoundForm({
                                                         ...roundForm,
@@ -3930,6 +3959,20 @@ export default function Dealer() {
                                                     onKeyDown={handleInputKeyDown}
                                                 />
                                                 <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', minWidth: '25px' }}>{config.isSet ? 'ชุด' : roundForm.currency_name}</span>
+                                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>ปิด</span>
+                                                <input
+                                                    type="time"
+                                                    className="form-input small"
+                                                    style={{ width: '85px', padding: '0.35rem 0.3rem', fontSize: '0.85rem' }}
+                                                    value={roundForm.type_close_times?.[key] || ''}
+                                                    onChange={e => setRoundForm({
+                                                        ...roundForm,
+                                                        type_close_times: {
+                                                            ...roundForm.type_close_times,
+                                                            [key]: e.target.value
+                                                        }
+                                                    })}
+                                                />
                                             </div>
                                         </div>
                                     ))}
@@ -4120,7 +4163,7 @@ export default function Dealer() {
                                 {/* Compact limits display */}
                                 <div style={{
                                     display: 'grid',
-                                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                                    gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
                                     gap: '0.5rem'
                                 }}>
                                     {Object.entries(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {}).map(([key, config]) => (
@@ -4144,7 +4187,7 @@ export default function Dealer() {
                                                 <input
                                                     type="number"
                                                     className="form-input small"
-                                                    style={{ width: '90px', textAlign: 'center', padding: '0.35rem 0.5rem', fontSize: '0.95rem' }}
+                                                    style={{ width: '80px', textAlign: 'center', padding: '0.35rem 0.5rem', fontSize: '0.9rem' }}
                                                     value={roundForm.type_limits[key] || 0}
                                                     onChange={e => setRoundForm({
                                                         ...roundForm,
@@ -4157,6 +4200,20 @@ export default function Dealer() {
                                                     onKeyDown={handleInputKeyDown}
                                                 />
                                                 <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', minWidth: '25px' }}>{config.isSet ? 'ชุด' : roundForm.currency_name}</span>
+                                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>ปิด</span>
+                                                <input
+                                                    type="time"
+                                                    className="form-input small"
+                                                    style={{ width: '85px', padding: '0.35rem 0.3rem', fontSize: '0.85rem' }}
+                                                    value={roundForm.type_close_times?.[key] || ''}
+                                                    onChange={e => setRoundForm({
+                                                        ...roundForm,
+                                                        type_close_times: {
+                                                            ...roundForm.type_close_times,
+                                                            [key]: e.target.value
+                                                        }
+                                                    })}
+                                                />
                                             </div>
                                         </div>
                                     ))}

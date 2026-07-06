@@ -11216,20 +11216,23 @@ serve(async (req) => {
         }
 
         let typeLimitsMap: Record<string, number> = {};
+        const typeCloseTimesMap: Record<string, string | null> = {};
         let numberLimits: any[] = [];
         const currentTotals = new Map<string, number>();
         let transfersList: any[] = [];
         const isSetBasedLottery = ['lao', 'hanoi'].includes(lotteryType);
 
+        // Fetch type limits unconditionally (needed for specific close times validation)
+        const { data: typeLimitsData } = await supabase
+          .from('type_limits')
+          .select('bet_type, max_per_number, close_time')
+          .eq('round_id', activeRound.id);
+        (typeLimitsData || []).forEach((tl: any) => {
+          typeLimitsMap[tl.bet_type] = Number(tl.max_per_number);
+          typeCloseTimesMap[tl.bet_type] = tl.close_time;
+        });
+
         if (returnExcess) {
-          // Fetch type limits
-          const { data: typeLimitsData } = await supabase
-            .from('type_limits')
-            .select('bet_type, max_per_number')
-            .eq('round_id', activeRound.id);
-          (typeLimitsData || []).forEach((tl: any) => {
-            typeLimitsMap[tl.bet_type] = Number(tl.max_per_number);
-          });
 
           // Fetch number limits
           const { data: numberLimitsData } = await supabase
@@ -11519,31 +11522,46 @@ serve(async (req) => {
         }
 
         const finalInserts = [];
-        const returnedBets: { numbers: string; betType: string; amount: number; typeLabel: string }[] = [];
+        const returnedBets: { numbers: string; betType: string; amount: number; typeLabel: string; reason?: 'closed' | 'overflow' }[] = [];
 
-        if (returnExcess) {
-          const currentExactSetsMap = new Map<string, number>();
-          const current3SetTotalMap = new Map<string, number>();
-          const setPrice = activeRound.set_prices?.['4_top'] || 120;
+        const currentExactSetsMap = new Map<string, number>();
+        const current3SetTotalMap = new Map<string, number>();
+        const setPrice = activeRound.set_prices?.['4_top'] || 120;
 
-          if (isSetBasedLottery) {
-            for (const [key, val] of currentTotals.entries()) {
-              const [bt, num] = key.split('|');
-              if ((bt === '4_set' || bt === '4_top') && num?.length === 4) {
-                const sets = Math.ceil(val / setPrice);
-                currentExactSetsMap.set(num, (currentExactSetsMap.get(num) || 0) + sets);
+        if (returnExcess && isSetBasedLottery) {
+          for (const [key, val] of currentTotals.entries()) {
+            const [bt, num] = key.split('|');
+            if ((bt === '4_set' || bt === '4_top') && num?.length === 4) {
+              const sets = Math.ceil(val / setPrice);
+              currentExactSetsMap.set(num, (currentExactSetsMap.get(num) || 0) + sets);
 
-                const last3 = num.slice(-3);
-                current3SetTotalMap.set(last3, (current3SetTotalMap.get(last3) || 0) + sets);
-              }
+              const last3 = num.slice(-3);
+              current3SetTotalMap.set(last3, (current3SetTotalMap.get(last3) || 0) + sets);
             }
           }
+        }
 
-          for (const insert of processedInserts) {
-            const betType = insert.bet_type;
-            const numbers = insert.numbers;
-            const amount = insert.amount;
+        for (const insert of processedInserts) {
+          const betType = insert.bet_type;
+          const numbers = insert.numbers;
+          const amount = insert.amount;
 
+          // Check specific close time first
+          const specificCloseTimeStr = typeCloseTimesMap[betType];
+          const typeCloseTime = specificCloseTimeStr ? new Date(specificCloseTimeStr) : new Date(activeRound.close_time);
+          if (now >= typeCloseTime) {
+            // Closed! Refund this bet completely
+            returnedBets.push({
+              numbers,
+              betType,
+              amount,
+              typeLabel: getThaiBetTypeLabel(betType, lotteryType),
+              reason: 'closed'
+            });
+            continue;
+          }
+
+          if (returnExcess) {
             if (isSetBasedLottery && (betType === '4_set' || betType === '4_top') && numbers?.length === 4) {
               const proposedSets = amount / setPrice;
               const last3 = numbers.slice(-3);
@@ -11584,7 +11602,8 @@ serve(async (req) => {
                   numbers,
                   betType,
                   amount: excessAmount,
-                  typeLabel: '4 ตัวชุด'
+                  typeLabel: '4 ตัวชุด',
+                  reason: 'overflow'
                 });
               }
             } else {
@@ -11633,11 +11652,16 @@ serve(async (req) => {
                   numbers,
                   betType,
                   amount: baseExcess,
-                  typeLabel: getThaiBetTypeLabel(betType, lotteryType)
+                  typeLabel: getThaiBetTypeLabel(betType, lotteryType),
+                  reason: 'overflow'
                 });
               }
             }
+          } else {
+            // returnExcess is false, accept all bets that didn't fail close time check
+            finalInserts.push(insert);
           }
+        }
 
           // Replace processedInserts with finalInserts
           processedInserts.length = 0;
@@ -11647,9 +11671,9 @@ serve(async (req) => {
           if (processedInserts.length === 0) {
             const setPrice = activeRound?.set_prices?.['4_top'] || 120;
             // Group and summarize returned bets
-            const groupedReturned = new Map<string, { numbers: string; betType: string; typeLabel: string; amount: number }>();
+            const groupedReturned = new Map<string, { numbers: string; betType: string; typeLabel: string; amount: number; reason?: string }>();
             returnedBets.forEach(rb => {
-              const key = `${rb.numbers}|${rb.typeLabel}`;
+              const key = `${rb.numbers}|${rb.typeLabel}|${rb.reason || 'overflow'}`;
               const existing = groupedReturned.get(key);
               if (existing) {
                 existing.amount += rb.amount;
@@ -11658,21 +11682,29 @@ serve(async (req) => {
               }
             });
 
-            let summaryText = `❌ ส่งโพยไม่สำเร็จ: เลขทุกตัวที่ส่งมามีมูลค่าเกินลิมิตของงวดนี้แล้ว จึงถูกตีคืนทั้งหมดค่ะ\n\n`;
+            const hasClosed = returnedBets.some(rb => rb.reason === 'closed');
+            const hasOverflow = returnedBets.some(rb => rb.reason === 'overflow');
+            let summaryText = `❌ ส่งโพยไม่สำเร็จ: เลขที่ส่งมาปิดรับแทงหรือเกินลิมิตของงวดนี้แล้ว จึงถูกตีคืนทั้งหมดค่ะ\n\n`;
+            if (hasClosed && !hasOverflow) {
+              summaryText = `❌ ส่งโพยไม่สำเร็จ: เลขทุกตัวที่ส่งมาปิดรับแทงเฉพาะประเภทแล้ว จึงถูกตีคืนทั้งหมดค่ะ\n\n`;
+            } else if (!hasClosed && hasOverflow) {
+              summaryText = `❌ ส่งโพยไม่สำเร็จ: เลขทุกตัวที่ส่งมามีมูลค่าเกินลิมิตของงวดนี้แล้ว จึงถูกตีคืนทั้งหมดค่ะ\n\n`;
+            }
+
             summaryText += `⚠️ ยอดที่คืนสมาชิก:\n`;
             for (const rb of groupedReturned.values()) {
               const cleanTypeLabel = rb.typeLabel.replace(/\s+/g, '');
+              const statusLabel = rb.reason === 'closed' ? ' [ปิดรับแล้ว]' : '';
               if (isSetBasedLottery && (rb.betType === '4_set' || rb.betType === '4_top')) {
                 const sets = Math.round(rb.amount / setPrice);
-                summaryText += `${rb.numbers} (${cleanTypeLabel}) คืน: ${sets} ชุด=฿${rb.amount.toLocaleString('th-TH')}\n`;
+                summaryText += `${rb.numbers} (${cleanTypeLabel})${statusLabel} คืน: ${sets} ชุด=฿${rb.amount.toLocaleString('th-TH')}\n`;
               } else {
-                summaryText += `${rb.numbers} (${cleanTypeLabel}) คืน: ฿${rb.amount.toLocaleString('th-TH')}\n`;
+                summaryText += `${rb.numbers} (${cleanTypeLabel})${statusLabel} คืน: ฿${rb.amount.toLocaleString('th-TH')}\n`;
               }
             }
             await sendLineReply(replyToken, summaryText.trim());
             continue;
           }
-        }
 
         // Verify Credit Limit of Dealer
         const creditCheck = await checkDealerCreditForBet(dealerId, totalBetAmount);
@@ -11766,9 +11798,9 @@ serve(async (req) => {
           }
 
           // Group and summarize returned bets
-          const groupedReturned = new Map<string, { numbers: string; betType: string; typeLabel: string; amount: number }>();
+          const groupedReturned = new Map<string, { numbers: string; betType: string; typeLabel: string; amount: number; reason?: string }>();
           returnedBets.forEach(rb => {
-            const key = `${rb.numbers}|${rb.typeLabel}`;
+            const key = `${rb.numbers}|${rb.typeLabel}|${rb.reason || 'overflow'}`;
             const existing = groupedReturned.get(key);
             if (existing) {
               existing.amount += rb.amount;
@@ -11780,11 +11812,12 @@ serve(async (req) => {
           summaryText += `⚠️ ยอดที่คืนสมาชิก:\n`;
           for (const rb of groupedReturned.values()) {
             const cleanTypeLabel = rb.typeLabel.replace(/\s+/g, '');
+            const statusLabel = rb.reason === 'closed' ? ' [ปิดรับแล้ว]' : '';
             if (isSetBasedLottery && (rb.betType === '4_set' || rb.betType === '4_top')) {
               const sets = Math.round(rb.amount / setPrice);
-              summaryText += `${rb.numbers} (${cleanTypeLabel}) คืน: ${sets} ชุด=฿${rb.amount.toLocaleString('th-TH')}\n`;
+              summaryText += `${rb.numbers} (${cleanTypeLabel})${statusLabel} คืน: ${sets} ชุด=฿${rb.amount.toLocaleString('th-TH')}\n`;
             } else {
-              summaryText += `${rb.numbers} (${cleanTypeLabel}) คืน: ฿${rb.amount.toLocaleString('th-TH')}\n`;
+              summaryText += `${rb.numbers} (${cleanTypeLabel})${statusLabel} คืน: ฿${rb.amount.toLocaleString('th-TH')}\n`;
             }
           }
           summaryText = summaryText.trimEnd();

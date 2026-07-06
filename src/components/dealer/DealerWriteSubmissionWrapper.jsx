@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useToast } from '../../contexts/ToastContext'
 import { updatePendingDeduction, checkDealerCreditForBet } from '../../utils/creditCheck'
-import { generateUUID } from '../../constants/lotteryTypes'
+import { generateUUID, BET_TYPES_BY_LOTTERY } from '../../constants/lotteryTypes'
 import { fetchNumberLimits, fetchCurrentTotals, checkBatchSubmissions, generateLimitWarnings } from '../../utils/numberLimits'
 import WriteSubmissionModal from '../WriteSubmissionModal'
 
@@ -110,6 +110,24 @@ export default function DealerWriteSubmissionWrapper({
         const creditCheck = await checkDealerCreditForBet(dealerId, round.id, totalAmount)
         if (!creditCheck.allowed) {
             throw new Error(creditCheck.message)
+        }
+
+        // Check specific bet type close times
+        const now = new Date()
+        const closedTypes = []
+        const lk = round.lottery_type === 'lao' || round.lottery_type === 'hanoi' ? 'lao' : round.lottery_type
+        for (const entry of entries) {
+            const bt = entry.betType || entry.bet_type
+            const matchingLimit = round.type_limits?.find(tl => tl.bet_type === bt)
+            const specificCloseTime = matchingLimit?.close_time ? new Date(matchingLimit.close_time) : new Date(round.close_time)
+            if (now >= specificCloseTime) {
+                const label = BET_TYPES_BY_LOTTERY[lk]?.[bt]?.label || bt
+                closedTypes.push(label)
+            }
+        }
+        if (closedTypes.length > 0) {
+            const uniqueClosedLabels = [...new Set(closedTypes)]
+            throw new Error(`🔴 ปิดรับแทงแล้วเฉพาะประเภทเลข: ${uniqueClosedLabels.join(', ')}`)
         }
 
         // Check number limits

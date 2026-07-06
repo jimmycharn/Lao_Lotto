@@ -14,6 +14,49 @@ export interface ParsedBet {
     specialType?: string;
 }
 
+function isCommonAmount(num: number): boolean {
+    if (num <= 0) return false;
+    return num % 5 === 0;
+}
+
+function normalizeThreeGroupShorthand(line: string): string {
+    const clean = line.trim();
+    const match = clean.match(/^(?<prefix>.*?)\b(?<g1>\d{2,3})\s*[\s+\-*xX×/.:'‘]\s*(?<g2>\d+)\s*[\s+\-*xX×/.:'‘]\s*(?<g3>\d+)\b(?<suffix>.*)$/);
+    if (!match) return line;
+
+    const { prefix, g1, g2, g3, suffix } = match.groups!;
+    
+    if (/\d/.test(prefix) || /\d/.test(suffix)) return line;
+
+    const numLen = g1.length;
+    const amt1 = parseInt(g2, 10);
+    const amt2 = parseInt(g3, 10);
+
+    if (!isCommonAmount(amt1)) return line;
+
+    if (numLen === 3) {
+        const perm = getPermutationCount(g1);
+        if (amt2 === perm) {
+            return `${prefix.trim()} ${g1}=${g2}*${g3} ${suffix.trim()}`.trim();
+        } else {
+            return `${prefix.trim()} ${g1}=${g2}*${g3} ${suffix.trim()}`.trim();
+        }
+    } else if (numLen === 2) {
+        if (g2 === g3) {
+            return `${prefix.trim()} ${g1}=${g2}*${g3} ${suffix.trim()}`.trim();
+        }
+    }
+    return line;
+}
+
+function preprocessShorthands(line: string): string {
+    let s = line.trim();
+    s = s.replace(/\/+=?(\d+)\*([ชุดช])$/i, '=$1*$2');
+    s = s.replace(/\/+([*xX\u00D7])\s*(\d+)$/i, '$1$2');
+    s = s.replace(/\/+=(\d+)$/i, '=$1');
+    return s;
+}
+
 // Helper: get all permutations
 export function getPermutations(str: string): string[] {
     if (str.length <= 1) return [str];
@@ -107,7 +150,7 @@ function cleanPrefixNoiseButKeepContext(line: string): string {
     if (!line) return '';
     let s = line.trim();
     // Remove optional timestamp and any non-digit/non-equals noise before context, betting keywords, or numbers
-    s = s.replace(/^(?:\d{1,2}[:.:]\d{2}([:.:]\d{2})?\s*)?([^=\d]*?)(?=(?:วิ่งบน|วิ่งล่าง|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล|พี่น้อง|พน|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|หาง|เบิ้ล|คู่|หน้าหลัง|น้าหลัง|นห|รูดหน้า|หน้า|น้า|น|รูดหลัง|หลัง|ลัง|ห|วิ่ง|ลอย|โต๊ด|โตด|ต)(?![ก-๛a-zA-Z])|\d)/i, '');
+    s = s.replace(/^(?:\d{1,2}[:.:]\d{2}([:.:]\d{2})?\s*)?([^=\d]*?)(?=(?:หน้าบน|กลางบน|หลังบน|หน้าล่าง|หลังล่าง|วิ่งบน|วิ่งล่าง|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล|พี่น้อง|พน|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|หาง|เบิ้ล|คู่|หน้าหลัง|น้าหลัง|นห|รูดหน้า|หน้า|น้า|น|รูดหลัง|หลัง|ลัง|ห|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต|มี)(?![ก-๛a-zA-Z])|\d)/i, '');
     return s.trim();
 }
 
@@ -170,7 +213,7 @@ function normalizeUnicode(str: string): string {
 
     // Normalize "มี" to "=" when acting as a bet separator between a number/context and amount digits
     // e.g. "8บนมี300" -> "8บน=300", "8บน มี 300" -> "8บน=300", "8มี300" -> "8=300"
-    s = s.replace(/(\d+|บน|ล่าง|บ\.?|ล\.?|บล|ลบ|วิ่ง|ลอย|โต๊ด)\s*มี\s*(\d+)/g, '$1=$2');
+    s = s.replace(/(บน|ล่าง|บ\.?|ล\.?|บล|ลบ|วิ่ง|ลอย|โต๊ด|โต้ด|โตด)\s*มี\s*(\d+)/g, '$1=$2');
 
     // Normalize colons to equals when they act as bet separators:
     // Case 1: 3-5 digit number followed by colon and digits (e.g. 610:10)
@@ -261,6 +304,11 @@ function findAmountIndex(tokens: string[]): number {
 }
 
 function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_separator_behavior?: string, hyphen_separator_behavior?: string }): string[] {
+    rawLines = rawLines.map(line => {
+        let s = preprocessShorthands(line);
+        s = normalizeThreeGroupShorthand(s);
+        return s;
+    });
     const expanded: string[] = [];
     const hyphenBehavior = settings?.hyphen_separator_behavior || 'separator';
 
@@ -700,7 +748,11 @@ function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_sep
                     expanded.push(...subExpanded);
                     continue;
                 }
-                line = `${prefixCtx}${numsPart}=${amt}${suffix}`;
+                let finalAmt = amt;
+                if (!amt.includes('*') && !amt.includes('-') && !amt.includes('ชุด') && !amt.includes('ช')) {
+                    finalAmt = `${amt}*${amt}`;
+                }
+                line = `${prefixCtx}${numsPart}=${finalAmt}${suffix}`;
             }
         }
 
@@ -840,7 +892,7 @@ export function parseMultiLinePaste(text: string, lotteryType = 'lao', settings?
         const trimmed = normalizeUnicode(lines[i].trim());
         if (!trimmed) continue;
 
-        const modeResult = parseContextLine(trimmed);
+        const modeResult = parseContextLine(trimmed, contextMode);
         if (modeResult !== null) {
             if (bareNumberBuffer.length > 0) flushBareBuffer();
             contextMode = modeResult;
@@ -866,7 +918,7 @@ export function parseMultiLinePaste(text: string, lotteryType = 'lao', settings?
         const digitMatches = lineToProcess.match(/\d+/g) || [];
         if (digitMatches.length === 1 && /^\d+/.test(lineToProcess)) {
             const hasEquals = lineToProcess.includes('=') || lineToProcess.includes(':');
-            const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19\s*หาง|หาง/.test(lineToProcess) || 
+            const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19\s*หาง|หาง/.test(lineToProcess) || 
                                    /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(lineToProcess);
             if (!hasEquals && !hasBetKeywords) {
                 // If it contains letters (Thai/English), skip it completely as text/noise
@@ -877,7 +929,7 @@ export function parseMultiLinePaste(text: string, lotteryType = 'lao', settings?
             }
         }
 
-        const strippedMode = parseContextLine(stripped);
+        const strippedMode = parseContextLine(stripped, contextMode);
         if (strippedMode !== null) {
             if (bareNumberBuffer.length > 0) flushBareBuffer();
             contextMode = strippedMode;
@@ -948,7 +1000,7 @@ export function parseMultiLinePaste(text: string, lotteryType = 'lao', settings?
             const origCtx = getLineEffectiveContext(trimmed, contextMode);
             if (origCtx !== contextMode) {
                 lineCtx = origCtx;
-                const origInline = extractInlineContext(trimmed);
+                const origInline = extractInlineContext(trimmed, contextMode);
                 if (origInline.mode) {
                     processLine = origInline.cleaned;
                 }
@@ -985,7 +1037,7 @@ function isConversationalSingleNumberLine(line: string): boolean {
     const hasLetters = /[ก-๛a-zA-Z]/.test(trimmed);
     if (hasLetters) {
         const hasEquals = trimmed.includes('=') || trimmed.includes(':');
-        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19\s*หาง|หาง/.test(trimmed) || 
+        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19\s*หาง|หาง/.test(trimmed) || 
                                /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(trimmed);
         if (!hasEquals && !hasBetKeywords) {
             return true;
@@ -1000,7 +1052,7 @@ function isConversationalSingleNumberLine(line: string): boolean {
 
     let cleaned = textOnly.toLowerCase();
     cleaned = cleaned.replace(/[\s.+\-*×xX\/=\(\)\[\]{}]/g, '');
-    cleaned = cleaned.replace(/ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บ\.?|ล\.?|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|ช|ซ|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19หาง|หาง/g, '');
+    cleaned = cleaned.replace(/ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บ\.?|ล\.?|บน|ล่าง|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|มี|ตัว|ช|ซ|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19หาง|หาง/g, '');
 
     if (cleaned.length === 0) {
         return false;
@@ -1010,7 +1062,7 @@ function isConversationalSingleNumberLine(line: string): boolean {
     const textFirstMatch = trimmed.match(/^([ก-๛a-zA-Z\s\(\)\[\]{}#.]+?)\s*(\d+)$/);
     if (textFirstMatch) {
         const hasEquals = trimmed.includes('=') || trimmed.includes(':');
-        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19\s*หาง|หาง/.test(trimmed) || 
+        const hasBetKeywords = /ตัวละ|ตูละ|ประตูละ|ชุดละ|ตัวตรง|ตรง|กลับ|คูณชุด|คูณ|ชุด|บาท|บน|ล่าง|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|มี|ตัว|พี่น้อง|พน|เลขคู่|คู่|เลขเบิ้ล|เบิ้ล|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|19\s*หาง|หาง/.test(trimmed) || 
                                /(?<![ก-๛a-zA-Z])[บลชซ]\.?(?![ก-๛a-zA-Z])/.test(trimmed);
         if (!hasEquals && !hasBetKeywords) {
             return true;
@@ -1061,7 +1113,7 @@ function extractAmountFromLine(line: string): AmountInfo | null {
         s = s.slice(0, floatBotSuffix.index).trim();
     }
     if (!mode) {
-        const floatTopSuffix = s.match(/\s*(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?)\s*$/);
+        const floatTopSuffix = s.match(/\s*(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|มี)\s*$/);
         if (floatTopSuffix) {
             mode = 'float_top';
             s = s.slice(0, floatTopSuffix.index).trim();
@@ -1104,7 +1156,7 @@ function extractAmountFromLine(line: string): AmountInfo | null {
         }
     }
 
-    const floatPrefixRe = /^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\.?\s*(\d.+)$/;
+    const floatPrefixRe = /^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|ลอยทั่วไป|มี)\.?\s*(\d.+)$/;
     const floatPrefixMatch = s.match(floatPrefixRe);
     if (floatPrefixMatch) {
         const kw = floatPrefixMatch[1];
@@ -1233,10 +1285,10 @@ function isPureAmountLine(line: string): boolean {
     s = s.replace(/\s*(กลับ|กลับตัว|กลับด้วย)$/, '');
     
     // Strip leading context
-    s = s.replace(/^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*/i, '');
+    s = s.replace(/^(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|ลอยทั่วไป|มี|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*/i, '');
     
     // Strip trailing context
-    s = s.replace(/\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?$/i, '');
+    s = s.replace(/\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|ลอยทั่วไป|มี|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?$/i, '');
     
     // Check if the remaining part is an amount pattern
     return isAmountPattern(s);
@@ -1261,7 +1313,7 @@ function extractTokenAmountAndContext(token: string): TokenAmountInfo | null {
         const num = match[1];
         const sep = match[2] === '=' ? '=' : '*';
         const rest = match[3].trim();
-        const ctxMatch = rest.match(/^(.*?)\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*$/i);
+        const ctxMatch = rest.match(/^(.*?)\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|ลอยทั่วไป|มี|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*$/i);
         if (ctxMatch) {
             return {
                 number: num,
@@ -1310,11 +1362,11 @@ function isAmountPattern(s: string): boolean {
 
 function getLineEffectiveContext(line: string, contextMode: string): string {
     const preClean = line.trim();
-    let inlineCtx = extractInlineContext(preClean);
+    let inlineCtx = extractInlineContext(preClean, contextMode);
     if (inlineCtx.mode) return inlineCtx.mode;
     const normalized = stripPrefixNoise(preClean);
     if (normalized) {
-        inlineCtx = extractInlineContext(normalized);
+        inlineCtx = extractInlineContext(normalized, contextMode);
         if (inlineCtx.mode) return inlineCtx.mode;
     }
     return contextMode;
@@ -1322,7 +1374,7 @@ function getLineEffectiveContext(line: string, contextMode: string): string {
 
 function emitBoth(rawLine: string, isLaoOrHanoi: boolean, lotteryType: string, settings?: { x_separator_behavior?: string }): ParsedBet[] {
     const results: ParsedBet[] = [];
-    const inlineCtx = extractInlineContext(rawLine.trim());
+    const inlineCtx = extractInlineContext(rawLine.trim(), 'both');
     const cleanLine = inlineCtx.mode ? inlineCtx.cleaned : rawLine;
     const eqCtx = cleanLine.match(/^(\d{1,5}\s*=\s*)(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?\s*(.+)$/);
     const finalLine = eqCtx ? `${eqCtx[1]}${eqCtx[3]}` : cleanLine;
@@ -1358,20 +1410,36 @@ function isBothContext(line: string): boolean {
     return false;
 }
 
-function parseContextLine(line: string): string | null {
+function parseContextLine(line: string, contextMode?: string): string | null {
     const withPunct = line.trim().replace(/(?:กลับ|กลับตัว|กลับด้วย)\s*$/, '').trim();
     const bracketCleaned = withPunct.replace(/[\[\](){}]/g, '').replace(/[\s.+\-]/g, '');
+    const isBottom = (contextMode === 'bottom' || contextMode === 'float_bottom' || contextMode === 'front_bottom_1' || contextMode === 'back_bottom_1');
+    if (/^\d*ตัว(หน้าล่าง|ปักหน้าล่าง)$/.test(bracketCleaned) || /^(หน้าล่าง|ปักหน้าล่าง)$/.test(bracketCleaned))
+        return 'front_bottom_1';
+    if (/^\d*ตัว(หลังล่าง|ปักหลังล่าง)$/.test(bracketCleaned) || /^(หลังล่าง|ปักหลังล่าง)$/.test(bracketCleaned))
+        return 'back_bottom_1';
+    if (/^\d*ตัว(หน้าบน|ปักหน้าบน)$/.test(bracketCleaned) || /^(หน้าบน|ปักหน้าบน)$/.test(bracketCleaned))
+        return 'front_top_1';
+    if (/^\d*ตัว(กลางบน|ปักกลางบน)$/.test(bracketCleaned) || /^(กลางบน|ปักกลางบน)$/.test(bracketCleaned))
+        return 'middle_top_1';
+    if (/^\d*ตัว(หลังบน|ปักหลังบน)$/.test(bracketCleaned) || /^(หลังบน|ปักหลังบน)$/.test(bracketCleaned))
+        return 'back_top_1';
+    if (/^\d*ตัว(ปักหน้า|หน้า)$/.test(bracketCleaned) || /^(ปักหน้า|หน้า)$/.test(bracketCleaned))
+        return isBottom ? 'front_bottom_1' : 'front_top_1';
+    if (/^\d*ตัว(ปักกลาง|กลาง)$/.test(bracketCleaned) || /^(ปักกลาง|กลาง)$/.test(bracketCleaned))
+        return 'middle_top_1';
+    if (/^\d*ตัว(ปักหลัง|หลัง)$/.test(bracketCleaned) || /^(ปักหลัง|หลัง)$/.test(bracketCleaned))
+        return isBottom ? 'back_bottom_1' : 'back_top_1';
     if (/^\d*ตัว(บนล่าง|ล่างบน|บล|ลบ)$/.test(bracketCleaned)) return 'both';
-    if (/^\d*ตัว(ล่าง|ล)$/.test(bracketCleaned)) return 'bottom';
     if (/^\d*ตัว(บน|บ)$/.test(bracketCleaned)) return 'top';
     if (/^\d*ตัว(วิ่งล่าง|ลอยล่าง)$/.test(bracketCleaned)) return 'float_bottom';
-    if (/^\d*ตัว(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|มี)$/.test(bracketCleaned)) return 'float_top';
+    if (/^\d*ตัว(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|มี)$/.test(bracketCleaned)) return 'float_top';
 
     const cleanedFloat = withPunct.replace(/[\s.+\-]/g, '');
     if (/^(วิ่งบน|ลอยบน|วิ่งบ|ลอยบ|ลอยทั่วไป)$/.test(cleanedFloat)) return 'float_top';
     if (/^(วิ่งล่าง|ลอยล่าง|วิ่งล|ลอยล)$/.test(cleanedFloat)) return 'float_bottom';
-    if (/^(วิ่ง|ลอย|โต๊ด|โตด|ต\.?)$/.test(cleanedFloat)) return 'float_top';
-    if (/^2ตัว(มี|วิ่ง|ลอย|โต๊ด|โตด|ต\.?)$/.test(cleanedFloat)) return 'float_top';
+    if (/^(วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|มี)$/.test(cleanedFloat)) return 'float_top';
+    if (/^2ตัว(มี|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?)$/.test(cleanedFloat)) return 'float_top';
 
     if (isBothContext(withPunct)) return 'both';
 
@@ -1380,7 +1448,7 @@ function parseContextLine(line: string): string | null {
     if (/^(ล่าง|ล)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(cleaned)) return 'bottom';
 
     const testStr = cleaned.replace(/^\d+ตัว/, '');
-    if (/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(testStr)) return 'float_top';
+    if (/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|มี)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(testStr)) return 'float_top';
     if (/^(วิ่งล่าง|ลอยล่าง)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(testStr)) return 'float_bottom';
 
     if (/^บ\.?$/.test(withPunct)) return 'top';
@@ -1438,10 +1506,50 @@ function refineFloatMode(mode: string, text: string): string {
     return mode;
 }
 
-function extractInlineContext(line: string): InlineContextInfo {
+function refinePositionMode(mode: string, text: string, contextMode?: string): string {
+    const lower = text.toLowerCase();
+    const isBottom = /ล่าง|ล\.?(?![ก-๛a-zA-Z])/.test(lower) ||
+                     ((contextMode === 'bottom' || contextMode === 'float_bottom' || contextMode === 'front_bottom_1' || contextMode === 'back_bottom_1') && !/บน|บ\.?(?![ก-๛a-zA-Z])/.test(lower));
+    if (isBottom) {
+        if (mode === 'front_top_1') return 'front_bottom_1';
+        if (mode === 'back_top_1') return 'back_bottom_1';
+    }
+    return mode;
+}
+
+function extractInlineContext(line: string, contextMode?: string): InlineContextInfo {
     let s = line.trim();
 
-    const floatPrefixTop = s.match(/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\.?\s*(\d.*)$/);
+    // Position bets (หน้า, กลาง, หลัง)
+    const posPrefix = s.match(/^(หน้าบน|ปักหน้าบน|กลางบน|ปักกลางบน|หลังบน|ปักหลังบน|หน้าล่าง|ปักหน้าล่าง|หลังล่าง|ปักหลังล่าง|ปักหน้า|ปักกลาง|ปักหลัง|หน้า|กลาง|หลัง)\s*(บน|ล่าง|บ|ล)?\.?\s*(\d.*)$/i);
+    if (posPrefix) {
+        const kw = posPrefix[1];
+        let mode = 'front_top_1';
+        if (kw.includes('กลาง')) mode = 'middle_top_1';
+        if (kw.includes('หลัง')) mode = 'back_top_1';
+        mode = refinePositionMode(mode, s, contextMode);
+        return { cleaned: posPrefix[3].trim(), mode };
+    }
+    const posSuffix = s.match(/^(.+?)\s*(หน้าบน|ปักหน้าบน|กลางบน|ปักกลางบน|หลังบน|ปักหลังบน|หน้าล่าง|ปักหน้าล่าง|หลังล่าง|ปักหลังล่าง|ปักหน้า|ปักกลาง|ปักหลัง|หน้า|กลาง|หลัง)\s*(บน|ล่าง|บ|ล)?\s*$/i);
+    if (posSuffix) {
+        const kw = posSuffix[2];
+        let mode = 'front_top_1';
+        if (kw.includes('กลาง')) mode = 'middle_top_1';
+        if (kw.includes('หลัง')) mode = 'back_top_1';
+        mode = refinePositionMode(mode, s, contextMode);
+        return { cleaned: posSuffix[1].trim(), mode };
+    }
+    const posMiddle = s.match(/^(\d+)\s*(หน้าบน|ปักหน้าบน|กลางบน|ปักกลางบน|หลังบน|ปักหลังบน|หน้าล่าง|ปักหน้าล่าง|หลังล่าง|ปักหลังล่าง|ปักหน้า|ปักกลาง|ปักหลัง|หน้า|กลาง|หลัง)\s*(บน|ล่าง|บ|ล)?\s*[=\s]\s*(\d[\d*=\-+]*)$/i);
+    if (posMiddle) {
+        const kw = posMiddle[2];
+        let mode = 'front_top_1';
+        if (kw.includes('กลาง')) mode = 'middle_top_1';
+        if (kw.includes('หลัง')) mode = 'back_top_1';
+        mode = refinePositionMode(mode, s, contextMode);
+        return { cleaned: `${posMiddle[1]}=${posMiddle[4].trim()}`, mode };
+    }
+
+    const floatPrefixTop = s.match(/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|ลอยทั่วไป|มี)\.?\s*(\d.*)$/);
     if (floatPrefixTop) {
         const kw = floatPrefixTop[1];
         let mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
@@ -1461,11 +1569,11 @@ function extractInlineContext(line: string): InlineContextInfo {
         mode = refineFloatMode(mode, s);
         return { cleaned: floatSuffixBot[1].trim(), mode };
     }
-    const floatSuffix = s.match(/^(.+?)\s*(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\s*$/);
+    const floatSuffix = s.match(/^(.+?)\s*(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|ลอยทั่วไป|มี)\s*$/);
     if (floatSuffix) {
         const kw = floatSuffix[2];
         const beforeKw = floatSuffix[1].trim();
-        if ((kw === 'โต๊ด' || kw === 'โตด') && (beforeKw.endsWith('เต็ง') || beforeKw.endsWith('เต็ง-') || beforeKw.endsWith('เต็ง/'))) {
+        if ((kw === 'โต๊ด' || kw === 'โต้ด' || kw === 'โตด') && (beforeKw.endsWith('เต็ง') || beforeKw.endsWith('เต็ง-') || beforeKw.endsWith('เต็ง/'))) {
             // Rejection: it's part of a compound keyword "เต็งโต๊ด", not a float suffix
         } else {
             let mode = 'float_top';
@@ -1474,7 +1582,7 @@ function extractInlineContext(line: string): InlineContextInfo {
         }
     }
 
-    const floatMiddle = s.match(/^(\d+)\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|มี)\s+(\d[\d*=\-+]*)$/);
+    const floatMiddle = s.match(/^(\d+)\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|ลอยทั่วไป|มี)\s+(\d[\d*=\-+]*)$/);
     if (floatMiddle) {
         const kw = floatMiddle[2];
         let mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
@@ -1551,7 +1659,7 @@ function extractInlineContext(line: string): InlineContextInfo {
         return { cleaned: `${eqSingleInline[1]}=${eqSingleInline[3].trim()}`, mode };
     }
     // --- Inline float context after =: "25= วิ่งบน 20", "25=โต๊ด20", "25=ต20" ---
-    const eqFloatInline = s.match(/^(\d+)\s*=\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป)\.?\s*(\d.+)$/);
+    const eqFloatInline = s.match(/^(\d+)\s*=\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|ลอยทั่วไป|มี)\.?\s*(\d.+)$/);
     if (eqFloatInline) {
         const kw = eqFloatInline[2];
         const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
@@ -1583,7 +1691,7 @@ function extractInlineContext(line: string): InlineContextInfo {
         return { cleaned: `${noSpaceSingle[1]} ${noSpaceSingle[3].trim()}`, mode };
     }
 
-    const noSpaceFloat = s.match(/^(\d+)(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โตด|ต\.?|ลอยทั่วไป|มี)\.?([=\d].*)$/);
+    const noSpaceFloat = s.match(/^(\d+)(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|ลอยทั่วไป|มี)\.?([=\d].*)$/);
     if (noSpaceFloat) {
         const kw = noSpaceFloat[2];
         const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
@@ -1596,14 +1704,14 @@ function extractInlineContext(line: string): InlineContextInfo {
 function parseNumberLine(line: string, contextMode: string, isLaoOrHanoi: boolean, lotteryType: string, settings?: { x_separator_behavior?: string }): ParsedBet[] | null {
     const preClean = normalizeUnicode(line.trim());
     if (isDateLine(preClean)) return null;
-    let inlineCtx = extractInlineContext(preClean);
+    let inlineCtx = extractInlineContext(preClean, contextMode);
     let normalized: string | null = null;
     if (inlineCtx.mode) {
         normalized = stripPrefixNoise(inlineCtx.cleaned);
     } else {
         normalized = stripPrefixNoise(preClean);
         if (normalized) {
-            inlineCtx = extractInlineContext(normalized);
+            inlineCtx = extractInlineContext(normalized, contextMode);
             if (inlineCtx.mode) {
                 normalized = inlineCtx.cleaned;
             }
@@ -1781,6 +1889,26 @@ function determineBetType(
     // === 1 digit ===
     if (numLen === 1) {
         if (amount1 === null) return null;
+        const positionBetTypes = ['front_top_1', 'middle_top_1', 'back_top_1', 'front_bottom_1', 'back_bottom_1'];
+        if (positionBetTypes.includes(contextMode)) {
+            const labels: { [key: string]: string } = {
+                'front_top_1': 'หน้าบน',
+                'middle_top_1': 'กลางบน',
+                'back_top_1': 'หลังบน',
+                'front_bottom_1': 'หน้าล่าง',
+                'back_bottom_1': 'หลังล่าง'
+            };
+            results.push({
+                numbers,
+                amount: amount1,
+                amount2: null,
+                betType: contextMode,
+                typeLabel: labels[contextMode],
+                rawLine,
+                formattedLine: `${numbers}=${amount1} ${labels[contextMode]}`
+            });
+            return results;
+        }
         const betType = isTop ? 'run_top' : 'run_bottom';
         const typeLabel = isTop ? 'ลอยบน' : 'ลอยล่าง';
         results.push({
@@ -2182,7 +2310,7 @@ function splitAmountAndTrailingText(line: string): SplitResult | null {
 function cleanNoteText(str: string): string {
     let s = normalizeUnicode(str.trim());
     // Remove leading number and context prefix if present (e.g. "47-ล่าง 50*50 น้ำค้าง" -> "50*50 น้ำค้าง")
-    const startCtxMatch = s.match(/^(\d{1,5})\s*[-/]?\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล|วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด)\.?\s*(?:=|\s+)?\s*(\d.+)$/i);
+    const startCtxMatch = s.match(/^(\d{1,5})\s*[-/]?\s*(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล|วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|มี)\.?\s*(?:=|\s+)?\s*(\d.+)$/i);
     if (startCtxMatch) {
         s = startCtxMatch[3].trim();
     } else {
