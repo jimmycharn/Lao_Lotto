@@ -11834,7 +11834,7 @@ serve(async (req) => {
           summaryText = summaryText.trimEnd();
         }
 
-        if (senderPoyDisplay !== 'none') {
+        if (senderPoyDisplay !== 'none' || (returnedBets && returnedBets.length > 0)) {
           const cancelMsg = `/ยกเลิก ${billId}`;
           await sendLineReply(replyToken, [summaryText, cancelMsg]);
         }
