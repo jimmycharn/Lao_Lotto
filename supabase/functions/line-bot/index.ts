@@ -3011,6 +3011,8 @@ serve(async (req) => {
             normText.startsWith('/โพยปกติ') ||
             normText.startsWith('/โพยปิด ') ||
             normText.startsWith('/โพยเปิด ') ||
+            normText.startsWith('/โพยเต็ม ') ||
+            normText.startsWith('/โพยปกติ ') ||
             text.startsWith('/total') || text.startsWith('/ยอดรวม') ||
             text.startsWith('/เลขรวม') || text.startsWith('/เลขเหลือ') ||
             text.startsWith('/เลขตี') || text.startsWith('/เลขตีออก') ||
@@ -8197,6 +8199,9 @@ serve(async (req) => {
                 commandPrefix = '/โพยปิดหมด';
               } else if (normText.startsWith('/โพยเปิดหมด')) {
                 commandPrefix = '/โพยเปิดหมด';
+              } else if (normText.startsWith('/โพยปกติ ')) {
+                commandPrefix = '/โพยปกติ ';
+                isSpecific = true;
               } else if (normText.startsWith('/โพยปกติ')) {
                 commandPrefix = '/โพยปกติ';
               } else if (normText.startsWith('/โพยปิด ')) {
