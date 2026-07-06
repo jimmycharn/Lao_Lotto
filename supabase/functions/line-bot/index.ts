@@ -3012,6 +3012,7 @@ serve(async (req) => {
             normText.startsWith('/โพยปิด ') ||
             normText.startsWith('/โพยเปิด ') ||
             normText.startsWith('/โพยเต็ม ') ||
+            normText.startsWith('/โพยย่อ ') ||
             normText.startsWith('/โพยปกติ ') ||
             text.startsWith('/total') || text.startsWith('/ยอดรวม') ||
             text.startsWith('/เลขรวม') || text.startsWith('/เลขเหลือ') ||
@@ -8177,14 +8178,15 @@ serve(async (req) => {
               continue;
             }
 
-            // ─── COMMAND: /โพยปิดหมด หรือ /โพยเปิดหมด หรือ /โพยปิด [รหัส] หรือ /โพยเปิด [รหัส] หรือ /โพยเต็ม [รหัส] ───
+            // ─── COMMAND: /โพยปิดหมด หรือ /โพยเปิดหมด หรือ /โพยปิด [รหัส] หรือ /โพยเปิด [รหัส] หรือ /โพยเต็ม [รหัส] หรือ /โพยย่อ [รหัส] ───
             const isGlobalOrSpecificPoyCmd = 
               normText === '/โพยปิดหมด' ||
               normText === '/โพยเปิดหมด' ||
               normText === '/โพยปกติ' ||
               normText.startsWith('/โพยปิด ') ||
               normText.startsWith('/โพยเปิด ') ||
-              normText.startsWith('/โพยเต็ม ');
+              normText.startsWith('/โพยเต็ม ') ||
+              normText.startsWith('/โพยย่อ ');
 
             if (isGlobalOrSpecificPoyCmd) {
               if (!isStaff && (!manager || manager.role !== 'admin')) {
@@ -8212,6 +8214,9 @@ serve(async (req) => {
                 isSpecific = true;
               } else if (normText.startsWith('/โพยเต็ม ')) {
                 commandPrefix = '/โพยเต็ม ';
+                isSpecific = true;
+              } else if (normText.startsWith('/โพยย่อ ')) {
+                commandPrefix = '/โพยย่อ ';
                 isSpecific = true;
               }
 
@@ -8262,8 +8267,9 @@ serve(async (req) => {
 
                 const isClosingCmd = commandPrefix === '/โพยปิด ';
                 const isFullCmd = commandPrefix === '/โพยเต็ม ';
+                const isShortCmd = commandPrefix === '/โพยย่อ ';
                 const isNormalCmd = commandPrefix === '/โพยปกติ ';
-                const targetAdminMode = isClosingCmd ? 'force_close' : ((isFullCmd || commandPrefix === '/โพยเปิด ') ? 'force_open' : 'normal');
+                const targetAdminMode = isClosingCmd ? 'force_close' : ((isFullCmd || isShortCmd || commandPrefix === '/โพยเปิด ') ? 'force_open' : 'normal');
                 const targetLineMode = isClosingCmd ? 'none' : (isFullCmd ? 'full' : 'short');
                 const lotName = groupLink.lottery_type === 'lao' ? 'หวยลาว' : groupLink.lottery_type === 'thai' ? 'หวยไทย' : groupLink.lottery_type === 'hanoi' ? 'หวยฮานอย' : groupLink.lottery_type === 'stock' ? 'หวยหุ้น' : 'หวยประเภทนี้';
                 let actionLabel = '';
@@ -8271,7 +8277,7 @@ serve(async (req) => {
                   actionLabel = `ปิดการแสดงผลโพยเด็ดขาดสำหรับกลุ่ม${lotName}`;
                 } else if (isFullCmd) {
                   actionLabel = `เปิดการแสดงผลโพยเต็มเด็ดขาดเป็นข้อยกเว้นสำหรับกลุ่ม${lotName}`;
-                } else if (commandPrefix === '/โพยเปิด ') {
+                } else if (isShortCmd || commandPrefix === '/โพยเปิด ') {
                   actionLabel = `เปิดการแสดงผลโพยย่อเด็ดขาดเป็นข้อยกเว้นสำหรับกลุ่ม${lotName}`;
                 } else {
                   actionLabel = `เคารพสิทธิ์ตั้งค่าส่วนบุคคลตามปกติสำหรับกลุ่ม${lotName}`;
