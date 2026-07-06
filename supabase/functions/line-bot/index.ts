@@ -8175,13 +8175,14 @@ serve(async (req) => {
               continue;
             }
 
-            // ─── COMMAND: /โพยปิดหมด หรือ /โพยเปิดหมด หรือ /โพยปิด [รหัส] หรือ /โพยเปิด [รหัส] ───
+            // ─── COMMAND: /โพยปิดหมด หรือ /โพยเปิดหมด หรือ /โพยปิด [รหัส] หรือ /โพยเปิด [รหัส] หรือ /โพยเต็ม [รหัส] ───
             const isGlobalOrSpecificPoyCmd = 
               normText === '/โพยปิดหมด' ||
               normText === '/โพยเปิดหมด' ||
               normText === '/โพยปกติ' ||
               normText.startsWith('/โพยปิด ') ||
-              normText.startsWith('/โพยเปิด ');
+              normText.startsWith('/โพยเปิด ') ||
+              normText.startsWith('/โพยเต็ม ');
 
             if (isGlobalOrSpecificPoyCmd) {
               if (!isStaff && (!manager || manager.role !== 'admin')) {
@@ -8203,6 +8204,9 @@ serve(async (req) => {
                 isSpecific = true;
               } else if (normText.startsWith('/โพยเปิด ')) {
                 commandPrefix = '/โพยเปิด ';
+                isSpecific = true;
+              } else if (normText.startsWith('/โพยเต็ม ')) {
+                commandPrefix = '/โพยเต็ม ';
                 isSpecific = true;
               }
 
@@ -8252,11 +8256,21 @@ serve(async (req) => {
                 }
 
                 const isClosingCmd = commandPrefix === '/โพยปิด ';
+                const isFullCmd = commandPrefix === '/โพยเต็ม ';
                 const isNormalCmd = commandPrefix === '/โพยปกติ ';
-                const targetAdminMode = isClosingCmd ? 'force_close' : (isNormalCmd ? 'normal' : 'force_open');
-                const targetLineMode = isClosingCmd ? 'none' : 'short';
+                const targetAdminMode = isClosingCmd ? 'force_close' : ((isFullCmd || commandPrefix === '/โพยเปิด ') ? 'force_open' : 'normal');
+                const targetLineMode = isClosingCmd ? 'none' : (isFullCmd ? 'full' : 'short');
                 const lotName = groupLink.lottery_type === 'lao' ? 'หวยลาว' : groupLink.lottery_type === 'thai' ? 'หวยไทย' : groupLink.lottery_type === 'hanoi' ? 'หวยฮานอย' : groupLink.lottery_type === 'stock' ? 'หวยหุ้น' : 'หวยประเภทนี้';
-                const actionLabel = isClosingCmd ? `ปิดการแสดงผลโพยเด็ดขาดสำหรับกลุ่ม${lotName}` : (isNormalCmd ? `เคารพสิทธิ์ตั้งค่าส่วนบุคคลตามปกติสำหรับกลุ่ม${lotName}` : `เปิดการแสดงผลโพยเด็ดขาดเป็นข้อยกเว้นสำหรับกลุ่ม${lotName}`);
+                let actionLabel = '';
+                if (isClosingCmd) {
+                  actionLabel = `ปิดการแสดงผลโพยเด็ดขาดสำหรับกลุ่ม${lotName}`;
+                } else if (isFullCmd) {
+                  actionLabel = `เปิดการแสดงผลโพยเต็มเด็ดขาดเป็นข้อยกเว้นสำหรับกลุ่ม${lotName}`;
+                } else if (commandPrefix === '/โพยเปิด ') {
+                  actionLabel = `เปิดการแสดงผลโพยย่อเด็ดขาดเป็นข้อยกเว้นสำหรับกลุ่ม${lotName}`;
+                } else {
+                  actionLabel = `เคารพสิทธิ์ตั้งค่าส่วนบุคคลตามปกติสำหรับกลุ่ม${lotName}`;
+                }
 
                 // Fetch all groups of this dealer sharing the same lottery_type
                 const { data: grps } = await supabase
