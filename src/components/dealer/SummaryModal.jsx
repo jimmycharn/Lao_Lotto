@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase, fetchAllRows } from '../../lib/supabase'
 import { FiDollarSign, FiX } from 'react-icons/fi'
-import { DEFAULT_COMMISSIONS, DEFAULT_PAYOUTS, DEFAULT_4_SET_SETTINGS, getLotteryTypeKey } from '../../constants/lotteryTypes'
+import { DEFAULT_COMMISSIONS, DEFAULT_PAYOUTS, DEFAULT_4_SET_SETTINGS, getLotteryTypeKey, normalizeBetType } from '../../constants/lotteryTypes'
 
 export default function SummaryModal({ round, onClose }) {
     const [submissions, setSubmissions] = useState([])
@@ -46,11 +46,12 @@ export default function SummaryModal({ round, onClose }) {
 
     // Map bet_type to settings key for Lao/Hanoi lottery and position bet types
     const getSettingsKey = (betType, lotteryKey) => {
+        const normalized = normalizeBetType(betType)
         const POSITION_MAP = {
             'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
             'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
         }
-        const mapped = POSITION_MAP[betType] || betType
+        const mapped = POSITION_MAP[normalized] || normalized
         if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
             const LAO_BET_TYPE_MAP = {
                 '3_top': '3_straight',
@@ -81,7 +82,7 @@ export default function SummaryModal({ round, onClose }) {
             return settings.isFixed ? settings.commission : sub.amount * (settings.commission / 100)
         }
         
-        let defaultComm = DEFAULT_COMMISSIONS[sub.bet_type] || 15
+        let defaultComm = DEFAULT_COMMISSIONS[normalizeBetType(sub.bet_type)] || DEFAULT_COMMISSIONS[sub.bet_type] || 15
         if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
             const LAO_DEFAULTS = {
                 'run_top': 10, 'run_bottom': 10,
@@ -90,7 +91,7 @@ export default function SummaryModal({ round, onClose }) {
                 '3_top': 20, '3_tod': 20, '3_bottom': 20,
                 '4_float': 20, '5_float': 20
             }
-            defaultComm = LAO_DEFAULTS[sub.bet_type] !== undefined ? LAO_DEFAULTS[sub.bet_type] : 20
+            defaultComm = LAO_DEFAULTS[normalizeBetType(sub.bet_type)] !== undefined ? LAO_DEFAULTS[normalizeBetType(sub.bet_type)] : (LAO_DEFAULTS[sub.bet_type] !== undefined ? LAO_DEFAULTS[sub.bet_type] : 20)
         }
         return sub.amount * (defaultComm / 100)
     }
@@ -111,9 +112,9 @@ export default function SummaryModal({ round, onClose }) {
 
         if (settings?.payout !== undefined) return sub.amount * settings.payout
         
-        let defaultPayout = DEFAULT_PAYOUTS[sub.bet_type] || 1
+        let defaultPayout = DEFAULT_PAYOUTS[normalizeBetType(sub.bet_type)] || DEFAULT_PAYOUTS[sub.bet_type] || 1
         if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
-            if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(sub.bet_type)) {
+            if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(normalizeBetType(sub.bet_type))) {
                 defaultPayout = 70
             }
         }

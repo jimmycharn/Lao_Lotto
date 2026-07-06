@@ -242,6 +242,19 @@ export const DEFAULT_PAYOUTS = {
     '4_float': 20, '4_tod': 100, '5_float': 10, '6_top': 1000000
 }
 
+// Normalize aliased bet types to their canonical base type for settings/payout lookups
+export function normalizeBetType(betType) {
+    const ALIAS_MAP = {
+        '2_spread': '2_center',
+        '2_tang': '2_center',
+        '2_teng': '2_run',
+        '2_have': '2_run',
+        '2_back': '2_top',
+        '2_front_single': '2_front'
+    }
+    return ALIAS_MAP[betType] || betType
+}
+
 // Helper to get default limits for a lottery type
 export function getDefaultLimitsForType(lotteryType) {
     const betTypes = BET_TYPES_BY_LOTTERY[lotteryType] || {}

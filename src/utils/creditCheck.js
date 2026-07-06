@@ -1,7 +1,8 @@
 import { supabase, fetchAllRows } from '../lib/supabase'
-import { getLotteryTypeKey, DEFAULT_COMMISSIONS, DEFAULT_PAYOUTS } from '../constants/lotteryTypes'
+import { getLotteryTypeKey, DEFAULT_COMMISSIONS, DEFAULT_PAYOUTS, normalizeBetType } from '../constants/lotteryTypes'
 
 const getFallbackCommission = (betType, lotteryType) => {
+    const normalized = normalizeBetType(betType)
     const lotteryKey = lotteryType === 'lao' || lotteryType === 'hanoi' ? 'lao' : lotteryType || 'thai'
     if (lotteryKey === 'lao') {
         const LAO_DEFAULTS = {
@@ -12,19 +13,20 @@ const getFallbackCommission = (betType, lotteryType) => {
             '4_top': 25, '4_set': 25, '4_float': 20,
             '5_float': 20
         }
-        return LAO_DEFAULTS[betType] !== undefined ? LAO_DEFAULTS[betType] : 20
+        return LAO_DEFAULTS[normalized] !== undefined ? LAO_DEFAULTS[normalized] : (LAO_DEFAULTS[betType] !== undefined ? LAO_DEFAULTS[betType] : 20)
     }
-    return DEFAULT_COMMISSIONS[betType] || 15
+    return DEFAULT_COMMISSIONS[normalized] || DEFAULT_COMMISSIONS[betType] || 15
 }
 
 const getFallbackPayout = (betType, lotteryType) => {
+    const normalized = normalizeBetType(betType)
     const lotteryKey = lotteryType === 'lao' || lotteryType === 'hanoi' ? 'lao' : lotteryType || 'thai'
     if (lotteryKey === 'lao') {
-        if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(betType)) {
+        if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(normalized)) {
             return 70
         }
     }
-    return DEFAULT_PAYOUTS[betType] || 1
+    return DEFAULT_PAYOUTS[normalized] || DEFAULT_PAYOUTS[betType] || 1
 }
 
 

@@ -24,7 +24,8 @@ import {
     generateBatchId,
     DEFAULT_COMMISSIONS,
     DEFAULT_4_SET_SETTINGS,
-    getLotteryTypeKey
+    getLotteryTypeKey,
+    normalizeBetType
 } from '../../constants/lotteryTypes'
 import '../../pages/Dealer.css'
 import '../../pages/SettingsTabs.css'
@@ -201,11 +202,12 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
         
         // Helper to get settings key for bet type
         const getBetSettingsKey = (betType, lKey) => {
+            const normalized = normalizeBetType(betType)
             if (lKey === 'lao' || lKey === 'hanoi') {
                 const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
-                return LAO_MAP[betType] || betType
+                return LAO_MAP[normalized] || normalized
             }
-            return betType
+            return normalized
         }
 
         // Group transfers by upstream_dealer_id (linked) or target_dealer_name (external)
@@ -275,7 +277,7 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
                             '4_top': 25, '4_set': 25, '4_float': 20,
                             '5_float': 20
                         }
-                        defaultComm = LAO_DEFAULTS[t.bet_type] !== undefined ? LAO_DEFAULTS[t.bet_type] : 20
+                        defaultComm = LAO_DEFAULTS[normalizeBetType(t.bet_type)] !== undefined ? LAO_DEFAULTS[normalizeBetType(t.bet_type)] : (LAO_DEFAULTS[t.bet_type] !== undefined ? LAO_DEFAULTS[t.bet_type] : 20)
                     }
                     const commissionRate = betSettings?.commission !== undefined 
                         ? betSettings.commission 

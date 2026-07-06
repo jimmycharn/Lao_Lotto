@@ -36,7 +36,8 @@ import {
     generateBatchId,
     getDefaultLimitsForType,
     getLotteryTypeKey,
-    calculate4SetPrizes
+    calculate4SetPrizes,
+    normalizeBetType
 } from '../../constants/lotteryTypes'
 import { findMatchingLimit, getEffectivePayoutPercent } from '../../utils/numberLimits'
 import { checkBetWin, deriveWinningNumbers } from '../../utils/scenarioCalculator'
@@ -45,6 +46,7 @@ import AIAnalysisModal from './AIAnalysisModal'
 
 // Helper functions for default fallbacks
 const getFallbackCommission = (betType, lotteryType) => {
+    const normalized = normalizeBetType(betType)
     const lotteryKey = lotteryType === 'lao' || lotteryType === 'hanoi' ? 'lao' : lotteryType || 'thai'
     if (lotteryKey === 'lao') {
         const LAO_DEFAULTS = {
@@ -55,19 +57,20 @@ const getFallbackCommission = (betType, lotteryType) => {
             '4_top': 25, '4_set': 25, '4_float': 20,
             '5_float': 20
         }
-        return LAO_DEFAULTS[betType] !== undefined ? LAO_DEFAULTS[betType] : 20
+        return LAO_DEFAULTS[normalized] !== undefined ? LAO_DEFAULTS[normalized] : (LAO_DEFAULTS[betType] !== undefined ? LAO_DEFAULTS[betType] : 20)
     }
-    return DEFAULT_COMMISSIONS[betType] || 15
+    return DEFAULT_COMMISSIONS[normalized] || DEFAULT_COMMISSIONS[betType] || 15
 }
 
 const getFallbackPayout = (betType, lotteryType) => {
+    const normalized = normalizeBetType(betType)
     const lotteryKey = lotteryType === 'lao' || lotteryType === 'hanoi' ? 'lao' : lotteryType || 'thai'
     if (lotteryKey === 'lao') {
-        if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(betType)) {
+        if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(normalized)) {
             return 70
         }
     }
-    return DEFAULT_PAYOUTS[betType] || 1
+    return DEFAULT_PAYOUTS[normalized] || DEFAULT_PAYOUTS[betType] || 1
 }
 
 // Helper: chunked Supabase update to avoid URL query string overflow (max ~100 IDs per batch)
@@ -2468,12 +2471,13 @@ export default function RoundAccordionItem({
 
     // Map bet_type to settings key for Lao/Hanoi lottery and position bet types
     const getSettingsKey = (betType, lotteryKey) => {
+        const normalized = normalizeBetType(betType)
         // Position bet types use pak_top/pak_bottom settings
         const POSITION_MAP = {
             'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
             'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
         }
-        const mapped = POSITION_MAP[betType] || betType
+        const mapped = POSITION_MAP[normalized] || normalized
         if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
             const LAO_BET_TYPE_MAP = {
                 '3_top': '3_straight',

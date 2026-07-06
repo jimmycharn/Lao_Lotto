@@ -155,8 +155,8 @@ export function checkBetWin(betType, betNumbers, winNums, payoutRate, amount, se
     // In most implementations, 3_bottom uses the same w3top for Lao. For Thai it's different.
     // We'll skip 3_bottom scenario generation for now as it requires separate bottom numbers.
 
-    // 2_top
-    if (bt === '2_top' && num.length === 2 && w2top) {
+    // 2_top / 2_back
+    if ((bt === '2_top' || bt === '2_back') && num.length === 2 && w2top) {
         if (num === w2top) return { wins: true, payout: amount * payoutRate }
     }
 
@@ -165,18 +165,18 @@ export function checkBetWin(betType, betNumbers, winNums, payoutRate, amount, se
         if (num === w2bottom) return { wins: true, payout: amount * payoutRate }
     }
 
-    // 2_front
-    if (bt === '2_front' && num.length === 2 && w3top && w3top.length === 3) {
+    // 2_front / 2_front_single
+    if ((bt === '2_front' || bt === '2_front_single') && num.length === 2 && w3top && w3top.length === 3) {
         if (num === w2front) return { wins: true, payout: amount * payoutRate }
     }
 
-    // 2_center / 2_spread
-    if ((bt === '2_center' || bt === '2_spread') && num.length === 2 && w3top && w3top.length === 3) {
+    // 2_center / 2_spread / 2_tang
+    if ((bt === '2_center' || bt === '2_spread' || bt === '2_tang') && num.length === 2 && w3top && w3top.length === 3) {
         if (num === w2center) return { wins: true, payout: amount * payoutRate }
     }
 
-    // 2_run (both digits appear in w3top)
-    if (bt === '2_run' && num.length === 2 && w3top && w3top.length === 3) {
+    // 2_run / 2_teng / 2_have (both digits appear in w3top)
+    if ((bt === '2_run' || bt === '2_teng' || bt === '2_have') && num.length === 2 && w3top && w3top.length === 3) {
         if (w3top.includes(num[0]) && w3top.includes(num[1])) {
             return { wins: true, payout: amount * payoutRate }
         }

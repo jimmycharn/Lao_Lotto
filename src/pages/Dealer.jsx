@@ -62,7 +62,8 @@ import {
     getDefaultLimitsForType,
     getDefaultSetPricesForType,
     getLotteryTypeKey,
-    calculate4SetPrizes
+    calculate4SetPrizes,
+    normalizeBetType
 } from '../constants/lotteryTypes'
 
 // Import separated modal components
@@ -2063,11 +2064,12 @@ export default function Dealer() {
             if (shouldSaveHistory) {
                 const lotteryKey = getLotteryTypeKey(roundData.lottery_type)
                 const getSettingsKey = (betType, lKey) => {
+                    const normalized = normalizeBetType(betType)
                     const POSITION_MAP = {
                         'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
                         'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
                     }
-                    const mapped = POSITION_MAP[betType] || betType
+                    const mapped = POSITION_MAP[normalized] || normalized
                     if (lKey === 'lao' || lKey === 'hanoi') {
                         const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
                         return LAO_MAP[mapped] || mapped
@@ -2104,7 +2106,7 @@ export default function Dealer() {
                     if (settings?.commission !== undefined) {
                         return settings.isFixed ? settings.commission : (sub.amount || 0) * (settings.commission / 100)
                     }
-                    let defaultRate = DEFAULT_COMMISSIONS[sub.bet_type] || 15
+                    let defaultRate = DEFAULT_COMMISSIONS[normalizeBetType(sub.bet_type)] || DEFAULT_COMMISSIONS[sub.bet_type] || 15
                     if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
                         const LAO_DEFAULTS = {
                             'run_top': 10, 'run_bottom': 10,
@@ -2113,7 +2115,7 @@ export default function Dealer() {
                             '3_top': 20, '3_tod': 20, '3_bottom': 20,
                             '4_float': 20, '5_float': 20
                         }
-                        defaultRate = LAO_DEFAULTS[sub.bet_type] !== undefined ? LAO_DEFAULTS[sub.bet_type] : 20
+                        defaultRate = LAO_DEFAULTS[normalizeBetType(sub.bet_type)] !== undefined ? LAO_DEFAULTS[normalizeBetType(sub.bet_type)] : (LAO_DEFAULTS[sub.bet_type] !== undefined ? LAO_DEFAULTS[sub.bet_type] : 20)
                     }
                     return (sub.amount || 0) * (defaultRate / 100)
                 }
@@ -2130,9 +2132,9 @@ export default function Dealer() {
                     const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
                     const settings = allUserSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
                     if (settings?.payout !== undefined) return (sub.amount || 0) * settings.payout
-                    let defaultRate = DEFAULT_PAYOUTS[sub.bet_type] || 1
+                    let defaultRate = DEFAULT_PAYOUTS[normalizeBetType(sub.bet_type)] || DEFAULT_PAYOUTS[sub.bet_type] || 1
                     if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
-                        if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(sub.bet_type)) {
+                        if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(normalizeBetType(sub.bet_type))) {
                             defaultRate = 70
                         }
                     }

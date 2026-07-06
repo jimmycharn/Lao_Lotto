@@ -57,7 +57,8 @@ import {
     getPermutations,
     getUnique3DigitPermsFrom4,
     getUnique3DigitPermsFrom5,
-    generateUUID
+    generateUUID,
+    normalizeBetType
 } from '../constants/lotteryTypes'
 
 export default function UserDashboard() {
@@ -2739,13 +2740,14 @@ export default function UserDashboard() {
         }
 
         const lotteryKey = getLotteryTypeKey(round?.lottery_type)
+        const normalized = normalizeBetType(sub.bet_type)
 
         // Map position bet types to pak_top/pak_bottom settings
         const POSITION_MAP = {
             'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
             'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
         }
-        let settingsKey = POSITION_MAP[sub.bet_type] || sub.bet_type
+        let settingsKey = POSITION_MAP[normalized] || normalized
         if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
             const LAO_BET_TYPE_MAP = {
                 '3_top': '3_straight',
@@ -2761,9 +2763,9 @@ export default function UserDashboard() {
         }
 
         // Use default payout rate for this bet type
-        let defaultRate = DEFAULT_PAYOUTS[sub.bet_type] || 1
+        let defaultRate = DEFAULT_PAYOUTS[normalized] || DEFAULT_PAYOUTS[sub.bet_type] || 1
         if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
-            if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(sub.bet_type)) {
+            if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(normalized)) {
                 defaultRate = 70
             }
         }
@@ -2774,11 +2776,12 @@ export default function UserDashboard() {
     // so that when commission rates change, all entries reflect the updated rate
     const getCalculatedCommission = useCallback((sub, round) => {
         const lotteryKey = getLotteryTypeKey(round?.lottery_type)
+        const normalized = normalizeBetType(sub.bet_type)
         const POSITION_MAP = {
             'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
             'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
         }
-        let settingsKey = POSITION_MAP[sub.bet_type] || sub.bet_type
+        let settingsKey = POSITION_MAP[normalized] || normalized
         if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
             const LAO_BET_TYPE_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
             settingsKey = LAO_BET_TYPE_MAP[settingsKey] || settingsKey
@@ -2797,7 +2800,7 @@ export default function UserDashboard() {
         if (settings?.commission !== undefined) {
             return settings.isFixed ? settings.commission : (sub.amount || 0) * (settings.commission / 100)
         }
-        let defaultRate = DEFAULT_COMMISSIONS[sub.bet_type] || 15
+        let defaultRate = DEFAULT_COMMISSIONS[normalized] || DEFAULT_COMMISSIONS[sub.bet_type] || 15
         if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
             const LAO_DEFAULTS = {
                 'run_top': 10, 'run_bottom': 10,
@@ -2806,7 +2809,7 @@ export default function UserDashboard() {
                 '3_top': 20, '3_tod': 20, '3_bottom': 20,
                 '4_float': 20, '5_float': 20
             }
-            defaultRate = LAO_DEFAULTS[sub.bet_type] !== undefined ? LAO_DEFAULTS[sub.bet_type] : 20
+            defaultRate = LAO_DEFAULTS[normalized] !== undefined ? LAO_DEFAULTS[normalized] : (LAO_DEFAULTS[sub.bet_type] !== undefined ? LAO_DEFAULTS[sub.bet_type] : 20)
         }
         return (sub.amount || 0) * (defaultRate / 100)
     }, [userSettings, getLotteryTypeKey])
