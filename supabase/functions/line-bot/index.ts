@@ -11006,7 +11006,7 @@ serve(async (req) => {
         // Verify if sender has a linked profile
         let { data: profile, error: profileErr } = await supabase
           .from('profiles')
-          .select('id, full_name, is_active, role, line_poy_display, admin_poy_display')
+          .select('id, full_name, is_active, role, line_poy_display, admin_poy_display, member_code')
           .eq('line_user_id', userId)
           .eq('is_active', true)
           .maybeSingle();
@@ -11734,7 +11734,12 @@ serve(async (req) => {
         });
 
         // Format and send confirmation ticket
+        const senderName = senderProfile?.full_name || 'ผู้ใช้ LINE';
+        const senderIdVal = senderProfile?.member_code || (senderProfile?.id ? senderProfile.id.substring(0, 5) : '-');
+
         let summaryText = `✅บันทึกโพยสำเร็จ!✅\n`;
+        summaryText += `ผู้ส่งโพย: ${senderName}\n`;
+        summaryText += `ID: ${senderIdVal}\n`;
         summaryText += `------------------------\n`;
 
         const formattedDetailLines: string[] = [];
