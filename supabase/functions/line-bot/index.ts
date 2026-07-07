@@ -11633,7 +11633,7 @@ serve(async (req) => {
         const current3SetTotalMap = new Map<string, number>();
         const setPrice = activeRound.set_prices?.['4_top'] || 120;
 
-        if (returnExcess && isSetBasedLottery) {
+        if (shouldLoadLimits && isSetBasedLottery) {
           for (const [key, val] of currentTotals.entries()) {
             const [bt, num] = key.split('|');
             if ((bt === '4_set' || bt === '4_top') && num?.length === 4) {
