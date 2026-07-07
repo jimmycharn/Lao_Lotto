@@ -121,8 +121,13 @@ export default function DealerWriteSubmissionWrapper({
             const matchingLimit = round.type_limits?.find(tl => tl.bet_type === bt)
             const specificCloseTime = matchingLimit?.close_time ? new Date(matchingLimit.close_time) : new Date(round.close_time)
             if (now >= specificCloseTime) {
-                const label = BET_TYPES_BY_LOTTERY[lk]?.[bt]?.label || bt
-                closedTypes.push(label)
+                const behavior = matchingLimit?.close_time_behavior || 'close_immediately'
+                if (matchingLimit?.close_time && behavior === 'return_excess') {
+                    // Skip blocking: let the normal limit checks handle this entry past its close time
+                } else {
+                    const label = BET_TYPES_BY_LOTTERY[lk]?.[bt]?.label || bt
+                    closedTypes.push(label)
+                }
             }
         }
         if (closedTypes.length > 0) {

@@ -1533,8 +1533,13 @@ export default function UserDashboard() {
             const matchingLimit = selectedRound.type_limits?.find(tl => tl.bet_type === entry.betType)
             const specificCloseTime = matchingLimit?.close_time ? new Date(matchingLimit.close_time) : new Date(selectedRound.close_time)
             if (now >= specificCloseTime) {
-                const label = BET_TYPES_BY_LOTTERY[lk]?.[entry.betType]?.label || entry.betType
-                closedTypes.push(label)
+                const behavior = matchingLimit?.close_time_behavior || 'close_immediately'
+                if (matchingLimit?.close_time && behavior === 'return_excess') {
+                    // Skip blocking: let the normal limit checks handle this entry past its close time
+                } else {
+                    const label = BET_TYPES_BY_LOTTERY[lk]?.[entry.betType]?.label || entry.betType
+                    closedTypes.push(label)
+                }
             }
         }
         if (closedTypes.length > 0) {

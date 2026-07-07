@@ -1747,7 +1747,7 @@ function getThaiBetTypeLabel(betType: string, lotteryType: string): string {
     const labels: Record<string, string> = {
       'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
       'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
-      '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
+      '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_spread': '2 ตัวถ่าง', '2_tang': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
       '3_top': '3 ตัวบน', '3_tod': '3 ตัวโต๊ด', '3_bottom': '3 ตัวล่าง',
       '4_float': '4 ตัวลอย', '5_float': '5 ตัวลอย'
     };
@@ -1757,7 +1757,7 @@ function getThaiBetTypeLabel(betType: string, lotteryType: string): string {
       '4_set': '4 ตัวชุด',
       'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
       'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
-      '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
+      '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_spread': '2 ตัวถ่าง', '2_tang': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
       '3_top': '3 ตัวตรง', '3_straight': '3 ตัวตรง', '3_tod': '3 ตัวโต๊ด', '3_tod_single': '3 ตัวโต๊ด',
       '4_float': '4 ตัวลอย', '5_float': '5 ตัวลอย'
     };
@@ -6242,7 +6242,15 @@ serve(async (req) => {
               const LABELS: Record<string, string> = {
                 '2_top': '2 ตัวบน',
                 '2_bottom': '2 ตัวล่าง',
+                '2_front': '2 ตัวหน้า',
+                '2_center': '2 ตัวถ่าง',
+                '2_spread': '2 ตัวถ่าง',
+                '2_tang': '2 ตัวถ่าง',
                 '2_run': '2 ตัวลอย',
+                '2_teng': '2 ตัวลอย',
+                '2_have': '2 ตัวลอย',
+                '2_back': '2 ตัวบน',
+                '2_front_single': '2 ตัวหน้า',
                 '3_top': groupLink.lottery_type === 'lao' || groupLink.lottery_type === 'hanoi' ? '3 ตัวตรง' : '3 ตัวบน',
                 '3_tod': '3 ตัวโต๊ด',
                 '3_front': '3 ตัวหน้า',
@@ -6536,7 +6544,15 @@ serve(async (req) => {
               const LABELS: Record<string, string> = {
                 '2_top': '2 ตัวบน',
                 '2_bottom': '2 ตัวล่าง',
+                '2_front': '2 ตัวหน้า',
+                '2_center': '2 ตัวถ่าง',
+                '2_spread': '2 ตัวถ่าง',
+                '2_tang': '2 ตัวถ่าง',
                 '2_run': '2 ตัวลอย',
+                '2_teng': '2 ตัวลอย',
+                '2_have': '2 ตัวลอย',
+                '2_back': '2 ตัวบน',
+                '2_front_single': '2 ตัวหน้า',
                 '3_top': groupLink.lottery_type === 'lao' || groupLink.lottery_type === 'hanoi' ? '3 ตัวตรง' : '3 ตัวบน',
                 '3_tod': '3 ตัวโต๊ด',
                 '3_front': '3 ตัวหน้า',
@@ -9202,6 +9218,8 @@ serve(async (req) => {
             '2_top': '2 ตัวบน',
             '2_front': '2 ตัวหน้า',
             '2_center': '2 ตัวถ่าง',
+            '2_spread': '2 ตัวถ่าง',
+            '2_tang': '2 ตัวถ่าง',
             '2_run': '2 ตัวลอย',
             '2_bottom': '2 ตัวล่าง',
             '3_top': '3 ตัวบน (ตรง)',
@@ -10463,7 +10481,15 @@ serve(async (req) => {
               const LABELS: Record<string, string> = {
                 '2_top': 'บน',
                 '2_bottom': 'ล่าง',
+                '2_front': 'หน้า',
+                '2_center': 'กลาง',
+                '2_spread': 'ถ่าง',
+                '2_tang': 'ถ่าง',
                 '2_run': '2 ตัวลอย',
+                '2_teng': 'เต็ง',
+                '2_have': 'มี',
+                '2_back': 'หลัง',
+                '2_front_single': 'หน้า',
                 '3_top': isLaoOrHanoi ? 'ตรง' : 'บน',
                 '3_tod': 'โต๊ด',
                 '3_front': '3 ตัวหน้า',
@@ -10854,7 +10880,15 @@ serve(async (req) => {
             const LABELS = {
               '2_top': 'บน',
               '2_bottom': 'ล่าง',
+              '2_front': 'หน้า',
+              '2_center': 'กลาง',
+              '2_spread': 'ถ่าง',
+              '2_tang': 'ถ่าง',
               '2_run': '2 ตัวลอย',
+              '2_teng': 'เต็ง',
+              '2_have': 'มี',
+              '2_back': 'หลัง',
+              '2_front_single': 'หน้า',
               '3_top': isLaoOrHanoi ? 'ตรง' : 'บน',
               '3_tod': 'โต๊ด',
               '3_front': '3 ตัวหน้า',
@@ -11281,6 +11315,7 @@ serve(async (req) => {
 
         let typeLimitsMap: Record<string, number> = {};
         const typeCloseTimesMap: Record<string, string | null> = {};
+        const typeCloseTimeBehaviorsMap: Record<string, string> = {};
         let numberLimits: any[] = [];
         const currentTotals = new Map<string, number>();
         let transfersList: any[] = [];
@@ -11289,14 +11324,20 @@ serve(async (req) => {
         // Fetch type limits unconditionally (needed for specific close times validation)
         const { data: typeLimitsData } = await supabase
           .from('type_limits')
-          .select('bet_type, max_per_number, close_time')
+          .select('bet_type, max_per_number, close_time, close_time_behavior')
           .eq('round_id', activeRound.id);
         (typeLimitsData || []).forEach((tl: any) => {
           typeLimitsMap[tl.bet_type] = Number(tl.max_per_number);
           typeCloseTimesMap[tl.bet_type] = tl.close_time;
+          typeCloseTimeBehaviorsMap[tl.bet_type] = tl.close_time_behavior || 'close_immediately';
         });
 
-        if (returnExcess) {
+        const hasReturnExcessBehaviors = (typeLimitsData || []).some(
+          (tl: any) => tl.close_time && tl.close_time_behavior === 'return_excess'
+        );
+        const shouldLoadLimits = returnExcess || hasReturnExcessBehaviors;
+
+        if (shouldLoadLimits) {
 
           // Fetch number limits
           const { data: numberLimitsData } = await supabase
@@ -11613,20 +11654,30 @@ serve(async (req) => {
           // Check specific close time first
           const specificCloseTimeStr = typeCloseTimesMap[betType];
           const typeCloseTime = specificCloseTimeStr ? new Date(specificCloseTimeStr) : new Date(activeRound.close_time);
-          if (now >= typeCloseTime) {
-            // Closed! Refund this bet completely
-            returnedBets.push({
-              numbers,
-              betType,
-              amount,
-              typeLabel: getThaiBetTypeLabel(betType, lotteryType),
-              reason: 'closed',
-              entry_id: insert.entry_id
-            });
-            continue;
+          const closeBehavior = typeCloseTimeBehaviorsMap[betType] || 'close_immediately';
+          const isPastTypeCloseTime = now >= typeCloseTime;
+
+          if (isPastTypeCloseTime) {
+            if (specificCloseTimeStr && closeBehavior === 'return_excess') {
+              // Past close time, but behavior is "return_excess" -> allowed to proceed.
+              // Limits validation will be enforced.
+            } else {
+              // Closed! Refund this bet completely
+              returnedBets.push({
+                numbers,
+                betType,
+                amount,
+                typeLabel: getThaiBetTypeLabel(betType, lotteryType),
+                reason: 'closed',
+                entry_id: insert.entry_id
+              });
+              continue;
+            }
           }
 
-          if (returnExcess) {
+          const shouldEnforceLimits = returnExcess || (isPastTypeCloseTime && closeBehavior === 'return_excess');
+
+          if (shouldEnforceLimits) {
             if (isSetBasedLottery && (betType === '4_set' || betType === '4_top') && numbers?.length === 4) {
               const proposedSets = amount / setPrice;
               const last3 = numbers.slice(-3);
@@ -11725,7 +11776,7 @@ serve(async (req) => {
               }
             }
           } else {
-            // returnExcess is false, accept all bets that didn't fail close time check
+            // shouldEnforceLimits is false, accept all bets that didn't fail close time check
             finalInserts.push(insert);
           }
         }

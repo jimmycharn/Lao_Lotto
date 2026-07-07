@@ -203,7 +203,8 @@ export default function Dealer() {
         notify_close_to_groups: true,
         type_limits: getDefaultLimitsForType('lao'),
         set_prices: getDefaultSetPricesForType('lao'),
-        type_close_times: {}
+        type_close_times: {},
+        type_close_time_behaviors: {}
     })
 
     // Update limits when lottery type changes
@@ -245,7 +246,8 @@ export default function Dealer() {
                 notify_close_to_groups,
                 type_limits: getDefaultLimitsForType(newType),
                 set_prices: getDefaultSetPricesForType(newType),
-                type_close_times: {}
+                type_close_times: {},
+                type_close_time_behaviors: {}
             }
         })
     }
@@ -1905,7 +1907,8 @@ export default function Dealer() {
                         bet_type: betType,
                         max_per_number: maxAmount,
                         payout_rate: 0, // Placeholder - actual payout from user_settings
-                        close_time: typeCloseTime
+                        close_time: typeCloseTime,
+                        close_time_behavior: roundForm.type_close_time_behaviors?.[betType] || 'close_immediately'
                     };
                 })
 
@@ -1930,7 +1933,8 @@ export default function Dealer() {
                 notify_close_to_groups: true,
                 type_limits: getDefaultLimitsForType('lao'),
                 set_prices: getDefaultSetPricesForType('lao'),
-                type_close_times: {}
+                type_close_times: {},
+                type_close_time_behaviors: {}
             })
             fetchData()
             toast.success('สร้างงวดสำเร็จ!')
@@ -2456,10 +2460,12 @@ export default function Dealer() {
         // Build type_limits object from fetched data
         const limitsObj = {}
         const typeCloseTimesObj = {}
+        const typeCloseTimeBehaviorsObj = {}
         const setPricesObj = round.set_prices || {}
         if (typeLimits) {
             typeLimits.forEach(limit => {
                 limitsObj[limit.bet_type] = limit.max_per_number || 0
+                typeCloseTimeBehaviorsObj[limit.bet_type] = limit.close_time_behavior || 'close_immediately'
                 if (limit.close_time) {
                     const dt = new Date(limit.close_time)
                     typeCloseTimesObj[limit.bet_type] = `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`
@@ -2498,6 +2504,7 @@ export default function Dealer() {
             type_limits: { ...getDefaultLimitsForType(round.lottery_type), ...limitsObj },
             set_prices: { ...getDefaultSetPricesForType(round.lottery_type), ...setPricesObj },
             type_close_times: typeCloseTimesObj,
+            type_close_time_behaviors: typeCloseTimeBehaviorsObj,
             notify_close_to_groups: round.notify_close_to_groups ?? false
         })
 
@@ -2563,7 +2570,7 @@ export default function Dealer() {
 
             // Filter only limits that are part of the current lottery type
             // Allow 0 value for dealers who want to transfer all numbers (0 = no limit acceptance)
-            const validBetTypes = Object.keys(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {})
+             const validBetTypes = Object.keys(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {})
             const typeLimitsData = Object.entries(roundForm.type_limits)
                 .filter(([betType, maxAmount]) => maxAmount !== undefined && maxAmount !== null && maxAmount !== '' && validBetTypes.includes(betType))
                 .map(([betType, maxAmount]) => {
@@ -2578,7 +2585,8 @@ export default function Dealer() {
                         bet_type: betType,
                         max_per_number: maxAmount,
                         payout_rate: 0,
-                        close_time: typeCloseTime
+                        close_time: typeCloseTime,
+                        close_time_behavior: roundForm.type_close_time_behaviors?.[betType] || 'close_immediately'
                     };
                 })
 
@@ -3924,7 +3932,7 @@ export default function Dealer() {
 
                                 <div style={{
                                     display: 'grid',
-                                    gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+                                    gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))',
                                     gap: '0.5rem'
                                 }}>
                                     {Object.entries(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {}).map(([key, config]) => (
@@ -3943,7 +3951,7 @@ export default function Dealer() {
                                                 </span>
                                                 {config.isSet && <span className="set-badge" style={{ fontSize: '0.65rem', padding: '0.1rem 0.25rem' }}>ชุด</span>}
                                             </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
                                                 <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>อั้น</span>
                                                 <input
                                                     type="number"
@@ -3975,6 +3983,21 @@ export default function Dealer() {
                                                         }
                                                     })}
                                                 />
+                                                <select
+                                                    className="form-input small"
+                                                    style={{ width: '100px', padding: '0.35rem 0.3rem', fontSize: '0.85rem', marginLeft: '0.25rem' }}
+                                                    value={roundForm.type_close_time_behaviors?.[key] || 'close_immediately'}
+                                                    onChange={e => setRoundForm({
+                                                        ...roundForm,
+                                                        type_close_time_behaviors: {
+                                                            ...roundForm.type_close_time_behaviors,
+                                                            [key]: e.target.value
+                                                        }
+                                                    })}
+                                                >
+                                                    <option value="close_immediately">ปิดรับทันที</option>
+                                                    <option value="return_excess">คืนเลขเกิน</option>
+                                                </select>
                                             </div>
                                         </div>
                                     ))}
@@ -4165,7 +4188,7 @@ export default function Dealer() {
                                 {/* Compact limits display */}
                                 <div style={{
                                     display: 'grid',
-                                    gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+                                    gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))',
                                     gap: '0.5rem'
                                 }}>
                                     {Object.entries(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {}).map(([key, config]) => (
@@ -4184,7 +4207,7 @@ export default function Dealer() {
                                                 </span>
                                                 {config.isSet && <span className="set-badge" style={{ fontSize: '0.65rem', padding: '0.1rem 0.25rem' }}>ชุด</span>}
                                             </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
                                                 <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>อั้น</span>
                                                 <input
                                                     type="number"
@@ -4216,6 +4239,21 @@ export default function Dealer() {
                                                         }
                                                     })}
                                                 />
+                                                <select
+                                                    className="form-input small"
+                                                    style={{ width: '100px', padding: '0.35rem 0.3rem', fontSize: '0.85rem', marginLeft: '0.25rem' }}
+                                                    value={roundForm.type_close_time_behaviors?.[key] || 'close_immediately'}
+                                                    onChange={e => setRoundForm({
+                                                        ...roundForm,
+                                                        type_close_time_behaviors: {
+                                                            ...roundForm.type_close_time_behaviors,
+                                                            [key]: e.target.value
+                                                        }
+                                                    })}
+                                                >
+                                                    <option value="close_immediately">ปิดรับทันที</option>
+                                                    <option value="return_excess">คืนเลขเกิน</option>
+                                                </select>
                                             </div>
                                         </div>
                                     ))}
