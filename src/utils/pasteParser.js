@@ -165,7 +165,19 @@ export function normalizeUnicode(str) {
     s = s.replace(/กลับ(?:ตู|ตัว|ประตู)(?!\s*ละ)/g, 'กลับชุด');
     s = s.replace(/(\d+)\s*[*×xX\-+]?\s*[ชซ](?![ก-๛a-zA-Z0-9])/g, '$1*ชุด');
     s = s.replace(/ตัว\s*ละ|ตู\s*ละ/g, '=');
-    s = s.replace(/(\d)\s*[xXzZ]\s*(\d)/g, '$1*$2');
+    s = s.replace(/(\d)\s*[xXzZ]\s*(\d)/g, (match, d1, d2, offset, wholeStr) => {
+        const beforeMatch = wholeStr.substring(0, offset);
+        const afterMatch = wholeStr.substring(offset + match.length);
+        const isPrevDigit = /\d$/.test(beforeMatch);
+        const isNextDigit = /^\d/.test(afterMatch);
+        if (isPrevDigit || isNextDigit) {
+            return `${d1}*${d2}`;
+        }
+        if (afterMatch.trim().startsWith('=')) {
+            return match;
+        }
+        return `${d1}*${d2}`;
+    });
     s = s.replace(/(\d)\s*([*\-+/\/,'])\s*(\d)/g, '$1$2$3');
     s = s.replace(/(\d)\s*[tTต]\s*(\d)/g, '$1*$2');
     s = s.replace(/(\d)\s*-\s*(?=[ก-๛])/g, '$1 ');
@@ -1202,6 +1214,10 @@ function parseContextLine(line, contextMode) {
     const withPunct = line.trim().replace(/(?:กลับ|กลับตัว|กลับด้วย)\s*$/, '').trim();
     const bracketCleaned = withPunct.replace(/[\[\](){}]/g, '').replace(/[\s.+\-]/g, '');
     const isBottom = (contextMode === 'bottom' || contextMode === 'float_bottom' || contextMode === 'front_bottom_1' || contextMode === 'back_bottom_1');
+    if (/^2ตัว(หน้า|หน้ากลับ|2หน้า|2หน้ากลับ)$/.test(bracketCleaned) || /^(2ตัวหน้า|2ตัวหน้ากลับ|2หน้า|2หน้ากลับ)$/.test(bracketCleaned))
+        return 'front';
+    if (/^2ตัว(ถ่าง|ถ่างกลับ|2ถ่าง|2ถ่างกลับ|กลาง|กลางกลับ|2กลาง|2กลางกลับ)$/.test(bracketCleaned) || /^(2ตัวถ่าง|2ตัวถ่างกลับ|2ถ่าง|2ถ่างกลับ|2ตัวกลาง|2ตัวกลางกลับ|2กลาง|2กลางกลับ)$/.test(bracketCleaned))
+        return 'center';
     if (/^\d*ตัว(หน้าล่าง|ปักหน้าล่าง)$/.test(bracketCleaned) || /^(หน้าล่าง|ปักหน้าล่าง)$/.test(bracketCleaned))
         return 'front_bottom_1';
     if (/^\d*ตัว(หลังล่าง|ปักหลังล่าง)$/.test(bracketCleaned) || /^(หลังล่าง|ปักหลังล่าง)$/.test(bracketCleaned))
@@ -1311,6 +1327,18 @@ function refinePositionMode(mode, text, contextMode) {
 }
 export function extractInlineContext(line, contextMode) {
     let s = line.trim();
+    const positionCtxSuffix = s.match(/^(.+?)(?<=\d|\s|=)(หน้า|ถ่าง)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/);
+    if (positionCtxSuffix) {
+        const rest = positionCtxSuffix[1];
+        const mode = positionCtxSuffix[2] === 'หน้า' ? 'front' : 'center';
+        return { cleaned: rest.trim(), mode };
+    }
+    const positionCtxPrefix = s.match(/^(หน้า|ถ่าง)\.?\s*(\d.*)$/);
+    if (positionCtxPrefix) {
+        const rest = positionCtxPrefix[2];
+        const mode = positionCtxPrefix[1] === 'หน้า' ? 'front' : 'center';
+        return { cleaned: rest.trim(), mode };
+    }
     // Position bets (หน้า, กลาง, หลัง)
     const posPrefix = s.match(/^(หน้าบน|ปักหน้าบน|กลางบน|ปักกลางบน|หลังบน|ปักหลังบน|หน้าล่าง|ปักหน้าล่าง|หลังล่าง|ปักหลังล่าง|ปักหน้า|ปักกลาง|ปักหลัง|หน้า|กลาง|หลัง)\s*(บน|ล่าง|บ|ล)?\.?\s*(\d.*)$/i);
     if (posPrefix) {
@@ -1489,11 +1517,38 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType, settings)
             }
         }
     }
-    const effectiveContext = inlineCtx.mode || contextMode;
-    const isReverseBet = effectiveContext === 'reverse';
-    const parseContext = (effectiveContext === 'both') ? 'top' : (isReverseBet ? 'top' : effectiveContext);
     if (!normalized)
         return null;
+    let effectiveContext = inlineCtx.mode || contextMode;
+    let normalizedMode = null;
+    // 1. [xX-] at start followed by 2 digits: e.g. x25=20 -> 25=20, and context is top
+    const p1 = normalized.match(/^(?<op>[xX-])(?<num>\d{2})(?<rest>[=*xX×:\s]+.*)?$/);
+    if (p1) {
+        const { num, rest } = p1.groups;
+        normalized = `${num}${rest || ''}`.trim();
+        normalizedMode = 'top';
+    } else {
+        // 2. 1 digit, then [xX-], then 1 digit: e.g. 2x5=20 -> 25=20, and context is center
+        const p2 = normalized.match(/^(?<num1>\d)(?<op>[xX-])(?<num2>\d)(?<rest>[=*xX×:\s]+.*)?$/);
+        if (p2) {
+            const { num1, num2, rest } = p2.groups;
+            normalized = `${num1}${num2}${rest || ''}`.trim();
+            normalizedMode = 'center';
+        } else {
+            // 3. 2 digits followed by [xX-]: e.g. 25x=20 -> 25=20, and context is front
+            const p3 = normalized.match(/^(?<num>\d{2})(?<op>[xX-])(?<rest>[=*xX×:\s]+.*)?$/);
+            if (p3) {
+                const { num, rest } = p3.groups;
+                normalized = `${num}${rest || ''}`.trim();
+                normalizedMode = 'front';
+            }
+        }
+    }
+    if (normalizedMode) {
+        effectiveContext = normalizedMode;
+    }
+    const isReverseBet = effectiveContext === 'reverse';
+    const parseContext = (effectiveContext === 'both') ? 'top' : (isReverseBet ? 'top' : effectiveContext);
     if (isDateLine(normalized))
         return null;
     normalized = normalized.replace(/(\d+)\s*[*×xX\-+]?\s*ชุด/g, '$1*ชุด');
@@ -1658,6 +1713,48 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
     if (numLen === 2) {
         if (amount1 === null)
             return null;
+        if (contextMode === 'front' || contextMode === 'center') {
+            const betType = contextMode === 'front' ? '2_front' : '2_center';
+            const baseLabel = contextMode === 'front' ? 'หน้า' : 'ถ่าง';
+            if (amount2 !== null && !shouldStraightOnly) {
+                const isDouble = numbers[0] === numbers[1];
+                if (isDouble) {
+                    const totalAmount = amount1 + amount2;
+                    results.push({
+                        numbers,
+                        amount: totalAmount,
+                        amount2: null,
+                        betType,
+                        typeLabel: baseLabel,
+                        rawLine,
+                        formattedLine: `${numbers}=${totalAmount} ${baseLabel}`
+                    });
+                } else {
+                    const typeLabel = `${baseLabel}กลับ`;
+                    results.push({
+                        numbers,
+                        amount: amount1,
+                        amount2,
+                        betType,
+                        specialType: 'reverse',
+                        typeLabel,
+                        rawLine,
+                        formattedLine: `${numbers}=${amount1}*${amount2} ${typeLabel}`
+                    });
+                }
+            } else {
+                results.push({
+                    numbers,
+                    amount: amount1,
+                    amount2: null,
+                    betType,
+                    typeLabel: baseLabel,
+                    rawLine,
+                    formattedLine: `${numbers}=${amount1} ${baseLabel}`
+                });
+            }
+            return results;
+        }
         if (isFloat) {
             if (contextMode === 'float_bottom') {
                 results.push({
