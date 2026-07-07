@@ -160,7 +160,7 @@ export function normalizeUnicode(str) {
         .replace(/[\u2018\u2019\u201A]/g, "'")
         .replace(/@/g, '=')
         .replace(/(\d),(\d{3})(?!\d)/g, '$1$2');
-    s = s.replace(/ทุกประตู|ทุกประตุ|ทุกตู|ทุกตุ/g, 'ชุด');
+    s = s.replace(/ทุกประตู|ทุกประตุ|ทุกตู|ทุกตุ/g, '*ชุด');
     s = s.replace(/กลับ(?:ตู|ตัว|ประตู)\s*ละ/g, 'กลับชุด=');
     s = s.replace(/กลับ(?:ตู|ตัว|ประตู)(?!\s*ละ)/g, 'กลับชุด');
     s = s.replace(/(\d+)\s*[*×xX\-+]?\s*[ชซ](?![ก-๛a-zA-Z0-9])/g, '$1*ชุด');
@@ -1551,7 +1551,11 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType, settings)
     const parseContext = (effectiveContext === 'both') ? 'top' : (isReverseBet ? 'top' : effectiveContext);
     if (isDateLine(normalized))
         return null;
-    normalized = normalized.replace(/(\d+)\s*[*×xX\-+]?\s*ชุด/g, '$1*ชุด');
+    const numMatch = normalized.match(/^(\d+)/);
+    const preNumLen = numMatch ? numMatch[1].length : 0;
+    if (preNumLen < 4) {
+        normalized = normalized.replace(/(\d+)\s*[*×xX\-+]?\s*ชุด/g, '$1*ชุด');
+    }
     const dotTriple = normalized.match(/^(\d+)\.(\d+)\.(\d+)$/);
     if (dotTriple) {
         normalized = `${dotTriple[1]}=${dotTriple[2]}*${dotTriple[3]}`;
@@ -1580,6 +1584,7 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType, settings)
     let amount2 = null;
     let amount3 = null;
     let hasChud = false;
+    let hasMultiplierChud = false;
     const eqMatch = normalized.match(/^(\d+)\s*[=]\s*(.+)$/);
     if (eqMatch) {
         numbers = eqMatch[1];
@@ -1589,6 +1594,7 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType, settings)
         amount2 = parsed.amount2;
         amount3 = parsed.amount3;
         hasChud = parsed.hasChud;
+        hasMultiplierChud = parsed.hasMultiplierChud;
     }
     else {
         const spaceMatch = normalized.match(/^(\d+)\s+(.+)$/);
@@ -1600,6 +1606,7 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType, settings)
             amount2 = parsed.amount2;
             amount3 = parsed.amount3;
             hasChud = parsed.hasChud;
+            hasMultiplierChud = parsed.hasMultiplierChud;
         }
         else {
             const bareMatch = normalized.match(/^(\d+)$/);
@@ -1614,11 +1621,15 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType, settings)
         return null;
     const numLen = numbers.length;
     const permCount = numLen >= 2 ? getPermutationCount(numbers) : 1;
-    return determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, parseContext, isLaoOrHanoi, lotteryType, line, settings, isReverseBet);
+    return determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, parseContext, isLaoOrHanoi, lotteryType, line, settings, isReverseBet, hasMultiplierChud);
 }
 function parseAmountPart(str) {
     let hasChud = false;
+    let hasMultiplierChud = false;
     let cleaned = normalizeUnicode(str.trim());
+    if (/[*×xX\-\/]\s*ชุด|ทุกประตู|ทุกประตุ|ทุกตู|ทุกตุ/i.test(cleaned)) {
+        hasMultiplierChud = true;
+    }
     cleaned = cleaned.replace(/(\d)[xX](\d)/g, '$1*$2');
     if (cleaned.includes('ชุด')) {
         hasChud = true;
@@ -1635,7 +1646,8 @@ function parseAmountPart(str) {
         amount1: (amount1 && amount1 > 0) ? amount1 : null,
         amount2: (amount2 && amount2 > 0) ? amount2 : null,
         amount3: (amount3 && amount3 > 0) ? amount3 : null,
-        hasChud
+        hasChud,
+        hasMultiplierChud
     };
 }
 function isDateLine(line) {
@@ -1668,7 +1680,7 @@ function isValidBare4DigitLine(rawLine, numbers) {
     const allowedRegex = /^[=\s]*(?:ชุด|ตัวชุด|ชุดลอยแพ|บน|ล่าง|บล|ลบ|บนล่าง|ล่างบน|บ\.?|ล\.?)?$/;
     return allowedRegex.test(remaining);
 }
-function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, contextMode, isLaoOrHanoi, lotteryType, rawLine, settings, isReverseBet = false) {
+function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, contextMode, isLaoOrHanoi, lotteryType, rawLine, settings, isReverseBet = false, hasMultiplierChud = false) {
     const isFloat = contextMode === 'float_top' || contextMode === 'float_bottom';
     const isTop = contextMode === 'top' || contextMode === 'float_top';
     const results = [];
@@ -1963,8 +1975,9 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
             }
             return null;
         }
-        if (amount2 !== null || hasChud) {
-            const effectiveAmount2 = hasChud ? get3DigitPermCount(numbers) : amount2;
+        const isKunChud = (amount2 !== null) || hasMultiplierChud || (hasChud && !isLaoOrHanoi);
+        if (isKunChud) {
+            const effectiveAmount2 = (hasChud || hasMultiplierChud) ? get3DigitPermCount(numbers) : amount2;
             const typeLabel = 'คูณชุด';
             results.push({
                 numbers,
@@ -1975,6 +1988,17 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
                 typeLabel,
                 rawLine,
                 formattedLine: `${numbers}=${amount1}*${effectiveAmount2} ${typeLabel}`
+            });
+        }
+        else if (hasChud && isLaoOrHanoi) {
+            results.push({
+                numbers,
+                amount: amount1,
+                amount2: null,
+                betType: '4_set',
+                typeLabel: '4ตัวชุด',
+                rawLine,
+                formattedLine: `${numbers}=${amount1} 4ตัวชุด`
             });
         }
         else {

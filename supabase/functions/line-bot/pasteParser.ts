@@ -182,7 +182,7 @@ function normalizeUnicode(str: string): string {
         .replace(/(\d),(\d{3})(?!\d)/g, '$1$2');
 
     // Replace ทุกประตู / ทุกประตุ / ทุกตู / ทุกตุ with ชุด
-    s = s.replace(/ทุกประตู|ทุกประตุ|ทุกตู|ทุกตุ/g, 'ชุด');
+    s = s.replace(/ทุกประตู|ทุกประตุ|ทุกตู|ทุกตุ/g, '*ชุด');
 
     // Normalize permutation keywords like "กลับตูละ", "กลับตัวละ", "กลับประตูละ" to "กลับชุด="
     s = s.replace(/กลับ(?:ตู|ตัว|ประตู)\s*ละ/g, 'กลับชุด=');
@@ -1778,7 +1778,11 @@ function parseNumberLine(line: string, contextMode: string, isLaoOrHanoi: boolea
     const parseContext = (effectiveContext === 'both') ? 'top' : (isReverseBet ? 'top' : effectiveContext);
     if (isDateLine(normalized)) return null;
 
-    normalized = normalized.replace(/(\d+)\s*[*×xX\-+]?\s*ชุด/g, '$1*ชุด');
+    const numMatch = normalized.match(/^(\d+)/);
+    const preNumLen = numMatch ? numMatch[1].length : 0;
+    if (preNumLen < 4) {
+        normalized = normalized.replace(/(\d+)\s*[*×xX\-+]?\s*ชุด/g, '$1*ชุด');
+    }
 
     const dotTriple = normalized.match(/^(\d+)\.(\d+)\.(\d+)$/);
     if (dotTriple) {
@@ -1812,6 +1816,7 @@ function parseNumberLine(line: string, contextMode: string, isLaoOrHanoi: boolea
     let amount2: number | null = null;
     let amount3: number | null = null;
     let hasChud = false;
+    let hasMultiplierChud = false;
 
     const eqMatch = normalized.match(/^(\d+)\s*[=]\s*(.+)$/);
     if (eqMatch) {
@@ -1822,6 +1827,7 @@ function parseNumberLine(line: string, contextMode: string, isLaoOrHanoi: boolea
         amount2 = parsed.amount2;
         amount3 = parsed.amount3;
         hasChud = parsed.hasChud;
+        hasMultiplierChud = parsed.hasMultiplierChud;
     } else {
         const spaceMatch = normalized.match(/^(\d+)\s+(.+)$/);
         if (spaceMatch) {
@@ -1832,6 +1838,7 @@ function parseNumberLine(line: string, contextMode: string, isLaoOrHanoi: boolea
             amount2 = parsed.amount2;
             amount3 = parsed.amount3;
             hasChud = parsed.hasChud;
+            hasMultiplierChud = parsed.hasMultiplierChud;
         } else {
             const bareMatch = normalized.match(/^(\d+)$/);
             if (bareMatch) {
@@ -1846,7 +1853,7 @@ function parseNumberLine(line: string, contextMode: string, isLaoOrHanoi: boolea
     const numLen = numbers.length;
     const permCount = numLen >= 2 ? getPermutationCount(numbers) : 1;
 
-    return determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, parseContext, isLaoOrHanoi, lotteryType, line, settings, isReverseBet);
+    return determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, permCount, parseContext, isLaoOrHanoi, lotteryType, line, settings, isReverseBet, hasMultiplierChud);
 }
 
 interface ParsedAmount {
@@ -1854,11 +1861,16 @@ interface ParsedAmount {
     amount2: number | null;
     amount3: number | null;
     hasChud: boolean;
+    hasMultiplierChud: boolean;
 }
 
 function parseAmountPart(str: string): ParsedAmount {
     let hasChud = false;
+    let hasMultiplierChud = false;
     let cleaned = normalizeUnicode(str.trim());
+    if (/[*×xX\-\/]\s*ชุด|ทุกประตู|ทุกประตุ|ทุกตู|ทุกตุ/i.test(cleaned)) {
+        hasMultiplierChud = true;
+    }
     cleaned = cleaned.replace(/(\d)[xX](\d)/g, '$1*$2');
 
     if (cleaned.includes('ชุด')) {
@@ -1882,7 +1894,8 @@ function parseAmountPart(str: string): ParsedAmount {
         amount1: (amount1 && amount1 > 0) ? amount1 : null,
         amount2: (amount2 && amount2 > 0) ? amount2 : null,
         amount3: (amount3 && amount3 > 0) ? amount3 : null,
-        hasChud
+        hasChud,
+        hasMultiplierChud
     };
 }
 
@@ -1932,7 +1945,8 @@ function determineBetType(
     lotteryType: string,
     rawLine: string,
     settings?: { x_separator_behavior?: string },
-    isReverseBet: boolean = false
+    isReverseBet: boolean = false,
+    hasMultiplierChud: boolean = false
 ): ParsedBet[] | null {
     const isFloat = contextMode === 'float_top' || contextMode === 'float_bottom';
     const isTop = contextMode === 'top' || contextMode === 'float_top';
@@ -2240,8 +2254,9 @@ function determineBetType(
             return null;
         }
 
-        if (amount2 !== null || hasChud) {
-            const effectiveAmount2 = hasChud ? get3DigitPermCount(numbers) : amount2;
+        const isKunChud = (amount2 !== null) || hasMultiplierChud || (hasChud && !isLaoOrHanoi);
+        if (isKunChud) {
+            const effectiveAmount2 = (hasChud || hasMultiplierChud) ? get3DigitPermCount(numbers) : amount2;
             const typeLabel = 'คูณชุด';
             results.push({
                 numbers,
@@ -2252,6 +2267,16 @@ function determineBetType(
                 typeLabel,
                 rawLine,
                 formattedLine: `${numbers}=${amount1}*${effectiveAmount2} ${typeLabel}`
+            });
+        } else if (hasChud && isLaoOrHanoi) {
+            results.push({
+                numbers,
+                amount: amount1,
+                amount2: null,
+                betType: '4_set',
+                typeLabel: '4ตัวชุด',
+                rawLine,
+                formattedLine: `${numbers}=${amount1} 4ตัวชุด`
             });
         } else {
             results.push({
