@@ -447,6 +447,29 @@ export default function DealerLineBotTab({ user, profile }) {
         }
     }
 
+    const handleToggleGroupNotification = async (groupId, key, value) => {
+        // Optimistic update
+        setLineGroups(prev => prev.map(g => g.id === groupId ? { ...g, [key]: value } : g))
+
+        try {
+            const { error } = await supabase
+                .from('line_groups')
+                .update({
+                    [key]: value,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', groupId)
+
+            if (error) throw error
+
+            toast.success('อัปเดตตั้งค่าการแจ้งเตือนของกลุ่มสำเร็จ!')
+        } catch (error) {
+            console.error('Error toggling group notification:', error)
+            toast.error('ไม่สามารถแก้ไขตั้งค่าการแจ้งเตือนได้')
+            fetchLineGroups()
+        }
+    }
+
     const configGroup = lineGroups.find(g => g.id === selectedConfigGroupId)
     const memberPerms = configGroup?.member_permissions || {
         bet: true,
@@ -848,6 +871,66 @@ export default function DealerLineBotTab({ user, profile }) {
                                                             padding: '1rem',
                                                             border: '1px solid var(--color-border)'
                                                         }}>
+                                                            {/* Automation & Notification Settings */}
+                                                            <div style={{
+                                                                background: 'rgba(255, 255, 255, 0.02)',
+                                                                border: '1px solid var(--color-border)',
+                                                                borderRadius: '8px',
+                                                                padding: '1rem',
+                                                                marginBottom: '1rem'
+                                                            }}>
+                                                                <div style={{ fontWeight: 600, marginBottom: '0.75rem', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                    <FiSettings /> ตั้งค่าแจ้งเตือนและการทำงานอัตโนมัติประจำกลุ่ม
+                                                                </div>
+                                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+                                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed', margin: 0 }}>
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={group.notify_round_created || false}
+                                                                            disabled={!isOwnerOrSuper}
+                                                                            onChange={e => handleToggleGroupNotification(group.id, 'notify_round_created', e.target.checked)}
+                                                                        />
+                                                                        <span style={{ fontSize: '0.85rem' }}>📢 แจ้งเตือนเมื่อเปิดงวดใหม่</span>
+                                                                    </label>
+                                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed', margin: 0 }}>
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={group.notify_admin_alerts || false}
+                                                                            disabled={!isOwnerOrSuper}
+                                                                            onChange={e => handleToggleGroupNotification(group.id, 'notify_admin_alerts', e.target.checked)}
+                                                                        />
+                                                                        <span style={{ fontSize: '0.85rem' }}>⚠️ แจ้งเตือนแอดมิน/ข้อผิดพลาด</span>
+                                                                    </label>
+                                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed', margin: 0 }}>
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={group.notify_layoff_bets || false}
+                                                                            disabled={!isOwnerOrSuper}
+                                                                            onChange={e => handleToggleGroupNotification(group.id, 'notify_layoff_bets', e.target.checked)}
+                                                                        />
+                                                                        <span style={{ fontSize: '0.85rem' }}>📥 รับโพยส่งออก (เลขตีออก)</span>
+                                                                    </label>
+                                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed', margin: 0 }}>
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={group.notify_round_summary || false}
+                                                                            disabled={!isOwnerOrSuper}
+                                                                            onChange={e => handleToggleGroupNotification(group.id, 'notify_round_summary', e.target.checked)}
+                                                                        />
+                                                                        <span style={{ fontSize: '0.85rem' }}>📊 ส่งสรุปยอดโพยเมื่อปิดงวด</span>
+                                                                    </label>
+                                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed', margin: 0 }}>
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={group.notify_lottery_results || false}
+                                                                            disabled={!isOwnerOrSuper}
+                                                                            onChange={e => handleToggleGroupNotification(group.id, 'notify_lottery_results', e.target.checked)}
+                                                                        />
+                                                                        <span style={{ fontSize: '0.85rem' }}>🏆 ส่งผลรางวัลและรายงานผู้ชนะ</span>
+                                                                    </label>
+                                                                </div>
+                                                            </div>
+
                                                             <div style={{ fontWeight: 600, marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                                 <span style={{ color: 'var(--color-primary)' }}>👥 รายชื่อสมาชิกในกลุ่ม LINE นี้ ({(groupMembers[group.line_group_id] || []).length} คน)</span>
                                                                 <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 'normal' }}>
