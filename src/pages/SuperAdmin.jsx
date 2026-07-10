@@ -1293,8 +1293,12 @@ export default function SuperAdmin() {
             })
 
             appData?.forEach(s => {
-                // app_settings contains raw strings
-                settingsObj[s.key] = s.value
+                if (s.key === 'openrouter_api_key' && s.value) {
+                    settingsObj['has_openrouter_api_key'] = true;
+                    settingsObj['openrouter_api_key'] = '••••••••••••••••';
+                } else {
+                    settingsObj[s.key] = s.value;
+                }
             })
 
             setSettings(settingsObj)
@@ -1806,6 +1810,11 @@ export default function SuperAdmin() {
     const handleUpdateSetting = async (key, value) => {
         try {
             if (APP_SETTINGS_KEYS.includes(key)) {
+                if (key === 'openrouter_api_key' && value === '••••••••••••••••') {
+                    // Do not overwrite if it is the masked placeholder
+                    toast.success('บันทึกการตั้งค่าสำเร็จ');
+                    return;
+                }
                 // Write to app_settings
                 const { error } = await supabase
                     .from('app_settings')
