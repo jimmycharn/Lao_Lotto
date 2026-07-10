@@ -1741,6 +1741,240 @@ function findMatchingLimit(numberLimits: any[], betType: string, numbers: string
   return reversedMatch || null;
 }
 
+function parseTokenToBetType(token: string, isLaoOrHanoi: boolean): string | null {
+  const clean = token.replace(/[\/\s]/g, '').trim();
+  
+  if (/^(ลอยบน|วิ่งบน|วิ่ง)$/.test(clean)) return 'run_top';
+  if (/^(ลอยล่าง|วิ่งล่าง)$/.test(clean)) return 'run_bottom';
+  if (/^(ปักบน)$/.test(clean)) return 'pak_top';
+  if (/^(ปักล่าง)$/.test(clean)) return 'pak_bottom';
+  
+  if (/^(2ตัวบน|2บน|บน2|บน)$/.test(clean)) return '2_top';
+  if (/^(2ตัวล่าง|2ล่าง|ล่าง2|ล่าง)$/.test(clean)) return '2_bottom';
+  if (/^(2ตัวหน้า|2หน้า)$/.test(clean)) return '2_front';
+  if (/^(2ตัวถ่าง|2ถ่าง|ถ่าง|กลาง)$/.test(clean)) return '2_center';
+  if (/^(2ตัวลอย|2ลอย)$/.test(clean)) return '2_run';
+  
+  if (/^(3ตัวตรงชุด|3ตรงชุด|3ชุด|3ตัวตรงชุด)$/.test(clean)) return '3_set';
+  if (/^(3ตัวบน|3บน|3ตัวตรง|3ตรง|ตรง)$/.test(clean)) {
+    return '3_top';
+  }
+  if (/^(3ตัวโต๊ด|3โต๊ด|โต๊ด|โตด)$/.test(clean)) return '3_tod';
+  if (/^(3ตัวล่าง|3ล่าง)$/.test(clean)) return '3_bottom';
+  
+  if (/^(4ตัวชุด|4ชุด)$/.test(clean)) return '4_set';
+  if (/^(4ตัวลอย|4ลอย|ลอยแพ)$/.test(clean)) return '4_float';
+  if (/^(5ตัวลอย|5ลอย)$/.test(clean)) return '5_float';
+  
+  return null;
+}
+
+function getCombinationsOf3(numbers: string): string[] {
+  const result = new Set<string>();
+  if (numbers.length === 4) {
+    for (let i = 0; i < 4; i++) {
+      const combo = (numbers.slice(0, i) + numbers.slice(i + 1)).split('').sort().join('');
+      result.add(combo);
+    }
+  } else if (numbers.length === 5) {
+    const chars = numbers.split('');
+    for (let i = 0; i < 5; i++) {
+      for (let j = i + 1; j < 5; j++) {
+        for (let k = j + 1; k < 5; k++) {
+          const combo = [chars[i], chars[j], chars[k]].sort().join('');
+          result.add(combo);
+        }
+      }
+    }
+  }
+  return Array.from(result);
+}
+
+interface ParsedLimit {
+  numbers: string;
+  betTypes: string[];
+  maxAmount: number;
+  payoutPercent: number;
+  limitType: 'limited' | 'blocked';
+  includeReversed: boolean;
+  isDelete: boolean;
+  isSetLimit: boolean;
+  combinations3?: string[];
+}
+
+function parseSpecificLimitLine(line: string, lotteryType: string, setPrice: number): ParsedLimit | null {
+  // Ensure there is a space before the first slash if it's attached to another word (e.g. "ก/ลบ" -> "ก /ลบ")
+  const firstSlash = line.indexOf('/');
+  if (firstSlash > 0 && line[firstSlash - 1] !== ' ') {
+    line = line.slice(0, firstSlash) + ' ' + line.slice(firstSlash);
+  }
+
+  const slashIndex = line.indexOf('/');
+  if (slashIndex !== -1) {
+    const prefix = line.slice(0, slashIndex);
+    const suffix = line.slice(slashIndex).replace(/\s+/g, '');
+    line = prefix + suffix;
+  }
+
+  const cleanLine = line.trim().replace(/\s+/g, ' ');
+  if (!cleanLine) return null;
+
+  const tokens = cleanLine.split(' ');
+  if (tokens.length === 0) return null;
+
+  const numbers = tokens[0];
+  if (!/^\d+$/.test(numbers)) return null;
+
+  let isDelete = false;
+  let limitType: 'limited' | 'blocked' = 'limited';
+  let payoutPercent = 100;
+  let includeReversed = false;
+  let isSetLimit = false;
+  let rawAmount: number | null = null;
+  let specifiedBetTypes: string[] = [];
+
+  const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType);
+
+  for (let i = 1; i < tokens.length; i++) {
+    const tok = tokens[i].trim();
+    if (!tok) continue;
+
+    if (/^(ลบ|ยกเลิก|ไม่อั้น|เปิด|delete|remove|clear)$/i.test(tok)) {
+      isDelete = true;
+      continue;
+    }
+
+    if (/^(ปิด|บล็อก|block|blocked)$/i.test(tok)) {
+      limitType = 'blocked';
+      rawAmount = 0;
+      continue;
+    }
+
+    if (/^(ก|กลับ)$/i.test(tok)) {
+      includeReversed = true;
+      continue;
+    }
+
+    if (tok.endsWith('%')) {
+      const val = parseFloat(tok.replace('%', ''));
+      if (!isNaN(val)) {
+        payoutPercent = val;
+      }
+      continue;
+    }
+
+    if (/^\d+(ช|ชุด)$/.test(tok)) {
+      isSetLimit = true;
+      const val = parseFloat(tok.replace(/(ช|ชุด)/, ''));
+      if (!isNaN(val)) {
+        rawAmount = val;
+      }
+      continue;
+    }
+
+    if (tok.startsWith('/')) {
+      const parts = tok.split('/');
+      for (const p of parts) {
+        if (!p) continue;
+        if (/^(ลบ|ยกเลิก|ไม่อั้น|เปิด|delete|remove|clear)$/i.test(p)) {
+          isDelete = true;
+          continue;
+        }
+        const bt = parseTokenToBetType(p, isLaoOrHanoi);
+        if (bt) {
+          specifiedBetTypes.push(bt);
+        }
+      }
+      continue;
+    }
+
+    if (/^\d+(\.\d+)?$/.test(tok)) {
+      const val = parseFloat(tok);
+      if (rawAmount === null) {
+        rawAmount = val;
+      } else if (payoutPercent === 100 && val <= 100) {
+        payoutPercent = val;
+      }
+    }
+  }
+
+  let maxAmount = 0;
+  if (!isDelete && limitType === 'limited') {
+    if (rawAmount === null) {
+      return null;
+    }
+    if (isSetLimit) {
+      maxAmount = rawAmount * setPrice;
+    } else {
+      maxAmount = rawAmount;
+    }
+  }
+
+  let finalBetTypes = [...specifiedBetTypes];
+  let combinations3: string[] = [];
+
+  if (finalBetTypes.length === 0) {
+    const len = numbers.length;
+    if (len === 1) {
+      finalBetTypes = ['run_top', 'run_bottom', 'pak_top', 'pak_bottom'];
+    } else if (len === 2) {
+      finalBetTypes = ['2_top', '2_bottom', '2_front', '2_center', '2_run'];
+    } else if (len === 3) {
+      if (lotteryType === 'thai') {
+        finalBetTypes = ['3_top', '3_tod', '3_bottom'];
+      } else {
+        finalBetTypes = ['3_top', '3_tod', '3_bottom', '3_set'];
+      }
+    } else if (len === 4) {
+      if (isDelete) {
+        finalBetTypes = isLaoOrHanoi ? ['4_float', '4_set'] : ['4_float'];
+      } else {
+        if (isSetLimit) {
+          finalBetTypes = ['4_set'];
+        } else if (includeReversed) {
+          combinations3 = getCombinationsOf3(numbers);
+          finalBetTypes = ['3_top'];
+        } else {
+          finalBetTypes = ['4_float'];
+        }
+      }
+    } else if (len === 5) {
+      finalBetTypes = ['5_float'];
+    }
+  } else {
+    const is3DigitType = finalBetTypes.some(bt => ['3_top', '3_tod', '3_bottom', '3_set'].includes(bt));
+    if (is3DigitType && numbers.length > 3) {
+      if (includeReversed) {
+        combinations3 = getCombinationsOf3(numbers);
+      } else {
+        const last3 = numbers.slice(-3);
+        return {
+          numbers: last3,
+          betTypes: finalBetTypes,
+          maxAmount,
+          payoutPercent,
+          limitType,
+          includeReversed,
+          isDelete,
+          isSetLimit
+        };
+      }
+    }
+  }
+
+  return {
+    numbers,
+    betTypes: finalBetTypes,
+    maxAmount,
+    payoutPercent,
+    limitType,
+    includeReversed,
+    isDelete,
+    isSetLimit,
+    ...(combinations3.length > 0 ? { combinations3 } : {})
+  };
+}
+
 function getThaiBetTypeLabel(betType: string, lotteryType: string): string {
   const typeLower = lotteryType.toLowerCase();
   if (typeLower === 'thai') {
@@ -3689,19 +3923,31 @@ serve(async (req) => {
                 }
               };
 
+              // Fetch saved default template if exists
+              const { data: template } = await supabase
+                .from('dealer_lottery_templates')
+                .select('*')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', targetType)
+                .maybeSingle();
+
               const today = new Date();
-              const openTimeStr = targetType === 'thai' || targetType === 'lao' ? '06:00' : '08:00';
-              let closeTimeStr = '20:00';
-              if (targetType === 'thai') closeTimeStr = '14:05';
-              else if (targetType === 'lao') closeTimeStr = '20:15';
+              let openTimeStr = template && template.open_time ? template.open_time : (targetType === 'thai' || targetType === 'lao' ? '06:00' : '08:00');
+              let closeTimeStr = template && template.close_time ? template.close_time : '20:00';
+              if (!template || !template.close_time) {
+                if (targetType === 'thai') closeTimeStr = '14:05';
+                else if (targetType === 'lao') closeTimeStr = '20:15';
+              }
 
               const roundDate = getBangkokDateString(today);
               const openTime = getBangkokISOString(today, openTimeStr);
               const closeTime = getBangkokISOString(today, closeTimeStr);
 
-              const deleteBeforeMinutes = targetType === 'thai' || targetType === 'lao' ? 30 : 1;
-              const deleteAfterSubmitMinutes = targetType === 'thai' || targetType === 'lao' ? 120 : 0;
-              const notifyCloseToGroups = targetType === 'lao';
+              const deleteBeforeMinutes = template ? template.delete_before_minutes : (targetType === 'thai' || targetType === 'lao' ? 30 : 1);
+              const deleteAfterSubmitMinutes = template ? template.delete_after_submit_minutes : (targetType === 'thai' || targetType === 'lao' ? 120 : 0);
+              const notifyCloseToGroups = template ? template.notify_close_to_groups : (targetType === 'lao');
+              const currencySymbol = template ? template.currency_symbol : '฿';
+              const currencyName = template ? template.currency_name : 'บาท';
 
               const lotteryNames: Record<string, string> = {
                 thai: 'หวยไทย',
@@ -3710,7 +3956,11 @@ serve(async (req) => {
                 stock: 'หวยหุ้น'
               };
               const lotteryName = lotteryNames[targetType] || targetType;
-              const defaultSetPrices = DEFAULT_SET_PRICES_BY_TYPE[targetType] || {};
+
+              let setPrices = DEFAULT_SET_PRICES_BY_TYPE[targetType] || {};
+              if (template && template.set_prices) {
+                setPrices = { ...setPrices, ...template.set_prices };
+              }
 
               // Insert round
               const { data: round, error: roundError } = await supabase
@@ -3724,12 +3974,12 @@ serve(async (req) => {
                   close_time: closeTime,
                   delete_before_minutes: deleteBeforeMinutes,
                   delete_after_submit_minutes: deleteAfterSubmitMinutes,
-                  currency_symbol: '฿',
-                  currency_name: 'บาท',
+                  currency_symbol: currencySymbol,
+                  currency_name: currencyName,
                   notify_close_to_groups: notifyCloseToGroups,
                   is_active: true,
                   status: 'open',
-                  set_prices: defaultSetPrices
+                  set_prices: setPrices
                 })
                 .select()
                 .single();
@@ -3741,12 +3991,28 @@ serve(async (req) => {
 
               // Create type limits
               const defaultLimits = DEFAULT_LIMITS_BY_TYPE[targetType] || {};
-              const typeLimitsData = Object.entries(defaultLimits).map(([betType, maxAmount]) => ({
-                round_id: round.id,
-                bet_type: betType,
-                max_per_number: maxAmount,
-                payout_rate: 0
-              }));
+              let finalLimits = { ...defaultLimits };
+              if (template && template.type_limits) {
+                finalLimits = { ...finalLimits, ...template.type_limits };
+              }
+
+              const typeLimitsData = Object.entries(finalLimits).map(([betType, maxAmount]) => {
+                const specificTime = template?.type_close_times?.[betType];
+                let typeCloseTime = null;
+                if (specificTime) {
+                  typeCloseTime = getBangkokISOString(today, specificTime);
+                }
+                const closeBehavior = template?.type_close_time_behaviors?.[betType] || 'close_immediately';
+
+                return {
+                  round_id: round.id,
+                  bet_type: betType,
+                  max_per_number: maxAmount,
+                  payout_rate: 0,
+                  close_time: typeCloseTime,
+                  close_time_behavior: closeBehavior
+                };
+              });
 
               const { error: limitsError } = await supabase
                 .from('type_limits')
@@ -8521,7 +8787,8 @@ serve(async (req) => {
 
                       sectionHeader("📋", "อัตราจ่าย & ค่าอั้น"),
                       cmdRow("/ดูอัตรา [ชื่อ] [ประเภทหวย]", "ดูค่าคอมและอัตราจ่าย เช่น /ดูอัตรา พี่น้ำ ลาว"),
-                      cmdRow("/ดูอั้น", "ดูค่าอั้นตามประเภทเลขของงวดปัจจุบัน")
+                      cmdRow("/ดูอั้น", "ดูค่าอั้นตามประเภทเลขของงวดปัจจุบัน"),
+                      cmdRow("/ดูอั้นเฉพาะ", "ดูเลขอั้น/เลขปิดเจาะจงเฉพาะตัวเลข")
                     ]
                   },
                   "footer": {
@@ -8578,7 +8845,8 @@ serve(async (req) => {
                       sectionHeader("⚙️", "ตั้งค่าอัตราจ่าย & ค่าอั้น"),
                       cmdRow("/ตั้งอัตรา [ชื่อ] [ประเภทหวย]", "ตั้งค่าคอมและอัตราจ่ายสมาชิก"),
                       cmdRow("/ตั้งอั้น", "ตั้งค่าอั้นตามประเภทเลข (หลายแบบ)"),
-                      cmdRow("/ตั้งอั้น [ตัวเลข]", "ตั้งค่าอั้นเหมาทุกประเภทเท่ากัน เช่น /ตั้งอั้น 1000")
+                      cmdRow("/ตั้งอั้น [ตัวเลข]", "ตั้งค่าอั้นเหมาทุกประเภทเท่ากัน เช่น /ตั้งอั้น 1000"),
+                      cmdRow("/ตั้งอั้นเฉพาะ [เลข] [เงื่อนไข]", "ตั้งค่าอั้นเฉพาะเลข (พิมพ์ /help เพื่อดูคู่มือเว็บ)")
                     ]
                   },
                   "footer": {
@@ -9323,6 +9591,433 @@ serve(async (req) => {
           };
           return defaults[lotteryType] || defaults['thai'];
         };
+
+        // ─── COMMAND: /ดูอั้นเฉพาะ หรือ /ดูอั้นเฉพาะเลข ───
+        if (text === '/ดูอั้นเฉพาะ' || text === '/ดูอั้นเฉพาะเลข') {
+          // 1. Group check
+          if (!groupLink) {
+            await sendLineReply(replyToken, `❌ กลุ่มนี้ยังไม่ได้ผูกกับเจ้ามือ ไม่สามารถเรียกดูข้อมูลยอดอั้นเฉพาะเลขได้`);
+            continue;
+          }
+          const listDealerId = groupLink.dealer_id;
+          const listLotteryType = groupLink.lottery_type;
+
+          // 2. Sender profile check
+          const { data: senderProfile } = await supabase
+            .from('profiles')
+            .select('id, role')
+            .eq('line_user_id', userId)
+            .eq('is_active', true)
+            .maybeSingle();
+
+          if (!senderProfile) {
+            await sendLineReply(replyToken, [
+              `❌ คุณยังไม่ได้เชื่อมบัญชี LINE ของคุณกับระบบ Big Lotto`,
+              userId
+            ]);
+            continue;
+          }
+
+          // Check if sender has authority
+          const targetDealerId = listDealerId;
+          const isStaffSender = senderProfile?.id === targetDealerId || senderProfile?.role === 'superadmin' || senderProfile?.role === 'admin';
+          let isManagerSender = false;
+          if (!isStaffSender && targetDealerId) {
+            const { data: mgr } = await supabase
+              .from('line_managers')
+              .select('id')
+              .eq('dealer_id', targetDealerId)
+              .eq('line_user_id', userId)
+              .eq('is_active', true)
+              .maybeSingle();
+            isManagerSender = !!mgr;
+          }
+          const isAuthorized = isStaffSender || isManagerSender;
+
+          if (!isAuthorized) {
+            await sendLineReply(replyToken, `❌ ขออภัยค่ะ เฉพาะเจ้ามือหรือผู้จัดการกลุ่มเท่านั้นที่มีสิทธิ์ตรวจสอบยอดอั้นเฉพาะเลขได้`);
+            continue;
+          }
+
+          // Find the active round
+          const { data: targetRounds } = await supabase
+            .from('lottery_rounds')
+            .select('*')
+            .eq('dealer_id', listDealerId)
+            .eq('lottery_type', listLotteryType)
+            .in('status', ['open', 'closed'])
+            .order('close_time', { ascending: false })
+            .limit(1);
+
+          const activeRound = targetRounds?.[0];
+          if (!activeRound) {
+            await sendLineReply(replyToken, `❌ หวยประเภท ${listLotteryType.toUpperCase()} ในขณะนี้ยังไม่มีงวดที่เปิดรับแทงค่ะ`);
+            continue;
+          }
+
+          // Fetch specific number limits for this round
+          const { data: numberLimits, error: nlErr } = await supabase
+            .from('number_limits')
+            .select('*')
+            .eq('round_id', activeRound.id)
+            .eq('is_active', true)
+            .order('numbers', { ascending: true });
+
+          if (nlErr) {
+            await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลเลขอั้นเฉพาะเลข`);
+            continue;
+          }
+
+          const lotteryNameThai = {
+            thai: 'หวยไทย',
+            lao: 'หวยลาว',
+            hanoi: 'หวยฮานอย',
+            stock: 'หวยหุ้น',
+            yeekee: 'หวยยี่กี'
+          }[listLotteryType] || listLotteryType.toUpperCase();
+
+          const roundDateStr = getRoundDisplayDate(activeRound, false);
+          let out = `📋 รายการตั้งอั้นเฉพาะเลข ${lotteryNameThai}\n`;
+          out += `งวดวันที่: ${roundDateStr}\n`;
+          out += `----------------------\n`;
+
+          if (!numberLimits || numberLimits.length === 0) {
+            out += `ℹ️ ยังไม่มีการตั้งอั้นเฉพาะเลขในงวดนี้ค่ะ\n`;
+          } else {
+            const setPrice = activeRound.set_prices?.['4_top'] || 120;
+            // Group specific limits by number & limit type to display them nicely
+            const grouped = new Map<string, {
+              numbers: string;
+              limitType: 'limited' | 'blocked';
+              maxAmount: number;
+              payoutPercent: number;
+              includeReversed: boolean;
+              betTypes: string[];
+            }>();
+
+            numberLimits.forEach((nl: any) => {
+              const key = `${nl.numbers}|${nl.limit_type}|${nl.max_amount}|${nl.payout_percent}|${nl.include_reversed}`;
+              if (!grouped.has(key)) {
+                grouped.set(key, {
+                  numbers: nl.numbers,
+                  limitType: nl.limit_type,
+                  maxAmount: Number(nl.max_amount),
+                  payoutPercent: Number(nl.payout_percent),
+                  includeReversed: !!nl.include_reversed,
+                  betTypes: []
+                });
+              }
+              grouped.get(key)!.betTypes.push(nl.bet_type);
+            });
+
+            for (const item of grouped.values()) {
+              // Translate bet types to Thai labels
+              const betTypeLabels = item.betTypes.map(bt => {
+                if (bt === 'run_top') return 'ลอยบน';
+                if (bt === 'run_bottom') return 'ลอยล่าง';
+                if (bt === 'pak_top') return 'ปักบน';
+                if (bt === 'pak_bottom') return 'ปักล่าง';
+                if (bt === '2_top') return 'บน';
+                if (bt === '2_bottom') return 'ล่าง';
+                if (bt === '2_front') return 'หน้า';
+                if (bt === '2_center') return 'ถ่าง';
+                if (bt === '2_run') return '2ตัวลอย';
+                if (bt === '3_top') return listLotteryType === 'thai' ? 'บน' : 'ตรง';
+                if (bt === '3_tod') return 'โต๊ด';
+                if (bt === '3_bottom') return 'ล่าง';
+                if (bt === '4_set') return '4ตัวชุด';
+                if (bt === '3_set') return '3ตรงชุด';
+                if (bt === '4_float') return 'ลอยแพ';
+                if (bt === '5_float') return '5ลอยแพ';
+                return bt;
+              });
+
+              const typeStr = betTypeLabels.join(', ');
+              const reverseSuffix = item.includeReversed ? ' (กลับ)' : '';
+              
+              if (item.limitType === 'blocked') {
+                out += `🚫 ${item.numbers} (${typeStr}): ปิดรับ${reverseSuffix}\n`;
+              } else {
+                const isSetType = item.betTypes.includes('4_set') || item.betTypes.includes('3_set');
+                let amountLabel = '';
+                if (isSetType) {
+                  const sets = Math.round(item.maxAmount / setPrice);
+                  amountLabel = `${sets.toLocaleString('th-TH')} ชุด`;
+                } else {
+                  amountLabel = `฿${item.maxAmount.toLocaleString('th-TH')}`;
+                }
+                const payLabel = item.payoutPercent !== 100 ? ` จ่าย ${item.payoutPercent}%` : '';
+                out += `⚠️ ${item.numbers} (${typeStr}): ${amountLabel}${payLabel}${reverseSuffix}\n`;
+              }
+            }
+          }
+          out += `----------------------`;
+          await sendLineReply(replyToken, out);
+          continue;
+        }
+
+        // ─── COMMAND: /ตั้งอั้นเฉพาะ หรือ /ตั้งอั้นเฉพาะเลข ───
+        if (text.startsWith('/ตั้งอั้นเฉพาะ') || text.startsWith('/ตั้งอั้นเฉพาะเลข')) {
+          // 1. Group check
+          if (!groupLink) {
+            await sendLineReply(replyToken, `❌ กลุ่มนี้ยังไม่ได้ผูกกับเจ้ามือ ไม่สามารถตั้งอั้นเฉพาะเลขได้`);
+            continue;
+          }
+          const listDealerId = groupLink.dealer_id;
+          const listLotteryType = groupLink.lottery_type;
+
+          // 2. Sender profile check
+          const { data: senderProfile } = await supabase
+            .from('profiles')
+            .select('id, role')
+            .eq('line_user_id', userId)
+            .eq('is_active', true)
+            .maybeSingle();
+
+          if (!senderProfile) {
+            await sendLineReply(replyToken, [
+              `❌ คุณยังไม่ได้เชื่อมบัญชี LINE ของคุณกับระบบ Big Lotto`,
+              userId
+            ]);
+            continue;
+          }
+
+          // Check if sender has authority
+          const targetDealerId = listDealerId;
+          const isStaffSender = senderProfile?.id === targetDealerId || senderProfile?.role === 'superadmin' || senderProfile?.role === 'admin';
+          let isManagerSender = false;
+          if (!isStaffSender && targetDealerId) {
+            const { data: mgr } = await supabase
+              .from('line_managers')
+              .select('id')
+              .eq('dealer_id', targetDealerId)
+              .eq('line_user_id', userId)
+              .eq('is_active', true)
+              .maybeSingle();
+            isManagerSender = !!mgr;
+          }
+          const isAuthorized = isStaffSender || isManagerSender;
+
+          if (!isAuthorized) {
+            await sendLineReply(replyToken, `❌ ขออภัยค่ะ เฉพาะเจ้ามือหรือผู้จัดการกลุ่มเท่านั้นที่มีสิทธิ์ตั้งค่าอั้นเฉพาะเลขได้`);
+            continue;
+          }
+
+          // Find the active round
+          const { data: targetRounds } = await supabase
+            .from('lottery_rounds')
+            .select('*')
+            .eq('dealer_id', listDealerId)
+            .eq('lottery_type', listLotteryType)
+            .in('status', ['open', 'closed'])
+            .order('close_time', { ascending: false })
+            .limit(1);
+
+          const activeRound = targetRounds?.[0];
+          if (!activeRound) {
+            await sendLineReply(replyToken, `❌ หวยประเภท ${listLotteryType.toUpperCase()} ในขณะนี้ยังไม่มีงวดที่เปิดอยู่สำหรับการตั้งอั้นเฉพาะเลข`);
+            continue;
+          }
+
+          // Split input by newlines
+          const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+          if (lines.length === 0) continue;
+
+          // Extract commands list (skip command header if standalone line)
+          let rawLines = lines;
+          const firstLine = lines[0];
+          if (firstLine.startsWith('/ตั้งอั้นเฉพาะ') || firstLine.startsWith('/ตั้งอั้นเฉพาะเลข')) {
+            const restOfFirstLine = firstLine.replace(/^\/ตั้งอั้นเฉพาะ(เลข)?/, '').trim();
+            if (restOfFirstLine) {
+              rawLines = [restOfFirstLine, ...lines.slice(1)];
+            } else {
+              rawLines = lines.slice(1);
+            }
+          }
+
+          if (rawLines.length === 0) {
+            await sendLineReply(replyToken, `❌ กรุณาระบุเลขและเงื่อนไขการอั้นเฉพาะ เช่น\n/ตั้งอั้นเฉพาะ 12 5000 50% ก\n/ตั้งอั้นเฉพาะ 99 บน ปิด`);
+            continue;
+          }
+
+          // Expand comma-separated numbers in lines
+          const expandedRawLines: string[] = [];
+          for (const line of rawLines) {
+            const cleanCommasLine = line.replace(/\s*,\s*/g, ',');
+            const cleanLine = cleanCommasLine.trim().replace(/\s+/g, ' ');
+            if (!cleanLine) continue;
+
+            const firstSpaceIndex = cleanLine.indexOf(' ');
+            const firstToken = firstSpaceIndex !== -1 ? cleanLine.slice(0, firstSpaceIndex) : cleanLine;
+
+            if (firstToken.includes(',')) {
+              const parts = firstToken.split(',').map(p => p.trim()).filter(p => /^\d+$/.test(p));
+              if (parts.length > 0) {
+                const remainingLine = firstSpaceIndex !== -1 ? cleanLine.slice(firstSpaceIndex) : '';
+                for (const part of parts) {
+                  expandedRawLines.push(part + remainingLine);
+                }
+              } else {
+                expandedRawLines.push(line);
+              }
+            } else {
+              expandedRawLines.push(line);
+            }
+          }
+
+          const setPrice = activeRound.set_prices?.['4_top'] || 120;
+          let successCount = 0;
+          let failCount = 0;
+          const successDetails: string[] = [];
+
+          for (const line of expandedRawLines) {
+            const parsed = parseSpecificLimitLine(line, listLotteryType, setPrice);
+            if (!parsed) {
+              failCount++;
+              continue;
+            }
+
+            const { numbers, betTypes, maxAmount, payoutPercent, limitType, includeReversed, isDelete, combinations3 } = parsed;
+
+            if (isDelete) {
+              // 1. Fetch active limits for the round and bet types to conditionally update/delete
+              const { data: activeLimits } = await supabase
+                .from('number_limits')
+                .select('*')
+                .eq('round_id', activeRound.id)
+                .in('bet_type', betTypes);
+
+              let targets = [numbers];
+              if (combinations3 && combinations3.length > 0) {
+                targets = combinations3;
+              } else if (includeReversed) {
+                targets = [numbers, ...getPermutations(numbers)];
+              }
+              targets = Array.from(new Set(targets));
+
+              if (activeLimits && activeLimits.length > 0) {
+                for (const targetNum of targets) {
+                  for (const bt of betTypes) {
+                    const matchingRows = activeLimits.filter(nl => 
+                      nl.bet_type === bt && 
+                      (nl.numbers === targetNum || (nl.reversed_numbers && nl.reversed_numbers.includes(targetNum)))
+                    );
+
+                    for (const row of matchingRows) {
+                      if (includeReversed) {
+                        // Delete entire row
+                        await supabase
+                          .from('number_limits')
+                          .delete()
+                          .eq('id', row.id);
+                      } else {
+                        if (row.numbers === targetNum) {
+                          if (row.include_reversed && row.reversed_numbers && row.reversed_numbers.length > 0) {
+                            const newMain = row.reversed_numbers[0];
+                            const newReverses = row.reversed_numbers.slice(1);
+                            await supabase
+                              .from('number_limits')
+                              .update({
+                                numbers: newMain,
+                                include_reversed: newReverses.length > 0,
+                                reversed_numbers: newReverses,
+                                updated_at: new Date().toISOString()
+                              })
+                              .eq('id', row.id);
+                          } else {
+                            await supabase
+                              .from('number_limits')
+                              .delete()
+                              .eq('id', row.id);
+                          }
+                        } else {
+                          const newReverses = row.reversed_numbers.filter((rn: string) => rn !== targetNum);
+                          await supabase
+                            .from('number_limits')
+                            .update({
+                              include_reversed: newReverses.length > 0,
+                              reversed_numbers: newReverses,
+                              updated_at: new Date().toISOString()
+                            })
+                            .eq('id', row.id);
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+
+              const revSuffix = includeReversed ? ' และตัวกลับ' : '';
+              successDetails.push(`ลบอั้นเลข ${numbers}${revSuffix}`);
+              successCount++;
+            } else {
+              // Upsert records
+              if (combinations3 && combinations3.length > 0) {
+                // Upsert for combinations of 3 digits
+                for (const combo of combinations3) {
+                  const reversedNumbers = includeReversed ? getPermutations(combo).filter(p => p !== combo) : [];
+                  for (const bt of betTypes) {
+                    const record = {
+                      round_id: activeRound.id,
+                      bet_type: bt,
+                      numbers: combo,
+                      max_amount: maxAmount,
+                      limit_type: limitType,
+                      payout_percent: payoutPercent,
+                      include_reversed: includeReversed,
+                      reversed_numbers: reversedNumbers,
+                      is_active: true,
+                      updated_at: new Date().toISOString()
+                    };
+                    await supabase
+                      .from('number_limits')
+                      .upsert(record, { onConflict: 'round_id,bet_type,numbers' });
+                  }
+                }
+                const label = limitType === 'blocked' ? 'ปิดรับ' : `อั้น ${maxAmount.toLocaleString()} จ่าย ${payoutPercent}%`;
+                const revLabel = includeReversed ? ' (กลับ)' : '';
+                successDetails.push(`${numbers}: ตั้งเลขชุด ${label}${revLabel}`);
+              } else {
+                // Single number
+                const reversedNumbers = includeReversed ? getPermutations(numbers).filter(p => p !== numbers) : [];
+                for (const bt of betTypes) {
+                  const record = {
+                    round_id: activeRound.id,
+                    bet_type: bt,
+                    numbers: numbers,
+                    max_amount: maxAmount,
+                    limit_type: limitType,
+                    payout_percent: payoutPercent,
+                    include_reversed: includeReversed,
+                    reversed_numbers: reversedNumbers,
+                    is_active: true,
+                    updated_at: new Date().toISOString()
+                    };
+                  await supabase
+                    .from('number_limits')
+                    .upsert(record, { onConflict: 'round_id,bet_type,numbers' });
+                }
+                const label = limitType === 'blocked' ? 'ปิดรับ' : `อั้น ${parsed.isSetLimit ? (maxAmount/setPrice) + ' ชุด' : '฿' + maxAmount.toLocaleString()} จ่าย ${payoutPercent}%`;
+                const revLabel = includeReversed ? ' (กลับ)' : '';
+                successDetails.push(`${numbers}: ${label}${revLabel}`);
+              }
+              successCount++;
+            }
+          }
+
+          let responseText = `✅ ตั้งอั้นเฉพาะเลขเสร็จเรียบร้อยแล้วค่ะ\n`;
+          responseText += `สำเร็จ: ${successCount} รายการ\n`;
+          if (failCount > 0) {
+            responseText += `ล้มเหลว: ${failCount} รายการ (รูปแบบไม่ถูกต้อง)\n`;
+          }
+          if (successDetails.length > 0) {
+            responseText += `----------------------\n`;
+            responseText += successDetails.join('\n');
+          }
+
+          await sendLineReply(replyToken, responseText);
+          continue;
+        }
 
         // ─── COMMAND: /ดูอั้น ───
         if (text === '/ดูอั้น' || text === '/limits') {
@@ -11682,7 +12377,10 @@ serve(async (req) => {
               const proposedSets = amount / setPrice;
               const last3 = numbers.slice(-3);
 
-              const limit4Set = typeLimitsMap['4_set'] !== undefined ? typeLimitsMap['4_set'] : (typeLimitsMap['4_top'] !== undefined ? typeLimitsMap['4_top'] : 999999999);
+              const matching4SetLimit = findMatchingLimit(numberLimits, '4_set', numbers);
+              const limit4Set = matching4SetLimit !== null
+                ? (matching4SetLimit.limit_type === 'blocked' ? 0 : Number(matching4SetLimit.max_amount) / setPrice)
+                : (typeLimitsMap['4_set'] !== undefined ? typeLimitsMap['4_set'] : (typeLimitsMap['4_top'] !== undefined ? typeLimitsMap['4_top'] : 999999999));
               const exactTransferred = transfersList
                 .filter(t => (t.bet_type === '4_set' || t.bet_type === '4_top') && t.numbers === numbers)
                 .reduce((sum, t) => sum + Math.floor((Number(t.amount) || 0) / setPrice), 0);
@@ -11690,7 +12388,10 @@ serve(async (req) => {
               const currentExactSets = currentExactSetsMap.get(numbers) || 0;
               const remaining4Set = Math.max(0, effectiveLimit4Set - currentExactSets);
 
-              const limit3Set = typeLimitsMap['3_set'] !== undefined ? typeLimitsMap['3_set'] : 999999999;
+              const matching3SetLimit = findMatchingLimit(numberLimits, '3_set', last3);
+              const limit3Set = matching3SetLimit !== null
+                ? (matching3SetLimit.limit_type === 'blocked' ? 0 : Number(matching3SetLimit.max_amount) / setPrice)
+                : (typeLimitsMap['3_set'] !== undefined ? typeLimitsMap['3_set'] : 999999999);
               const totalTransferred3Set = transfersList
                 .filter(t => (t.bet_type === '4_set' || t.bet_type === '3_set') && t.numbers?.slice(-3) === last3)
                 .reduce((sum, t) => sum + Math.floor((Number(t.amount) || 0) / setPrice), 0);
@@ -11727,7 +12428,7 @@ serve(async (req) => {
               const matchingLimit = findMatchingLimit(numberLimits, betType, numbers);
               let limit = 999999999;
               if (matchingLimit) {
-                limit = Number(matchingLimit.max_amount);
+                limit = matchingLimit.limit_type === 'blocked' ? 0 : Number(matchingLimit.max_amount);
               } else {
                 const typeLimit = typeLimitsMap[betType];
                 if (typeLimit !== undefined) {

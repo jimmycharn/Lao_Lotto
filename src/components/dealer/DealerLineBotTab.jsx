@@ -1418,6 +1418,50 @@ export default function DealerLineBotTab({ user, profile }) {
                             <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)', background: 'rgba(255,255,255,0.01)' }}>
                                 <td style={{ padding: '0.75rem' }}>
                                     <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /ดูอั้น
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>ดูวงเงินอั้นแยกตามประเภทเลขของงวดปัจจุบัน</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)', background: 'rgba(255,255,255,0.01)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /ดูอั้นเฉพาะ หรือ /ดูอั้นเฉพาะเลข
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>เรียกดูรายการเลขอั้นเฉพาะตัวเลข (อั้นเปอร์เซ็นต์จ่าย/ปิดรับเฉพาะตัวเลข) ในงวดปัจจุบัน</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)', background: 'rgba(255,255,255,0.01)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /ตั้งอั้น [ตัวเลข] หรือส่งหลายบรรทัด
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>ตั้งค่ายอดอั้นหลักแยกตามประเภทเลข (พิมพ์คำสั่งนำและใส่เลขวงเงิน เช่น /ตั้งอั้น 1000 หรือพิมพ์ประเภทเลขตามด้วยยอดอั้นบรรทัดละคู่)</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)', background: 'rgba(255,255,255,0.01)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /ตั้งอั้นเฉพาะ [เลข] [วงเงิน] [จ่าย%] [ก]
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>ตั้งค่าอั้นเฉพาะตัวเลข (เช่น /ตั้งอั้นเฉพาะ 12 5000 50% ก หรือ /ตั้งอั้นเฉพาะ 99 บน ปิด หรือ /ตั้งอั้นเฉพาะ 12 ลบ) รองรับหลายบรรทัด</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)', background: 'rgba(255,255,255,0.01)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
                                         /แจ้งผล [เลขรางวัล]
                                     </code>
                                 </td>

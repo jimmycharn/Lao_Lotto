@@ -107,6 +107,9 @@ export default function Dealer() {
 
     // Modal states
     const [showCreateModal, setShowCreateModal] = useState(false)
+    const [templates, setTemplates] = useState({})
+    const [loadingTemplates, setLoadingTemplates] = useState(false)
+    const [savingTemplate, setSavingTemplate] = useState(false)
     const [showEditModal, setShowEditModal] = useState(false)
     const [editingRound, setEditingRound] = useState(null)
     const [showLimitsModal, setShowLimitsModal] = useState(false)
@@ -207,6 +210,147 @@ export default function Dealer() {
         type_close_time_behaviors: {}
     })
 
+    // Open create round modal and populate with template or defaults
+    const handleOpenCreateModal = () => {
+        const defaultType = 'lao'
+        let open_time = '06:00'
+        let close_time = '20:15'
+        let delete_after_submit_minutes = 120
+        let delete_before_minutes = 30
+        let notify_close_to_groups = true
+        let currency_symbol = '฿'
+        let currency_name = 'บาท'
+        let type_limits = getDefaultLimitsForType(defaultType)
+        let set_prices = getDefaultSetPricesForType(defaultType)
+        let type_close_times = {}
+        let type_close_time_behaviors = {}
+
+        const template = templates[defaultType]
+        if (template) {
+            open_time = template.open_time || open_time
+            close_time = template.close_time || close_time
+            delete_before_minutes = template.delete_before_minutes
+            delete_after_submit_minutes = template.delete_after_submit_minutes
+            currency_symbol = template.currency_symbol || currency_symbol
+            currency_name = template.currency_name || currency_name
+            notify_close_to_groups = template.notify_close_to_groups
+            if (template.type_limits) {
+                type_limits = { ...type_limits, ...template.type_limits }
+            }
+            if (template.set_prices) {
+                set_prices = { ...set_prices, ...template.set_prices }
+            }
+            if (template.type_close_times) {
+                type_close_times = { ...template.type_close_times }
+            }
+            if (template.type_close_time_behaviors) {
+                type_close_time_behaviors = { ...template.type_close_time_behaviors }
+            }
+        }
+
+        setRoundForm({
+            lottery_type: defaultType,
+            lottery_name: '',
+            open_date: new Date().toISOString().split('T')[0],
+            open_time,
+            close_date: new Date().toISOString().split('T')[0],
+            close_time,
+            delete_before_minutes,
+            delete_after_submit_minutes,
+            currency_symbol,
+            currency_name,
+            notify_close_to_groups,
+            type_limits,
+            set_prices,
+            type_close_times,
+            type_close_time_behaviors
+        })
+        setShowCreateModal(true)
+    }
+
+    // Save current form settings as template/default in DB
+    const handleSaveTemplate = async () => {
+        if (!user?.id) return
+        try {
+            setSavingTemplate(true)
+            const { error } = await supabase
+                .from('dealer_lottery_templates')
+                .upsert({
+                    dealer_id: user.id,
+                    lottery_type: roundForm.lottery_type,
+                    open_time: roundForm.open_time,
+                    close_time: roundForm.close_time,
+                    delete_before_minutes: roundForm.delete_before_minutes,
+                    delete_after_submit_minutes: roundForm.delete_after_submit_minutes,
+                    currency_symbol: roundForm.currency_symbol,
+                    currency_name: roundForm.currency_name,
+                    notify_close_to_groups: roundForm.notify_close_to_groups,
+                    set_prices: roundForm.set_prices,
+                    type_limits: roundForm.type_limits,
+                    type_close_times: roundForm.type_close_times,
+                    type_close_time_behaviors: roundForm.type_close_time_behaviors
+                }, {
+                    onConflict: 'dealer_id,lottery_type'
+                })
+
+            if (error) throw error
+
+            toast.success(`บันทึกค่าเริ่มต้นสำหรับ ${LOTTERY_TYPES[roundForm.lottery_type]} สำเร็จ!`)
+            await fetchTemplates()
+        } catch (e) {
+            console.error('Error saving template:', e)
+            toast.error('เกิดข้อผิดพลาดในการบันทึกค่าเริ่มต้น: ' + e.message)
+        } finally {
+            setSavingTemplate(false)
+        }
+    }
+
+    // Reset current form to system defaults (factory reset)
+    const handleResetToSystemDefaults = () => {
+        const type = roundForm.lottery_type
+        let open_time = '06:00'
+        let close_time = '20:15'
+        let delete_after_submit_minutes = 120
+        let delete_before_minutes = 30
+        let notify_close_to_groups = true
+
+        if (type === 'thai') {
+            open_time = '06:00'
+            close_time = '14:05'
+            delete_after_submit_minutes = 120
+            delete_before_minutes = 30
+            notify_close_to_groups = false
+        } else if (type === 'lao') {
+            open_time = '06:00'
+            close_time = '20:15'
+            delete_after_submit_minutes = 120
+            delete_before_minutes = 30
+            notify_close_to_groups = true
+        } else {
+            open_time = '08:00'
+            close_time = '20:00'
+            delete_after_submit_minutes = 0
+            delete_before_minutes = 1
+            notify_close_to_groups = false
+        }
+
+        setRoundForm(prev => ({
+            ...prev,
+            open_time,
+            close_time,
+            delete_after_submit_minutes,
+            delete_before_minutes,
+            notify_close_to_groups,
+            currency_symbol: type === 'lao' ? '฿' : '฿',
+            currency_name: type === 'lao' ? 'บาท' : 'บาท',
+            type_limits: getDefaultLimitsForType(type),
+            set_prices: getDefaultSetPricesForType(type),
+            type_close_times: {},
+            type_close_time_behaviors: {}
+        }))
+        toast.info('คืนค่าเริ่มต้นโรงงานของระบบเรียบร้อย (ชั่วคราว - กดบันทึกหากต้องการให้บันทึกถาวร)')
+    }
+
     // Update limits when lottery type changes
     const handleLotteryTypeChange = (newType) => {
         setRoundForm(prev => {
@@ -215,25 +359,56 @@ export default function Dealer() {
             let delete_after_submit_minutes = 120
             let delete_before_minutes = 30
             let notify_close_to_groups = true
+            let currency_symbol = '฿'
+            let currency_name = 'บาท'
+            let type_limits = getDefaultLimitsForType(newType)
+            let set_prices = getDefaultSetPricesForType(newType)
+            let type_close_times = {}
+            let type_close_time_behaviors = {}
 
-            if (newType === 'thai') {
-                open_time = '06:00'
-                close_time = '14:05'
-                delete_after_submit_minutes = 120
-                delete_before_minutes = 30
-                notify_close_to_groups = false
-            } else if (newType === 'lao') {
-                open_time = '06:00'
-                close_time = '20:15'
-                delete_after_submit_minutes = 120
-                delete_before_minutes = 30
-                notify_close_to_groups = true
+            // Check if we have a template for this lottery type
+            const template = templates[newType]
+            if (template) {
+                open_time = template.open_time || open_time
+                close_time = template.close_time || close_time
+                delete_before_minutes = template.delete_before_minutes
+                delete_after_submit_minutes = template.delete_after_submit_minutes
+                currency_symbol = template.currency_symbol || currency_symbol
+                currency_name = template.currency_name || currency_name
+                notify_close_to_groups = template.notify_close_to_groups
+
+                if (template.type_limits) {
+                    type_limits = { ...type_limits, ...template.type_limits }
+                }
+                if (template.set_prices) {
+                    set_prices = { ...set_prices, ...template.set_prices }
+                }
+                if (template.type_close_times) {
+                    type_close_times = { ...template.type_close_times }
+                }
+                if (template.type_close_time_behaviors) {
+                    type_close_time_behaviors = { ...template.type_close_time_behaviors }
+                }
             } else {
-                open_time = '08:00'
-                close_time = '20:00'
-                delete_after_submit_minutes = 0
-                delete_before_minutes = 1
-                notify_close_to_groups = false
+                if (newType === 'thai') {
+                    open_time = '06:00'
+                    close_time = '14:05'
+                    delete_after_submit_minutes = 120
+                    delete_before_minutes = 30
+                    notify_close_to_groups = false
+                } else if (newType === 'lao') {
+                    open_time = '06:00'
+                    close_time = '20:15'
+                    delete_after_submit_minutes = 120
+                    delete_before_minutes = 30
+                    notify_close_to_groups = true
+                } else {
+                    open_time = '08:00'
+                    close_time = '20:00'
+                    delete_after_submit_minutes = 0
+                    delete_before_minutes = 1
+                    notify_close_to_groups = false
+                }
             }
 
             return {
@@ -244,10 +419,12 @@ export default function Dealer() {
                 delete_after_submit_minutes,
                 delete_before_minutes,
                 notify_close_to_groups,
-                type_limits: getDefaultLimitsForType(newType),
-                set_prices: getDefaultSetPricesForType(newType),
-                type_close_times: {},
-                type_close_time_behaviors: {}
+                currency_symbol,
+                currency_name,
+                type_limits,
+                set_prices,
+                type_close_times,
+                type_close_time_behaviors
             }
         })
     }
@@ -287,6 +464,7 @@ export default function Dealer() {
             if (hasFetchedRef.current) return
             hasFetchedRef.current = true
             fetchDealerCredit() // Load credit first (parallel with fetchData)
+            fetchTemplates()
             fetchData()
         } else {
             // User is logged in but not a dealer - stop loading
@@ -294,6 +472,31 @@ export default function Dealer() {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user?.id, profile?.id, isDealer, isSuperAdmin])
+
+    async function fetchTemplates() {
+        if (!user?.id) return
+        try {
+            setLoadingTemplates(true)
+            const { data, error } = await supabase
+                .from('dealer_lottery_templates')
+                .select('*')
+                .eq('dealer_id', user.id)
+
+            if (error) throw error
+
+            const templateMap = {}
+            if (data) {
+                data.forEach(t => {
+                    templateMap[t.lottery_type] = t
+                })
+            }
+            setTemplates(templateMap)
+        } catch (e) {
+            console.error('Error fetching templates:', e)
+        } finally {
+            setLoadingTemplates(false)
+        }
+    }
 
     async function fetchData() {
         setLoading(true)
@@ -3002,7 +3205,7 @@ export default function Dealer() {
                                     <h2>งวดหวยทั้งหมด</h2>
                                     <button
                                         className="btn btn-primary"
-                                        onClick={() => setShowCreateModal(true)}
+                                        onClick={handleOpenCreateModal}
                                         style={{ width: '100%', justifyContent: 'center' }}
                                     >
                                         <FiPlus /> สร้างงวดใหม่
@@ -4006,6 +4209,27 @@ export default function Dealer() {
                         </div>
 
                         <div className="modal-footer">
+                            <div style={{ marginRight: 'auto', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <button className="btn btn-secondary" onClick={handleResetToSystemDefaults} title="คืนค่าข้อมูลเป็นค่าที่ระบบกำหนดจากโรงงาน">
+                                    <FiRotateCcw /> ใช้ค่าเริ่มต้นระบบ
+                                </button>
+                                <button
+                                    className="btn"
+                                    onClick={handleSaveTemplate}
+                                    disabled={savingTemplate}
+                                    style={{
+                                        background: 'rgba(212, 175, 55, 0.15)',
+                                        color: 'var(--color-primary)',
+                                        border: '1px solid var(--color-primary)'
+                                    }}
+                                >
+                                    {savingTemplate ? 'กำลังบันทึก...' : (
+                                        <>
+                                            <FiSave /> บันทึกเป็นค่าเริ่มต้น
+                                        </>
+                                    )}
+                                </button>
+                            </div>
                             <button className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
                                 ยกเลิก
                             </button>
