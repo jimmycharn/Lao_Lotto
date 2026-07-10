@@ -3851,6 +3851,29 @@ serve(async (req) => {
           const closeTimestamp = formatLocalDateTimeStr(closeDateStr, job.close_time);
           const lotteryName = job.name || LOTTERY_TYPE_NAMES[job.lottery_type] || 'หวยอัตโนมัติ';
 
+          // Check for overlapping active rounds
+          const { data: existingRounds } = await supabase
+            .from('lottery_rounds')
+            .select('open_time, close_time, status')
+            .eq('dealer_id', job.dealer_id)
+            .eq('lottery_type', job.lottery_type)
+            .not('status', 'in', '("closed","announced","cancelled")');
+
+          const hasOverlap = (existingRounds || []).some((r: any) => {
+            const extOpen = new Date(r.open_time);
+            const extClose = new Date(r.close_time);
+            const newOpen = new Date(openTimestamp);
+            const newClose = new Date(closeTimestamp);
+
+            return (r.status !== 'closed' && r.status !== 'announced' && r.status !== 'cancelled' && now < extClose) &&
+                   (newOpen < extClose && newClose > extOpen);
+          });
+
+          if (hasOverlap) {
+            results.push({ job_id: job.id, status: 'skipped', reason: 'overlapping_active_round' });
+            continue;
+          }
+
           // Insert new round
           const { data: round, error: insertError } = await supabase
             .from('lottery_rounds')
@@ -3986,6 +4009,29 @@ serve(async (req) => {
           const openTimestamp = formatLocalDateTimeStr(roundDateStr, template.open_time);
           const closeTimestamp = formatLocalDateTimeStr(closeDateStr, template.close_time);
           const lotteryName = LOTTERY_TYPE_NAMES[template.lottery_type] || 'หวยอัตโนมัติ';
+
+          // Check for overlapping active rounds
+          const { data: existingRounds } = await supabase
+            .from('lottery_rounds')
+            .select('open_time, close_time, status')
+            .eq('dealer_id', template.dealer_id)
+            .eq('lottery_type', template.lottery_type)
+            .not('status', 'in', '("closed","announced","cancelled")');
+
+          const hasOverlap = (existingRounds || []).some((r: any) => {
+            const extOpen = new Date(r.open_time);
+            const extClose = new Date(r.close_time);
+            const newOpen = new Date(openTimestamp);
+            const newClose = new Date(closeTimestamp);
+
+            return (r.status !== 'closed' && r.status !== 'announced' && r.status !== 'cancelled' && now < extClose) &&
+                   (newOpen < extClose && newClose > extOpen);
+          });
+
+          if (hasOverlap) {
+            results.push({ template_id: template.id, status: 'skipped', reason: 'overlapping_active_round' });
+            continue;
+          }
 
           // Insert new round
           const { data: round, error: insertError } = await supabase
