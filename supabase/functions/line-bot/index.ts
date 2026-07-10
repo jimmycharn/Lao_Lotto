@@ -2818,7 +2818,7 @@ serve(async (req) => {
 
       const { data: round } = await supabase
         .from('lottery_rounds')
-        .select('id, dealer_id, lottery_type, lottery_name, round_date, close_time, notify_close_to_groups')
+        .select('*')
         .eq('id', roundId)
         .maybeSingle()
 
@@ -2880,6 +2880,161 @@ serve(async (req) => {
         } catch (e) {
           console.error(`auto_close_notify: failed pushing to group ${g.line_group_id}:`, e)
         }
+      }
+
+      // --- AUTO LAYOFF & CLOSING REPORT SYSTEM ---
+      try {
+        const { data: template } = await supabase
+          .from('dealer_lottery_templates')
+          .select('*')
+          .eq('dealer_id', round.dealer_id)
+          .eq('lottery_type', round.lottery_type)
+          .maybeSingle()
+
+        if (template) {
+          // 1. Calculate & Perform Auto-Layoff
+          if (template.auto_layoff_enabled) {
+            const { data: submissions, error: subErr } = await fetchAllRows(
+              (from, to) => supabase
+                .from('submissions')
+                .select('id, bet_type, numbers, amount, user_id')
+                .eq('round_id', round.id)
+                .eq('is_deleted', false)
+                .range(from, to)
+            );
+
+            const { data: transfers, error: trErr } = await fetchAllRows(
+              (from, to) => supabase
+                .from('bet_transfers')
+                .select('bet_type, numbers, amount')
+                .eq('round_id', round.id)
+                .range(from, to)
+            );
+
+            if (!subErr && submissions && submissions.length > 0) {
+              const uniqueUserIds = [...new Set(submissions.map((s: any) => s.user_id).filter(Boolean))];
+              const userSettingsMap: Record<string, any> = {};
+              if (uniqueUserIds.length > 0) {
+                const { data: allUserSettings } = await supabase
+                  .from('user_settings')
+                  .select('user_id, lottery_settings')
+                  .eq('dealer_id', round.dealer_id)
+                  .in('user_id', uniqueUserIds);
+
+                for (const us of (allUserSettings || [])) {
+                  userSettingsMap[us.user_id] = us.lottery_settings;
+                }
+              }
+
+              const setPrice = round.set_prices?.['4_top'] || 120;
+              const betItems = buildBetItems(submissions, transfers || [], userSettingsMap, round.lottery_type, setPrice);
+              const scenarios = calculateScenarios(betItems, round.lottery_type, setPrice);
+              const keepAmount = template.auto_layoff_keep_amount || 0;
+              const recommendations = greedyRecommendations(scenarios, betItems, keepAmount, setPrice, round.lottery_type);
+
+              if (recommendations && recommendations.length > 0) {
+                const excessItems = recommendations.map(rec => ({
+                  bet_type: rec.bet_type,
+                  numbers: rec.numbers,
+                  amount: rec.transfer_amount
+                }));
+
+                const layoffResult = await performLayoff(round.dealer_id, round.id, round.lottery_type, excessItems);
+                
+                let layoffMessageText = `📢 [Auto-Layoff] ระบบได้ทำการส่งออกเลขเกินอั้นโดยอัตโนมัติสำเร็จแล้วค่ะ!\n`;
+                if (layoffResult.success) {
+                  const upstreamName = layoffResult.targetDealerName || 'เจ้ามือหลัก';
+                  layoffMessageText += `📤 ตีออกไปยัง: ${upstreamName}\n` +
+                    `รวมจำนวนเลข: ${recommendations.length} รายการ\n` +
+                    `ดูรายละเอียดบิลการส่งออกได้ที่เว็บบอร์ดดีลเลอร์ของคุณค่ะ`;
+                } else {
+                  layoffMessageText = `⚠️ [Auto-Layoff] ระบบตรวจพบเลขที่ต้องตีออก แต่เกิดข้อผิดพลาด:\n❌ ${layoffResult.message}`;
+                }
+
+                // Push to groups matching notify_layoff_bets = true
+                const { data: layoffGroups } = await supabase
+                  .from('line_groups')
+                  .select('line_group_id')
+                  .eq('dealer_id', round.dealer_id)
+                  .eq('notify_layoff_bets', true)
+
+                if (layoffGroups && layoffGroups.length > 0) {
+                  for (const lg of layoffGroups) {
+                    if (lg.line_group_id) {
+                      try {
+                        await sendLinePush(lg.line_group_id, layoffMessageText);
+                      } catch (pushErr) {
+                        console.error("Failed to send layoff push:", pushErr);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          // 2. Calculate and Route Closing Summary Report
+          const { data: finalSubmissions } = await fetchAllRows(
+            (from, to) => supabase
+              .from('submissions')
+              .select('amount, user_id')
+              .eq('round_id', round.id)
+              .eq('is_deleted', false)
+              .range(from, to)
+          );
+          const { data: finalTransfers } = await fetchAllRows(
+            (from, to) => supabase
+              .from('bet_transfers')
+              .select('amount')
+              .eq('round_id', round.id)
+              .range(from, to)
+          );
+
+          const totalBetsAmt = (finalSubmissions || []).reduce((sum, s) => sum + Number(s.amount || 0), 0);
+          const totalLayoffAmt = (finalTransfers || []).reduce((sum, t) => sum + Number(t.amount || 0), 0);
+          const keepAmountVal = totalBetsAmt - totalLayoffAmt;
+
+          const uniqueUserIds = [...new Set((finalSubmissions || []).map((s: any) => s.user_id).filter(Boolean))];
+          let senderNames = 'ไม่มี';
+          if (uniqueUserIds.length > 0) {
+            const { data: profiles } = await supabase
+              .from('profiles')
+              .select('full_name')
+              .in('id', uniqueUserIds);
+            senderNames = (profiles || []).map(p => p.full_name || 'ไม่ระบุชื่อ').join(', ');
+          }
+
+          const closingSummaryText = `📊 สรุปยอดโพยเมื่อปิดงวด [${round.lottery_name}]\n` +
+            `📅 งวดวันที่: ${round.round_date}\n` +
+            `----------------------------------\n` +
+            `💰 ยอดรวมยอดแทงดิบ: ${totalBetsAmt.toLocaleString()} ${round.currency_symbol || '฿'}\n` +
+            `📤 ยอดที่ส่งออก (ตีออก): ${totalLayoffAmt.toLocaleString()} ${round.currency_symbol || '฿'}\n` +
+            `🛡️ ยอดร้านถือสู้เอง: ${keepAmountVal.toLocaleString()} ${round.currency_symbol || '฿'}\n` +
+            `----------------------------------\n` +
+            `👥 จำนวนคนส่งโพย: ${uniqueUserIds.length} คน\n` +
+            `รายชื่อ: ${senderNames}`;
+
+          // Push to groups matching notify_round_summary = true
+          const { data: summaryGroups } = await supabase
+            .from('line_groups')
+            .select('line_group_id')
+            .eq('dealer_id', round.dealer_id)
+            .eq('notify_round_summary', true)
+
+          if (summaryGroups && summaryGroups.length > 0) {
+            for (const sg of summaryGroups) {
+              if (sg.line_group_id) {
+                try {
+                  await sendLinePush(sg.line_group_id, closingSummaryText);
+                } catch (pushErr) {
+                  console.error("Failed to send summary push:", pushErr);
+                }
+              }
+            }
+          }
+        }
+      } catch (automationErr) {
+        console.error("Error in auto layoff or closing summary trigger:", automationErr);
       }
 
       return new Response(JSON.stringify({ success: true, round_id: roundId, groups_notified: sent }), {
