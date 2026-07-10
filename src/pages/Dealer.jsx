@@ -75,6 +75,7 @@ import ChangePasswordModal from '../components/ChangePasswordModal'
 import SubmissionsModal from '../components/dealer/SubmissionsModal'
 import DealerProfileTab from '../components/dealer/DealerProfileTab'
 import DealerLineBotTab from '../components/dealer/DealerLineBotTab'
+import DealerAutomationTab from '../components/dealer/DealerAutomationTab'
 import QRScannerModal from '../components/dealer/QRScannerModal'
 import MemberAccordionItem from '../components/dealer/MemberAccordionItem'
 import UpstreamDealerSettingsInline from '../components/dealer/UpstreamDealerSettingsInline'
@@ -3242,6 +3243,12 @@ export default function Dealer() {
                         <FiMessageSquare /> จัดการ LINE Bot
                     </button>
                     <button
+                        className={`tab-btn ${activeTab === 'automation' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('automation')}
+                    >
+                        <FiSettings /> ตั้งค่าออโตเมชัน
+                    </button>
+                    <button
                         className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
                         onClick={() => setActiveTab('profile')}
                     >
@@ -4023,6 +4030,10 @@ export default function Dealer() {
 
                     {activeTab === 'lineBot' && (
                         <DealerLineBotTab user={user} profile={profile} />
+                    )}
+
+                    {activeTab === 'automation' && (
+                        <DealerAutomationTab user={user} profile={profile} />
                     )}
 
                     {activeTab === 'profile' && (
