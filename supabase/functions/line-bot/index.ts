@@ -309,6 +309,56 @@ function getBangkokDateString(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+// Helper: Parse Thai BE or Western AD date/time line into a Bangkok ISO string
+function parseThaiOrWesternDateTimeToBangkokISO(str: string, defaultTimeStr = '00:00'): string | null {
+  // Strip trailing comments (anything after a space or parenthesis)
+  const firstToken = str.trim().split(/[\s(]+/)[0].trim();
+  
+  if (!firstToken) return null;
+
+  const timeRegex = /(\d{1,2})[\.:](\d{2})$/;
+  const timeMatch = firstToken.match(timeRegex);
+  
+  let timeStr = defaultTimeStr;
+  let datePart = firstToken;
+
+  if (timeMatch) {
+    const hours = timeMatch[1].padStart(2, '0');
+    const minutes = timeMatch[2];
+    timeStr = `${hours}:${minutes}`;
+    datePart = firstToken.slice(0, timeMatch.index).trim();
+    if (datePart.endsWith('/') || datePart.endsWith('@')) {
+      datePart = datePart.slice(0, -1).trim();
+    }
+  }
+
+  const dateRegex = /^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/;
+  const dateMatch = datePart.match(dateRegex);
+  if (!dateMatch) return null;
+
+  const day = parseInt(dateMatch[1]);
+  const month = parseInt(dateMatch[2]);
+  let year = parseInt(dateMatch[3]);
+
+  if (year >= 2400) {
+    year = year - 543;
+  } else if (year < 100) {
+    if (year > 50) {
+      // 2-digit BE year (e.g. 69 -> BE 2569 -> AD 2026)
+      year = 2500 + year - 543;
+    } else {
+      // 2-digit AD year (e.g. 26 -> AD 2026)
+      year = 2000 + year;
+    }
+  }
+
+  const yyyy = String(year);
+  const mm = String(month).padStart(2, '0');
+  const dd = String(day).padStart(2, '0');
+
+  return `${yyyy}-${mm}-${dd}T${timeStr}:00+07:00`;
+}
+
 // Helper: Get round display date in Buddhist Era (using close_time/end date if available, otherwise round_date)
 function getRoundDisplayDate(round: any, useSlash = false): string {
   if (!round) return '';
@@ -3824,13 +3874,17 @@ serve(async (req) => {
                 continue;
               }
 
-              const parts = text.split(/\s+/);
-              if (parts.length < 2) {
-                await sendLineReply(replyToken, `❌ กรุณาระบุประเภทหวย เช่น /สร้าง ไทย หรือ /สร้าง ลาว`);
-                continue;
+              // Extract the targetType from the first line
+              const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+              const firstLine = lines[0];
+
+              let typeInput = '';
+              if (firstLine.startsWith('/สร้าง ')) {
+                typeInput = firstLine.substring('/สร้าง '.length).trim();
+              } else if (firstLine.startsWith('/สร้าง')) {
+                typeInput = firstLine.substring('/สร้าง'.length).trim();
               }
 
-              const typeInput = parts[1];
               const targetType = parseLotteryType(typeInput);
               if (!targetType) {
                 await sendLineReply(replyToken, `❌ ไม่พบประเภทหวย "${typeInput}" (ประเภทที่รองรับ: ไทย, ลาว, ฮานอย, หุ้น)`);
@@ -3932,16 +3986,62 @@ serve(async (req) => {
                 .maybeSingle();
 
               const today = new Date();
-              let openTimeStr = template && template.open_time ? template.open_time : (targetType === 'thai' || targetType === 'lao' ? '06:00' : '08:00');
-              let closeTimeStr = template && template.close_time ? template.close_time : '20:00';
-              if (!template || !template.close_time) {
-                if (targetType === 'thai') closeTimeStr = '14:05';
-                else if (targetType === 'lao') closeTimeStr = '20:15';
-              }
+              const templateOpenTime = template && template.open_time ? template.open_time : (targetType === 'thai' || targetType === 'lao' ? '06:00' : '08:00');
+              const templateCloseTime = template && template.close_time ? template.close_time : (targetType === 'thai' ? '14:05' : (targetType === 'lao' ? '20:15' : '20:00'));
 
-              const roundDate = getBangkokDateString(today);
-              const openTime = getBangkokISOString(today, openTimeStr);
-              const closeTime = getBangkokISOString(today, closeTimeStr);
+              let roundDate = '';
+              let openTime = '';
+              let closeTime = '';
+              let closeTimeStr = templateCloseTime;
+
+              if (lines.length === 1) {
+                roundDate = getBangkokDateString(today);
+                openTime = getBangkokISOString(today, templateOpenTime);
+                closeTime = getBangkokISOString(today, templateCloseTime);
+              } else if (lines.length === 2) {
+                const parsedClose = parseThaiOrWesternDateTimeToBangkokISO(lines[1], templateCloseTime);
+                if (!parsedClose) {
+                  await sendLineReply(replyToken, `❌ รูปแบบวันเวลาปิดไม่ถูกต้อง (ตัวอย่าง: 16-7-69/15.00 หรือ 16-7-26/15:00)`);
+                  continue;
+                }
+
+                // Open date and time is "now" in Bangkok
+                const formatter = new Intl.DateTimeFormat('en-US', {
+                  timeZone: 'Asia/Bangkok',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  hour12: false
+                });
+                const timeParts = formatter.formatToParts(today);
+                const curHour = timeParts.find(p => p.type === 'hour')?.value || '00';
+                const curMin = timeParts.find(p => p.type === 'minute')?.value || '00';
+                const curTimeStr = `${curHour}:${curMin}`;
+
+                roundDate = parsedClose.slice(0, 10);
+                openTime = getBangkokISOString(today, curTimeStr);
+                closeTime = parsedClose;
+
+                const closeParts = parsedClose.split('T');
+                if (closeParts.length > 1) {
+                  closeTimeStr = closeParts[1].substring(0, 5);
+                }
+              } else {
+                const parsedOpen = parseThaiOrWesternDateTimeToBangkokISO(lines[1], templateOpenTime);
+                const parsedClose = parseThaiOrWesternDateTimeToBangkokISO(lines[2], templateCloseTime);
+                if (!parsedOpen || !parsedClose) {
+                  await sendLineReply(replyToken, `❌ รูปแบบวันเวลาเปิดหรือปิดไม่ถูกต้อง (ตัวอย่าง: 15-7-69/08.00 และ 16-7-69/15.00)`);
+                  continue;
+                }
+
+                roundDate = parsedClose.slice(0, 10);
+                openTime = parsedOpen;
+                closeTime = parsedClose;
+
+                const closeParts = parsedClose.split('T');
+                if (closeParts.length > 1) {
+                  closeTimeStr = closeParts[1].substring(0, 5);
+                }
+              }
 
               const deleteBeforeMinutes = template ? template.delete_before_minutes : (targetType === 'thai' || targetType === 'lao' ? 30 : 1);
               const deleteAfterSubmitMinutes = template ? template.delete_after_submit_minutes : (targetType === 'thai' || targetType === 'lao' ? 120 : 0);
