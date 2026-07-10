@@ -623,7 +623,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                     {/* 3. Auto Layoff */}
                                     <div style={{ background: 'rgba(255,255,255,0.01)', padding: '1.2rem', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
                                         <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                            <FiShield /> ระบบคัดกรองส่งยอดเลขออก (Auto-Layoff When Closed)
+                                            <FiShield /> ระบบส่งออกยอดอั้น (Auto-Layoff)
                                         </h4>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
@@ -632,7 +632,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                     checked={jobForm.layoff_enabled}
                                                     onChange={(e) => setJobForm({ ...jobForm, layoff_enabled: e.target.checked })}
                                                 />
-                                                <strong>เปิดการส่งออกตัวเลขเกินอั้นโดยอัตโนมัติเมื่อรอบปิดรับ</strong>
+                                                <strong>ส่งออกยอดตัวเลขเกินอั้นอัตโนมัติเมื่อปิดรอบ</strong>
                                             </label>
 
                                             {jobForm.layoff_enabled && (
@@ -645,14 +645,14 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                                 onChange={(e) => setJobForm({ ...jobForm, layoff_method: e.target.value })}
                                                                 className="form-input"
                                                             >
-                                                                <option value="limits">ยึดตามวงเงินอั้นรายตัวของประเภทเลข (Limits)</option>
-                                                                <option value="formula">คำนวณสู้ร้านด้วยสูตรหาจุดกำไรสูงสุด (Formula)</option>
-                                                                <option value="ai">ใช้ระบบ AI ประเมินจุดเสี่ยงจำกัดงบเงินสู้ (AI)</option>
+                                                                <option value="limits">ยึดตามยอดอั้นรายตัว (Limits)</option>
+                                                                <option value="formula">คำนวณแบบสู้หาจุดกำไรสูงสุด (Formula)</option>
+                                                                <option value="ai">ประเมินความเสี่ยงและจำกัดงบสู้ (AI)</option>
                                                             </select>
                                                         </div>
                                                         {jobForm.layoff_method !== 'limits' && (
                                                             <div>
-                                                                <label className="form-label">งบสู้ร้านสูงสุด / ยอดถือสู้</label>
+                                                                <label className="form-label">งบถือสู้สูงสุด</label>
                                                                 <input
                                                                     type="number"
                                                                     value={jobForm.layoff_keep_amount}
@@ -672,12 +672,12 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                                     checked={jobForm.layoff_notify_group_enabled}
                                                                     onChange={(e) => setJobForm({ ...jobForm, layoff_notify_group_enabled: e.target.checked })}
                                                                 />
-                                                                <span>ส่งรายงานบิลที่ตีออกไปเข้าห้อง LINE กลุ่ม</span>
+                                                                <span>ส่งรายงานยอดตีออกเข้ากลุ่ม LINE</span>
                                                             </label>
                                                         </div>
                                                         {jobForm.layoff_notify_group_enabled && (
                                                             <div>
-                                                                <label className="form-label">เลือก LINE กลุ่มเป้าหมาย</label>
+                                                                <label className="form-label">เลือกกลุ่มไลน์</label>
                                                                 <select
                                                                     value={jobForm.layoff_notify_group_id}
                                                                     onChange={(e) => setJobForm({ ...jobForm, layoff_notify_group_id: e.target.value })}
@@ -700,7 +700,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                     {/* 4. Number Reports */}
                                     <div style={{ background: 'rgba(255,255,255,0.01)', padding: '1.2rem', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
                                         <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                            <FiList /> ระบบรายงานยอดตัวเลขเมื่อปิดงวด (Closing Number Reports)
+                                            <FiList /> ส่งรายงานยอดตัวเลขเมื่อปิดงวด
                                         </h4>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
@@ -709,13 +709,13 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                     checked={jobForm.notify_bets_enabled}
                                                     onChange={(e) => setJobForm({ ...jobForm, notify_bets_enabled: e.target.checked })}
                                                 />
-                                                <strong>แจ้งรายงานยอดเลขรวม/เลขตีออก/เลขคงเหลือเข้าไลน์กลุ่ม</strong>
+                                                <strong>ส่งรายงานสรุปตัวเลขไปยังกลุ่ม LINE</strong>
                                             </label>
 
                                             {jobForm.notify_bets_enabled && (
                                                 <div style={{ background: 'rgba(0,0,0,0.15)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                                     <div>
-                                                        <label className="form-label">เลือกประเภทข้อมูลที่จะรายงาน</label>
+                                                        <label className="form-label">เลือกรายงานที่ต้องการส่ง</label>
                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
                                                             <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.9rem' }}>
                                                                 <input
@@ -723,7 +723,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                                     checked={jobForm.notify_bets_types.includes('total')}
                                                                     onChange={() => toggleFormReportType('total')}
                                                                 />
-                                                                <span>รายงานยอดเลขรวมทั้งหมด (Total)</span>
+                                                                <span>ยอดรวมทั้งหมด (Total)</span>
                                                             </label>
                                                             <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.9rem' }}>
                                                                 <input
@@ -731,7 +731,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                                     checked={jobForm.notify_bets_types.includes('remaining')}
                                                                     onChange={() => toggleFormReportType('remaining')}
                                                                 />
-                                                                <span>รายงานยอดตัวเลขเหลือถือสู้เอง (Remaining)</span>
+                                                                <span>ยอดถือสู้เอง (Remaining)</span>
                                                             </label>
                                                             <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.9rem' }}>
                                                                 <input
@@ -739,13 +739,13 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                                     checked={jobForm.notify_bets_types.includes('layoff')}
                                                                     onChange={() => toggleFormReportType('layoff')}
                                                                 />
-                                                                <span>รายงานยอดตัวเลขที่ส่งออก/ตีออก (Layoffs)</span>
+                                                                <span>ยอดตีออก (Layoffs)</span>
                                                             </label>
                                                         </div>
                                                     </div>
 
                                                     <div>
-                                                        <label className="form-label">เลือก LINE กลุ่มสำหรับส่งรายงานตัวเลข</label>
+                                                        <label className="form-label">เลือกกลุ่มไลน์</label>
                                                         <select
                                                             value={jobForm.notify_bets_group_id}
                                                             onChange={(e) => setJobForm({ ...jobForm, notify_bets_group_id: e.target.value })}
@@ -766,7 +766,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                     {/* 5. Award Announcement */}
                                     <div style={{ background: 'rgba(255,255,255,0.01)', padding: '1.2rem', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
                                         <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                            <FiRefreshCw /> ระบบดึงและแจ้งผลรางวัลอัตโนมัติ (AI Award Announcement)
+                                            <FiRefreshCw /> ระบบแจ้งผลและสรุปยอดอัตโนมัติ
                                         </h4>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
@@ -775,7 +775,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                     checked={jobForm.auto_import_result_enabled}
                                                     onChange={(e) => setJobForm({ ...jobForm, auto_import_result_enabled: e.target.checked })}
                                                 />
-                                                <strong>ดึงข้อมูลผลรางวัลจากระบบ AI และตรวจสอบยอดได้เสียในงวดนี้อัตโนมัติ</strong>
+                                                <strong>ดึงผลรางวัลและคำนวณได้เสียโดยอัตโนมัติ</strong>
                                             </label>
 
                                             {jobForm.auto_import_result_enabled && (
@@ -794,12 +794,12 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                                         });
                                                                     }}
                                                                 />
-                                                                <strong>ส่งสรุปผลรวมเข้ากลุ่ม</strong>
+                                                                <strong>ส่งสรุปผลหวยเข้ากลุ่ม</strong>
                                                             </label>
                                                         </div>
                                                         {!!jobForm.result_notify_group_id && (
                                                             <div>
-                                                                <label className="form-label" style={{ margin: 0, marginBottom: '0.3rem' }}>เลือกกลุ่ม</label>
+                                                                <label className="form-label" style={{ margin: 0, marginBottom: '0.3rem' }}>เลือกกลุ่มไลน์</label>
                                                                 <select
                                                                     value={jobForm.result_notify_group_id === 'select' ? '' : jobForm.result_notify_group_id}
                                                                     onChange={(e) => setJobForm({ ...jobForm, result_notify_group_id: e.target.value })}
@@ -822,7 +822,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                                 checked={jobForm.notify_result_enabled}
                                                                 onChange={(e) => setJobForm({ ...jobForm, notify_result_enabled: e.target.checked })}
                                                             />
-                                                            <span>ส่งสรุปยอดรายบุคคลเข้าไลน์กลุ่มสมาชิก (ระบบจะวิเคราะห์และส่งสรุปให้สมาชิกแต่ละกลุ่มโดยอัตโนมัติ เสมือนคำสั่ง /แจ้งผล)</span>
+                                                            <span>ส่งผลได้เสียรายคนเข้าไลน์กลุ่มสมาชิก (เสมือนคำสั่ง /แจ้งผล)</span>
                                                         </label>
                                                     </div>
                                                 </div>
