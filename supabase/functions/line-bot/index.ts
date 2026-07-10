@@ -960,20 +960,20 @@ async function sendMemberResultAnnouncements(roundId: string, dealerId: string):
         groupWinnerCount++;
       }
     }
-    const groupNet = groupTotalWin - (groupTotalBet - groupTotalComm);
-    const groupNetLabel = groupNet > 0 
-      ? `ร้านต้องเก็บเพิ่ม: ฿${Math.round(groupNet).toLocaleString('th-TH')}` 
-      : (groupNet < 0 ? `ร้านต้องจ่ายสมาชิก: ฿${Math.abs(Math.round(groupNet)).toLocaleString('th-TH')}` : 'เสมอ');
+    const netToPay = groupTotalBet - groupTotalComm - groupTotalWin;
+    const groupNetLabel = netToPay > 0 
+      ? `สมาชิกต้องจ่ายเภา: ฿${Math.round(netToPay).toLocaleString('th-TH')}` 
+      : (netToPay < 0 ? `เภาต้องจ่ายสมาชิก: ฿${Math.abs(Math.round(netToPay)).toLocaleString('th-TH')}` : 'เสมอ');
 
-    const groupSummaryText = `📊 สรุปยอดรวมกลุ่ม: ${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()}\n` +
+    const groupSummaryText = `📊 สรุปผลได้เสีย: ${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()}\n` +
       `📅 งวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n` +
       `----------------------------------\n` +
-      `💰 ยอดแทงรวมกลุ่ม: ฿${Math.round(groupTotalBet).toLocaleString('th-TH')}\n` +
-      `💸 ค่าคอมรวมกลุ่ม: ฿${Math.round(groupTotalComm).toLocaleString('th-TH')}\n` +
-      `🎉 ยอดถูกรางวัลรวมกลุ่ม: ฿${Math.round(groupTotalWin).toLocaleString('th-TH')}\n` +
+      `💰 ยอดแทงรวม: ฿${Math.round(groupTotalBet).toLocaleString('th-TH')}\n` +
+      `💸 ค่าคอมรวม: ฿${Math.round(groupTotalComm).toLocaleString('th-TH')}\n` +
+      `🎉 ยอดถูกรางวัลรวม: ฿${Math.round(groupTotalWin).toLocaleString('th-TH')}\n` +
       `----------------------------------\n` +
       `📝 สรุปยอดได้เสียสุทธิ:\n👉 ${groupNetLabel}\n` +
-      `👥 สมาชิกถูกรางวัล: ${groupWinnerCount} คน`;
+      `👥 สมาชิกถูกรางวัล: ${groupWinnerCount} รายการ`;
 
     const carouselMessages: any[] = [];
     const chunkSize = 10;
@@ -6428,20 +6428,20 @@ serve(async (req) => {
                     groupWinnerCount++;
                   }
                 }
-                const groupNet = groupTotalWin - (groupTotalBet - groupTotalComm);
-                const groupNetLabel = groupNet > 0 
-                  ? `ร้านต้องเก็บเพิ่ม: ฿${Math.round(groupNet).toLocaleString('th-TH')}` 
-                  : (groupNet < 0 ? `ร้านต้องจ่ายสมาชิก: ฿${Math.abs(Math.round(groupNet)).toLocaleString('th-TH')}` : 'เสมอ');
+                const netToPay = groupTotalBet - groupTotalComm - groupTotalWin;
+                const groupNetLabel = netToPay > 0 
+                  ? `สมาชิกต้องจ่ายเภา: ฿${Math.round(netToPay).toLocaleString('th-TH')}` 
+                  : (netToPay < 0 ? `เภาต้องจ่ายสมาชิก: ฿${Math.abs(Math.round(netToPay)).toLocaleString('th-TH')}` : 'เสมอ');
 
-                const groupSummaryText = `📊 สรุปยอดรวมกลุ่ม: ${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()}\n` +
+                const groupSummaryText = `📊 สรุปผลได้เสีย: ${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()}\n` +
                   `📅 งวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n` +
                   `----------------------------------\n` +
-                  `💰 ยอดแทงรวมกลุ่ม: ฿${Math.round(groupTotalBet).toLocaleString('th-TH')}\n` +
-                  `💸 ค่าคอมรวมกลุ่ม: ฿${Math.round(groupTotalComm).toLocaleString('th-TH')}\n` +
-                  `🎉 ยอดถูกรางวัลรวมกลุ่ม: ฿${Math.round(groupTotalWin).toLocaleString('th-TH')}\n` +
+                  `💰 ยอดแทงรวม: ฿${Math.round(groupTotalBet).toLocaleString('th-TH')}\n` +
+                  `💸 ค่าคอมรวม: ฿${Math.round(groupTotalComm).toLocaleString('th-TH')}\n` +
+                  `🎉 ยอดถูกรางวัลรวม: ฿${Math.round(groupTotalWin).toLocaleString('th-TH')}\n` +
                   `----------------------------------\n` +
                   `📝 สรุปยอดได้เสียสุทธิ:\n👉 ${groupNetLabel}\n` +
-                  `👥 สมาชิกถูกรางวัล: ${groupWinnerCount} คน`;
+                  `👥 สมาชิกถูกรางวัล: ${groupWinnerCount} รายการ`;
 
                 // Send in chunks of 10
                 const carouselMessages: any[] = [];
