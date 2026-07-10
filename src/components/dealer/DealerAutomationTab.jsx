@@ -70,11 +70,24 @@ const WEEK_DAYS = [
     { value: 6, label: 'เสาร์' }
 ];
 
-export default function DealerAutomationTab({ user, profile }) {
+export default function DealerAutomationTab({ user, profile, allowedLotteryTypes }) {
     const { toast } = useToast()
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
-    const [lotteryType, setLotteryType] = useState('lao')
+    const [lotteryType, setLotteryType] = useState(() => {
+        const initialTypes = ['lao', 'thai', 'lao_extra', 'lao_vip', 'yeekee']
+            .filter(key => !allowedLotteryTypes || allowedLotteryTypes.includes(key));
+        return initialTypes[0] || 'lao';
+    })
+
+    // Initialize lottery type when allowedLotteryTypes loads
+    useEffect(() => {
+        if (allowedLotteryTypes && allowedLotteryTypes.length > 0) {
+            if (!allowedLotteryTypes.includes(lotteryType)) {
+                setLotteryType(allowedLotteryTypes[0]);
+            }
+        }
+    }, [allowedLotteryTypes]);
     const [template, setTemplate] = useState({
         is_auto_round_enabled: false,
         schedule_mode: 'weekly',
@@ -267,11 +280,17 @@ export default function DealerAutomationTab({ user, profile }) {
                             className="form-input"
                             style={{ width: 'auto', padding: '0.4rem 2rem 0.4rem 1rem' }}
                         >
-                            <option value="lao">หวยพัฒนาลาว (Lao)</option>
-                            <option value="thai">หวยรัฐบาลไทย (Thai)</option>
-                            <option value="lao_extra">หวยลาวพิเศษ</option>
-                            <option value="lao_vip">หวยลาว VIP</option>
-                            <option value="yeekee">หวยจับยี่กี (Yeekee)</option>
+                            {Object.entries({
+                                lao: 'หวยพัฒนาลาว (Lao)',
+                                thai: 'หวยรัฐบาลไทย (Thai)',
+                                lao_extra: 'หวยลาวพิเศษ',
+                                lao_vip: 'หวยลาว VIP',
+                                yeekee: 'หวยจับยี่กี (Yeekee)'
+                            })
+                            .filter(([key]) => !allowedLotteryTypes || allowedLotteryTypes.includes(key))
+                            .map(([key, label]) => (
+                                <option key={key} value={key}>{label}</option>
+                            ))}
                         </select>
                     </div>
                 </div>

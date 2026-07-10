@@ -4033,7 +4033,7 @@ export default function Dealer() {
                     )}
 
                     {activeTab === 'automation' && (
-                        <DealerAutomationTab user={user} profile={profile} />
+                        <DealerAutomationTab user={user} profile={profile} allowedLotteryTypes={allowedLotteryTypes} />
                     )}
 
                     {activeTab === 'profile' && (
