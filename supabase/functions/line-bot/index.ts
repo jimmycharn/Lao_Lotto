@@ -4177,13 +4177,17 @@ serve(async (req) => {
         }
       }
 
-      // Load API Key
-      const { data: openRouterKeyRow } = await supabase
+      // Load API Key & Model
+      const { data: settingsRows } = await supabase
         .from('app_settings')
-        .select('value')
-        .eq('key', 'openrouter_api_key')
-        .maybeSingle();
+        .select('key, value')
+        .in('key', ['openrouter_api_key', 'openrouter_model']);
+
+      const openRouterKeyRow = settingsRows?.find(r => r.key === 'openrouter_api_key');
+      const openRouterModelRow = settingsRows?.find(r => r.key === 'openrouter_model');
+
       const AI_API_KEY = openRouterKeyRow?.value || Deno.env.get('OPENROUTER_API_KEY') || '';
+      const AI_MODEL = openRouterModelRow?.value || 'google/gemini-2.5-flash';
 
       if (!AI_API_KEY) {
         console.error("Missing OpenRouter API Key in app_settings or environment");
@@ -4292,7 +4296,7 @@ serve(async (req) => {
                 'X-Title': 'LaoLotto Centralized AI Crawler'
               },
               body: JSON.stringify({
-                model: 'google/gemini-2.5-flash',
+                model: AI_MODEL,
                 messages: [
                   { role: 'system', content: systemPrompt },
                   { role: 'user', content: userPrompt }

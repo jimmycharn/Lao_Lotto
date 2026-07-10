@@ -1266,14 +1266,23 @@ export default function SuperAdmin() {
 
     const fetchSettings = async () => {
         try {
-            const { data, error } = await supabase
+            // Fetch system settings
+            const { data: systemData, error: systemError } = await supabase
                 .from('system_settings')
                 .select('*')
 
-            if (error) throw error
+            if (systemError) throw systemError
+
+            // Fetch app settings (for OpenRouter API and AI Model)
+            const { data: appData, error: appError } = await supabase
+                .from('app_settings')
+                .select('*')
+                .in('key', ['openrouter_api_key', 'openrouter_model'])
+
+            if (appError) throw appError
 
             const settingsObj = {}
-            data?.forEach(s => {
+            systemData?.forEach(s => {
                 try {
                     // Try to parse as JSON, if fails use raw value
                     settingsObj[s.key] = typeof s.value === 'string' ? JSON.parse(s.value) : s.value
@@ -1282,6 +1291,12 @@ export default function SuperAdmin() {
                     settingsObj[s.key] = s.value
                 }
             })
+
+            appData?.forEach(s => {
+                // app_settings contains raw strings
+                settingsObj[s.key] = s.value
+            })
+
             setSettings(settingsObj)
         } catch (error) {
             console.error('Error fetching settings:', error)
@@ -1786,19 +1801,34 @@ export default function SuperAdmin() {
     }
 
     // === SETTINGS MANAGEMENT ===
+    const APP_SETTINGS_KEYS = ['openrouter_api_key', 'openrouter_model']
+
     const handleUpdateSetting = async (key, value) => {
         try {
-            // Use upsert to create if not exists, or update if exists
-            const { error } = await supabase
-                .from('system_settings')
-                .upsert({
-                    key: key,
-                    value: JSON.stringify(value),
-                    updated_by: user.id
-                }, { onConflict: 'key' })
+            if (APP_SETTINGS_KEYS.includes(key)) {
+                // Write to app_settings
+                const { error } = await supabase
+                    .from('app_settings')
+                    .upsert({
+                        key: key,
+                        value: value // Save raw API credentials
+                    }, { onConflict: 'key' })
 
-            if (error) throw error
+                if (error) throw error
+            } else {
+                // Write to system_settings
+                const { error } = await supabase
+                    .from('system_settings')
+                    .upsert({
+                        key: key,
+                        value: JSON.stringify(value),
+                        updated_by: user.id
+                    }, { onConflict: 'key' })
+
+                if (error) throw error
+            }
             fetchSettings()
+            toast.success('บันทึกการตั้งค่าสำเร็จ')
         } catch (error) {
             console.error('Error updating setting:', error)
             toast.error('เกิดข้อผิดพลาดในการบันทึกการตั้งค่า')
@@ -3472,6 +3502,50 @@ export default function SuperAdmin() {
                                 <option value="yearly">รายปี</option>
                                 <option value="immediate">เก็บทันทีหลังปิดงวด</option>
                             </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* AI Configuration Settings */}
+            <div className="settings-section" style={{ marginTop: '1.5rem' }}>
+                <h3>การตั้งค่าระบบ AI ค้นหาผลรางวัล</h3>
+                <div className="settings-grid">
+                    <div className="setting-item" style={{ gridColumn: 'span 2' }}>
+                        <label>OpenRouter API Key (สำหรับระบบ AI ดึงผลรางวัล)</label>
+                        <div className="setting-input">
+                            <input
+                                type="password"
+                                placeholder="sk-or-v1-..."
+                                value={settings.openrouter_api_key || ''}
+                                onChange={(e) => setSettings({ ...settings, openrouter_api_key: e.target.value })}
+                            />
+                            <button
+                                className="btn btn-sm btn-primary"
+                                onClick={() => handleUpdateSetting('openrouter_api_key', settings.openrouter_api_key)}
+                                title="บันทึกคีย์ API"
+                            >
+                                <FiSave />
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="setting-item" style={{ gridColumn: 'span 2' }}>
+                        <label>AI Model Name (จากระบบ OpenRouter)</label>
+                        <div className="setting-input">
+                            <input
+                                type="text"
+                                placeholder="เช่น google/gemini-2.5-flash หรือ google/gemini-2.5-pro"
+                                value={settings.openrouter_model || ''}
+                                onChange={(e) => setSettings({ ...settings, openrouter_model: e.target.value })}
+                            />
+                            <button
+                                className="btn btn-sm btn-primary"
+                                onClick={() => handleUpdateSetting('openrouter_model', settings.openrouter_model)}
+                                title="บันทึกชื่อรุ่นโมเดล"
+                            >
+                                <FiSave />
+                            </button>
                         </div>
                     </div>
                 </div>
