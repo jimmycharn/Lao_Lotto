@@ -408,6 +408,603 @@ function formatWinningNumbersForDisplay(winningNumbers: any, lotteryType: string
   return typeof winningNumbers === 'string' ? winningNumbers : JSON.stringify(winningNumbers);
 }
 
+const AUTOMATION_TYPE_RANKS: Record<string, number> = {
+  'run_top': 10, 'run_bottom': 11, 'pak_top': 12, 'pak_bottom': 13,
+  '2_top': 100, '2_bottom': 101, '2_front': 102, '2_center': 103, '2_run': 104,
+  '3_top': 200, '3_tod': 201, '3_bottom': 202, '3_front': 203, '3_back': 204,
+  '4_set': 400, '4_tod': 401, '4_float': 402, '5_float': 403, '6_top': 404
+};
+
+async function generateTotalNumbersSummary(roundId: string, lotteryType: string): Promise<string> {
+  let submissions = [];
+  try {
+    submissions = await fetchAllSubmissions(roundId);
+  } catch (err) {
+    console.error("Error fetching submissions for generateTotalNumbersSummary:", err);
+    return "❌ เกิดข้อผิดพลาดในการดึงข้อมูลรายงานเลขรวม";
+  }
+
+  const soldMap = new Map<string, Map<string, number>>();
+  let grandTotal = 0;
+  (submissions || []).forEach((s: any) => {
+    const amt = Number(s.amount || 0);
+    if (amt <= 0) return;
+    if (!soldMap.has(s.bet_type)) {
+      soldMap.set(s.bet_type, new Map<string, number>());
+    }
+    const typeMap = soldMap.get(s.bet_type)!;
+    typeMap.set(s.numbers, (typeMap.get(s.numbers) || 0) + amt);
+    grandTotal += amt;
+  });
+
+  const sortedTypes = Array.from(soldMap.keys()).sort((a, b) => {
+    const rankA = AUTOMATION_TYPE_RANKS[a] !== undefined ? AUTOMATION_TYPE_RANKS[a] : 500;
+    const rankB = AUTOMATION_TYPE_RANKS[b] !== undefined ? AUTOMATION_TYPE_RANKS[b] : 500;
+    if (rankA !== rankB) return rankA - rankB;
+    return a.localeCompare(b);
+  });
+
+  const LOTTERY_TYPE_NAMES: Record<string, string> = {
+    lao: 'หวยลาว',
+    thai: 'หวยไทย',
+    hanoi: 'หวยฮานอย',
+    stock: 'หวยหุ้น',
+    yeekee: 'หวยยี่กี'
+  };
+  const typeNameInThai = LOTTERY_TYPE_NAMES[lotteryType] || `หวย${lotteryType.toUpperCase()}`;
+
+  let summaryText = `รายงานเลขรวม (${typeNameInThai})\n`;
+  summaryText += `รวมยอดรวม: ฿${grandTotal.toLocaleString('th-TH')}\n`;
+  summaryText += `--------------------------\n`;
+
+  if (soldMap.size === 0) {
+    summaryText += `ยังไม่มียอดขายเข้ามาค่ะ\n`;
+  } else {
+    const categories: string[] = [];
+    for (const type of sortedTypes) {
+      const label = getThaiBetTypeLabel(type, lotteryType);
+      const typeMap = soldMap.get(type)!;
+      const sortedNums = Array.from(typeMap.keys()).sort((a, b) => {
+        const numA = parseInt(a, 10);
+        const numB = parseInt(b, 10);
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+        return a.localeCompare(b);
+      });
+
+      const betItemsStr = sortedNums.map(num => {
+        const amt = typeMap.get(num)!;
+        return `${num}=${amt}`;
+      }).join('\n');
+
+      categories.push(`${label}\n${betItemsStr}`);
+    }
+    summaryText += categories.join('\n----------------\n') + '\n';
+  }
+  summaryText += `--------------------------`;
+  return summaryText;
+}
+
+async function generateLayoffNumbersSummary(roundId: string, lotteryType: string): Promise<string> {
+  const { data: transfers, error: trErr } = await supabase
+    .from('bet_transfers')
+    .select('bet_type, numbers, amount, status')
+    .eq('round_id', roundId);
+
+  if (trErr) {
+    console.error("Error fetching transfers for generateLayoffNumbersSummary:", trErr);
+    return "❌ เกิดข้อผิดพลาดในการดึงข้อมูลรายงานเลขตีออก";
+  }
+
+  const activeTransfers = (transfers || []).filter((t: any) => t.status !== 'returned');
+
+  const transferMap = new Map<string, Map<string, number>>();
+  let grandTotal = 0;
+  activeTransfers.forEach((t: any) => {
+    const amt = Number(t.amount || 0);
+    if (amt <= 0) return;
+    if (!transferMap.has(t.bet_type)) {
+      transferMap.set(t.bet_type, new Map<string, number>());
+    }
+    const typeMap = transferMap.get(t.bet_type)!;
+    typeMap.set(t.numbers, (typeMap.get(t.numbers) || 0) + amt);
+    grandTotal += amt;
+  });
+
+  const sortedTypes = Array.from(transferMap.keys()).sort((a, b) => {
+    const rankA = AUTOMATION_TYPE_RANKS[a] !== undefined ? AUTOMATION_TYPE_RANKS[a] : 500;
+    const rankB = AUTOMATION_TYPE_RANKS[b] !== undefined ? AUTOMATION_TYPE_RANKS[b] : 500;
+    if (rankA !== rankB) return rankA - rankB;
+    return a.localeCompare(b);
+  });
+
+  const LOTTERY_TYPE_NAMES: Record<string, string> = {
+    lao: 'หวยลาว',
+    thai: 'หวยไทย',
+    hanoi: 'หวยฮานอย',
+    stock: 'หวยหุ้น',
+    yeekee: 'หวยยี่กี'
+  };
+  const typeNameInThai = LOTTERY_TYPE_NAMES[lotteryType] || `หวย${lotteryType.toUpperCase()}`;
+
+  let summaryText = `รายงานเลขตีออก (${typeNameInThai})\n`;
+  summaryText += `รวมยอดตีออก: ฿${grandTotal.toLocaleString('th-TH')}\n`;
+  summaryText += `--------------------------\n`;
+
+  if (transferMap.size === 0) {
+    summaryText += `ไม่มีการตีออกตัวเลขในงวดนี้ค่ะ\n`;
+  } else {
+    const categories: string[] = [];
+    for (const type of sortedTypes) {
+      const label = getThaiBetTypeLabel(type, lotteryType);
+      const typeMap = transferMap.get(type)!;
+      const sortedNums = Array.from(typeMap.keys()).sort((a, b) => {
+        const numA = parseInt(a, 10);
+        const numB = parseInt(b, 10);
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+        return a.localeCompare(b);
+      });
+
+      const betItemsStr = sortedNums.map(num => {
+        const amt = typeMap.get(num)!;
+        return `${num}=${amt}`;
+      }).join('\n');
+
+      categories.push(`${label}\n${betItemsStr}`);
+    }
+    summaryText += categories.join('\n----------------\n') + '\n';
+  }
+  summaryText += `--------------------------`;
+  return summaryText;
+}
+
+async function generateRemainingNumbersSummary(roundId: string, lotteryType: string): Promise<string> {
+  let submissions = [];
+  try {
+    submissions = await fetchAllSubmissions(roundId);
+  } catch (err) {
+    console.error("Error fetching submissions for generateRemainingNumbersSummary:", err);
+    return "❌ เกิดข้อผิดพลาดในการดึงข้อมูลรายงานเลขเหลือ";
+  }
+
+  const { data: transfers, error: trErr } = await supabase
+    .from('bet_transfers')
+    .select('bet_type, numbers, amount, status')
+    .eq('round_id', roundId);
+
+  if (trErr) {
+    console.error("Error fetching transfers for generateRemainingNumbersSummary:", trErr);
+    return "❌ เกิดข้อผิดพลาดในการดึงข้อมูลรายงานเลขเหลือ";
+  }
+
+  const soldMap = new Map<string, Map<string, number>>();
+  (submissions || []).forEach((s: any) => {
+    const amt = Number(s.amount || 0);
+    if (amt <= 0) return;
+    if (!soldMap.has(s.bet_type)) {
+      soldMap.set(s.bet_type, new Map<string, number>());
+    }
+    const typeMap = soldMap.get(s.bet_type)!;
+    typeMap.set(s.numbers, (typeMap.get(s.numbers) || 0) + amt);
+  });
+
+  const transferMap = new Map<string, Map<string, number>>();
+  const activeTransfers = (transfers || []).filter((t: any) => t.status !== 'returned');
+  activeTransfers.forEach((t: any) => {
+    const amt = Number(t.amount || 0);
+    if (amt <= 0) return;
+    if (!transferMap.has(t.bet_type)) {
+      transferMap.set(t.bet_type, new Map<string, number>());
+    }
+    const typeMap = transferMap.get(t.bet_type)!;
+    typeMap.set(t.numbers, (typeMap.get(t.numbers) || 0) + amt);
+  });
+
+  const remainingMap = new Map<string, Map<string, number>>();
+  let grandRemainingTotal = 0;
+
+  for (const [type, soldTypeMap] of soldMap.entries()) {
+    const transferTypeMap = transferMap.get(type);
+    for (const [num, soldAmt] of soldTypeMap.entries()) {
+      const trAmt = transferTypeMap?.get(num) || 0;
+      const remainingAmt = soldAmt - trAmt;
+      if (remainingAmt > 0) {
+         if (!remainingMap.has(type)) {
+           remainingMap.set(type, new Map<string, number>());
+         }
+         remainingMap.get(type)!.set(num, remainingAmt);
+         grandRemainingTotal += remainingAmt;
+      }
+    }
+  }
+
+  const sortedTypes = Array.from(remainingMap.keys()).sort((a, b) => {
+    const rankA = AUTOMATION_TYPE_RANKS[a] !== undefined ? AUTOMATION_TYPE_RANKS[a] : 500;
+    const rankB = AUTOMATION_TYPE_RANKS[b] !== undefined ? AUTOMATION_TYPE_RANKS[b] : 500;
+    if (rankA !== rankB) return rankA - rankB;
+    return a.localeCompare(b);
+  });
+
+  const LOTTERY_TYPE_NAMES: Record<string, string> = {
+    lao: 'หวยลาว',
+    thai: 'หวยไทย',
+    hanoi: 'หวยฮานอย',
+    stock: 'หวยหุ้น',
+    yeekee: 'หวยยี่กี'
+  };
+  const typeNameInThai = LOTTERY_TYPE_NAMES[lotteryType] || `หวย${lotteryType.toUpperCase()}`;
+
+  let summaryText = `รายงานเลขเหลือ (ถือสู้เอง) (${typeNameInThai})\n`;
+  summaryText += `รวมยอดเหลือ: ฿${grandRemainingTotal.toLocaleString('th-TH')}\n`;
+  summaryText += `--------------------------\n`;
+
+  if (remainingMap.size === 0) {
+    summaryText += `ไม่มีตัวเลขคงเหลือ (ถือสู้เอง) ในงวดนี้ค่ะ\n`;
+  } else {
+    const categories: string[] = [];
+    for (const type of sortedTypes) {
+      const label = getThaiBetTypeLabel(type, lotteryType);
+      const typeMap = remainingMap.get(type)!;
+      const sortedNums = Array.from(typeMap.keys()).sort((a, b) => {
+        const numA = parseInt(a, 10);
+        const numB = parseInt(b, 10);
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+        return a.localeCompare(b);
+      });
+
+      const betItemsStr = sortedNums.map(num => {
+        const amt = typeMap.get(num)!;
+        return `${num}=${amt}`;
+      }).join('\n');
+
+      categories.push(`${label}\n${betItemsStr}`);
+    }
+    summaryText += categories.join('\n----------------\n') + '\n';
+  }
+  summaryText += `--------------------------`;
+  return summaryText;
+}
+
+async function sendMemberResultAnnouncements(roundId: string, dealerId: string): Promise<void> {
+  const { data: activeRound } = await supabase
+    .from('lottery_rounds')
+    .select('*')
+    .eq('id', roundId)
+    .maybeSingle();
+
+  if (!activeRound || !activeRound.is_result_announced) {
+    console.log(`[sendMemberResultAnnouncements] Round ${roundId} not found or results not announced.`);
+    return;
+  }
+
+  const { data: allGroups, error: groupsErr } = await supabase
+    .from('line_groups')
+    .select('line_group_id')
+    .eq('dealer_id', dealerId)
+    .eq('lottery_type', activeRound.lottery_type)
+    .eq('is_active', true);
+
+  if (groupsErr || !allGroups || allGroups.length === 0) {
+    console.log(`[sendMemberResultAnnouncements] No active line groups found for dealer ${dealerId} and type ${activeRound.lottery_type}`);
+    return;
+  }
+
+  const { data: managerData } = await supabase
+    .from('line_managers')
+    .select('line_user_id')
+    .eq('dealer_id', dealerId)
+    .eq('is_active', true);
+  const managerLineUserIds = new Set((managerData || []).map((m: any) => m.line_user_id));
+
+  for (const g of allGroups) {
+    const targetGroupId = g.line_group_id;
+
+    const { data: groupMembers, error: memErr } = await supabase
+      .from('line_group_members')
+      .select('user_id, line_user_id, display_name')
+      .eq('line_group_id', targetGroupId);
+
+    if (memErr || !groupMembers || groupMembers.length === 0) {
+      console.log(`[sendMemberResultAnnouncements] No members found for group ${targetGroupId}: ${memErr?.message || 'unknown'}`);
+      continue;
+    }
+
+    const nonManagerMembers = groupMembers.filter((m: any) => !managerLineUserIds.has(m.line_user_id));
+    const memberUserIds = nonManagerMembers.map((m: any) => m.user_id).filter(Boolean);
+    if (memberUserIds.length === 0) {
+      console.log(`[sendMemberResultAnnouncements] No non-manager members with user_id in group ${targetGroupId}`);
+      continue;
+    }
+
+    let submissions: any[] = [];
+    try {
+      const allSubs = await fetchAllSubmissions(activeRound.id);
+      const memberSet = new Set(memberUserIds);
+      submissions = allSubs.filter((s: any) => memberSet.has(s.user_id));
+    } catch (err) {
+      console.error(`[sendMemberResultAnnouncements] Error fetching submissions for group ${targetGroupId}:`, err);
+      continue;
+    }
+
+    if (submissions.length === 0) {
+      console.log(`[sendMemberResultAnnouncements] No submissions in this round for members of group ${targetGroupId}`);
+      continue;
+    }
+
+    const userSummaries: Record<string, {
+      userId: string;
+      totalBet: number;
+      totalCommission: number;
+      totalWin: number;
+      winCount: number;
+    }> = {};
+
+    const setPrice = activeRound.set_prices?.['4_top'] || 120;
+    const isAnnounced = !!activeRound.winning_numbers;
+
+    submissions.forEach((sub: any) => {
+      const userId = sub.user_id;
+      if (!userId) return;
+
+      const amt = Number(sub.amount || 0);
+      const comm = Number(sub.commission_amount || 0);
+
+      let win = 0;
+      if (isAnnounced && sub.is_winner) {
+        if (sub.bet_type === '4_set') {
+          const numSets = Math.max(1, Math.floor(amt / setPrice));
+          win = (sub.prize_amount != null ? Number(sub.prize_amount) : 0) * numSets;
+        } else {
+          win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
+        }
+        if (win === 0) {
+          const winResult = checkTransferWin(
+            sub.bet_type,
+            sub.numbers,
+            activeRound.winning_numbers,
+            activeRound.lottery_type,
+            amt,
+            setPrice,
+            DEFAULT_4_SET_SETTINGS.prizes
+          );
+          if (winResult.wins) {
+            win = winResult.payout;
+          }
+        }
+      }
+
+      if (!userSummaries[userId]) {
+        userSummaries[userId] = {
+          userId,
+          totalBet: 0,
+          totalCommission: 0,
+          totalWin: 0,
+          winCount: 0
+        };
+      }
+      userSummaries[userId].totalBet += amt;
+      userSummaries[userId].totalCommission += comm;
+      userSummaries[userId].totalWin += win;
+      if (sub.is_winner) {
+        userSummaries[userId].winCount++;
+      }
+    });
+
+    const userIds = Object.keys(userSummaries);
+    const profilesMap: Record<string, string> = {};
+
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', userIds);
+      (profiles || []).forEach((p: any) => {
+        profilesMap[p.id] = p.full_name || 'ไม่ระบุชื่อ';
+      });
+    }
+
+    const sortedUserSummaries = Object.values(userSummaries).sort((a, b) => {
+      if (b.totalBet !== a.totalBet) {
+        return b.totalBet - a.totalBet;
+      }
+      const netA = a.totalWin - (a.totalBet - a.totalCommission);
+      const netB = b.totalWin - (b.totalBet - b.totalCommission);
+      return netB - netA;
+    });
+
+    const winNumStr = formatWinningNumbersForDisplay(activeRound.winning_numbers, activeRound.lottery_type);
+
+    const bubbles = sortedUserSummaries.map((u) => {
+      const userName = profilesMap[u.userId] || 'ไม่ระบุชื่อ';
+      const roundedBet = Math.round(u.totalBet);
+      const roundedComm = Math.round(u.totalCommission);
+      const roundedWin = Math.round(u.totalWin);
+      const net = u.totalWin - (u.totalBet - u.totalCommission);
+      const roundedNet = Math.round(net);
+
+      let netLabel = '';
+      let netColor = '#888888';
+      if (roundedNet > 0) {
+        netLabel = `ต้องเก็บ ฿${roundedNet.toLocaleString('th-TH')}`;
+        netColor = '#10b981';
+      } else if (roundedNet < 0) {
+        netLabel = `ต้องจ่าย ฿${Math.abs(roundedNet).toLocaleString('th-TH')}`;
+        netColor = '#ef4444';
+      } else {
+        netLabel = 'เสมอ';
+        netColor = '#94a3b8';
+      }
+
+      return {
+        "type": "bubble",
+        "size": "mega",
+        "header": {
+          "type": "box",
+          "layout": "vertical",
+          "backgroundColor": "#4f46e5",
+          "paddingAll": "lg",
+          "contents": [
+            {
+              "type": "text",
+              "text": `📊 ผลได้เสียการแทงของคุณ`,
+              "weight": "bold",
+              "size": "md",
+              "color": "#ffffff"
+            },
+            {
+              "type": "text",
+              "text": `งวดวันที่: ${getRoundDisplayDate(activeRound, false)} (${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()})`,
+              "size": "xs",
+              "color": "#c7d2fe",
+              "margin": "xs"
+            },
+            {
+              "type": "text",
+              "text": `🏆 ผลรางวัล: ${winNumStr}`,
+              "size": "sm",
+              "color": "#fbbf24",
+              "margin": "xs",
+              "weight": "bold"
+            },
+            {
+              "type": "text",
+              "text": `🎉 ประกาศผลรางวัลแล้ว`,
+              "size": "xs",
+              "color": "#10b981",
+              "margin": "xs",
+              "weight": "bold"
+            }
+          ]
+        },
+        "body": {
+          "type": "box",
+          "layout": "vertical",
+          "backgroundColor": "#f8fafc",
+          "paddingAll": "md",
+          "contents": [
+            {
+              "type": "box",
+              "layout": "vertical",
+              "backgroundColor": "#ffffff",
+              "cornerRadius": "md",
+              "paddingAll": "lg",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": `คุณ ${userName}`,
+                  "weight": "bold",
+                  "size": "md",
+                  "color": "#0f172a"
+                },
+                {
+                  "type": "separator",
+                  "margin": "md",
+                  "color": "#e2e8f0"
+                },
+                {
+                  "type": "box",
+                  "layout": "horizontal",
+                  "margin": "md",
+                  "contents": [
+                    { "type": "text", "text": "ยอดส่งแทง:", "size": "sm", "color": "#64748b" },
+                    { "type": "text", "text": `฿${roundedBet.toLocaleString('th-TH')}`, "weight": "bold", "size": "sm", "color": "#0f172a", "align": "end" }
+                  ]
+                },
+                {
+                  "type": "box",
+                  "layout": "horizontal",
+                  "margin": "sm",
+                  "contents": [
+                    { "type": "text", "text": "ส่วนลด/ค่าคอม:", "size": "sm", "color": "#64748b" },
+                    { "type": "text", "text": `฿${roundedComm.toLocaleString('th-TH')}`, "weight": "bold", "size": "sm", "color": "#0f172a", "align": "end" }
+                  ]
+                },
+                {
+                  "type": "box",
+                  "layout": "horizontal",
+                  "margin": "sm",
+                  "contents": [
+                    { "type": "text", "text": "ยอดถูกรางวัล:", "size": "sm", "color": "#64748b" },
+                    { "type": "text", "text": `ถูก ${u.winCount} ครั้ง / ฿${roundedWin.toLocaleString('th-TH')}`, "weight": "bold", "size": "sm", "color": "#0f172a", "align": "end" }
+                  ]
+                },
+                {
+                  "type": "separator",
+                  "margin": "md",
+                  "color": "#e2e8f0"
+                },
+                {
+                  "type": "box",
+                  "layout": "horizontal",
+                  "margin": "md",
+                  "contents": [
+                    { "type": "text", "text": "สรุปยอดสุทธิ:", "weight": "bold", "size": "sm", "color": "#0f172a" },
+                    { "type": "text", "text": netLabel, "weight": "bold", "size": "sm", "color": netColor, "align": "end" }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      };
+    });
+
+    let groupTotalBet = 0;
+    let groupTotalComm = 0;
+    let groupTotalWin = 0;
+    let groupWinnerCount = 0;
+    for (const u of sortedUserSummaries) {
+      groupTotalBet += u.totalBet;
+      groupTotalComm += u.totalCommission;
+      groupTotalWin += u.totalWin;
+      if (u.totalWin > 0) {
+        groupWinnerCount++;
+      }
+    }
+    const groupNet = groupTotalWin - (groupTotalBet - groupTotalComm);
+    const groupNetLabel = groupNet > 0 
+      ? `ร้านต้องเก็บเพิ่ม: ฿${Math.round(groupNet).toLocaleString('th-TH')}` 
+      : (groupNet < 0 ? `ร้านต้องจ่ายสมาชิก: ฿${Math.abs(Math.round(groupNet)).toLocaleString('th-TH')}` : 'เสมอ');
+
+    const groupSummaryText = `📊 สรุปยอดรวมกลุ่ม: ${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()}\n` +
+      `📅 งวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n` +
+      `----------------------------------\n` +
+      `💰 ยอดแทงรวมกลุ่ม: ฿${Math.round(groupTotalBet).toLocaleString('th-TH')}\n` +
+      `💸 ค่าคอมรวมกลุ่ม: ฿${Math.round(groupTotalComm).toLocaleString('th-TH')}\n` +
+      `🎉 ยอดถูกรางวัลรวมกลุ่ม: ฿${Math.round(groupTotalWin).toLocaleString('th-TH')}\n` +
+      `----------------------------------\n` +
+      `📝 สรุปยอดได้เสียสุทธิ:\n👉 ${groupNetLabel}\n` +
+      `👥 สมาชิกถูกรางวัล: ${groupWinnerCount} คน`;
+
+    const carouselMessages: any[] = [];
+    const chunkSize = 10;
+    for (let i = 0; i < bubbles.length; i += chunkSize) {
+      const chunk = bubbles.slice(i, i + chunkSize);
+      carouselMessages.push({
+        "type": "flex",
+        "altText": `📊 รายงานผลได้เสียสำหรับสมาชิกในกลุ่ม (${activeRound.lottery_type.toUpperCase()})`,
+        "contents": {
+          "type": "carousel",
+          "contents": chunk
+        }
+      });
+    }
+
+    carouselMessages.push({
+      "type": "text",
+      "text": groupSummaryText
+    });
+
+    console.log(`[sendMemberResultAnnouncements] pushing ${carouselMessages.length} messages to group=${targetGroupId}`);
+    for (const msg of carouselMessages) {
+      try {
+        await sendLinePush(targetGroupId, msg);
+      } catch (pushErr) {
+        console.error(`[sendMemberResultAnnouncements] Failed push to group ${targetGroupId}:`, pushErr);
+      }
+    }
+  }
+}
+
 // Helper: Parse report date and type params (e.g. ล/9/5/2026, ล/9/5/26, ล/9/5/69, ล/9/5/2569)
 function parseReportParams(param: string): { lotteryType: string; dateStr: string } | null {
   const clean = param.replace(/\s+/g, '').toLowerCase();
@@ -2829,9 +3426,9 @@ serve(async (req) => {
         })
       }
 
-      // Check if notifications are enabled for this round in the UI settings
-      if (round.notify_close_to_groups === false) {
-        return new Response(JSON.stringify({ success: true, round_id: roundId, message: 'Notifications disabled by setting' }), {
+      // Check if notifications or automation is enabled for this round
+      if (round.notify_close_to_groups === false && !round.created_by_job_id) {
+        return new Response(JSON.stringify({ success: true, round_id: roundId, message: 'Automation and notifications disabled by setting' }), {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
@@ -2845,8 +3442,9 @@ serve(async (req) => {
         .eq('is_active', true)
 
       let groupsToNotify: any[] = [];
-      
-      if (groups && groups.length > 0) {
+      let sent = 0
+
+      if (round.notify_close_to_groups && groups && groups.length > 0) {
         // Fetch all active submissions for this round to see which users bet
         let submissions = [];
         try {
@@ -2869,21 +3467,30 @@ serve(async (req) => {
           const activeGroupIds = new Set((activeMembers || []).map((m: any) => m.line_group_id));
           groupsToNotify = groups.filter((g: any) => activeGroupIds.has(g.line_group_id));
         }
-      }
 
-      const closeFlexMessage = buildCloseFlexMessage(round)
-      let sent = 0
-      for (const g of groupsToNotify) {
-        try {
-          await sendLinePush(g.line_group_id, closeFlexMessage)
-          sent++
-        } catch (e) {
-          console.error(`auto_close_notify: failed pushing to group ${g.line_group_id}:`, e)
+        const closeFlexMessage = buildCloseFlexMessage(round)
+        for (const g of groupsToNotify) {
+          try {
+            await sendLinePush(g.line_group_id, closeFlexMessage)
+            sent++
+          } catch (e) {
+            console.error(`auto_close_notify: failed pushing to group ${g.line_group_id}:`, e)
+          }
         }
       }
 
-      // --- AUTO LAYOFF & CLOSING REPORT SYSTEM ---
+      // --- AUTO LAYOFF & REPORTING SYSTEM ---
       try {
+        let job: any = null;
+        if (round.created_by_job_id) {
+          const { data: jobData } = await supabase
+            .from('dealer_automation_jobs')
+            .select('*')
+            .eq('id', round.created_by_job_id)
+            .maybeSingle();
+          job = jobData;
+        }
+
         const { data: template } = await supabase
           .from('dealer_lottery_templates')
           .select('*')
@@ -2891,150 +3498,240 @@ serve(async (req) => {
           .eq('lottery_type', round.lottery_type)
           .maybeSingle()
 
-        if (template) {
-          // 1. Calculate & Perform Auto-Layoff
-          if (template.auto_layoff_enabled) {
-            const { data: submissions, error: subErr } = await fetchAllRows(
-              (from, to) => supabase
-                .from('submissions')
-                .select('id, bet_type, numbers, amount, user_id')
-                .eq('round_id', round.id)
-                .eq('is_deleted', false)
-                .range(from, to)
-            );
+        // 1. Determine layoff settings (use job if exists, otherwise fallback to template)
+        const layoffEnabled = job ? job.layoff_enabled : (template?.auto_layoff_enabled || false);
+        const layoffMethod = job ? job.layoff_method : (template?.auto_layoff_method || 'limits');
+        const keepAmount = job ? Number(job.layoff_keep_amount || 0) : (template?.auto_layoff_keep_amount || 0);
 
-            const { data: transfers, error: trErr } = await fetchAllRows(
-              (from, to) => supabase
-                .from('bet_transfers')
-                .select('bet_type, numbers, amount')
-                .eq('round_id', round.id)
-                .range(from, to)
-            );
+        if (layoffEnabled) {
+          const { data: submissions, error: subErr } = await fetchAllRows(
+            (from, to) => supabase
+              .from('submissions')
+              .select('id, bet_type, numbers, amount, user_id')
+              .eq('round_id', round.id)
+              .eq('is_deleted', false)
+              .range(from, to)
+          );
 
-            if (!subErr && submissions && submissions.length > 0) {
-              const uniqueUserIds = [...new Set(submissions.map((s: any) => s.user_id).filter(Boolean))];
-              const userSettingsMap: Record<string, any> = {};
-              if (uniqueUserIds.length > 0) {
-                const { data: allUserSettings } = await supabase
-                  .from('user_settings')
-                  .select('user_id, lottery_settings')
-                  .eq('dealer_id', round.dealer_id)
-                  .in('user_id', uniqueUserIds);
+          const { data: transfers, error: trErr } = await fetchAllRows(
+            (from, to) => supabase
+              .from('bet_transfers')
+              .select('bet_type, numbers, amount')
+              .eq('round_id', round.id)
+              .range(from, to)
+          );
 
-                for (const us of (allUserSettings || [])) {
-                  userSettingsMap[us.user_id] = us.lottery_settings;
-                }
+          if (!subErr && submissions && submissions.length > 0) {
+            const uniqueUserIds = [...new Set(submissions.map((s: any) => s.user_id).filter(Boolean))];
+            const userSettingsMap: Record<string, any> = {};
+            if (uniqueUserIds.length > 0) {
+              const { data: allUserSettings } = await supabase
+                .from('user_settings')
+                .select('user_id, lottery_settings')
+                .eq('dealer_id', round.dealer_id)
+                .in('user_id', uniqueUserIds);
+
+              for (const us of (allUserSettings || [])) {
+                userSettingsMap[us.user_id] = us.lottery_settings;
               }
+            }
 
-              const setPrice = round.set_prices?.['4_top'] || 120;
+            const setPrice = round.set_prices?.['4_top'] || 120;
+            let recommendations: any[] = [];
+
+            if (layoffMethod === 'ai') {
+              try {
+                const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-analyze-transfers`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                    'apikey': SUPABASE_SERVICE_ROLE_KEY
+                  },
+                  body: JSON.stringify({
+                    round_id: round.id,
+                    budget: keepAmount,
+                    dealer_id: round.dealer_id,
+                    lottery_type: round.lottery_type,
+                    currency_symbol: round.currency_symbol || '฿'
+                  })
+                });
+
+                if (response.ok) {
+                  const data = await response.json();
+                  if (data?.success) {
+                    recommendations = data.data?.recommendations || [];
+                  }
+                }
+              } catch (aiErr) {
+                console.error("AI Layoff calculation failed, falling back to formula:", aiErr);
+              }
+            }
+
+            // Fallback for formula/limits OR if AI calculation failed
+            if (recommendations.length === 0 && (layoffMethod === 'formula' || layoffMethod === 'limits' || layoffMethod === 'ai')) {
               const betItems = buildBetItems(submissions, transfers || [], userSettingsMap, round.lottery_type, setPrice);
               const scenarios = calculateScenarios(betItems, round.lottery_type, setPrice);
-              const keepAmount = template.auto_layoff_keep_amount || 0;
-              const recommendations = greedyRecommendations(scenarios, betItems, keepAmount, setPrice, round.lottery_type);
+              recommendations = greedyRecommendations(scenarios, betItems, keepAmount, setPrice, round.lottery_type);
+            }
 
-              if (recommendations && recommendations.length > 0) {
-                const excessItems = recommendations.map(rec => ({
-                  bet_type: rec.bet_type,
-                  numbers: rec.numbers,
-                  amount: rec.transfer_amount
-                }));
+            if (recommendations && recommendations.length > 0) {
+              const excessItems = recommendations.map(rec => ({
+                bet_type: rec.bet_type,
+                numbers: rec.numbers,
+                amount: rec.transfer_amount
+              }));
 
-                const layoffResult = await performLayoff(round.dealer_id, round.id, round.lottery_type, excessItems);
-                
-                let layoffMessageText = `📢 [Auto-Layoff] ระบบได้ทำการส่งออกเลขเกินอั้นโดยอัตโนมัติสำเร็จแล้วค่ะ!\n`;
-                if (layoffResult.success) {
-                  const upstreamName = layoffResult.targetDealerName || 'เจ้ามือหลัก';
-                  layoffMessageText += `📤 ตีออกไปยัง: ${upstreamName}\n` +
-                    `รวมจำนวนเลข: ${recommendations.length} รายการ\n` +
-                    `ดูรายละเอียดบิลการส่งออกได้ที่เว็บบอร์ดดีลเลอร์ของคุณค่ะ`;
-                } else {
-                  layoffMessageText = `⚠️ [Auto-Layoff] ระบบตรวจพบเลขที่ต้องตีออก แต่เกิดข้อผิดพลาด:\n❌ ${layoffResult.message}`;
+              const layoffResult = await performLayoff(round.dealer_id, round.id, round.lottery_type, excessItems);
+              
+              let layoffMessageText = `📢 [Auto-Layoff] ระบบได้ทำการส่งออกเลขเกินอั้นโดยอัตโนมัติสำเร็จแล้วค่ะ!\n`;
+              if (layoffResult.success) {
+                const upstreamName = layoffResult.targetDealerName || 'เจ้ามือหลัก';
+                layoffMessageText += `📤 ตีออกไปยัง: ${upstreamName}\n` +
+                  `รวมจำนวนเลข: ${recommendations.length} รายการ\n` +
+                  `ดูรายละเอียดบิลการส่งออกได้ที่เว็บบอร์ดดีลเลอร์ของคุณค่ะ`;
+              } else {
+                layoffMessageText = `⚠️ [Auto-Layoff] ระบบตรวจพบเลขที่ต้องตีออก แต่เกิดข้อผิดพลาด:\n❌ ${layoffResult.message}`;
+              }
+
+              // Route layoff notification
+              let layoffGroups: any[] = [];
+              if (job && job.layoff_notify_group_enabled && job.layoff_notify_group_id) {
+                const { data: specificGroup } = await supabase
+                  .from('line_groups')
+                  .select('line_group_id')
+                  .eq('id', job.layoff_notify_group_id)
+                  .eq('is_active', true)
+                  .maybeSingle();
+                if (specificGroup) {
+                  layoffGroups.push(specificGroup);
                 }
-
-                // Push to groups matching notify_layoff_bets = true
-                const { data: layoffGroups } = await supabase
+              } else {
+                // Legacy fallback: push to all groups with notify_layoff_bets = true
+                const { data: fbGroups } = await supabase
                   .from('line_groups')
                   .select('line_group_id')
                   .eq('dealer_id', round.dealer_id)
-                  .eq('notify_layoff_bets', true)
+                  .eq('notify_layoff_bets', true);
+                if (fbGroups) layoffGroups = fbGroups;
+              }
 
-                if (layoffGroups && layoffGroups.length > 0) {
-                  for (const lg of layoffGroups) {
-                    if (lg.line_group_id) {
-                      try {
-                        await sendLinePush(lg.line_group_id, layoffMessageText);
-                      } catch (pushErr) {
-                        console.error("Failed to send layoff push:", pushErr);
-                      }
+              if (layoffGroups && layoffGroups.length > 0) {
+                for (const lg of layoffGroups) {
+                  if (lg.line_group_id) {
+                    try {
+                      await sendLinePush(lg.line_group_id, layoffMessageText);
+                    } catch (pushErr) {
+                      console.error("Failed to send layoff push:", pushErr);
                     }
                   }
                 }
               }
             }
           }
+        }
 
-          // 2. Calculate and Route Closing Summary Report
-          const { data: finalSubmissions } = await fetchAllRows(
-            (from, to) => supabase
-              .from('submissions')
-              .select('amount, user_id')
-              .eq('round_id', round.id)
-              .eq('is_deleted', false)
-              .range(from, to)
-          );
-          const { data: finalTransfers } = await fetchAllRows(
-            (from, to) => supabase
-              .from('bet_transfers')
-              .select('amount')
-              .eq('round_id', round.id)
-              .range(from, to)
-          );
-
-          const totalBetsAmt = (finalSubmissions || []).reduce((sum, s) => sum + Number(s.amount || 0), 0);
-          const totalLayoffAmt = (finalTransfers || []).reduce((sum, t) => sum + Number(t.amount || 0), 0);
-          const keepAmountVal = totalBetsAmt - totalLayoffAmt;
-
-          const uniqueUserIds = [...new Set((finalSubmissions || []).map((s: any) => s.user_id).filter(Boolean))];
-          let senderNames = 'ไม่มี';
-          if (uniqueUserIds.length > 0) {
-            const { data: profiles } = await supabase
-              .from('profiles')
-              .select('full_name')
-              .in('id', uniqueUserIds);
-            senderNames = (profiles || []).map(p => p.full_name || 'ไม่ระบุชื่อ').join(', ');
-          }
-
-          const closingSummaryText = `📊 สรุปยอดโพยเมื่อปิดงวด [${round.lottery_name}]\n` +
-            `📅 งวดวันที่: ${round.round_date}\n` +
-            `----------------------------------\n` +
-            `💰 ยอดรวมยอดแทงดิบ: ${totalBetsAmt.toLocaleString()} ${round.currency_symbol || '฿'}\n` +
-            `📤 ยอดที่ส่งออก (ตีออก): ${totalLayoffAmt.toLocaleString()} ${round.currency_symbol || '฿'}\n` +
-            `🛡️ ยอดร้านถือสู้เอง: ${keepAmountVal.toLocaleString()} ${round.currency_symbol || '฿'}\n` +
-            `----------------------------------\n` +
-            `👥 จำนวนคนส่งโพย: ${uniqueUserIds.length} คน\n` +
-            `รายชื่อ: ${senderNames}`;
-
-          // Push to groups matching notify_round_summary = true
-          const { data: summaryGroups } = await supabase
+        // 2. Custom Number Reports (only for job automation)
+        if (job && job.notify_bets_enabled && job.notify_bets_group_id) {
+          const { data: reportGroup } = await supabase
             .from('line_groups')
             .select('line_group_id')
-            .eq('dealer_id', round.dealer_id)
-            .eq('notify_round_summary', true)
+            .eq('id', job.notify_bets_group_id)
+            .eq('is_active', true)
+            .maybeSingle();
 
-          if (summaryGroups && summaryGroups.length > 0) {
-            for (const sg of summaryGroups) {
-              if (sg.line_group_id) {
+          if (reportGroup && reportGroup.line_group_id) {
+            const reportTypes = Array.isArray(job.notify_bets_types) ? job.notify_bets_types : [];
+            for (const type of reportTypes) {
+              let textMsg = "";
+              if (type === 'total') {
+                textMsg = await generateTotalNumbersSummary(round.id, round.lottery_type);
+              } else if (type === 'remaining') {
+                textMsg = await generateRemainingNumbersSummary(round.id, round.lottery_type);
+              } else if (type === 'layoff') {
+                textMsg = await generateLayoffNumbersSummary(round.id, round.lottery_type);
+              }
+
+              if (textMsg) {
                 try {
-                  await sendLinePush(sg.line_group_id, closingSummaryText);
+                  await sendLinePush(reportGroup.line_group_id, textMsg);
                 } catch (pushErr) {
-                  console.error("Failed to send summary push:", pushErr);
+                  console.error(`Failed to send ${type} report to group ${reportGroup.line_group_id}:`, pushErr);
                 }
+              }
+            }
+          }
+        }
+
+        // 3. Fallback/Standard Round Closing Summary Report (always calculated & routed)
+        const { data: finalSubmissions } = await fetchAllRows(
+          (from, to) => supabase
+            .from('submissions')
+            .select('amount, user_id')
+            .eq('round_id', round.id)
+            .eq('is_deleted', false)
+            .range(from, to)
+        );
+        const { data: finalTransfers } = await fetchAllRows(
+          (from, to) => supabase
+            .from('bet_transfers')
+            .select('amount')
+            .eq('round_id', round.id)
+            .range(from, to)
+        );
+
+        const totalBetsAmt = (finalSubmissions || []).reduce((sum, s) => sum + Number(s.amount || 0), 0);
+        const totalLayoffAmt = (finalTransfers || []).reduce((sum, t) => sum + Number(t.amount || 0), 0);
+        const keepAmountVal = totalBetsAmt - totalLayoffAmt;
+
+        const uniqueUserIds = [...new Set((finalSubmissions || []).map((s: any) => s.user_id).filter(Boolean))];
+        let senderNames = 'ไม่มี';
+        if (uniqueUserIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .in('id', uniqueUserIds);
+          senderNames = (profiles || []).map(p => p.full_name || 'ไม่ระบุชื่อ').join(', ');
+        }
+
+        const closingSummaryText = `📊 สรุปยอดโพยเมื่อปิดงวด [${round.lottery_name}]\n` +
+          `📅 งวดวันที่: ${round.round_date}\n` +
+          `----------------------------------\n` +
+          `💰 ยอดรวมยอดแทงดิบ: ${totalBetsAmt.toLocaleString()} ${round.currency_symbol || '฿'}\n` +
+          `📤 ยอดที่ส่งออก (ตีออก): ${totalLayoffAmt.toLocaleString()} ${round.currency_symbol || '฿'}\n` +
+          `🛡️ ยอดร้านถือสู้เอง: ${keepAmountVal.toLocaleString()} ${round.currency_symbol || '฿'}\n` +
+          `----------------------------------\n` +
+          `👥 จำนวนคนส่งโพย: ${uniqueUserIds.length} คน\n` +
+          `รายชื่อ: ${senderNames}`;
+
+        // Push to groups matching notify_round_summary = true
+        const { data: summaryGroups } = await supabase
+          .from('line_groups')
+          .select('line_group_id')
+          .eq('dealer_id', round.dealer_id)
+          .eq('notify_round_summary', true)
+
+        if (summaryGroups && summaryGroups.length > 0) {
+          for (const sg of summaryGroups) {
+            if (sg.line_group_id) {
+              try {
+                await sendLinePush(sg.line_group_id, closingSummaryText);
+              } catch (pushErr) {
+                console.error("Failed to send summary push:", pushErr);
               }
             }
           }
         }
       } catch (automationErr) {
         console.error("Error in auto layoff or closing summary trigger:", automationErr);
+      }
+
+      // Mark the job as closed if it was run
+      if (round.created_by_job_id) {
+        await supabase
+          .from('dealer_automation_jobs')
+          .update({ last_closed_at: new Date().toISOString() })
+          .eq('id', round.created_by_job_id);
       }
 
       return new Response(JSON.stringify({ success: true, round_id: roundId, groups_notified: sent }), {
@@ -3058,30 +3755,199 @@ serve(async (req) => {
         })
       }
 
-      // 1. Fetch templates that have auto scheduling enabled
+      // 1. Fetch active automation jobs
+      const { data: jobs, error: jobsError } = await supabase
+        .from('dealer_automation_jobs')
+        .select('*')
+        .eq('is_active', true)
+
+      // 2. Fetch legacy templates for fallback support
       const { data: templates, error: templatesError } = await supabase
         .from('dealer_lottery_templates')
         .select('*')
         .eq('is_auto_round_enabled', true)
 
-      if (templatesError) {
-        console.error("Error fetching templates for auto creation:", templatesError)
-        return new Response(JSON.stringify({ error: templatesError.message }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        })
-      }
-
-      const results = [];
+      const results: any[] = [];
       const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
-      const currentDayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ...
+      const currentDayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday...
       const currentDayOfMonth = now.getDate();
+      const roundDateStr = now.toISOString().split('T')[0];
+
+      const bkkHour = parseInt(now.toLocaleString("en-US", { timeZone: "Asia/Bangkok", hour: "2-digit", hour12: false }), 10);
+      const bkkMinute = parseInt(now.toLocaleString("en-US", { timeZone: "Asia/Bangkok", minute: "2-digit" }), 10);
+      const currentHourMin = `${String(bkkHour).padStart(2, '0')}:${String(bkkMinute).padStart(2, '0')}`;
 
       // Check if it is the last day of the month
       const nextDay = new Date(now);
       nextDay.setDate(now.getDate() + 1);
       const isLastDayOfMonth = nextDay.getMonth() !== now.getMonth();
 
+      const formatLocalDateTimeStr = (datePart: string, timePart: string) => {
+        return `${datePart}T${timePart || '00:00'}:00+07:00`;
+      }
+
+      const LOTTERY_TYPE_NAMES: Record<string, string> = {
+        lao: 'หวยพัฒนาลาว',
+        thai: 'หวยรัฐบาลไทย',
+        lao_extra: 'หวยลาวพิเศษ',
+        lao_vip: 'หวยลาว VIP',
+        yeekee: 'หวยยี่กี',
+        stock: 'หวยหุ้น',
+        hanoi: 'หวยฮานอย',
+        other: 'หวยอื่นๆ'
+      };
+
+      // Process new style automation jobs
+      for (const job of (jobs || [])) {
+        try {
+          let shouldCreate = false;
+          const scheduleDays = Array.isArray(job.schedule_days) ? job.schedule_days : [];
+
+          if (job.schedule_mode === 'weekly') {
+            if (scheduleDays.includes(currentDayOfWeek)) {
+              shouldCreate = true;
+            }
+          } else if (job.schedule_mode === 'monthly') {
+            if (scheduleDays.includes(currentDayOfMonth) || (scheduleDays.includes('last') && isLastDayOfMonth)) {
+              shouldCreate = true;
+            }
+          }
+
+          if (!shouldCreate) continue;
+
+          // Check if open_time has arrived
+          if (currentHourMin < job.open_time) continue;
+
+          // Check if already created today by checking last_created_at in BKK time
+          let alreadyCreatedToday = false;
+          if (job.last_created_at) {
+            const lastRunBkkDate = new Date(new Date(job.last_created_at).toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
+            const lastRunDatePart = lastRunBkkDate.getFullYear() + '-' + 
+                                    String(lastRunBkkDate.getMonth() + 1).padStart(2, '0') + '-' + 
+                                    String(lastRunBkkDate.getDate()).padStart(2, '0');
+            if (lastRunDatePart === roundDateStr) {
+              alreadyCreatedToday = true;
+            }
+          }
+
+          if (alreadyCreatedToday) {
+            results.push({ job_id: job.id, status: 'skipped', reason: 'already_created_today' });
+            continue;
+          }
+
+          // Fetch default template settings if exists to copy configuration
+          const { data: tmpl } = await supabase
+            .from('dealer_lottery_templates')
+            .select('*')
+            .eq('dealer_id', job.dealer_id)
+            .eq('lottery_type', job.lottery_type)
+            .maybeSingle();
+
+          const closeDate = new Date(now);
+          closeDate.setDate(now.getDate() + (job.close_day_offset || 0));
+          const closeDateStr = closeDate.toISOString().split('T')[0];
+
+          const openTimestamp = formatLocalDateTimeStr(roundDateStr, job.open_time);
+          const closeTimestamp = formatLocalDateTimeStr(closeDateStr, job.close_time);
+          const lotteryName = job.name || LOTTERY_TYPE_NAMES[job.lottery_type] || 'หวยอัตโนมัติ';
+
+          // Insert new round
+          const { data: round, error: insertError } = await supabase
+            .from('lottery_rounds')
+            .insert({
+              dealer_id: job.dealer_id,
+              lottery_type: job.lottery_type,
+              lottery_name: lotteryName,
+              round_date: roundDateStr,
+              open_time: openTimestamp,
+              close_time: closeTimestamp,
+              delete_before_minutes: tmpl?.delete_before_minutes || 30,
+              delete_after_submit_minutes: tmpl?.delete_after_submit_minutes || 120,
+              currency_symbol: tmpl?.currency_symbol || '฿',
+              currency_name: tmpl?.currency_name || 'บาท',
+              set_prices: tmpl?.set_prices || {},
+              notify_close_to_groups: job.layoff_notify_group_enabled || false,
+              created_by_job_id: job.id,
+              is_active: true
+            })
+            .select('id')
+            .single()
+
+          if (insertError || !round) {
+            console.error(`Error inserting round for job ${job.id}:`, insertError);
+            results.push({ job_id: job.id, status: 'failed', error: insertError?.message });
+            continue;
+          }
+
+          // Insert type limits from defaults if any exist
+          if (tmpl && tmpl.type_limits && typeof tmpl.type_limits === 'object') {
+            const typeLimitsData = Object.entries(tmpl.type_limits).map(([betType, maxAmount]) => {
+              const specificTime = tmpl.type_close_times?.[betType];
+              let specificCloseTimestamp = null;
+              if (specificTime) {
+                specificCloseTimestamp = formatLocalDateTimeStr(closeDateStr, specificTime);
+              }
+              return {
+                round_id: round.id,
+                bet_type: betType,
+                max_per_number: typeof maxAmount === 'number' ? maxAmount : 0,
+                payout_rate: 0,
+                close_time: specificCloseTimestamp,
+                close_time_behavior: tmpl.type_close_time_behaviors?.[betType] || 'close_immediately'
+              };
+            });
+
+            if (typeLimitsData.length > 0) {
+              const { error: limitsError } = await supabase
+                .from('type_limits')
+                .insert(typeLimitsData);
+              if (limitsError) {
+                console.error(`Error inserting type limits for round ${round.id}:`, limitsError);
+              }
+            }
+          }
+
+          // Fetch LINE groups configured to receive round created notification
+          const { data: groups } = await supabase
+            .from('line_groups')
+            .select('line_group_id, group_name')
+            .eq('dealer_id', job.dealer_id)
+            .eq('lottery_type', job.lottery_type)
+            .eq('notify_round_created', true)
+
+          if (groups && groups.length > 0) {
+            const announceText = `📢 เปิดรับแทงงวดใหม่แล้วค่ะ!\n` +
+              `หวย: ${lotteryName}\n` +
+              `งวดวันที่: ${roundDateStr}\n` +
+              `เวลาเปิดรับ: ${job.open_time} น.\n` +
+              `เวลาปิดรับ: ${job.close_time} น.\n\n` +
+              `ท่านสามารถส่งโพยเข้าระบบเพื่อวิเคราะห์และบันทึกบิลแทงได้ทันทีค่ะ! 🎰`;
+
+            for (const g of groups) {
+              if (g.line_group_id) {
+                try {
+                  await sendLinePush(g.line_group_id, announceText);
+                } catch (pushErr) {
+                  console.error(`Error sending LINE push notification for round creation to group ${g.line_group_id}:`, pushErr);
+                }
+              }
+            }
+          }
+
+          // Update job last_created_at
+          await supabase
+            .from('dealer_automation_jobs')
+            .update({ last_created_at: new Date().toISOString() })
+            .eq('id', job.id);
+
+          results.push({ job_id: job.id, status: 'success', round_id: round.id });
+        } catch (itemErr: any) {
+          console.error(`Error processing job ${job.id}:`, itemErr);
+          results.push({ job_id: job.id, status: 'error', error: itemErr.message });
+        }
+      }
+
+      // Process legacy templates (for fallback compatibility)
       for (const template of (templates || [])) {
         try {
           let shouldCreate = false;
@@ -3098,9 +3964,9 @@ serve(async (req) => {
           }
 
           if (!shouldCreate) continue;
+          if (currentHourMin < template.open_time) continue;
 
-          // Check if round already exists for this dealer, type, and date
-          const roundDateStr = now.toISOString().split('T')[0];
+          // Check if round already exists for this dealer, type, and date to avoid duplicate creation
           const { data: existingRound, error: existError } = await supabase
             .from('lottery_rounds')
             .select('id')
@@ -3109,19 +3975,8 @@ serve(async (req) => {
             .eq('round_date', roundDateStr)
             .maybeSingle()
 
-          if (existError) {
-            console.error(`Error checking existing round for template ${template.id}:`, existError);
-            continue;
-          }
-
-          if (existingRound) {
-            results.push({ template_id: template.id, status: 'skipped', reason: 'already_exists' });
-            continue;
-          }
-
-          // Calculate open_time and close_time timestamps (preserves timezone intent)
-          const formatLocalDateTimeStr = (datePart: string, timePart: string) => {
-            return `${datePart}T${timePart || '00:00'}:00+07:00`;
+          if (existError || existingRound) {
+            continue; // Skip if exists or error checking
           }
 
           const closeDate = new Date(now);
@@ -3130,14 +3985,6 @@ serve(async (req) => {
 
           const openTimestamp = formatLocalDateTimeStr(roundDateStr, template.open_time);
           const closeTimestamp = formatLocalDateTimeStr(closeDateStr, template.close_time);
-
-          const LOTTERY_TYPE_NAMES: Record<string, string> = {
-            lao: 'หวยพัฒนาลาว',
-            thai: 'หวยรัฐบาลไทย',
-            lao_extra: 'หวยลาวพิเศษ',
-            lao_vip: 'หวยลาว VIP',
-            yeekee: 'หวยยี่กี'
-          };
           const lotteryName = LOTTERY_TYPE_NAMES[template.lottery_type] || 'หวยอัตโนมัติ';
 
           // Insert new round
@@ -3156,18 +4003,18 @@ serve(async (req) => {
               currency_name: template.currency_name || 'บาท',
               set_prices: template.set_prices || {},
               notify_close_to_groups: template.notify_close_to_groups || false,
-              is_active: true // Auto round created starts active immediately
+              is_active: true
             })
             .select('id')
             .single()
 
           if (insertError || !round) {
-            console.error(`Error inserting round for template ${template.id}:`, insertError);
+            console.error(`Error inserting round for legacy template ${template.id}:`, insertError);
             results.push({ template_id: template.id, status: 'failed', error: insertError?.message });
             continue;
           }
 
-          // Insert type limits if any exist
+          // Insert type limits
           if (template.type_limits && typeof template.type_limits === 'object') {
             const typeLimitsData = Object.entries(template.type_limits).map(([betType, maxAmount]) => {
               const specificTime = template.type_close_times?.[betType];
@@ -3190,16 +4037,17 @@ serve(async (req) => {
                 .from('type_limits')
                 .insert(typeLimitsData);
               if (limitsError) {
-                console.error(`Error inserting type limits for round ${round.id}:`, limitsError);
+                console.error(`Error inserting type limits for legacy round ${round.id}:`, limitsError);
               }
             }
           }
 
-          // 2. Fetch LINE groups configured to receive round created notification
+          // Fetch LINE groups configured to receive round created notification
           const { data: groups } = await supabase
             .from('line_groups')
             .select('line_group_id, group_name')
             .eq('dealer_id', template.dealer_id)
+            .eq('lottery_type', template.lottery_type)
             .eq('notify_round_created', true)
 
           if (groups && groups.length > 0) {
@@ -3530,16 +4378,36 @@ serve(async (req) => {
               .eq('is_result_announced', false);
 
             for (const dr of (dealerRounds || [])) {
-              // Get template for this dealer
-              const { data: tmpl } = await supabase
-                .from('dealer_lottery_templates')
-                .select('auto_import_result_enabled')
-                .eq('dealer_id', dr.dealer_id)
-                .eq('lottery_type', lottery_type)
-                .maybeSingle();
+              let autoImportEnabled = false;
+              let resultNotifyGroupId = null;
+              let notifyResultEnabled = false;
+              let job: any = null;
 
-              // If auto_import is enabled:
-              if (tmpl?.auto_import_result_enabled) {
+              if (dr.created_by_job_id) {
+                const { data: jobData } = await supabase
+                  .from('dealer_automation_jobs')
+                  .select('*')
+                  .eq('id', dr.created_by_job_id)
+                  .maybeSingle();
+                if (jobData) {
+                  job = jobData;
+                  autoImportEnabled = jobData.auto_import_result_enabled;
+                  resultNotifyGroupId = jobData.result_notify_group_id;
+                  notifyResultEnabled = jobData.notify_result_enabled;
+                }
+              }
+
+              if (!job) {
+                const { data: tmpl } = await supabase
+                  .from('dealer_lottery_templates')
+                  .select('auto_import_result_enabled')
+                  .eq('dealer_id', dr.dealer_id)
+                  .eq('lottery_type', lottery_type)
+                  .maybeSingle();
+                autoImportEnabled = tmpl?.auto_import_result_enabled || false;
+              }
+
+              if (autoImportEnabled) {
                 // Update round
                 await supabase
                   .from('lottery_rounds')
@@ -3553,15 +4421,32 @@ serve(async (req) => {
                 // Run calculate winners RPC
                 await supabase.rpc('calculate_round_winners', { p_round_id: dr.id });
 
-                // Fetch LINE groups matching notify_lottery_results = true
-                const { data: resultGroups } = await supabase
-                  .from('line_groups')
-                  .select('line_group_id')
-                  .eq('dealer_id', dr.dealer_id)
-                  .eq('notify_lottery_results', true);
+                // Fetch target announcement LINE groups
+                let resultGroups = [];
+                if (job && resultNotifyGroupId) {
+                  const { data: specificGroup } = await supabase
+                    .from('line_groups')
+                    .select('line_group_id')
+                    .eq('id', resultNotifyGroupId)
+                    .eq('is_active', true)
+                    .maybeSingle();
+                  if (specificGroup) {
+                    resultGroups.push(specificGroup);
+                  }
+                } else {
+                  // Fallback: Notify all groups matching notify_lottery_results = true
+                  const { data: fallbackGroups } = await supabase
+                    .from('line_groups')
+                    .select('line_group_id')
+                    .eq('dealer_id', dr.dealer_id)
+                    .eq('notify_lottery_results', true);
+                  if (fallbackGroups) {
+                    resultGroups = fallbackGroups;
+                  }
+                }
 
-                if (resultGroups && resultGroups.length > 0) {
-                  const winNumStr = typeof winNumbers === 'string' ? winNumbers : (winNumbers['4_set'] || winNumbers['3_top'] || '');
+                if (resultGroups.length > 0) {
+                  const winNumStr = formatWinningNumbersForDisplay(winNumbers, dr.lottery_type);
                   const announceText = `🏆 ประกาศผลรางวัลอย่างเป็นทางการ [${dr.lottery_name}]\n` +
                     `📅 งวดวันที่: ${dr.round_date}\n` +
                     `----------------------------------\n` +
@@ -3579,6 +4464,23 @@ serve(async (req) => {
                       }
                     }
                   }
+                }
+
+                // Notify individual member results (Flex Carousels)
+                if (job && notifyResultEnabled) {
+                  try {
+                    await sendMemberResultAnnouncements(dr.id, dr.dealer_id);
+                  } catch (notifyErr) {
+                    console.error("Failed sendMemberResultAnnouncements in crawler:", notifyErr);
+                  }
+                }
+
+                // Update job announced timestamp
+                if (dr.created_by_job_id) {
+                  await supabase
+                    .from('dealer_automation_jobs')
+                    .update({ last_announced_at: new Date().toISOString() })
+                    .eq('id', dr.created_by_job_id);
                 }
               }
             }
