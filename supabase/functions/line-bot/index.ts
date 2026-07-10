@@ -5461,6 +5461,34 @@ serve(async (req) => {
                   };
                 });
 
+                // Calculate group totals
+                let groupTotalBet = 0;
+                let groupTotalComm = 0;
+                let groupTotalWin = 0;
+                let groupWinnerCount = 0;
+                for (const u of sortedUserSummaries) {
+                  groupTotalBet += u.totalBet;
+                  groupTotalComm += u.totalCommission;
+                  groupTotalWin += u.totalWin;
+                  if (u.totalWin > 0) {
+                    groupWinnerCount++;
+                  }
+                }
+                const groupNet = groupTotalWin - (groupTotalBet - groupTotalComm);
+                const groupNetLabel = groupNet > 0 
+                  ? `ร้านต้องเก็บเพิ่ม: ฿${Math.round(groupNet).toLocaleString('th-TH')}` 
+                  : (groupNet < 0 ? `ร้านต้องจ่ายสมาชิก: ฿${Math.abs(Math.round(groupNet)).toLocaleString('th-TH')}` : 'เสมอ');
+
+                const groupSummaryText = `📊 สรุปยอดรวมกลุ่ม: ${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()}\n` +
+                  `📅 งวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n` +
+                  `----------------------------------\n` +
+                  `💰 ยอดแทงรวมกลุ่ม: ฿${Math.round(groupTotalBet).toLocaleString('th-TH')}\n` +
+                  `💸 ค่าคอมรวมกลุ่ม: ฿${Math.round(groupTotalComm).toLocaleString('th-TH')}\n` +
+                  `🎉 ยอดถูกรางวัลรวมกลุ่ม: ฿${Math.round(groupTotalWin).toLocaleString('th-TH')}\n` +
+                  `----------------------------------\n` +
+                  `📝 สรุปยอดได้เสียสุทธิ:\n👉 ${groupNetLabel}\n` +
+                  `👥 สมาชิกถูกรางวัล: ${groupWinnerCount} คน`;
+
                 // Send in chunks of 10
                 const carouselMessages: any[] = [];
                 const chunkSize = 10;
@@ -5476,9 +5504,26 @@ serve(async (req) => {
                   });
                 }
 
+                // Add group summary text message!
+                carouselMessages.push({
+                  "type": "text",
+                  "text": groupSummaryText
+                });
+
                 if (targetGroupId === groupId) {
-                  await sendLineReply(replyToken, carouselMessages);
+                  const toReply = carouselMessages.slice(0, 5);
+                  const toPush = carouselMessages.slice(5);
+
+                  await sendLineReply(replyToken, toReply);
                   currentGroupProcessed = true;
+
+                  for (const msg of toPush) {
+                    try {
+                      await sendLinePush(targetGroupId, msg);
+                    } catch (pushErr) {
+                      console.error(`Failed to push overflow results to group ${targetGroupId}:`, pushErr);
+                    }
+                  }
                 } else {
                   console.log(`[แจ้งผล] pushing ${carouselMessages.length} messages to group=${targetGroupId}`);
                   for (const msg of carouselMessages) {
