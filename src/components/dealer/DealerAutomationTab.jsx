@@ -12,53 +12,7 @@ import {
 import '../../pages/Dealer.css'
 import '../../pages/SettingsTabs.css'
 
-const LOTTERY_BET_TYPES = {
-    lao: [
-        { key: '4_set', label: 'หวยชุด 4 ตัว' },
-        { key: '3_top', label: '3 ตัวบน' },
-        { key: '3_tod', label: '3 ตัวโต๊ด' },
-        { key: '2_top', label: '2 ตัวบน' },
-        { key: '2_bottom', label: '2 ตัวล่าง' },
-        { key: 'run_top', label: 'วิ่งบน' },
-        { key: 'run_bottom', label: 'วิ่งล่าง' }
-    ],
-    thai: [
-        { key: '3_top', label: '3 ตัวบน' },
-        { key: '3_tod', label: '3 ตัวโต๊ด' },
-        { key: '3_front', label: '3 ตัวหน้า' },
-        { key: '3_bottom', label: '3 ตัวล่าง' },
-        { key: '2_top', label: '2 ตัวบน' },
-        { key: '2_bottom', label: '2 ตัวล่าง' },
-        { key: 'run_top', label: 'วิ่งบน' },
-        { key: 'run_bottom', label: 'วิ่งล่าง' }
-    ],
-    lao_extra: [
-        { key: '4_set', label: 'หวยชุด 4 ตัว' },
-        { key: '3_top', label: '3 ตัวบน' },
-        { key: '3_tod', label: '3 ตัวโต๊ด' },
-        { key: '2_top', label: '2 ตัวบน' },
-        { key: '2_bottom', label: '2 ตัวล่าง' },
-        { key: 'run_top', label: 'วิ่งบน' },
-        { key: 'run_bottom', label: 'วิ่งล่าง' }
-    ],
-    lao_vip: [
-        { key: '4_set', label: 'หวยชุด 4 ตัว' },
-        { key: '3_top', label: '3 ตัวบน' },
-        { key: '3_tod', label: '3 ตัวโต๊ด' },
-        { key: '2_top', label: '2 ตัวบน' },
-        { key: '2_bottom', label: '2 ตัวล่าง' },
-        { key: 'run_top', label: 'วิ่งบน' },
-        { key: 'run_bottom', label: 'วิ่งล่าง' }
-    ],
-    yeekee: [
-        { key: '3_top', label: '3 ตัวบน' },
-        { key: '3_tod', label: '3 ตัวโต๊ด' },
-        { key: '2_top', label: '2 ตัวบน' },
-        { key: '2_bottom', label: '2 ตัวล่าง' },
-        { key: 'run_top', label: 'วิ่งบน' },
-        { key: 'run_bottom', label: 'วิ่งล่าง' }
-    ]
-};
+import { LOTTERY_TYPES, BET_TYPES, BET_TYPES_BY_LOTTERY } from '../../constants/lotteryTypes'
 
 const WEEK_DAYS = [
     { value: 0, label: 'อาทิตย์' },
@@ -75,7 +29,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [lotteryType, setLotteryType] = useState(() => {
-        const initialTypes = ['lao', 'thai', 'lao_extra', 'lao_vip', 'yeekee']
+        const initialTypes = Object.keys(LOTTERY_TYPES)
             .filter(key => !allowedLotteryTypes || allowedLotteryTypes.includes(key));
         return initialTypes[0] || 'lao';
     })
@@ -266,7 +220,10 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
         })
     }
 
-    const betTypes = LOTTERY_BET_TYPES[lotteryType] || []
+    const betTypes = Object.entries(BET_TYPES_BY_LOTTERY[lotteryType] || {}).map(([key, cfg]) => ({
+        key,
+        label: cfg.label || BET_TYPES[key] || key
+    }));
 
     return (
         <div className="profile-tab-container">
@@ -280,13 +237,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                             className="form-input"
                             style={{ width: 'auto', padding: '0.4rem 2rem 0.4rem 1rem' }}
                         >
-                            {Object.entries({
-                                lao: 'หวยพัฒนาลาว (Lao)',
-                                thai: 'หวยรัฐบาลไทย (Thai)',
-                                lao_extra: 'หวยลาวพิเศษ',
-                                lao_vip: 'หวยลาว VIP',
-                                yeekee: 'หวยจับยี่กี (Yeekee)'
-                            })
+                            {Object.entries(LOTTERY_TYPES)
                             .filter(([key]) => !allowedLotteryTypes || allowedLotteryTypes.includes(key))
                             .map(([key, label]) => (
                                 <option key={key} value={key}>{label}</option>
