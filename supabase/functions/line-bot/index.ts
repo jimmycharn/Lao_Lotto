@@ -2888,6 +2888,197 @@ serve(async (req) => {
       })
     }
 
+    if (apiPayload && apiPayload.action === 'auto_create_rounds') {
+      const { data: secretRow } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'line_bot_cron_secret')
+        .maybeSingle()
+
+      const expectedSecret = secretRow?.value || ''
+      if (!expectedSecret || apiPayload.secret !== expectedSecret) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      // 1. Fetch templates that have auto scheduling enabled
+      const { data: templates, error: templatesError } = await supabase
+        .from('dealer_lottery_templates')
+        .select('*')
+        .eq('is_auto_round_enabled', true)
+
+      if (templatesError) {
+        console.error("Error fetching templates for auto creation:", templatesError)
+        return new Response(JSON.stringify({ error: templatesError.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      const results = [];
+      const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
+      const currentDayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ...
+      const currentDayOfMonth = now.getDate();
+
+      // Check if it is the last day of the month
+      const nextDay = new Date(now);
+      nextDay.setDate(now.getDate() + 1);
+      const isLastDayOfMonth = nextDay.getMonth() !== now.getMonth();
+
+      for (const template of (templates || [])) {
+        try {
+          let shouldCreate = false;
+          const scheduleDays = Array.isArray(template.schedule_days) ? template.schedule_days : [];
+
+          if (template.schedule_mode === 'weekly') {
+            if (scheduleDays.includes(currentDayOfWeek)) {
+              shouldCreate = true;
+            }
+          } else if (template.schedule_mode === 'monthly') {
+            if (scheduleDays.includes(currentDayOfMonth) || (scheduleDays.includes('last') && isLastDayOfMonth)) {
+              shouldCreate = true;
+            }
+          }
+
+          if (!shouldCreate) continue;
+
+          // Check if round already exists for this dealer, type, and date
+          const roundDateStr = now.toISOString().split('T')[0];
+          const { data: existingRound, error: existError } = await supabase
+            .from('lottery_rounds')
+            .select('id')
+            .eq('dealer_id', template.dealer_id)
+            .eq('lottery_type', template.lottery_type)
+            .eq('round_date', roundDateStr)
+            .maybeSingle()
+
+          if (existError) {
+            console.error(`Error checking existing round for template ${template.id}:`, existError);
+            continue;
+          }
+
+          if (existingRound) {
+            results.push({ template_id: template.id, status: 'skipped', reason: 'already_exists' });
+            continue;
+          }
+
+          // Calculate open_time and close_time timestamps (preserves timezone intent)
+          const formatLocalDateTimeStr = (datePart: string, timePart: string) => {
+            return `${datePart}T${timePart || '00:00'}:00+07:00`;
+          }
+
+          const closeDate = new Date(now);
+          closeDate.setDate(now.getDate() + (template.close_day_offset || 0));
+          const closeDateStr = closeDate.toISOString().split('T')[0];
+
+          const openTimestamp = formatLocalDateTimeStr(roundDateStr, template.open_time);
+          const closeTimestamp = formatLocalDateTimeStr(closeDateStr, template.close_time);
+
+          const LOTTERY_TYPE_NAMES: Record<string, string> = {
+            lao: 'หวยพัฒนาลาว',
+            thai: 'หวยรัฐบาลไทย',
+            lao_extra: 'หวยลาวพิเศษ',
+            lao_vip: 'หวยลาว VIP',
+            yeekee: 'หวยยี่กี'
+          };
+          const lotteryName = LOTTERY_TYPE_NAMES[template.lottery_type] || 'หวยอัตโนมัติ';
+
+          // Insert new round
+          const { data: round, error: insertError } = await supabase
+            .from('lottery_rounds')
+            .insert({
+              dealer_id: template.dealer_id,
+              lottery_type: template.lottery_type,
+              lottery_name: lotteryName,
+              round_date: roundDateStr,
+              open_time: openTimestamp,
+              close_time: closeTimestamp,
+              delete_before_minutes: template.delete_before_minutes,
+              delete_after_submit_minutes: template.delete_after_submit_minutes,
+              currency_symbol: template.currency_symbol || '฿',
+              currency_name: template.currency_name || 'บาท',
+              set_prices: template.set_prices || {},
+              notify_close_to_groups: template.notify_close_to_groups || false,
+              is_active: true // Auto round created starts active immediately
+            })
+            .select('id')
+            .single()
+
+          if (insertError || !round) {
+            console.error(`Error inserting round for template ${template.id}:`, insertError);
+            results.push({ template_id: template.id, status: 'failed', error: insertError?.message });
+            continue;
+          }
+
+          // Insert type limits if any exist
+          if (template.type_limits && typeof template.type_limits === 'object') {
+            const typeLimitsData = Object.entries(template.type_limits).map(([betType, maxAmount]) => {
+              const specificTime = template.type_close_times?.[betType];
+              let specificCloseTimestamp = null;
+              if (specificTime) {
+                specificCloseTimestamp = formatLocalDateTimeStr(closeDateStr, specificTime);
+              }
+              return {
+                round_id: round.id,
+                bet_type: betType,
+                max_per_number: typeof maxAmount === 'number' ? maxAmount : 0,
+                payout_rate: 0,
+                close_time: specificCloseTimestamp,
+                close_time_behavior: template.type_close_time_behaviors?.[betType] || 'close_immediately'
+              };
+            });
+
+            if (typeLimitsData.length > 0) {
+              const { error: limitsError } = await supabase
+                .from('type_limits')
+                .insert(typeLimitsData);
+              if (limitsError) {
+                console.error(`Error inserting type limits for round ${round.id}:`, limitsError);
+              }
+            }
+          }
+
+          // 2. Fetch LINE groups configured to receive round created notification
+          const { data: groups } = await supabase
+            .from('line_groups')
+            .select('line_group_id, group_name')
+            .eq('dealer_id', template.dealer_id)
+            .eq('notify_round_created', true)
+
+          if (groups && groups.length > 0) {
+            const announceText = `📢 เปิดรับแทงงวดใหม่แล้วค่ะ!\n` +
+              `หวย: ${lotteryName}\n` +
+              `งวดวันที่: ${roundDateStr}\n` +
+              `เวลาเปิดรับ: ${template.open_time} น.\n` +
+              `เวลาปิดรับ: ${template.close_time} น.\n\n` +
+              `ท่านสามารถส่งโพยเข้าระบบเพื่อวิเคราะห์และบันทึกบิลแทงได้ทันทีค่ะ! 🎰`;
+
+            for (const g of groups) {
+              if (g.line_group_id) {
+                try {
+                  await sendLinePush(g.line_group_id, announceText);
+                } catch (pushErr) {
+                  console.error(`Error sending LINE push notification for round creation to group ${g.line_group_id}:`, pushErr);
+                }
+              }
+            }
+          }
+
+          results.push({ template_id: template.id, status: 'success', round_id: round.id });
+        } catch (itemErr: any) {
+          console.error(`Error processing template ${template.id}:`, itemErr);
+          results.push({ template_id: template.id, status: 'error', error: itemErr.message });
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, results }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      })
+    }
+
     if (isApiCall) {
       const authHeader = req.headers.get('Authorization') || ''
       const token = authHeader.replace('Bearer ', '')
