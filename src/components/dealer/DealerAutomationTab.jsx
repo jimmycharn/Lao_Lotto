@@ -780,7 +780,42 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
 
                                             {jobForm.auto_import_result_enabled && (
                                                 <div style={{ background: 'rgba(0,0,0,0.15)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: !!jobForm.result_notify_group_id ? '1fr 1fr' : '1fr', gap: '1rem', alignItems: 'center' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+                                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', margin: 0 }}>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={!!jobForm.result_notify_group_id}
+                                                                    onChange={(e) => {
+                                                                        const isChecked = e.target.checked;
+                                                                        setJobForm({
+                                                                            ...jobForm,
+                                                                            result_notify_group_id: isChecked ? (lineGroups[0]?.id || 'select') : ''
+                                                                        });
+                                                                    }}
+                                                                />
+                                                                <strong>ส่งสรุปผลรวมเข้ากลุ่ม</strong>
+                                                            </label>
+                                                        </div>
+                                                        {!!jobForm.result_notify_group_id && (
+                                                            <div>
+                                                                <label className="form-label" style={{ margin: 0, marginBottom: '0.3rem' }}>เลือกกลุ่ม</label>
+                                                                <select
+                                                                    value={jobForm.result_notify_group_id === 'select' ? '' : jobForm.result_notify_group_id}
+                                                                    onChange={(e) => setJobForm({ ...jobForm, result_notify_group_id: e.target.value })}
+                                                                    className="form-input"
+                                                                    required
+                                                                >
+                                                                    <option value="">-- กรุณาเลือกกลุ่มไลน์ --</option>
+                                                                    {lineGroups.map(lg => (
+                                                                        <option key={lg.id} value={lg.id}>{lg.group_name}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.8rem' }}>
                                                         <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', margin: 0 }}>
                                                             <input
                                                                 type="checkbox"

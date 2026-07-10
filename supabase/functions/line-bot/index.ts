@@ -4423,15 +4423,17 @@ serve(async (req) => {
 
                 // Fetch target announcement LINE groups
                 let resultGroups = [];
-                if (job && resultNotifyGroupId) {
-                  const { data: specificGroup } = await supabase
-                    .from('line_groups')
-                    .select('line_group_id')
-                    .eq('id', resultNotifyGroupId)
-                    .eq('is_active', true)
-                    .maybeSingle();
-                  if (specificGroup) {
-                    resultGroups.push(specificGroup);
+                if (job) {
+                  if (resultNotifyGroupId) {
+                    const { data: specificGroup } = await supabase
+                      .from('line_groups')
+                      .select('line_group_id')
+                      .eq('id', resultNotifyGroupId)
+                      .eq('is_active', true)
+                      .maybeSingle();
+                    if (specificGroup) {
+                      resultGroups.push(specificGroup);
+                    }
                   }
                 } else {
                   // Fallback: Notify all groups matching notify_lottery_results = true
