@@ -3234,6 +3234,380 @@ serve(async (req) => {
       })
     }
 
+    if (apiPayload && apiPayload.action === 'central_crawl_results') {
+      const { data: secretRow } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'line_bot_cron_secret')
+        .maybeSingle()
+
+      const expectedSecret = secretRow?.value || ''
+      if (!expectedSecret || apiPayload.secret !== expectedSecret) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      // 1. Find distinct (lottery_type, round_date) of closed rounds that are not announced
+      const { data: pendingRounds, error: roundsErr } = await supabase
+        .from('lottery_rounds')
+        .select('lottery_type, round_date')
+        .eq('status', 'closed')
+        .eq('is_result_announced', false)
+        .order('round_date', { ascending: true })
+
+      if (roundsErr) {
+        console.error("Error fetching pending rounds for crawl:", roundsErr);
+        return new Response(JSON.stringify({ error: roundsErr.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      if (!pendingRounds || pendingRounds.length === 0) {
+        return new Response(JSON.stringify({ success: true, message: "No pending closed rounds to crawl." }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      // Group by lottery_type and round_date to avoid duplicate crawling
+      const uniquePending = [];
+      const seenKeys = new Set();
+      for (const r of pendingRounds) {
+        const key = `${r.lottery_type}:${r.round_date}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          uniquePending.push(r);
+        }
+      }
+
+      // Load API Key
+      const { data: openRouterKeyRow } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'openrouter_api_key')
+        .maybeSingle();
+      const AI_API_KEY = openRouterKeyRow?.value || Deno.env.get('OPENROUTER_API_KEY') || '';
+
+      if (!AI_API_KEY) {
+        console.error("Missing OpenRouter API Key in app_settings or environment");
+        return new Response(JSON.stringify({ error: "Missing OpenRouter API Key" }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      const crawlResults = [];
+
+      for (const r of uniquePending) {
+        const { lottery_type, round_date } = r;
+
+        try {
+          // Check if already exists in central_lottery_results
+          const { data: existingCentral } = await supabase
+            .from('central_lottery_results')
+            .select('*')
+            .eq('lottery_type', lottery_type)
+            .eq('round_date', round_date)
+            .maybeSingle();
+
+          let winNumbers = null;
+          let sourceUrlUsed = null;
+
+          if (existingCentral) {
+            winNumbers = existingCentral.win_number_all;
+            sourceUrlUsed = "central_cache";
+          } else {
+            // Check central_ai_search_jobs status and retries
+            const { data: job } = await supabase
+              .from('central_ai_search_jobs')
+              .select('*')
+              .eq('lottery_type', lottery_type)
+              .eq('round_date', round_date)
+              .maybeSingle();
+
+            const retryCount = job?.retry_count || 0;
+            const maxRetries = job?.max_retries || 5;
+
+            if (job && job.status === 'failed' && retryCount >= maxRetries) {
+              console.log(`Crawl skipped for ${lottery_type} on ${round_date}: Max retries exhausted.`);
+              crawlResults.push({ lottery_type, round_date, status: 'skipped_max_retries' });
+              continue;
+            }
+
+            // Upsert job status to 'running'
+            await supabase
+              .from('central_ai_search_jobs')
+              .upsert({
+                lottery_type,
+                round_date,
+                status: 'running',
+                retry_count: retryCount + 1,
+                last_attempt_at: new Date().toISOString()
+              }, {
+                onConflict: 'lottery_type,round_date'
+              });
+
+            // Fetch remembered sources
+            const { data: sources } = await supabase
+              .from('central_lottery_sources')
+              .select('source_url')
+              .eq('lottery_type', lottery_type)
+              .order('success_count', { ascending: false })
+              .limit(5);
+
+            const sourceUrlsStr = (sources || []).map(s => s.source_url).join('\n');
+
+            const systemPrompt = "You are a precise lottery result search grounding assistant. You query web search to find exact winning lottery numbers. Respond ONLY with the requested JSON format.";
+            const userPrompt = `Find the verified winning numbers of the lottery:\n` +
+              `Lottery Type: ${lottery_type}\n` +
+              `Round Date: ${round_date} (Format: YYYY-MM-DD)\n\n` +
+              `Prioritized Sources (Urls that historically had correct results):\n${sourceUrlsStr || 'None'}\n\n` +
+              `Please query Google/Web search. Find the winning numbers for this lottery type on this date.\n` +
+              `For Lao/Hanoi lottery, find the main 4-digit set (e.g. '1234'), the 3-digit top (e.g. '234'), and the 2-digit bottom (e.g. '34').\n` +
+              `For Thai lottery, find the 6-digit first prize, 3-digit top, 2-digit bottom, 2-digit top, and the four 3-digit bottom prizes.\n` +
+              `Identify the exact source URL you found the results on.\n\n` +
+              `You MUST respond with a JSON object in this format (no markdown, no explanations):\n` +
+              `{\n` +
+              `  "success": true,\n` +
+              `  "found": true,\n` +
+              `  "source_url": "https://...",\n` +
+              `  "numbers": {\n` +
+              `    "4_set": "1234",\n` +
+              `    "3_top": "234",\n` +
+              `    "2_bottom": "34",\n` +
+              `    "3_tod": "234",\n` +
+              `    "win_number_all": { ... }\n` +
+              `  }\n` +
+              `}\n` +
+              `If not found, return:\n` +
+              `{\n` +
+              `  "success": true,\n` +
+              `  "found": false\n` +
+              `}`;
+
+            // Call OpenRouter
+            const openaiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${AI_API_KEY}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': SUPABASE_URL,
+                'X-Title': 'LaoLotto Centralized AI Crawler'
+              },
+              body: JSON.stringify({
+                model: 'google/gemini-2.5-flash',
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: userPrompt }
+                ],
+                plugins: [
+                  { id: "web-search" }
+                ],
+                temperature: 0.1,
+                max_tokens: 1000
+              })
+            });
+
+            if (!openaiResponse.ok) {
+              const errText = await openaiResponse.text();
+              throw new Error(`OpenRouter API returned error ${openaiResponse.status}: ${errText}`);
+            }
+
+            const responseData = await openaiResponse.json();
+            let aiText = responseData?.choices?.[0]?.message?.content || '';
+            
+            // Clean markdown
+            aiText = aiText.replace(/```json|```/g, '').trim();
+            const parsed = JSON.parse(aiText);
+
+            if (parsed.success && parsed.found && parsed.numbers) {
+              winNumbers = parsed.numbers;
+              sourceUrlUsed = parsed.source_url || 'unknown';
+
+              // Store to central_lottery_results
+              const { error: insErr } = await supabase
+                .from('central_lottery_results')
+                .insert({
+                  lottery_type,
+                  round_date,
+                  win_number_3_top: winNumbers['3_top'] || null,
+                  win_number_2_bottom: winNumbers['2_bottom'] || null,
+                  win_number_3_tod: winNumbers['3_tod'] || null,
+                  win_number_all: winNumbers,
+                  is_verified: true
+                });
+
+              if (insErr) {
+                console.error("Error storing to central_lottery_results:", insErr);
+              }
+
+              // Update job status to 'success'
+              await supabase
+                .from('central_ai_search_jobs')
+                .update({
+                  status: 'success',
+                  updated_at: new Date().toISOString()
+                })
+                .eq('lottery_type', lottery_type)
+                .eq('round_date', round_date);
+
+              // Save/increment central_lottery_sources
+              if (sourceUrlUsed && sourceUrlUsed.startsWith('http')) {
+                const domainUrl = new URL(sourceUrlUsed).origin;
+                const { data: existingSource } = await supabase
+                  .from('central_lottery_sources')
+                  .select('id, success_count')
+                  .eq('lottery_type', lottery_type)
+                  .eq('source_url', domainUrl)
+                  .maybeSingle();
+
+                if (existingSource) {
+                  await supabase
+                    .from('central_lottery_sources')
+                    .update({
+                      success_count: (existingSource.success_count || 0) + 1,
+                      last_success_at: new Date().toISOString()
+                    })
+                    .eq('id', existingSource.id);
+                } else {
+                  await supabase
+                    .from('central_lottery_sources')
+                    .insert({
+                      lottery_type,
+                      source_url: domainUrl,
+                      success_count: 1,
+                      last_success_at: new Date().toISOString()
+                    });
+                }
+              }
+            } else {
+              // Update job status to 'failed'
+              await supabase
+                .from('central_ai_search_jobs')
+                .update({
+                  status: 'failed',
+                  updated_at: new Date().toISOString()
+                })
+                .eq('lottery_type', lottery_type)
+                .eq('round_date', round_date);
+
+              console.log(`AI search failed to find results for ${lottery_type} on ${round_date}`);
+              
+              // If retry limit reached, notify superadmins
+              if (retryCount + 1 >= maxRetries) {
+                const { data: adminGroups } = await supabase
+                  .from('line_groups')
+                  .select('line_group_id')
+                  .eq('notify_admin_alerts', true);
+
+                if (adminGroups && adminGroups.length > 0) {
+                  const alertText = `⚠️ [System Alert] AI Crawler ไม่สามารถค้นหาผลรางวัลได้ครบตามจำนวนรอบสูงสุด:\n` +
+                    `หวย: ${lottery_type}\n` +
+                    `งวดวันที่: ${round_date}\n` +
+                    `กรุณาบันทึกผลรางวัลเข้าระบบด้วยตนเองค่ะ`;
+                  for (const ag of adminGroups) {
+                    if (ag.line_group_id) {
+                      await sendLinePush(ag.line_group_id, alertText);
+                    }
+                  }
+                }
+              }
+              continue;
+            }
+          }
+
+          // If we successfully got winNumbers, import to all matching dealer rounds
+          if (winNumbers) {
+            const { data: dealerRounds } = await supabase
+              .from('lottery_rounds')
+              .select('*')
+              .eq('lottery_type', lottery_type)
+              .eq('round_date', round_date)
+              .eq('status', 'closed')
+              .eq('is_result_announced', false);
+
+            for (const dr of (dealerRounds || [])) {
+              // Get template for this dealer
+              const { data: tmpl } = await supabase
+                .from('dealer_lottery_templates')
+                .select('auto_import_result_enabled')
+                .eq('dealer_id', dr.dealer_id)
+                .eq('lottery_type', lottery_type)
+                .maybeSingle();
+
+              // If auto_import is enabled:
+              if (tmpl?.auto_import_result_enabled) {
+                // Update round
+                await supabase
+                  .from('lottery_rounds')
+                  .update({
+                    winning_numbers: winNumbers,
+                    is_result_announced: true,
+                    status: 'announced'
+                  })
+                  .eq('id', dr.id);
+
+                // Run calculate winners RPC
+                await supabase.rpc('calculate_round_winners', { p_round_id: dr.id });
+
+                // Fetch LINE groups matching notify_lottery_results = true
+                const { data: resultGroups } = await supabase
+                  .from('line_groups')
+                  .select('line_group_id')
+                  .eq('dealer_id', dr.dealer_id)
+                  .eq('notify_lottery_results', true);
+
+                if (resultGroups && resultGroups.length > 0) {
+                  const winNumStr = typeof winNumbers === 'string' ? winNumbers : (winNumbers['4_set'] || winNumbers['3_top'] || '');
+                  const announceText = `🏆 ประกาศผลรางวัลอย่างเป็นทางการ [${dr.lottery_name}]\n` +
+                    `📅 งวดวันที่: ${dr.round_date}\n` +
+                    `----------------------------------\n` +
+                    `🎉 เลขที่ออก: ${winNumStr}\n` +
+                    `----------------------------------\n` +
+                    `ระบบได้ทำการคำนวณรางวัลและโอนเครดิตเข้ากระเป๋าสมาชิกเรียบร้อยแล้วค่ะ!\n` +
+                    `พิมพ์ /สรุป เพื่อเช็คบิลที่ถูกรางวัลส่วนตัวได้เลยค่ะ 🧧`;
+
+                  for (const rg of resultGroups) {
+                    if (rg.line_group_id) {
+                      try {
+                        await sendLinePush(rg.line_group_id, announceText);
+                      } catch (pushErr) {
+                        console.error("Failed to send results push:", pushErr);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
+            crawlResults.push({ lottery_type, round_date, status: 'success', source: sourceUrlUsed });
+          }
+
+        } catch (itemErr: any) {
+          console.error(`Error crawling ${lottery_type} on ${round_date}:`, itemErr);
+          crawlResults.push({ lottery_type, round_date, status: 'error', error: itemErr.message });
+          
+          // Reset job status to failed so it can retry
+          await supabase
+            .from('central_ai_search_jobs')
+            .update({
+              status: 'failed',
+              updated_at: new Date().toISOString()
+            })
+            .eq('lottery_type', lottery_type)
+            .eq('round_date', round_date);
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, crawlResults }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      })
+    }
+
     if (isApiCall) {
       const authHeader = req.headers.get('Authorization') || ''
       const token = authHeader.replace('Bearer ', '')
