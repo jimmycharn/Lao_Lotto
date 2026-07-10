@@ -532,8 +532,12 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                                 สถานะ: {job.layoff_enabled ? '✅ เปิดทำงาน' : '❌ ปิดทำงาน'}<br />
                                                                 {job.layoff_enabled && (
                                                                     <>
-                                                                        วิธี: {job.layoff_method === 'ai' ? 'สมองกล AI' : (job.layoff_method === 'formula' ? 'สูตรกำไรสูงสุด' : 'ตารางอั้นยอด')}<br />
-                                                                        ยอดถือสู้: ฿{(job.layoff_keep_amount || 0).toLocaleString()}
+                                                                        วิธี: {job.layoff_method === 'ai' ? 'สมองกล AI' : (job.layoff_method === 'formula' ? 'สูตรกำไรสูงสุด' : 'ตารางอั้นยอด')}
+                                                                        {job.layoff_method !== 'limits' && (
+                                                                            <>
+                                                                                <br />ยอดถือสู้: ฿{(job.layoff_keep_amount || 0).toLocaleString()}
+                                                                            </>
+                                                                        )}
                                                                     </>
                                                                 )}
                                                             </div>
@@ -730,7 +734,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
 
                                             {jobForm.layoff_enabled && (
                                                 <div style={{ background: 'rgba(0,0,0,0.15)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: jobForm.layoff_method === 'limits' ? '1fr' : '1fr 1fr', gap: '1rem' }}>
                                                         <div>
                                                             <label className="form-label">สูตรวิธีการประมวลผล</label>
                                                             <select
@@ -743,16 +747,18 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                                 <option value="ai">ใช้ระบบ AI ประเมินจุดเสี่ยงจำกัดงบเงินสู้ (AI)</option>
                                                             </select>
                                                         </div>
-                                                        <div>
-                                                            <label className="form-label">งบสู้ร้านสูงสุด / ยอดถือสู้</label>
-                                                            <input
-                                                                type="number"
-                                                                value={jobForm.layoff_keep_amount}
-                                                                onChange={(e) => setJobForm({ ...jobForm, layoff_keep_amount: Number(e.target.value) })}
-                                                                placeholder="เช่น 5000"
-                                                                className="form-input"
-                                                            />
-                                                        </div>
+                                                        {jobForm.layoff_method !== 'limits' && (
+                                                            <div>
+                                                                <label className="form-label">งบสู้ร้านสูงสุด / ยอดถือสู้</label>
+                                                                <input
+                                                                    type="number"
+                                                                    value={jobForm.layoff_keep_amount}
+                                                                    onChange={(e) => setJobForm({ ...jobForm, layoff_keep_amount: Number(e.target.value) })}
+                                                                    placeholder="เช่น 5000"
+                                                                    className="form-input"
+                                                                />
+                                                            </div>
+                                                        )}
                                                     </div>
 
                                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -871,31 +877,15 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
 
                                             {jobForm.auto_import_result_enabled && (
                                                 <div style={{ background: 'rgba(0,0,0,0.15)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', alignItems: 'flex-start' }}>
-                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', margin: 0 }}>
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={jobForm.notify_result_enabled}
-                                                                    onChange={(e) => setJobForm({ ...jobForm, notify_result_enabled: e.target.checked })}
-                                                                />
-                                                                <span>ส่งสรุปยอดรายบุคคลเข้าไลน์กลุ่มสมาชิก (เสมือนแจ้งผลได้เสีย)</span>
-                                                            </label>
-                                                        </div>
-                                                        <div>
-                                                            <label className="form-label">เลือก LINE กลุ่มแจ้งผลสรุปรางวัล & ผลได้เสีย</label>
-                                                            <select
-                                                                value={jobForm.result_notify_group_id}
-                                                                onChange={(e) => setJobForm({ ...jobForm, result_notify_group_id: e.target.value })}
-                                                                className="form-input"
-                                                                required
-                                                            >
-                                                                <option value="">-- กรุณาเลือกกลุ่มไลน์ --</option>
-                                                                {lineGroups.map(lg => (
-                                                                    <option key={lg.id} value={lg.id}>{lg.group_name}</option>
-                                                                ))}
-                                                            </select>
-                                                        </div>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', margin: 0 }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={jobForm.notify_result_enabled}
+                                                                onChange={(e) => setJobForm({ ...jobForm, notify_result_enabled: e.target.checked })}
+                                                            />
+                                                            <span>ส่งสรุปยอดรายบุคคลเข้าไลน์กลุ่มสมาชิก (ระบบจะวิเคราะห์และส่งสรุปให้สมาชิกแต่ละกลุ่มโดยอัตโนมัติ เสมือนคำสั่ง /แจ้งผล)</span>
+                                                        </label>
                                                     </div>
                                                 </div>
                                             )}
