@@ -207,7 +207,15 @@ export default function Dealer() {
         type_limits: getDefaultLimitsForType('lao'),
         set_prices: getDefaultSetPricesForType('lao'),
         type_close_times: {},
-        type_close_time_behaviors: {}
+        type_close_time_behaviors: {},
+        is_auto_round_enabled: false,
+        schedule_mode: 'weekly',
+        schedule_days: [],
+        close_day_offset: 0,
+        auto_layoff_enabled: false,
+        auto_layoff_method: 'limits',
+        auto_layoff_keep_amount: 0,
+        auto_import_result_enabled: false
     })
 
     // Open create round modal and populate with template or defaults
@@ -224,6 +232,14 @@ export default function Dealer() {
         let set_prices = getDefaultSetPricesForType(defaultType)
         let type_close_times = {}
         let type_close_time_behaviors = {}
+        let is_auto_round_enabled = false
+        let schedule_mode = 'weekly'
+        let schedule_days = []
+        let close_day_offset = 0
+        let auto_layoff_enabled = false
+        let auto_layoff_method = 'limits'
+        let auto_layoff_keep_amount = 0
+        let auto_import_result_enabled = false
 
         const template = templates[defaultType]
         if (template) {
@@ -246,6 +262,14 @@ export default function Dealer() {
             if (template.type_close_time_behaviors) {
                 type_close_time_behaviors = { ...template.type_close_time_behaviors }
             }
+            is_auto_round_enabled = template.is_auto_round_enabled || false
+            schedule_mode = template.schedule_mode || 'weekly'
+            schedule_days = template.schedule_days || []
+            close_day_offset = template.close_day_offset || 0
+            auto_layoff_enabled = template.auto_layoff_enabled || false
+            auto_layoff_method = template.auto_layoff_method || 'limits'
+            auto_layoff_keep_amount = template.auto_layoff_keep_amount || 0
+            auto_import_result_enabled = template.auto_import_result_enabled || false
         }
 
         setRoundForm({
@@ -263,7 +287,15 @@ export default function Dealer() {
             type_limits,
             set_prices,
             type_close_times,
-            type_close_time_behaviors
+            type_close_time_behaviors,
+            is_auto_round_enabled,
+            schedule_mode,
+            schedule_days,
+            close_day_offset,
+            auto_layoff_enabled,
+            auto_layoff_method,
+            auto_layoff_keep_amount,
+            auto_import_result_enabled
         })
         setShowCreateModal(true)
     }
@@ -288,7 +320,15 @@ export default function Dealer() {
                     set_prices: roundForm.set_prices,
                     type_limits: roundForm.type_limits,
                     type_close_times: roundForm.type_close_times,
-                    type_close_time_behaviors: roundForm.type_close_time_behaviors
+                    type_close_time_behaviors: roundForm.type_close_time_behaviors,
+                    is_auto_round_enabled: roundForm.is_auto_round_enabled,
+                    schedule_mode: roundForm.schedule_mode,
+                    schedule_days: roundForm.schedule_days,
+                    close_day_offset: roundForm.close_day_offset,
+                    auto_layoff_enabled: roundForm.auto_layoff_enabled,
+                    auto_layoff_method: roundForm.auto_layoff_method,
+                    auto_layoff_keep_amount: roundForm.auto_layoff_keep_amount,
+                    auto_import_result_enabled: roundForm.auto_import_result_enabled
                 }, {
                     onConflict: 'dealer_id,lottery_type'
                 })
@@ -365,6 +405,14 @@ export default function Dealer() {
             let set_prices = getDefaultSetPricesForType(newType)
             let type_close_times = {}
             let type_close_time_behaviors = {}
+            let is_auto_round_enabled = false
+            let schedule_mode = 'weekly'
+            let schedule_days = []
+            let close_day_offset = 0
+            let auto_layoff_enabled = false
+            let auto_layoff_method = 'limits'
+            let auto_layoff_keep_amount = 0
+            let auto_import_result_enabled = false
 
             // Check if we have a template for this lottery type
             const template = templates[newType]
@@ -389,6 +437,14 @@ export default function Dealer() {
                 if (template.type_close_time_behaviors) {
                     type_close_time_behaviors = { ...template.type_close_time_behaviors }
                 }
+                is_auto_round_enabled = template.is_auto_round_enabled || false
+                schedule_mode = template.schedule_mode || 'weekly'
+                schedule_days = template.schedule_days || []
+                close_day_offset = template.close_day_offset || 0
+                auto_layoff_enabled = template.auto_layoff_enabled || false
+                auto_layoff_method = template.auto_layoff_method || 'limits'
+                auto_layoff_keep_amount = template.auto_layoff_keep_amount || 0
+                auto_import_result_enabled = template.auto_import_result_enabled || false
             } else {
                 if (newType === 'thai') {
                     open_time = '06:00'
@@ -424,7 +480,15 @@ export default function Dealer() {
                 type_limits,
                 set_prices,
                 type_close_times,
-                type_close_time_behaviors
+                type_close_time_behaviors,
+                is_auto_round_enabled,
+                schedule_mode,
+                schedule_days,
+                close_day_offset,
+                auto_layoff_enabled,
+                auto_layoff_method,
+                auto_layoff_keep_amount,
+                auto_import_result_enabled
             }
         })
     }
@@ -4123,6 +4187,172 @@ export default function Dealer() {
                                         <option value="฿">฿ บาท</option>
                                         <option value="₭">₭ กีบ</option>
                                     </select>
+                                </div>
+                            </div>
+
+                            {/* Automation and Scheduling Section */}
+                            <div className="form-section" style={{ borderTop: '1px solid var(--color-border)', paddingTop: '1.5rem', marginTop: '1.5rem' }}>
+                                <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-primary)' }}>
+                                    <FiSettings /> ตั้งค่าระบบทำงานอัตโนมัติ (Automation Settings)
+                                </h4>
+                                
+                                <div className="form-group" style={{ marginTop: '1rem' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={roundForm.is_auto_round_enabled || false}
+                                            onChange={e => setRoundForm({ ...roundForm, is_auto_round_enabled: e.target.checked })}
+                                            style={{ width: '1.1rem', height: '1.1rem', cursor: 'pointer' }}
+                                        />
+                                        <span style={{ fontWeight: 600 }}>เปิดระบบเปิด/ปิดงวดอัตโนมัติ (Auto-Round Schedule)</span>
+                                    </label>
+                                    <p className="form-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
+                                        เมื่อเปิดใช้งาน ระบบจะสร้างงวดนี้ขึ้นมาใหม่โดยอัตโนมัติตามวันเวลาที่กำหนด
+                                    </p>
+                                </div>
+
+                                {roundForm.is_auto_round_enabled && (
+                                    <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--color-border)', borderRadius: '8px', marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                        <div className="form-row">
+                                            <div className="form-group" style={{ flex: 1 }}>
+                                                <label className="form-label">รอบความถี่การทำซ้ำ</label>
+                                                <select
+                                                    className="form-input"
+                                                    value={roundForm.schedule_mode || 'weekly'}
+                                                    onChange={e => setRoundForm({ ...roundForm, schedule_mode: e.target.value, schedule_days: [] })}
+                                                >
+                                                    <option value="weekly">ทุกสัปดาห์ (Weekly)</option>
+                                                    <option value="monthly">ทุกเดือน (Monthly)</option>
+                                                </select>
+                                            </div>
+                                            <div className="form-group" style={{ flex: 1 }}>
+                                                <label className="form-label">ปิดงวดวันถัดไปหรือไม่ (Offset)</label>
+                                                <select
+                                                    className="form-input"
+                                                    value={roundForm.close_day_offset || 0}
+                                                    onChange={e => setRoundForm({ ...roundForm, close_day_offset: parseInt(e.target.value) || 0 })}
+                                                >
+                                                    <option value={0}>ปิดวันเดียวกันกับวันเปิด (Offset 0 วัน)</option>
+                                                    <option value={1}>ปิดวันถัดไปจากวันเปิด (Offset 1 วัน)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label className="form-label">
+                                                {roundForm.schedule_mode === 'weekly' ? 'เลือกวันในสัปดาห์ที่จะเปิด' : 'ระบุวันที่ในเดือน (ใส่ตัวเลขวันที่คั่นด้วยเครื่องหมายจุลภาค เช่น 1,15,16 หรือระบุ "last" สำหรับวันสิ้นเดือน)'}
+                                            </label>
+                                            {roundForm.schedule_mode === 'weekly' ? (
+                                                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                                                    {[
+                                                        { value: 1, label: 'จันทร์' },
+                                                        { value: 2, label: 'อังคาร' },
+                                                        { value: 3, label: 'พุธ' },
+                                                        { value: 4, label: 'พฤหัส' },
+                                                        { value: 5, label: 'ศุกร์' },
+                                                        { value: 6, label: 'เสาร์' },
+                                                        { value: 0, label: 'อาทิตย์' }
+                                                    ].map(day => {
+                                                        const isChecked = (roundForm.schedule_days || []).includes(day.value);
+                                                        return (
+                                                            <label key={day.value} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer', padding: '0.25rem 0.5rem', background: isChecked ? 'rgba(212,175,55,0.1)' : 'rgba(255,255,255,0.03)', border: '1px solid ' + (isChecked ? 'var(--color-primary)' : 'var(--color-border)'), borderRadius: '4px' }}>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={isChecked}
+                                                                    onChange={e => {
+                                                                        const days = roundForm.schedule_days || [];
+                                                                        const nextDays = e.target.checked
+                                                                            ? [...days, day.value]
+                                                                            : days.filter(d => d !== day.value);
+                                                                        setRoundForm({ ...roundForm, schedule_days: nextDays });
+                                                                    }}
+                                                                    style={{ display: 'none' }}
+                                                                />
+                                                                <span style={{ fontSize: '0.85rem', color: isChecked ? 'var(--color-primary)' : 'var(--color-text)' }}>{day.label}</span>
+                                                            </label>
+                                                        )
+                                                    })}
+                                                </div>
+                                            ) : (
+                                                <input
+                                                    type="text"
+                                                    className="form-input"
+                                                    placeholder="เช่น 1, 15, last"
+                                                    value={Array.isArray(roundForm.schedule_days) ? roundForm.schedule_days.join(', ') : ''}
+                                                    onChange={e => {
+                                                        const val = e.target.value;
+                                                        const parts = val.split(',').map(s => {
+                                                            const clean = s.trim();
+                                                            if (clean.toLowerCase() === 'last') return 'last';
+                                                            const num = parseInt(clean);
+                                                            return isNaN(num) ? null : num;
+                                                        }).filter(x => x !== null);
+                                                        setRoundForm({ ...roundForm, schedule_days: parts });
+                                                    }}
+                                                />
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="form-group" style={{ marginTop: '1rem' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={roundForm.auto_layoff_enabled || false}
+                                            onChange={e => setRoundForm({ ...roundForm, auto_layoff_enabled: e.target.checked })}
+                                            style={{ width: '1.1rem', height: '1.1rem', cursor: 'pointer' }}
+                                        />
+                                        <span style={{ fontWeight: 600 }}>เปิดระบบคำนวณและส่งต่อเลขเกินอั้นอัตโนมัติ (Auto-Layoff)</span>
+                                    </label>
+                                    <p className="form-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
+                                        เมื่อปิดงวด ระบบจะคำนวณยอดที่เกินวงเงินรับ และส่งต่อไปยังกลุ่มไลน์ตีออกที่ตั้งไว้โดยอัตโนมัติ
+                                    </p>
+                                </div>
+
+                                {roundForm.auto_layoff_enabled && (
+                                    <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--color-border)', borderRadius: '8px', marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                        <div className="form-row">
+                                            <div className="form-group" style={{ flex: 1 }}>
+                                                <label className="form-label">วิธีการตัดยอด/ตีออก (Layoff Method)</label>
+                                                <select
+                                                    className="form-input"
+                                                    value={roundForm.auto_layoff_method || 'limits'}
+                                                    onChange={e => setRoundForm({ ...roundForm, auto_layoff_method: e.target.value })}
+                                                >
+                                                    <option value="limits">ตัดตามวงเงินรับที่อั้น (Limits)</option>
+                                                    <option value="formula">ตัดตามเกณฑ์คำนวณสูตร (Formula)</option>
+                                                    <option value="ai">ตัดด้วยระบบจัดสรร AI อัตโนมัติ (AI-based)</option>
+                                                </select>
+                                            </div>
+                                            <div className="form-group" style={{ flex: 1 }}>
+                                                <label className="form-label">วงเงินคงเหลือของร้าน (Keep Amount)</label>
+                                                <input
+                                                    type="number"
+                                                    className="form-input"
+                                                    placeholder="จำนวนเงินสุทธิที่ต้องการรับเอง"
+                                                    value={roundForm.auto_layoff_keep_amount || 0}
+                                                    onChange={e => setRoundForm({ ...roundForm, auto_layoff_keep_amount: parseFloat(e.target.value) || 0 })}
+                                                    min="0"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="form-group" style={{ marginTop: '1rem' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={roundForm.auto_import_result_enabled || false}
+                                            onChange={e => setRoundForm({ ...roundForm, auto_import_result_enabled: e.target.checked })}
+                                            style={{ width: '1.1rem', height: '1.1rem', cursor: 'pointer' }}
+                                        />
+                                        <span style={{ fontWeight: 600 }}>ดึงและบันทึกผลรางวัลอัตโนมัติด้วย AI Crawler</span>
+                                    </label>
+                                    <p className="form-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
+                                        ดึงผลรางวัลจากส่วนกลางเมื่อออกรางวัลเสสิ้น คำนวณผู้ชนะและประกาศผลทางห้องแชทอัตโนมัติ
+                                    </p>
                                 </div>
                             </div>
 
