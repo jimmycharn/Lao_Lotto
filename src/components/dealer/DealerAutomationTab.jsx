@@ -39,7 +39,6 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
     const [lineGroups, setLineGroups] = useState([])
     const [loadingJobs, setLoadingJobs] = useState(true)
     const [savingJob, setSavingJob] = useState(false)
-    const [submittingDefaults, setSubmittingDefaults] = useState(false)
     
     // Default template state (legacy/fallback configuration & defaults)
     const [lotteryType, setLotteryType] = useState(() => {
@@ -48,19 +47,9 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
         return initialTypes[0] || 'lao';
     })
 
-    const [template, setTemplate] = useState({
-        delete_before_minutes: 60,
-        delete_after_submit_minutes: 5,
-        currency_symbol: '฿',
-        currency_name: 'บาท',
-        set_prices: {},
-        type_limits: {},
-        type_close_times: {},
-        type_close_time_behaviors: {}
-    })
+
 
     // Active tab in settings: 'jobs' (automation list) or 'defaults' (type limits/prices)
-    const [activeSubTab, setActiveSubTab] = useState('jobs')
 
     // Modal / Form state for creating/editing job
     const [isFormOpen, setIsFormOpen] = useState(false)
@@ -92,7 +81,6 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
         if (user?.id) {
             fetchJobs()
             fetchLineGroups()
-            fetchDefaultTemplate()
         }
     }, [user?.id, lotteryType])
 
@@ -128,75 +116,6 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             setLineGroups(data || [])
         } catch (err) {
             console.error('Error fetching line groups:', err)
-        }
-    }
-
-    const fetchDefaultTemplate = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('dealer_lottery_templates')
-                .select('*')
-                .eq('dealer_id', user.id)
-                .eq('lottery_type', lotteryType)
-                .maybeSingle()
-
-            if (error) throw error
-
-            if (data) {
-                setTemplate({
-                    delete_before_minutes: data.delete_before_minutes || 60,
-                    delete_after_submit_minutes: data.delete_after_submit_minutes || 5,
-                    currency_symbol: data.currency_symbol || '฿',
-                    currency_name: data.currency_name || 'บาท',
-                    set_prices: data.set_prices || {},
-                    type_limits: data.type_limits || {},
-                    type_close_times: data.type_close_times || {},
-                    type_close_time_behaviors: data.type_close_time_behaviors || {}
-                })
-            } else {
-                setTemplate({
-                    delete_before_minutes: 60,
-                    delete_after_submit_minutes: 5,
-                    currency_symbol: '฿',
-                    currency_name: 'บาท',
-                    set_prices: {},
-                    type_limits: {},
-                    type_close_times: {},
-                    type_close_time_behaviors: {}
-                })
-            }
-        } catch (err) {
-            console.error('Error fetching default template:', err)
-        }
-    }
-
-    const handleSaveDefaults = async () => {
-        setSubmittingDefaults(true)
-        try {
-            const { error } = await supabase
-                .from('dealer_lottery_templates')
-                .upsert({
-                    dealer_id: user.id,
-                    lottery_type: lotteryType,
-                    delete_before_minutes: template.delete_before_minutes,
-                    delete_after_submit_minutes: template.delete_after_submit_minutes,
-                    currency_symbol: template.currency_symbol,
-                    currency_name: template.currency_name,
-                    set_prices: template.set_prices,
-                    type_limits: template.type_limits,
-                    type_close_times: template.type_close_times,
-                    type_close_time_behaviors: template.type_close_time_behaviors
-                }, {
-                    onConflict: 'dealer_id,lottery_type'
-                })
-
-            if (error) throw error
-            toast.success('บันทึกตั้งค่าแม่แบบเริ่มต้นเรียบร้อยแล้วค่ะ! 🎉')
-        } catch (err) {
-            console.error('Error saving defaults:', err)
-            toast.error('เกิดข้อผิดพลาดในการบันทึกข้อมูลแม่แบบ')
-        } finally {
-            setSubmittingDefaults(false)
         }
     }
 
@@ -411,25 +330,9 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
 
     return (
         <div className="profile-tab-container">
-            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.8rem' }}>
-                <button
-                    onClick={() => { setActiveSubTab('jobs'); setIsFormOpen(false); }}
-                    className={`btn ${activeSubTab === 'jobs' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-                >
-                    <FiClock /> จัดการรายการออโตเมชัน (Cron Jobs)
-                </button>
-                <button
-                    onClick={() => setActiveSubTab('defaults')}
-                    className={`btn ${activeSubTab === 'defaults' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-                >
-                    <FiSettings /> ตั้งค่าประเภทเลขเริ่มต้น & อั้นเริ่มต้น
-                </button>
-            </div>
+            
 
-            {activeSubTab === 'jobs' && (
-                <div>
+                            <div>
                     {!isFormOpen ? (
                         <div className="profile-card">
                             <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -916,152 +819,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                         </div>
                     )}
                 </div>
-            )}
 
-            {activeSubTab === 'defaults' && (
-                <div className="profile-card">
-                    <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <h3 style={{ margin: 0 }}><FiSettings /> ตั้งค่าแม่แบบและอั้นยอดหวยเริ่มต้น</h3>
-                        <div>
-                            <select
-                                value={lotteryType}
-                                onChange={(e) => setLotteryType(e.target.value)}
-                                className="form-input"
-                                style={{ width: 'auto', padding: '0.4rem 2rem 0.4rem 1rem' }}
-                            >
-                                {Object.entries(LOTTERY_TYPES)
-                                    .filter(([key]) => !allowedLotteryTypes || allowedLotteryTypes.includes(key))
-                                    .map(([key, label]) => (
-                                        <option key={key} value={key}>{label}</option>
-                                    ))}
-                            </select>
-                        </div>
-                    </div>
-
-                    <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                        
-                        {/* Templates Info */}
-                        <div style={{ padding: '1rem', background: 'rgba(59, 130, 246, 0.08)', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.2)', fontSize: '0.9rem', color: 'var(--text-secondary)', display: 'flex', gap: '0.8rem', alignItems: 'flex-start' }}>
-                            <FiInfo size={20} style={{ color: '#3b82f6', flexShrink: 0, marginTop: '0.1rem' }} />
-                            <div>
-                                <strong>💡 ข้อมูลการทำงานของแม่แบบ:</strong>
-                                <p style={{ margin: '0.3rem 0 0 0', lineHeight: '1.4' }}>
-                                    ค่าอั้นยอดและกำหนดเวลาปิดเฉพาะประเภทตัวเลขเหล่านี้ จะถูกนำไปใช้เป็นค่าเริ่มต้นโดยอัตโนมัติ เมื่อรอบหวยนั้นๆ ถูกสร้างขึ้นผ่านตารางงานออโตเมชันที่คุณกำหนดไว้
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Basic Config */}
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                            <div>
-                                <label className="form-label">สัญลักษณ์เงินตรา (Currency Symbol)</label>
-                                <input
-                                    type="text"
-                                    value={template.currency_symbol}
-                                    onChange={(e) => setTemplate({ ...template, currency_symbol: e.target.value })}
-                                    className="form-input"
-                                />
-                            </div>
-                            <div>
-                                <label className="form-label">ชื่อหน่วยเงิน (Currency Name)</label>
-                                <input
-                                    type="text"
-                                    value={template.currency_name}
-                                    onChange={(e) => setTemplate({ ...template, currency_name: e.target.value })}
-                                    className="form-input"
-                                />
-                            </div>
-                            <div>
-                                <label className="form-label">ยกเลิกบิลก่อนปิดรับหวยกี่นาที</label>
-                                <input
-                                    type="number"
-                                    value={template.delete_before_minutes}
-                                    onChange={(e) => setTemplate({ ...template, delete_before_minutes: Number(e.target.value) })}
-                                    className="form-input"
-                                />
-                            </div>
-                            <div>
-                                <label className="form-label">ยกเลิกบิลภายในกี่นาทีหลังส่ง</label>
-                                <input
-                                    type="number"
-                                    value={template.delete_after_submit_minutes}
-                                    onChange={(e) => setTemplate({ ...template, delete_after_submit_minutes: Number(e.target.value) })}
-                                    className="form-input"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Granular Table Limits */}
-                        <div>
-                            <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0 0 1rem 0', color: 'var(--text-primary)' }}>
-                                <FiList /> แม่แบบอั้นยอดและกำหนดปิดเฉพาะประเภทเลข
-                            </h4>
-                            
-                            <table className="dealer-table" style={{ width: '100%', marginTop: '0.5rem' }}>
-                                <thead>
-                                    <tr>
-                                        <th>ประเภทเลข</th>
-                                        <th>วงเงินสู้สูงสุดต่อเลข (฿)</th>
-                                        <th>เวลาปิดเฉพาะตัวเลข (เช่น 20:00 น.)</th>
-                                        <th>พฤติกรรมการคืนโพยเมื่อปิด/ล้น</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {betTypes.map((type) => (
-                                        <tr key={type.key}>
-                                            <td><strong>{type.label}</strong></td>
-                                            <td>
-                                                <input
-                                                    type="number"
-                                                    value={template.type_limits[type.key] ?? ''}
-                                                    onChange={(e) => handleLimitChange(type.key, e.target.value)}
-                                                    placeholder="ไม่มีอั้น"
-                                                    className="form-input"
-                                                    style={{ width: '100%', padding: '0.3rem 0.5rem', fontSize: '0.9rem' }}
-                                                />
-                                            </td>
-                                            <td>
-                                                <input
-                                                    type="time"
-                                                    value={template.type_close_times[type.key] || ''}
-                                                    onChange={(e) => handleCloseTimeChange(type.key, e.target.value)}
-                                                    className="form-input"
-                                                    style={{ width: '100%', padding: '0.3rem 0.5rem', fontSize: '0.9rem' }}
-                                                />
-                                            </td>
-                                            <td>
-                                                <select
-                                                    value={template.type_close_time_behaviors[type.key] || 'close_immediately'}
-                                                    onChange={(e) => handleCloseBehaviorChange(type.key, e.target.value)}
-                                                    className="form-input"
-                                                    style={{ width: '100%', padding: '0.3rem 0.5rem', fontSize: '0.9rem' }}
-                                                >
-                                                    <option value="close_immediately">ปิดรับทันที</option>
-                                                    <option value="refund_portion">คืนสัดส่วนส่วนเกิน</option>
-                                                    <option value="refund_all">คืนทั้งบิลหากมีตัวติด</option>
-                                                </select>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        {/* Save Button */}
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                            <button
-                                type="button"
-                                disabled={submittingDefaults}
-                                onClick={handleSaveDefaults}
-                                className="btn btn-primary"
-                                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.5rem', fontSize: '1rem' }}
-                            >
-                                <FiSave /> {submittingDefaults ? 'กำลังบันทึก...' : '💾 บันทึกแม่แบบตั้งค่าเริ่มต้น'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     )
 }
