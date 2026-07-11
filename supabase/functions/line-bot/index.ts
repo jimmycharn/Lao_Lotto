@@ -3593,13 +3593,10 @@ serve(async (req) => {
               }));
 
               const layoffResult = await performLayoff(round.dealer_id, round.id, round.lottery_type, excessItems);
-              
-              let layoffMessageText = `📢 [Auto-Layoff] ระบบได้ทำการส่งออกเลขเกินอั้นโดยอัตโนมัติสำเร็จแล้วค่ะ!\n`;
+
+              let layoffMessageText: string;
               if (layoffResult.success) {
-                const upstreamName = layoffResult.targetDealerName || 'เจ้ามือหลัก';
-                layoffMessageText += `📤 ตีออกไปยัง: ${upstreamName}\n` +
-                  `รวมจำนวนเลข: ${recommendations.length} รายการ\n` +
-                  `ดูรายละเอียดบิลการส่งออกได้ที่เว็บบอร์ดดีลเลอร์ของคุณค่ะ`;
+                layoffMessageText = await generateLayoffNumbersSummary(round.id, round.lottery_type);
               } else {
                 layoffMessageText = `⚠️ [Auto-Layoff] ระบบตรวจพบเลขที่ต้องตีออก แต่เกิดข้อผิดพลาด:\n❌ ${layoffResult.message}`;
               }
