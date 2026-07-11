@@ -62,6 +62,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
         open_time: '06:00',
         close_time: '20:15',
         close_day_offset: 0,
+        creation_frequency: 'once_per_day',
         layoff_enabled: false,
         layoff_method: 'limits',
         layoff_keep_amount: 0,
@@ -130,6 +131,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             open_time: '06:00',
             close_time: '20:15',
             close_day_offset: 0,
+            creation_frequency: 'once_per_day',
             layoff_enabled: false,
             layoff_method: 'limits',
             layoff_keep_amount: 0,
@@ -157,6 +159,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             open_time: job.open_time ? job.open_time.slice(0, 5) : '06:00',
             close_time: job.close_time ? job.close_time.slice(0, 5) : '20:15',
             close_day_offset: job.close_day_offset || 0,
+            creation_frequency: job.creation_frequency || 'once_per_day',
             layoff_enabled: job.layoff_enabled || false,
             layoff_method: job.layoff_method || 'limits',
             layoff_keep_amount: job.layoff_keep_amount || 0,
@@ -233,6 +236,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             open_time: jobForm.open_time,
             close_time: jobForm.close_time,
             close_day_offset: jobForm.close_day_offset,
+            creation_frequency: jobForm.creation_frequency,
             layoff_enabled: jobForm.layoff_enabled,
             layoff_method: jobForm.layoff_method,
             layoff_keep_amount: jobForm.layoff_keep_amount,
@@ -440,7 +444,8 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                             <div style={{ color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
                                                                 เปิดรับ: {job.open_time ? job.open_time.slice(0, 5) : '-'} น.<br />
                                                                 ปิดรับ: {job.close_time ? job.close_time.slice(0, 5) : '-'} น.
-                                                                {job.close_day_offset > 0 && ` (ปิดถัดไป ${job.close_day_offset} วัน)`}
+                                                                {job.close_day_offset > 0 && ` (ปิดถัดไป ${job.close_day_offset} วัน)`}<br />
+                                                                สร้างงวด: {job.creation_frequency === 'unlimited' ? 'ไม่จำกัด/วัน' : 'วันละครั้ง'}
                                                             </div>
                                                         </div>
                                                         <div>
@@ -558,6 +563,23 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                         <option value="2">2 วัน</option>
                                                     </select>
                                                 </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="form-label">จำนวนครั้งที่สร้างงวดต่อวัน</label>
+                                                <select
+                                                    value={jobForm.creation_frequency}
+                                                    onChange={(e) => setJobForm({ ...jobForm, creation_frequency: e.target.value })}
+                                                    className="form-input"
+                                                >
+                                                    <option value="once_per_day">สร้างได้วันละครั้ง (Once per day)</option>
+                                                    <option value="unlimited">สร้างได้ไม่จำกัด (Unlimited)</option>
+                                                </select>
+                                                <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '0.4rem 0 0 0' }}>
+                                                    {jobForm.creation_frequency === 'unlimited'
+                                                        ? 'ระบบจะสร้างงวดใหม่ได้หลายครั้งต่อวัน โดยจะสร้างเมื่อไม่คาบเกี่ยวเวลากับงวดหวยประเภทเดียวกันที่ยังไม่ปิดเท่านั้น'
+                                                        : 'ระบบจะสร้างงวดใหม่ให้อัตโนมัติเพียงวันละ 1 ครั้งเท่านั้น'}
+                                                </p>
                                             </div>
 
                                             <div>

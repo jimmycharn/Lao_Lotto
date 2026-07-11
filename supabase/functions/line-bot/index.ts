@@ -3825,6 +3825,25 @@ serve(async (req) => {
           // Check if open_time has arrived
           if (currentHourMin < job.open_time) continue;
 
+          // Respect the per-job creation frequency setting (default: once per day)
+          if ((job.creation_frequency || 'once_per_day') !== 'unlimited') {
+            let alreadyCreatedToday = false;
+            if (job.last_created_at) {
+              const lastRunBkkDate = new Date(new Date(job.last_created_at).toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
+              const lastRunDatePart = lastRunBkkDate.getFullYear() + '-' +
+                                      String(lastRunBkkDate.getMonth() + 1).padStart(2, '0') + '-' +
+                                      String(lastRunBkkDate.getDate()).padStart(2, '0');
+              if (lastRunDatePart === roundDateStr) {
+                alreadyCreatedToday = true;
+              }
+            }
+
+            if (alreadyCreatedToday) {
+              results.push({ job_id: job.id, status: 'skipped', reason: 'already_created_today' });
+              continue;
+            }
+          }
+
           // Fetch default template settings if exists to copy configuration
           const { data: tmpl } = await supabase
             .from('dealer_lottery_templates')
