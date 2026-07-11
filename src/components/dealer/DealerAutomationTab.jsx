@@ -66,6 +66,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
         creation_frequency: 'once_per_day',
         open_notify_message: '',
         open_notify_enabled: true,
+        open_notify_group_id: '',
         layoff_enabled: false,
         layoff_method: 'limits',
         layoff_keep_amount: 0,
@@ -137,6 +138,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             creation_frequency: 'once_per_day',
             open_notify_message: '',
             open_notify_enabled: true,
+            open_notify_group_id: '',
             layoff_enabled: false,
             layoff_method: 'limits',
             layoff_keep_amount: 0,
@@ -167,6 +169,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             creation_frequency: job.creation_frequency || 'once_per_day',
             open_notify_message: job.open_notify_message || '',
             open_notify_enabled: job.open_notify_enabled ?? true,
+            open_notify_group_id: job.open_notify_group_id || '',
             layoff_enabled: job.layoff_enabled || false,
             layoff_method: job.layoff_method || 'limits',
             layoff_keep_amount: job.layoff_keep_amount || 0,
@@ -246,6 +249,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             creation_frequency: jobForm.creation_frequency,
             open_notify_message: jobForm.open_notify_message || null,
             open_notify_enabled: jobForm.open_notify_enabled,
+            open_notify_group_id: jobForm.open_notify_group_id || null,
             layoff_enabled: jobForm.layoff_enabled,
             layoff_method: jobForm.layoff_method,
             layoff_keep_amount: jobForm.layoff_keep_amount,
@@ -703,6 +707,22 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                         </div>
                                         {jobForm.open_notify_enabled && (
                                         <>
+                                        <div style={{ marginBottom: '0.8rem' }}>
+                                            <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.3rem' }}>
+                                                ส่งไปยังกลุ่มไลน์
+                                            </label>
+                                            <select
+                                                value={jobForm.open_notify_group_id}
+                                                onChange={(e) => setJobForm({ ...jobForm, open_notify_group_id: e.target.value })}
+                                                className="form-input"
+                                                style={{ width: '100%' }}
+                                            >
+                                                <option value="">ส่งทุกกลุ่ม (ค่าเริ่มต้น)</option>
+                                                {lineGroups.map(g => (
+                                                    <option key={g.id} value={g.id}>{g.group_name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
                                         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0 0 0.8rem 0' }}>
                                             ข้อความที่จะส่งไปยังกลุ่มไลน์ทุกกลุ่มเมื่อระบบสร้างงวดใหม่อัตโนมัติ หากไม่กรอกจะใช้ข้อความเริ่มต้นตามประเภทหวย
                                         </p>
