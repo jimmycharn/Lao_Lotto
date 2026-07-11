@@ -4054,6 +4054,10 @@ serve(async (req) => {
 
           if (!shouldCreate) continue;
           if (currentHourMin < template.open_time) continue;
+          if (currentHourMin >= template.close_time) {
+            results.push({ template_id: template.id, status: 'skipped', reason: 'past_close_time' });
+            continue;
+          }
 
           const closeDate = new Date(now);
           closeDate.setDate(now.getDate() + (template.close_day_offset || 0));
@@ -14577,10 +14581,6 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ success: false, message: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 500
-    })
-  }
-})
       status: 500
     })
   }
