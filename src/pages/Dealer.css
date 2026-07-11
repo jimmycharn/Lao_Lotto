@@ -5219,6 +5219,8 @@ html.theme-light .icon-btn-sm:hover {
 }
 
 .round-form-modal {
+    display: flex;
+    flex-direction: column;
     width: min(760px, calc(100vw - 1rem));
     max-height: min(92vh, 980px);
     overflow: hidden;
@@ -5235,6 +5237,8 @@ html.theme-light .icon-btn-sm:hover {
 }
 
 .round-form-modal .modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
     scrollbar-gutter: stable;
 }
