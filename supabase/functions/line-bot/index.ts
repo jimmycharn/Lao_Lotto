@@ -3997,7 +3997,7 @@ serve(async (req) => {
             .eq('lottery_type', job.lottery_type)
             .eq('notify_round_created', true)
 
-          if (groups && groups.length > 0) {
+          if (groups && groups.length > 0 && job.open_notify_enabled !== false) {
             // Build the open-round notification from the customizable template (or default)
             const deleteBeforeMin = tmpl?.delete_before_minutes || 30;
             const closeTimeMinus30 = subtractMinutesToHHMM(closeDateStr, job.close_time, deleteBeforeMin);
@@ -4149,7 +4149,7 @@ serve(async (req) => {
             .eq('lottery_type', template.lottery_type)
             .eq('notify_round_created', true)
 
-          if (groups && groups.length > 0) {
+          if (groups && groups.length > 0 && template.open_notify_enabled !== false) {
             // Build the open-round notification from the customizable template (or default)
             const deleteBeforeMin = template.delete_before_minutes || 30;
             const closeTimeMinus30 = subtractMinutesToHHMM(closeDateStr, template.close_time, deleteBeforeMin);

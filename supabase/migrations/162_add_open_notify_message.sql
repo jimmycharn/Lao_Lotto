@@ -6,7 +6,9 @@
 -- based on lottery_type (lao/hanoi vs thai style wording).
 
 ALTER TABLE public.dealer_automation_jobs
-    ADD COLUMN IF NOT EXISTS open_notify_message TEXT;
+    ADD COLUMN IF NOT EXISTS open_notify_message TEXT,
+    ADD COLUMN IF NOT EXISTS open_notify_enabled BOOLEAN DEFAULT true;
 
 ALTER TABLE public.dealer_lottery_templates
-    ADD COLUMN IF NOT EXISTS open_notify_message TEXT;
+    ADD COLUMN IF NOT EXISTS open_notify_message TEXT,
+    ADD COLUMN IF NOT EXISTS open_notify_enabled BOOLEAN DEFAULT true;

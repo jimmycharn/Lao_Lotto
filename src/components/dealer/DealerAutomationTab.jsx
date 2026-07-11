@@ -65,6 +65,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
         close_day_offset: 0,
         creation_frequency: 'once_per_day',
         open_notify_message: '',
+        open_notify_enabled: true,
         layoff_enabled: false,
         layoff_method: 'limits',
         layoff_keep_amount: 0,
@@ -135,6 +136,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             close_day_offset: 0,
             creation_frequency: 'once_per_day',
             open_notify_message: '',
+            open_notify_enabled: true,
             layoff_enabled: false,
             layoff_method: 'limits',
             layoff_keep_amount: 0,
@@ -164,6 +166,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             close_day_offset: job.close_day_offset || 0,
             creation_frequency: job.creation_frequency || 'once_per_day',
             open_notify_message: job.open_notify_message || '',
+            open_notify_enabled: job.open_notify_enabled ?? true,
             layoff_enabled: job.layoff_enabled || false,
             layoff_method: job.layoff_method || 'limits',
             layoff_keep_amount: job.layoff_keep_amount || 0,
@@ -242,6 +245,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             close_day_offset: jobForm.close_day_offset,
             creation_frequency: jobForm.creation_frequency,
             open_notify_message: jobForm.open_notify_message || null,
+            open_notify_enabled: jobForm.open_notify_enabled,
             layoff_enabled: jobForm.layoff_enabled,
             layoff_method: jobForm.layoff_method,
             layoff_keep_amount: jobForm.layoff_keep_amount,
@@ -663,9 +667,42 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
 
                                     {/* 2.5 Open-round notification message */}
                                     <div style={{ background: 'rgba(255,255,255,0.01)', padding: '1.2rem', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
-                                        <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                            <FiMessageSquare /> ข้อความแจ้งเปิดงวด (Open Notification)
-                                        </h4>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                            <h4 style={{ margin: '0', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                <FiMessageSquare /> ข้อความแจ้งเปิดงวด (Open Notification)
+                                            </h4>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                                    {jobForm.open_notify_enabled ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
+                                                </span>
+                                                <div
+                                                    onClick={() => setJobForm({ ...jobForm, open_notify_enabled: !jobForm.open_notify_enabled })}
+                                                    style={{
+                                                        width: '44px',
+                                                        height: '24px',
+                                                        borderRadius: '12px',
+                                                        background: jobForm.open_notify_enabled ? 'var(--accent-color, #4caf50)' : 'var(--border-color, #666)',
+                                                        position: 'relative',
+                                                        cursor: 'pointer',
+                                                        transition: 'background 0.2s',
+                                                        flexShrink: 0
+                                                    }}
+                                                >
+                                                    <div style={{
+                                                        position: 'absolute',
+                                                        top: '2px',
+                                                        left: jobForm.open_notify_enabled ? '22px' : '2px',
+                                                        width: '20px',
+                                                        height: '20px',
+                                                        borderRadius: '50%',
+                                                        background: '#fff',
+                                                        transition: 'left 0.2s'
+                                                    }} />
+                                                </div>
+                                            </label>
+                                        </div>
+                                        {jobForm.open_notify_enabled && (
+                                        <>
                                         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0 0 0.8rem 0' }}>
                                             ข้อความที่จะส่งไปยังกลุ่มไลน์ทุกกลุ่มเมื่อระบบสร้างงวดใหม่อัตโนมัติ หากไม่กรอกจะใช้ข้อความเริ่มต้นตามประเภทหวย
                                         </p>
@@ -683,6 +720,8 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                         <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', margin: '0.5rem 0 0 0' }}>
                                             ตัวแปรที่ใช้ได้: [ประเภทหวย] [งวดวันที่] [วันที่ปิดงวด] [เวลาปิดงวด] [เวลาปิดงวด-30 นาที]
                                         </p>
+                                        </>
+                                        )}
                                     </div>
 
                                     {/* 3. Auto Layoff */}
