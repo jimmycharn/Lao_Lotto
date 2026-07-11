@@ -474,6 +474,13 @@ async function generateTotalNumbersSummary(roundId: string, lotteryType: string)
     return "❌ เกิดข้อผิดพลาดในการดึงข้อมูลรายงานเลขรวม";
   }
 
+  const { data: roundData } = await supabase
+    .from('lottery_rounds')
+    .select('round_date, close_time')
+    .eq('id', roundId)
+    .maybeSingle();
+  const roundDisplayDate = getRoundDisplayDate(roundData, false);
+
   const soldMap = new Map<string, Map<string, number>>();
   let grandTotal = 0;
   (submissions || []).forEach((s: any) => {
@@ -504,6 +511,9 @@ async function generateTotalNumbersSummary(roundId: string, lotteryType: string)
   const typeNameInThai = LOTTERY_TYPE_NAMES[lotteryType] || `หวย${lotteryType.toUpperCase()}`;
 
   let summaryText = `รายงานเลขรวม (${typeNameInThai})\n`;
+  if (roundDisplayDate) {
+    summaryText += `งวดวันที่: ${roundDisplayDate}\n`;
+  }
   summaryText += `รวมยอดรวม: ฿${grandTotal.toLocaleString('th-TH')}\n`;
   summaryText += `--------------------------\n`;
 
@@ -542,8 +552,15 @@ async function generateLayoffNumbersSummary(roundId: string, lotteryType: string
 
   if (trErr) {
     console.error("Error fetching transfers for generateLayoffNumbersSummary:", trErr);
-    return "❌ เกิดข้อผิดพลาดในการดึงข้อมูลรายงานเลขตีออก";
+    return "❌ เกิดข้อผิดพลาดในการดึงข้อมูลเลขตีออก";
   }
+
+  const { data: roundData } = await supabase
+    .from('lottery_rounds')
+    .select('round_date, close_time')
+    .eq('id', roundId)
+    .maybeSingle();
+  const roundDisplayDate = getRoundDisplayDate(roundData, false);
 
   const activeTransfers = (transfers || []).filter((t: any) => t.status !== 'returned');
 
@@ -576,7 +593,10 @@ async function generateLayoffNumbersSummary(roundId: string, lotteryType: string
   };
   const typeNameInThai = LOTTERY_TYPE_NAMES[lotteryType] || `หวย${lotteryType.toUpperCase()}`;
 
-  let summaryText = `รายงานเลขตีออก (${typeNameInThai})\n`;
+  let summaryText = `เลขตีออก (${typeNameInThai})\n`;
+  if (roundDisplayDate) {
+    summaryText += `งวดวันที่: ${roundDisplayDate}\n`;
+  }
   summaryText += `รวมยอดตีออก: ฿${grandTotal.toLocaleString('th-TH')}\n`;
   summaryText += `--------------------------\n`;
 
@@ -615,6 +635,13 @@ async function generateRemainingNumbersSummary(roundId: string, lotteryType: str
     console.error("Error fetching submissions for generateRemainingNumbersSummary:", err);
     return "❌ เกิดข้อผิดพลาดในการดึงข้อมูลรายงานเลขเหลือ";
   }
+
+  const { data: roundData } = await supabase
+    .from('lottery_rounds')
+    .select('round_date, close_time')
+    .eq('id', roundId)
+    .maybeSingle();
+  const roundDisplayDate = getRoundDisplayDate(roundData, false);
 
   const { data: transfers, error: trErr } = await supabase
     .from('bet_transfers')
@@ -684,6 +711,9 @@ async function generateRemainingNumbersSummary(roundId: string, lotteryType: str
   const typeNameInThai = LOTTERY_TYPE_NAMES[lotteryType] || `หวย${lotteryType.toUpperCase()}`;
 
   let summaryText = `รายงานเลขเหลือ (ถือสู้เอง) (${typeNameInThai})\n`;
+  if (roundDisplayDate) {
+    summaryText += `งวดวันที่: ${roundDisplayDate}\n`;
+  }
   summaryText += `รวมยอดเหลือ: ฿${grandRemainingTotal.toLocaleString('th-TH')}\n`;
   summaryText += `--------------------------\n`;
 
@@ -9154,14 +9184,14 @@ serve(async (req) => {
 
                 try {
                   const pdfBytes = await generateReportPDF(
-                    `รายงานเลขตีออก (${typeNameInThai})`,
+                    `เลขตีออก (${typeNameInThai})`,
                     roundDateStr ? `งวดวันที่: ${roundDateStr}` : '',
                     pdfCategories,
                     `รวมยอดตีออก: ฿${grandTotal.toLocaleString('th-TH')}`
                   );
                   const fileName = `transfers_${activeRound.id}_${Date.now()}.pdf`;
                   const signedUrl = await uploadPDFToStorage(pdfBytes, fileName);
-                  await sendLineReply(replyToken, `📄 ดาวน์โหลด PDF รายงานเลขตีออก (${typeNameInThai})\nงวดวันที่: ${roundDateStr}\n\n👉 กดที่นี่เพื่อดาวน์โหลด:\n${signedUrl}`);
+                  await sendLineReply(replyToken, `📄 ดาวน์โหลด PDF เลขตีออก (${typeNameInThai})\nงวดวันที่: ${roundDateStr}\n\n👉 กดที่นี่เพื่อดาวน์โหลด:\n${signedUrl}`);
                 } catch (pdfErr) {
                   console.error("PDF generation/upload error:", pdfErr);
                   await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการสร้างไฟล์ PDF: ${pdfErr.message}`);
@@ -9169,7 +9199,7 @@ serve(async (req) => {
                 continue;
               }
 
-              let summaryText = `รายงานเลขตีออก (${typeNameInThai})\n`;
+              let summaryText = `เลขตีออก (${typeNameInThai})\n`;
               if (roundDateStr) {
                 summaryText += `งวดวันที่: ${roundDateStr}\n`;
               }
