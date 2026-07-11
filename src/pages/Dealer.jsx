@@ -4466,20 +4466,15 @@ export default function Dealer() {
                             </div>
                         </div>
 
-                        <div className="modal-footer">
-                            <div style={{ marginRight: 'auto', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <div className="modal-footer round-modal-footer">
+                            <div className="round-footer-presets">
                                 <button className="btn btn-secondary" onClick={handleResetToSystemDefaults} title="คืนค่าข้อมูลเป็นค่าที่ระบบกำหนดจากโรงงาน">
                                     <FiRotateCcw /> ใช้ค่าเริ่มต้นระบบ
                                 </button>
                                 <button
-                                    className="btn"
+                                    className="btn round-save-template-btn"
                                     onClick={handleSaveTemplate}
                                     disabled={savingTemplate}
-                                    style={{
-                                        background: 'rgba(212, 175, 55, 0.15)',
-                                        color: 'var(--color-primary)',
-                                        border: '1px solid var(--color-primary)'
-                                    }}
                                 >
                                     {savingTemplate ? 'กำลังบันทึก...' : (
                                         <>
@@ -4488,12 +4483,14 @@ export default function Dealer() {
                                     )}
                                 </button>
                             </div>
-                            <button className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
-                                ยกเลิก
-                            </button>
-                            <button className="btn btn-primary" onClick={handleCreateRound}>
-                                <FiCheck /> สร้างงวด
-                            </button>
+                            <div className="round-footer-actions">
+                                <button className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
+                                    ยกเลิก
+                                </button>
+                                <button className="btn btn-primary" onClick={handleCreateRound}>
+                                    <FiCheck /> สร้างงวด
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -4743,13 +4740,15 @@ export default function Dealer() {
                             </div>
                         </div>
 
-                        <div className="modal-footer">
-                            <button className="btn btn-secondary" onClick={() => { setShowEditModal(false); setEditingRound(null); }}>
-                                ยกเลิก
-                            </button>
-                            <button className="btn btn-primary" onClick={handleUpdateRound}>
-                                <FiCheck /> บันทึกการแก้ไข
-                            </button>
+                        <div className="modal-footer round-modal-footer">
+                            <div className="round-footer-actions">
+                                <button className="btn btn-secondary" onClick={() => { setShowEditModal(false); setEditingRound(null); }}>
+                                    ยกเลิก
+                                </button>
+                                <button className="btn btn-primary" onClick={handleUpdateRound}>
+                                    <FiCheck /> บันทึกการแก้ไข
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
