@@ -501,20 +501,37 @@ export default function Dealer() {
 
     // Move to next input on Enter key
     const handleInputKeyDown = (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault()
-            const form = e.target.closest('.modal-body')
-            if (!form) return
+        if (e.key !== 'Enter') return
 
-            const inputs = Array.from(form.querySelectorAll('input:not([disabled]), select:not([disabled])'))
-            const currentIndex = inputs.indexOf(e.target)
+        e.preventDefault()
+        const limitRow = e.target.closest('.round-limit-row')
+        if (limitRow) {
+            const limitRows = Array.from(limitRow.closest('.round-limits-grid')?.querySelectorAll('.round-limit-row') || [])
+            const currentRowIndex = limitRows.indexOf(limitRow)
+            const rowInputs = Array.from(limitRow.querySelectorAll('input:not([disabled])'))
+            const currentInputIndex = rowInputs.indexOf(e.target)
+            const nextInputInRow = rowInputs[currentInputIndex + 1]
 
-            if (currentIndex !== -1 && currentIndex < inputs.length - 1) {
-                const nextInput = inputs[currentIndex + 1]
-                nextInput.focus()
-                if (nextInput.type !== 'date' && nextInput.type !== 'time' && nextInput.tagName !== 'SELECT') {
-                    nextInput.select()
-                }
+            if (nextInputInRow) {
+                nextInputInRow.focus()
+                return
+            }
+
+            const nextRowInput = limitRows[currentRowIndex + 1]?.querySelector('input:not([disabled])')
+            if (nextRowInput) nextRowInput.focus()
+            return
+        }
+
+        const form = e.target.closest('.modal-body')
+        if (!form) return
+
+        const inputs = Array.from(form.querySelectorAll('input:not([disabled]), select:not([disabled])'))
+        const currentIndex = inputs.indexOf(e.target)
+        const nextInput = inputs[currentIndex + 1]
+        if (nextInput) {
+            nextInput.focus()
+            if (nextInput.type !== 'date' && nextInput.type !== 'time' && nextInput.tagName !== 'SELECT') {
+                nextInput.select()
             }
         }
     }
@@ -4045,7 +4062,7 @@ export default function Dealer() {
             {/* Create Round Modal */}
             {showCreateModal && (
                 <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
-                    <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
+                    <div className="modal modal-lg round-form-modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
                             <h3><FiPlus /> สร้างงวดหวยใหม่</h3>
                             <button className="modal-close" onClick={() => setShowCreateModal(false)}>
@@ -4374,13 +4391,13 @@ export default function Dealer() {
                                     อัตราจ่ายจะใช้ตามที่ตั้งค่าให้แต่ละลูกค้า
                                 </p>
 
-                                <div style={{
+                                <div className="round-limits-grid" style={{
                                     display: 'grid',
                                     gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))',
                                     gap: '0.5rem'
                                 }}>
                                     {Object.entries(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {}).map(([key, config]) => (
-                                        <div key={key} style={{
+                                        <div key={key} className="round-limit-row" style={{
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'space-between',
@@ -4485,7 +4502,7 @@ export default function Dealer() {
             {/* Edit Round Modal */}
             {showEditModal && editingRound && (
                 <div className="modal-overlay" onClick={() => { setShowEditModal(false); setEditingRound(null); }}>
-                    <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
+                    <div className="modal modal-lg round-form-modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
                             <h3><FiEdit2 /> แก้ไขงวดหวย</h3>
                             <button className="modal-close" onClick={() => { setShowEditModal(false); setEditingRound(null); }}>
@@ -4651,13 +4668,13 @@ export default function Dealer() {
                                 </p>
 
                                 {/* Compact limits display */}
-                                <div style={{
+                                <div className="round-limits-grid" style={{
                                     display: 'grid',
                                     gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))',
                                     gap: '0.5rem'
                                 }}>
                                     {Object.entries(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {}).map(([key, config]) => (
-                                        <div key={key} style={{
+                                        <div key={key} className="round-limit-row" style={{
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'space-between',

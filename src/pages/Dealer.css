@@ -5217,3 +5217,186 @@ html.theme-light .icon-btn-sm:hover {
     color: #000000 !important;
     background: var(--color-primary) !important;
 }
+
+.round-form-modal {
+    width: min(760px, calc(100vw - 1rem));
+    max-height: min(92vh, 980px);
+    overflow: hidden;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+}
+
+.round-form-modal .modal-header {
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.12), rgba(255, 255, 255, 0.02));
+}
+
+.round-form-modal .modal-header h3 svg,
+.round-form-modal .form-section h4 {
+    color: var(--color-primary);
+}
+
+.round-form-modal .modal-body {
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+}
+
+.round-form-modal .form-group {
+    margin-bottom: 1rem;
+}
+
+.round-form-modal .lottery-type-grid {
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+    gap: 0.6rem;
+}
+
+.round-form-modal .type-option {
+    min-height: 44px;
+    padding: 0.65rem 0.75rem;
+    border-radius: 10px;
+}
+
+.round-form-modal .form-row {
+    gap: 0.85rem;
+}
+
+.round-form-modal .form-input {
+    min-height: 42px;
+    border-radius: 10px;
+}
+
+.round-form-modal .form-section {
+    padding: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.025);
+}
+
+.round-form-modal .round-limits-grid {
+    grid-template-columns: repeat(auto-fit, minmax(390px, 1fr)) !important;
+    gap: 0.6rem !important;
+}
+
+.round-form-modal .round-limit-row {
+    display: grid !important;
+    grid-template-columns: minmax(110px, 1fr) auto;
+    gap: 0.6rem;
+    min-width: 0;
+}
+
+.round-form-modal .round-limit-row > div:first-child {
+    min-width: 0;
+}
+
+.round-form-modal .round-limit-row > div:last-child {
+    display: grid !important;
+    grid-template-columns: auto 80px auto auto 85px 100px;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+.round-form-modal .round-limit-row > div:last-child .form-input.small {
+    width: auto !important;
+    min-width: 0;
+}
+
+.round-form-modal .modal-footer {
+    flex-wrap: wrap;
+}
+
+.round-form-modal .modal-footer > div:first-child {
+    display: flex;
+    flex: 1 1 100%;
+    margin-right: 0 !important;
+}
+
+.round-form-modal .modal-footer > .btn {
+    flex: 1 1 140px;
+    max-width: none;
+}
+
+@media (max-width: 680px) {
+    .round-form-modal {
+        width: calc(100vw - 0.75rem);
+        max-height: calc(100vh - 0.75rem);
+        border-radius: 16px;
+    }
+
+    .round-form-modal .modal-header {
+        padding: 0.9rem 1rem;
+    }
+
+    .round-form-modal .modal-header h3 {
+        font-size: 1rem;
+    }
+
+    .round-form-modal .modal-body {
+        padding: 0.85rem;
+    }
+
+    .round-form-modal .form-row {
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .round-form-modal .form-row > .form-group {
+        width: 100%;
+    }
+
+    .round-form-modal .form-section {
+        padding: 0.85rem;
+    }
+
+    .round-form-modal .round-limits-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    .round-form-modal .round-limit-row {
+        grid-template-columns: 1fr;
+        gap: 0.7rem;
+        padding: 0.75rem 0.8rem !important;
+    }
+
+    .round-form-modal .round-limit-row > div:last-child {
+        grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr) !important;
+        gap: 0.45rem;
+    }
+
+    .round-form-modal .round-limit-row > div:last-child > span:nth-of-type(1) {
+        grid-column: 1;
+    }
+
+    .round-form-modal .round-limit-row > div:last-child > input[type="number"] {
+        grid-column: 2;
+    }
+
+    .round-form-modal .round-limit-row > div:last-child > span:nth-of-type(2) {
+        grid-column: 3;
+    }
+
+    .round-form-modal .round-limit-row > div:last-child > span:nth-of-type(3) {
+        grid-column: 1;
+    }
+
+    .round-form-modal .round-limit-row > div:last-child > input[type="time"] {
+        grid-column: 2;
+    }
+
+    .round-form-modal .round-limit-row > div:last-child > select {
+        grid-column: 3 / 5;
+    }
+
+    .round-form-modal .modal-footer {
+        padding: 0.85rem;
+        gap: 0.5rem;
+    }
+
+    .round-form-modal .modal-footer > div:first-child {
+        flex-direction: column;
+    }
+
+    .round-form-modal .modal-footer > div:first-child .btn,
+    .round-form-modal .modal-footer > .btn {
+        width: 100%;
+        flex-basis: 100%;
+    }
+}
