@@ -390,6 +390,56 @@ function getRoundDisplayDate(round: any, useSlash = false): string {
   return targetTime;
 }
 
+// Lottery types that use the 4-digit-set ("4_set") betting mechanic, i.e. lao/hanoi style
+const LAO_HANOI_STYLE_TYPES = new Set(['lao', 'hanoi', 'lao_extra', 'lao_vip']);
+
+const DEFAULT_OPEN_NOTIFY_LAO_HANOI =
+  `📢 ประกาศจากเภา:\n` +
+  `📢 เปิดรับแทง: [ประเภทหวย]\n` +
+  `📅 งวดวันที่: [งวดวันที่]\n` +
+  `--------------------------\n` +
+  `⚠️ ถ้ามีตัวปิดและติดมาจะจ่ายครึ่ง ตัวไหนมามากเกินไป คืนได้ตลอดเวลา\n` +
+  `✍️ ให้ตรวจสอบโพยทุกครั้งที่บอทรับ ได้เสียกันตามที่บอทรับ ตรวจสอบและยกเลิกได้ตามเวลา\n` +
+  `เลข 4 ตัวชุด ที่ส่งหลัง [เวลาปิดงวด-30 นาที] บอทจะคืนเลขตัวที่เกิน ส่วนเลขอื่นๆรับถึง [เวลาปิดงวด] \n` +
+  `⏰ เปิดรับแทงตั้งแต่บัดนี้ จนถึง [วันที่ปิดงวด] เวลา [เวลาปิดงวด]\n` +
+  `--------------------------\n` +
+  `🎉 ขอให้ทุกท่านโชคดีมีชัยกับการเสี่ยงดวงงวดนี้กันทุกคนนะครับ`;
+
+const DEFAULT_OPEN_NOTIFY_THAI =
+  `📢 ประกาศจากเภา:\n` +
+  `📢 เปิดรับแทง: [ประเภทหวย]\n` +
+  `📅 งวดวันที่: [งวดวันที่]\n` +
+  `--------------------------\n` +
+  `⚠️ ถ้ามีตัวปิดและติดมาจะจ่ายครึ่ง ตัวไหนมามากเกินไป คืนได้ตลอดเวลา\n` +
+  `✍️ ให้ตรวจสอบโพยทุกครั้งที่บอทรับ ได้เสียกันตามที่บอทรับ ตรวจสอบและยกเลิกได้ตามเวลา\n` +
+  `รับเลขถึงเวลา [เวลาปิดงวด] \n` +
+  `⏰ เปิดรับแทงตั้งแต่บัดนี้ จนถึง [วันที่ปิดงวด] เวลา [เวลาปิดงวด]\n` +
+  `--------------------------\n` +
+  `🎉 ขอให้ทุกท่านโชคดีมีชัยกับการเสี่ยงดวงงวดนี้กันทุกคนนะครับ`;
+
+// Helper: Pick the default open-round notification template for a lottery type
+function getDefaultOpenNotifyTemplate(lotteryType: string): string {
+  return LAO_HANOI_STYLE_TYPES.has(lotteryType) ? DEFAULT_OPEN_NOTIFY_LAO_HANOI : DEFAULT_OPEN_NOTIFY_THAI;
+}
+
+// Helper: Replace [placeholder] tokens in a notification template with real values
+function renderOpenNotifyMessage(template: string, params: Record<string, string>): string {
+  let text = template;
+  for (const [key, value] of Object.entries(params)) {
+    text = text.split(`[${key}]`).join(value);
+  }
+  return text;
+}
+
+// Helper: Compute HH:MM that is `minutesToSubtract` minutes before the given date/time (Bangkok time)
+function subtractMinutesToHHMM(dateStr: string, timeStr: string, minutesToSubtract: number): string {
+  const dt = new Date(`${dateStr}T${timeStr}:00+07:00`);
+  dt.setMinutes(dt.getMinutes() - minutesToSubtract);
+  const hour = parseInt(dt.toLocaleString("en-US", { timeZone: "Asia/Bangkok", hour: "2-digit", hour12: false }), 10) % 24;
+  const minute = parseInt(dt.toLocaleString("en-US", { timeZone: "Asia/Bangkok", minute: "2-digit" }), 10);
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
 // Helper: Format winning numbers for display
 function formatWinningNumbersForDisplay(winningNumbers: any, lotteryType: string): string {
   if (!winningNumbers) return 'ยังไม่มีผลรางวัล';
@@ -3948,12 +3998,19 @@ serve(async (req) => {
             .eq('notify_round_created', true)
 
           if (groups && groups.length > 0) {
-            const announceText = `📢 เปิดรับแทงงวดใหม่แล้วค่ะ!\n` +
-              `หวย: ${lotteryName}\n` +
-              `งวดวันที่: ${roundDateStr}\n` +
-              `เวลาเปิดรับ: ${job.open_time} น.\n` +
-              `เวลาปิดรับ: ${job.close_time} น.\n\n` +
-              `ท่านสามารถส่งโพยเข้าระบบเพื่อวิเคราะห์และบันทึกบิลแทงได้ทันทีค่ะ! 🎰`;
+            // Build the open-round notification from the customizable template (or default)
+            const deleteBeforeMin = tmpl?.delete_before_minutes || 30;
+            const closeTimeMinus30 = subtractMinutesToHHMM(closeDateStr, job.close_time, deleteBeforeMin);
+            const roundDisplayDate = getRoundDisplayDate({ round_date: roundDateStr, close_time: closeTimestamp }, false);
+            const closeDisplayDate = getRoundDisplayDate({ round_date: closeDateStr, close_time: closeTimestamp }, false);
+            const notifyTemplate = job.open_notify_message || getDefaultOpenNotifyTemplate(job.lottery_type);
+            const announceText = renderOpenNotifyMessage(notifyTemplate, {
+              'ประเภทหวย': lotteryName,
+              'งวดวันที่': roundDisplayDate,
+              'วันที่ปิดงวด': closeDisplayDate,
+              'เวลาปิดงวด': job.close_time,
+              'เวลาปิดงวด-30 นาที': closeTimeMinus30
+            });
 
             for (const g of groups) {
               if (g.line_group_id) {
@@ -4093,12 +4150,19 @@ serve(async (req) => {
             .eq('notify_round_created', true)
 
           if (groups && groups.length > 0) {
-            const announceText = `📢 เปิดรับแทงงวดใหม่แล้วค่ะ!\n` +
-              `หวย: ${lotteryName}\n` +
-              `งวดวันที่: ${roundDateStr}\n` +
-              `เวลาเปิดรับ: ${template.open_time} น.\n` +
-              `เวลาปิดรับ: ${template.close_time} น.\n\n` +
-              `ท่านสามารถส่งโพยเข้าระบบเพื่อวิเคราะห์และบันทึกบิลแทงได้ทันทีค่ะ! 🎰`;
+            // Build the open-round notification from the customizable template (or default)
+            const deleteBeforeMin = template.delete_before_minutes || 30;
+            const closeTimeMinus30 = subtractMinutesToHHMM(closeDateStr, template.close_time, deleteBeforeMin);
+            const roundDisplayDate = getRoundDisplayDate({ round_date: roundDateStr, close_time: closeTimestamp }, false);
+            const closeDisplayDate = getRoundDisplayDate({ round_date: closeDateStr, close_time: closeTimestamp }, false);
+            const notifyTemplate = template.open_notify_message || getDefaultOpenNotifyTemplate(template.lottery_type);
+            const announceText = renderOpenNotifyMessage(notifyTemplate, {
+              'ประเภทหวย': lotteryName,
+              'งวดวันที่': roundDisplayDate,
+              'วันที่ปิดงวด': closeDisplayDate,
+              'เวลาปิดงวด': template.close_time,
+              'เวลาปิดงวด-30 นาที': closeTimeMinus30
+            });
 
             for (const g of groups) {
               if (g.line_group_id) {

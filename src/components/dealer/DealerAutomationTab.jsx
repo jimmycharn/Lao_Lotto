@@ -15,6 +15,7 @@ import {
     FiCheckCircle,
     FiAlertCircle,
     FiCalendar,
+    FiMessageSquare,
     FiToggleLeft,
     FiToggleRight
 } from 'react-icons/fi'
@@ -63,6 +64,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
         close_time: '20:15',
         close_day_offset: 0,
         creation_frequency: 'once_per_day',
+        open_notify_message: '',
         layoff_enabled: false,
         layoff_method: 'limits',
         layoff_keep_amount: 0,
@@ -132,6 +134,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             close_time: '20:15',
             close_day_offset: 0,
             creation_frequency: 'once_per_day',
+            open_notify_message: '',
             layoff_enabled: false,
             layoff_method: 'limits',
             layoff_keep_amount: 0,
@@ -160,6 +163,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             close_time: job.close_time ? job.close_time.slice(0, 5) : '20:15',
             close_day_offset: job.close_day_offset || 0,
             creation_frequency: job.creation_frequency || 'once_per_day',
+            open_notify_message: job.open_notify_message || '',
             layoff_enabled: job.layoff_enabled || false,
             layoff_method: job.layoff_method || 'limits',
             layoff_keep_amount: job.layoff_keep_amount || 0,
@@ -237,6 +241,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             close_time: jobForm.close_time,
             close_day_offset: jobForm.close_day_offset,
             creation_frequency: jobForm.creation_frequency,
+            open_notify_message: jobForm.open_notify_message || null,
             layoff_enabled: jobForm.layoff_enabled,
             layoff_method: jobForm.layoff_method,
             layoff_keep_amount: jobForm.layoff_keep_amount,
@@ -654,6 +659,30 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                 </div>
                                             </div>
                                         </div>
+                                    </div>
+
+                                    {/* 2.5 Open-round notification message */}
+                                    <div style={{ background: 'rgba(255,255,255,0.01)', padding: '1.2rem', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+                                        <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                            <FiMessageSquare /> ข้อความแจ้งเปิดงวด (Open Notification)
+                                        </h4>
+                                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0 0 0.8rem 0' }}>
+                                            ข้อความที่จะส่งไปยังกลุ่มไลน์ทุกกลุ่มเมื่อระบบสร้างงวดใหม่อัตโนมัติ หากไม่กรอกจะใช้ข้อความเริ่มต้นตามประเภทหวย
+                                        </p>
+                                        <textarea
+                                            value={jobForm.open_notify_message}
+                                            onChange={(e) => setJobForm({ ...jobForm, open_notify_message: e.target.value })}
+                                            className="form-input"
+                                            rows={12}
+                                            placeholder={jobForm.lottery_type === 'thai'
+                                                ? `📢 ประกาศจากเภา:\n📢 เปิดรับแทง: [ประเภทหวย]\n📅 งวดวันที่: [งวดวันที่]\n--------------------------\n⚠️ ถ้ามีตัวปิดและติดมาจะจ่ายครึ่ง ตัวไหนมามากเกินไป คืนได้ตลอดเวลา\n✍️ ให้ตรวจสอบโพยทุกครั้งที่บอทรับ ได้เสียกันตามที่บอทรับ ตรวจสอบและยกเลิกได้ตามเวลา\nรับเลขถึงเวลา [เวลาปิดงวด] \n⏰ เปิดรับแทงตั้งแต่บัดนี้ จนถึง [วันที่ปิดงวด] เวลา [เวลาปิดงวด]\n--------------------------\n🎉 ขอให้ทุกท่านโชคดีมีชัยกับการเสี่ยงดวงงวดนี้กันทุกคนนะครับ`
+                                                : `📢 ประกาศจากเภา:\n📢 เปิดรับแทง: [ประเภทหวย]\n📅 งวดวันที่: [งวดวันที่]\n--------------------------\n⚠️ ถ้ามีตัวปิดและติดมาจะจ่ายครึ่ง ตัวไหนมามากเกินไป คืนได้ตลอดเวลา\n✍️ ให้ตรวจสอบโพยทุกครั้งที่บอทรับ ได้เสียกันตามที่บอทรับ ตรวจสอบและยกเลิกได้ตามเวลา\nเลข 4 ตัวชุด ที่ส่งหลัง [เวลาปิดงวด-30 นาที] บอทจะคืนเลขตัวที่เกิน ส่วนเลขอื่นๆรับถึง [เวลาปิดงวด] \n⏰ เปิดรับแทงตั้งแต่บัดนี้ จนถึง [วันที่ปิดงวด] เวลา [เวลาปิดงวด]\n--------------------------\n🎉 ขอให้ทุกท่านโชคดีมีชัยกับการเสี่ยงดวงงวดนี้กันทุกคนนะครับ`
+                                            }
+                                            style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem', resize: 'vertical', lineHeight: '1.5' }}
+                                        />
+                                        <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', margin: '0.5rem 0 0 0' }}>
+                                            ตัวแปรที่ใช้ได้: [ประเภทหวย] [งวดวันที่] [วันที่ปิดงวด] [เวลาปิดงวด] [เวลาปิดงวด-30 นาที]
+                                        </p>
                                     </div>
 
                                     {/* 3. Auto Layoff */}
