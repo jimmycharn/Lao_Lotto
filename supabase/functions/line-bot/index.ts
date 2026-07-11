@@ -3825,19 +3825,42 @@ serve(async (req) => {
         .eq('is_auto_round_enabled', true)
 
       const results: any[] = [];
-      const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
-      const currentDayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday...
-      const currentDayOfMonth = now.getDate();
-      const roundDateStr = now.toISOString().split('T')[0];
+      const now = new Date(); // actual UTC timestamp — used for Date comparisons
 
-      const bkkHour = parseInt(now.toLocaleString("en-US", { timeZone: "Asia/Bangkok", hour: "2-digit", hour12: false }), 10);
-      const bkkMinute = parseInt(now.toLocaleString("en-US", { timeZone: "Asia/Bangkok", minute: "2-digit" }), 10);
-      const currentHourMin = `${String(bkkHour).padStart(2, '0')}:${String(bkkMinute).padStart(2, '0')}`;
+      // Derive Bangkok time components from the actual timestamp
+      const bkkParts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Bangkok",
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hour12: false,
+        weekday: "short"
+      }).formatToParts(now);
+      const getPart = (type: string) => bkkParts.find(p => p.type === type)?.value || '';
+      const bkkYear = getPart('year');
+      const bkkMonth = getPart('month');
+      const bkkDay = getPart('day');
+      const bkkHour = getPart('hour') === '24' ? '00' : getPart('hour');
+      const bkkMinute = getPart('minute');
+
+      const roundDateStr = `${bkkYear}-${bkkMonth}-${bkkDay}`;
+      const currentHourMin = `${bkkHour.padStart(2, '0')}:${bkkMinute.padStart(2, '0')}`;
+
+      // Compute Bangkok day-of-week and day-of-month
+      const bkkDate = new Date(parseInt(bkkYear), parseInt(bkkMonth) - 1, parseInt(bkkDay));
+      const currentDayOfWeek = bkkDate.getDay(); // 0 = Sunday, 1 = Monday...
+      const currentDayOfMonth = parseInt(bkkDay, 10);
 
       // Check if it is the last day of the month
-      const nextDay = new Date(now);
-      nextDay.setDate(now.getDate() + 1);
-      const isLastDayOfMonth = nextDay.getMonth() !== now.getMonth();
+      const nextDay = new Date(parseInt(bkkYear), parseInt(bkkMonth) - 1, parseInt(bkkDay) + 1);
+      const isLastDayOfMonth = nextDay.getMonth() !== (parseInt(bkkMonth) - 1);
+
+      // Helper: compute a Bangkok date string offset by N days from today
+      const bkkDateStrWithOffset = (offsetDays: number) => {
+        const d = new Date(parseInt(bkkYear), parseInt(bkkMonth) - 1, parseInt(bkkDay) + offsetDays);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${dd}`;
+      };
 
       const formatLocalDateTimeStr = (datePart: string, timePart: string) => {
         return `${datePart}T${timePart || '00:00'}:00+07:00`;
@@ -3855,8 +3878,10 @@ serve(async (req) => {
       };
 
       // Process new style automation jobs
+      console.log(`[auto_create] Started. jobs=${(jobs||[]).length}, templates=${(templates||[]).length}, now=${currentHourMin}, date=${roundDateStr}, dow=${currentDayOfWeek}, dom=${currentDayOfMonth}`);
       for (const job of (jobs || [])) {
         try {
+          console.log(`[auto_create] Job ${job.id}: name=${job.name}, type=${job.lottery_type}, freq=${job.creation_frequency}, open=${job.open_time}, close=${job.close_time}, active=${job.is_active}`);
           let shouldCreate = false;
           const scheduleDays = Array.isArray(job.schedule_days) ? job.schedule_days : [];
 
@@ -3870,10 +3895,23 @@ serve(async (req) => {
             }
           }
 
-          if (!shouldCreate) continue;
+          if (!shouldCreate) {
+            console.log(`[auto_create] Job ${job.id}: SKIP - schedule mismatch (mode=${job.schedule_mode}, days=${JSON.stringify(scheduleDays)}, dow=${currentDayOfWeek}, dom=${currentDayOfMonth})`);
+            continue;
+          }
 
           // Check if open_time has arrived
-          if (currentHourMin < job.open_time) continue;
+          if (currentHourMin < job.open_time) {
+            console.log(`[auto_create] Job ${job.id}: SKIP - before open_time (${currentHourMin} < ${job.open_time})`);
+            continue;
+          }
+
+          // For unlimited mode, don't create if current time has passed close_time
+          if ((job.creation_frequency || 'once_per_day') === 'unlimited' && currentHourMin >= job.close_time) {
+            console.log(`[auto_create] Job ${job.id}: SKIP - past close_time (${currentHourMin} >= ${job.close_time})`);
+            results.push({ job_id: job.id, status: 'skipped', reason: 'past_close_time' });
+            continue;
+          }
 
           // Respect the per-job creation frequency setting (default: once per day)
           if ((job.creation_frequency || 'once_per_day') !== 'unlimited') {
@@ -3902,9 +3940,7 @@ serve(async (req) => {
             .eq('lottery_type', job.lottery_type)
             .maybeSingle();
 
-          const closeDate = new Date(now);
-          closeDate.setDate(now.getDate() + (job.close_day_offset || 0));
-          const closeDateStr = closeDate.toISOString().split('T')[0];
+          const closeDateStr = bkkDateStrWithOffset(job.close_day_offset || 0);
 
           const openTimestamp = formatLocalDateTimeStr(roundDateStr, job.open_time);
           const closeTimestamp = formatLocalDateTimeStr(closeDateStr, job.close_time);
@@ -3913,10 +3949,12 @@ serve(async (req) => {
           // Check for overlapping active rounds
           const { data: existingRounds } = await supabase
             .from('lottery_rounds')
-            .select('open_time, close_time, status')
+            .select('id, open_time, close_time, status, created_by_job_id')
             .eq('dealer_id', job.dealer_id)
             .eq('lottery_type', job.lottery_type)
             .not('status', 'in', '("closed","announced","cancelled")');
+
+          console.log(`[auto_create] Job ${job.id}: existingRounds=${JSON.stringify(existingRounds)}, newOpen=${openTimestamp}, newClose=${closeTimestamp}`);
 
           const hasOverlap = (existingRounds || []).some((r: any) => {
             const extOpen = new Date(r.open_time);
@@ -3924,14 +3962,19 @@ serve(async (req) => {
             const newOpen = new Date(openTimestamp);
             const newClose = new Date(closeTimestamp);
 
-            return (r.status !== 'closed' && r.status !== 'announced' && r.status !== 'cancelled' && now < extClose) &&
+            const overlap = (r.status !== 'closed' && r.status !== 'announced' && r.status !== 'cancelled' && now < extClose) &&
                    (newOpen < extClose && newClose > extOpen);
+            if (overlap) console.log(`[auto_create] Job ${job.id}: OVERLAP with round ${r.id} (status=${r.status}, open=${r.open_time}, close=${r.close_time})`);
+            return overlap;
           });
 
           if (hasOverlap) {
+            console.log(`[auto_create] Job ${job.id}: SKIP - overlapping_active_round`);
             results.push({ job_id: job.id, status: 'skipped', reason: 'overlapping_active_round' });
             continue;
           }
+
+          console.log(`[auto_create] Job ${job.id}: PROCEEDING to create round`);
 
           // Insert new round
           const { data: round, error: insertError } = await supabase
@@ -4059,9 +4102,7 @@ serve(async (req) => {
             continue;
           }
 
-          const closeDate = new Date(now);
-          closeDate.setDate(now.getDate() + (template.close_day_offset || 0));
-          const closeDateStr = closeDate.toISOString().split('T')[0];
+          const closeDateStr = bkkDateStrWithOffset(template.close_day_offset || 0);
 
           const openTimestamp = formatLocalDateTimeStr(roundDateStr, template.open_time);
           const closeTimestamp = formatLocalDateTimeStr(closeDateStr, template.close_time);
