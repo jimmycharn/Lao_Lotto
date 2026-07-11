@@ -329,13 +329,26 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
     }));
 
     return (
-        <div className="profile-tab-container">
-            
+        <div className="profile-tab-container automation-tab-container">
+            <div className="automation-intro">
+                <div>
+                    <span className="automation-eyebrow">WORKFLOW CONTROL CENTER</span>
+                    <h2><FiSettings /> ตั้งค่าออโตเมชัน</h2>
+                    <p>จัดการตารางเปิด–ปิดงวด การส่งรายงาน และการประกาศผลจากพื้นที่เดียว</p>
+                </div>
+                <div className="automation-intro-mark"><FiClock /></div>
+            </div>
 
-                            <div>
+            <div className="automation-metrics">
+                <div className="automation-metric"><span>รายการทั้งหมด</span><strong>{jobs.length}</strong><small>workflow</small></div>
+                <div className="automation-metric"><span>กำลังทำงาน</span><strong>{jobs.filter(job => job.is_active).length}</strong><small>active now</small></div>
+                <div className="automation-metric"><span>กลุ่ม LINE</span><strong>{lineGroups.length}</strong><small>connected groups</small></div>
+            </div>
+
+                            <div className="automation-content">
                     {!isFormOpen ? (
-                        <div className="profile-card">
-                            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div className="profile-card automation-list-card">
+                            <div className="card-header automation-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <h3 style={{ margin: 0 }}><FiClock /> รายการงานออโตเมชันของร้านคุณ</h3>
                                 <button
                                     onClick={handleOpenCreate}
@@ -346,7 +359,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                 </button>
                             </div>
 
-                            <div className="card-body">
+                            <div className="card-body automation-list-body">
                                 {loadingJobs ? (
                                     <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
                                         <div className="spinner" />
@@ -364,6 +377,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                             return (
                                                 <div
                                                     key={job.id}
+                                                    className="automation-job-card"
                                                     style={{
                                                         background: 'rgba(255,255,255,0.02)',
                                                         border: '1px solid var(--border-color)',
@@ -377,7 +391,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                     }}
                                                 >
                                                     {/* Row 1: Header info */}
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.8rem' }}>
+                                                    <div className="automation-job-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.8rem' }}>
                                                         <div>
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                                                                 <h4 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-primary)' }}>{job.name}</h4>
@@ -420,7 +434,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                     </div>
 
                                                     {/* Row 2: Automation details */}
-                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.8rem', padding: '0.8rem', background: 'rgba(0,0,0,0.12)', borderRadius: '8px', fontSize: '0.85rem' }}>
+                                                    <div className="automation-job-details" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.8rem', padding: '0.8rem', background: 'rgba(0,0,0,0.12)', borderRadius: '8px', fontSize: '0.85rem' }}>
                                                         <div>
                                                             <strong>⏰ กำหนดเวลา:</strong>
                                                             <div style={{ color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
@@ -456,7 +470,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                     </div>
 
                                                     {/* Row 3: Timestamps */}
-                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', gap: '1rem', flexWrap: 'wrap', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.5rem' }}>
+                                                    <div className="automation-job-meta" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', gap: '1rem', flexWrap: 'wrap', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.5rem' }}>
                                                         <span>🆕 รันสร้างงวดล่าสุด: {job.last_created_at ? new Date(job.last_created_at).toLocaleString('th-TH') : 'ยังไม่เคยรัน'}</span>
                                                         <span>🛑 รันปิดงวดล่าสุด: {job.last_closed_at ? new Date(job.last_closed_at).toLocaleString('th-TH') : 'ยังไม่เคยรัน'}</span>
                                                         <span>🏆 รันประกาศผลล่าสุด: {job.last_announced_at ? new Date(job.last_announced_at).toLocaleString('th-TH') : 'ยังไม่เคยรัน'}</span>
@@ -469,15 +483,15 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                             </div>
                         </div>
                     ) : (
-                        <div className="profile-card">
+                        <div className="profile-card automation-form-card">
                             <form onSubmit={handleSaveJob}>
-                                <div className="card-header">
+                                <div className="card-header automation-form-header">
                                     <h3 style={{ margin: 0 }}>
                                         {editingJobId ? `✏️ แก้ไขรายการออโตเมชัน: ${jobForm.name}` : '🚀 สร้างรายการงานออโตเมชันตัวใหม่'}
                                     </h3>
                                 </div>
 
-                                <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                <div className="card-body automation-form-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                                     
                                     {/* 1. Basic Info */}
                                     <div style={{ background: 'rgba(255,255,255,0.01)', padding: '1.2rem', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
