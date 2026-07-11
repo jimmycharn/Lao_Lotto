@@ -3754,7 +3754,7 @@ serve(async (req) => {
         const { data: finalSubmissions } = await fetchAllRows(
           (from, to) => supabase
             .from('submissions')
-            .select('amount, user_id')
+            .select('amount, user_id, commission_amount')
             .eq('round_id', round.id)
             .eq('is_deleted', false)
             .range(from, to)
@@ -3762,34 +3762,113 @@ serve(async (req) => {
         const { data: finalTransfers } = await fetchAllRows(
           (from, to) => supabase
             .from('bet_transfers')
-            .select('amount')
+            .select('amount, target_dealer_name, bet_type, status')
             .eq('round_id', round.id)
             .range(from, to)
         );
 
         const totalBetsAmt = (finalSubmissions || []).reduce((sum, s) => sum + Number(s.amount || 0), 0);
-        const totalLayoffAmt = (finalTransfers || []).reduce((sum, t) => sum + Number(t.amount || 0), 0);
+        const activeTransfers = (finalTransfers || []).filter((t: any) => t.status !== 'returned');
+        const totalLayoffAmt = activeTransfers.reduce((sum, t) => sum + Number(t.amount || 0), 0);
         const keepAmountVal = totalBetsAmt - totalLayoffAmt;
 
-        const uniqueUserIds = [...new Set((finalSubmissions || []).map((s: any) => s.user_id).filter(Boolean))];
-        let senderNames = 'ไม่มี';
+        // Per-user breakdown
+        const userMap = new Map<string, { totalBet: number; totalComm: number }>();
+        (finalSubmissions || []).forEach((s: any) => {
+          const uid = s.user_id;
+          if (!uid) return;
+          if (!userMap.has(uid)) userMap.set(uid, { totalBet: 0, totalComm: 0 });
+          const u = userMap.get(uid)!;
+          u.totalBet += Number(s.amount || 0);
+          u.totalComm += Number(s.commission_amount || 0);
+        });
+
+        const uniqueUserIds = [...userMap.keys()];
+        let profilesMap: Record<string, string> = {};
         if (uniqueUserIds.length > 0) {
           const { data: profiles } = await supabase
             .from('profiles')
-            .select('full_name')
+            .select('id, full_name')
             .in('id', uniqueUserIds);
-          senderNames = (profiles || []).map(p => p.full_name || 'ไม่ระบุชื่อ').join(', ');
+          (profiles || []).forEach((p: any) => {
+            profilesMap[p.id] = p.full_name || 'ไม่ระบุชื่อ';
+          });
         }
 
-        const closingSummaryText = `📊 สรุปยอดโพยเมื่อปิดงวด [${round.lottery_name}]\n` +
-          `📅 งวดวันที่: ${round.round_date}\n` +
+        // Per-dealer layoff breakdown
+        const dealerMap = new Map<string, { totalBet: number; totalComm: number }>();
+        activeTransfers.forEach((t: any) => {
+          const dealerName = t.target_dealer_name || 'ไม่ระบุชื่อ';
+          if (!dealerMap.has(dealerName)) dealerMap.set(dealerName, { totalBet: 0, totalComm: 0 });
+          const d = dealerMap.get(dealerName)!;
+          const amt = Number(t.amount || 0);
+          d.totalBet += amt;
+          // Calculate commission based on bet_type defaults
+          let commRate = 15;
+          const DEFAULT_COMM: Record<string, number> = {
+            'run_top': 10, 'run_bottom': 10, 'pak_top': 15, 'pak_bottom': 15,
+            '2_top': 15, '2_bottom': 15, '2_front': 15, '2_spread': 15,
+            '3_top': 30, '3_tod': 15, '3_bottom': 15
+          };
+          const LAO_DEFAULTS: Record<string, number> = {
+            'run_top': 10, 'run_bottom': 10, 'pak_top': 15, 'pak_bottom': 15,
+            '2_top': 20, '2_bottom': 20, '3_top': 20, '3_tod': 20, '3_bottom': 20
+          };
+          if (round.lottery_type === 'lao' || round.lottery_type === 'hanoi') {
+            commRate = LAO_DEFAULTS[t.bet_type] !== undefined ? LAO_DEFAULTS[t.bet_type] : 20;
+          } else {
+            commRate = DEFAULT_COMM[t.bet_type] !== undefined ? DEFAULT_COMM[t.bet_type] : 15;
+          }
+          d.totalComm += amt * (commRate / 100);
+        });
+
+        // Build lottery type name
+        const SUMMARY_LOTTERY_TYPE_NAMES: Record<string, string> = {
+          lao: 'หวยลาว', thai: 'หวยไทย', hanoi: 'หวยฮานอย',
+          stock: 'หวยหุ้น', yeekee: 'หวยยี่กี',
+          lao_extra: 'หวยลาวพิเศษ', lao_vip: 'หวยลาว VIP'
+        };
+        const summaryTypeName = SUMMARY_LOTTERY_TYPE_NAMES[round.lottery_type] || round.lottery_type.toUpperCase();
+        const roundDisplayDate = getRoundDisplayDate(round, false);
+
+        // Build summary text
+        let closingSummaryText = `📊 สรุปยอดรวมทั้งหมด: ${summaryTypeName}\n` +
+          `📅 งวดวันที่: ${roundDisplayDate}\n` +
           `----------------------------------\n` +
-          `💰 ยอดรวมยอดแทงดิบ: ${totalBetsAmt.toLocaleString()} ${round.currency_symbol || '฿'}\n` +
-          `📤 ยอดที่ส่งออก (ตีออก): ${totalLayoffAmt.toLocaleString()} ${round.currency_symbol || '฿'}\n` +
-          `🛡️ ยอดร้านถือสู้เอง: ${keepAmountVal.toLocaleString()} ${round.currency_symbol || '฿'}\n` +
+          `💰 ยอดแทงรวม:  ฿${Math.round(totalBetsAmt).toLocaleString('th-TH')}\n` +
+          `📤 ยอดที่ตีออก: ฿${Math.round(totalLayoffAmt).toLocaleString('th-TH')}\n` +
+          `🛡️ ยอดเหลือในมือ: ฿${Math.round(keepAmountVal).toLocaleString('th-TH')}\n` +
           `----------------------------------\n` +
           `👥 จำนวนคนส่งโพย: ${uniqueUserIds.length} คน\n` +
-          `รายชื่อ: ${senderNames}`;
+          `ชื่อ/ยอดรวม/ค่าคอม/ยอดส่ง\n`;
+
+        // Sort users by total bet descending
+        const sortedUsers = uniqueUserIds.map(uid => ({
+          uid,
+          name: profilesMap[uid] || 'ไม่ระบุชื่อ',
+          ...userMap.get(uid)!
+        })).sort((a, b) => b.totalBet - a.totalBet);
+
+        sortedUsers.forEach((u, idx) => {
+          const net = Math.round(u.totalBet - u.totalComm);
+          closingSummaryText += `${idx + 1}. ${u.name} ${Math.round(u.totalBet).toLocaleString('th-TH')}/${Math.round(u.totalComm).toLocaleString('th-TH')}/${net.toLocaleString('th-TH')}\n`;
+        });
+
+        // Add layoff dealer breakdown only if there are active transfers
+        if (dealerMap.size > 0) {
+          closingSummaryText += `----------------------------------\n`;
+          closingSummaryText += `👥 ตีออกให้เจ้ามือ ${dealerMap.size} คน\n`;
+          closingSummaryText += `ชื่อ/ยอดรวม/ค่าคอม/ยอดตี\n`;
+
+          const sortedDealers = [...dealerMap.entries()].map(([name, data]) => ({
+            name, ...data
+          })).sort((a, b) => b.totalBet - a.totalBet);
+
+          sortedDealers.forEach((d, idx) => {
+            const net = Math.round(d.totalBet - d.totalComm);
+            closingSummaryText += `${idx + 1}. ${d.name} ${Math.round(d.totalBet).toLocaleString('th-TH')}/${Math.round(d.totalComm).toLocaleString('th-TH')}/${net.toLocaleString('th-TH')}\n`;
+          });
+        }
 
         // Push to groups matching notify_round_summary = true
         const { data: summaryGroups } = await supabase
