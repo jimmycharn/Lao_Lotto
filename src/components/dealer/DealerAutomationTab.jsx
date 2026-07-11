@@ -469,7 +469,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                             <div style={{ color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
                                                                 ส่งยอด: {job.notify_bets_enabled ? '✅ เปิดแจ้งกลุ่ม' : '❌ ปิด'}<br />
                                                                 ดึงผลออโต้: {job.auto_import_result_enabled ? '✅ เปิด' : '❌ ปิด'}<br />
-                                                                ส่งได้เสีย: {job.notify_result_enabled ? '✅ แจ้ง Carousel สมาชิก' : '❌ ปิด'}
+                                                                ส่งได้เสีย: {job.notify_result_enabled ? '✅ แจ้งสมาชิก' : '❌ ปิด'}
                                                             </div>
                                                         </div>
                                                     </div>
