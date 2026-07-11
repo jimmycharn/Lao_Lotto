@@ -3568,8 +3568,18 @@ serve(async (req) => {
               }
             }
 
-            // Fallback for formula/limits OR if AI calculation failed
-            if (recommendations.length === 0 && (layoffMethod === 'formula' || layoffMethod === 'limits' || layoffMethod === 'ai')) {
+            // 'limits' method: transfer out exactly the amount exceeding each number's configured limit
+            if (recommendations.length === 0 && layoffMethod === 'limits') {
+              const excessItems = await calculateRoundExcess(round.id);
+              recommendations = excessItems.map(item => ({
+                bet_type: item.bet_type,
+                numbers: item.numbers,
+                transfer_amount: item.amount
+              }));
+            }
+
+            // Fallback for formula OR if AI calculation failed
+            if (recommendations.length === 0 && (layoffMethod === 'formula' || layoffMethod === 'ai')) {
               const betItems = buildBetItems(submissions, transfers || [], userSettingsMap, round.lottery_type, setPrice);
               const scenarios = calculateScenarios(betItems, round.lottery_type, setPrice);
               recommendations = greedyRecommendations(scenarios, betItems, keepAmount, setPrice, round.lottery_type);
