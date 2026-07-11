@@ -3825,23 +3825,6 @@ serve(async (req) => {
           // Check if open_time has arrived
           if (currentHourMin < job.open_time) continue;
 
-          // Check if already created today by checking last_created_at in BKK time
-          let alreadyCreatedToday = false;
-          if (job.last_created_at) {
-            const lastRunBkkDate = new Date(new Date(job.last_created_at).toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
-            const lastRunDatePart = lastRunBkkDate.getFullYear() + '-' + 
-                                    String(lastRunBkkDate.getMonth() + 1).padStart(2, '0') + '-' + 
-                                    String(lastRunBkkDate.getDate()).padStart(2, '0');
-            if (lastRunDatePart === roundDateStr) {
-              alreadyCreatedToday = true;
-            }
-          }
-
-          if (alreadyCreatedToday) {
-            results.push({ job_id: job.id, status: 'skipped', reason: 'already_created_today' });
-            continue;
-          }
-
           // Fetch default template settings if exists to copy configuration
           const { data: tmpl } = await supabase
             .from('dealer_lottery_templates')
@@ -3995,19 +3978,6 @@ serve(async (req) => {
 
           if (!shouldCreate) continue;
           if (currentHourMin < template.open_time) continue;
-
-          // Check if round already exists for this dealer, type, and date to avoid duplicate creation
-          const { data: existingRound, error: existError } = await supabase
-            .from('lottery_rounds')
-            .select('id')
-            .eq('dealer_id', template.dealer_id)
-            .eq('lottery_type', template.lottery_type)
-            .eq('round_date', roundDateStr)
-            .maybeSingle()
-
-          if (existError || existingRound) {
-            continue; // Skip if exists or error checking
-          }
 
           const closeDate = new Date(now);
           closeDate.setDate(now.getDate() + (template.close_day_offset || 0));
