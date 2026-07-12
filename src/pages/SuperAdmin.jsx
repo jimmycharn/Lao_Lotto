@@ -246,12 +246,7 @@ export default function SuperAdmin() {
             let primary_number = null
             let secondary_number = null
             let three_digit_sets = null
-            let win_number_6_top = null
-            let win_number_3_top = null
-            let win_number_2_top = null
-            let win_number_2_bottom = null
-            let win_number_4_set = null
-            let win_number_3_bottom = null
+            let derivedAll = {}
 
             if (manualLotteryType === 'thai') {
                 const sixDigit = (manualInputs.official_6_digit || '').trim()
@@ -265,20 +260,25 @@ export default function SuperAdmin() {
                 primary_number = sixDigit
                 secondary_number = twoBottom || null
                 three_digit_sets = [...front3, ...back3]
-                win_number_6_top = sixDigit
-                win_number_3_top = sixDigit.slice(0, 3)
-                win_number_2_top = sixDigit.slice(0, 2)
-                win_number_2_bottom = twoBottom || null
+                derivedAll = {
+                    '6_top': sixDigit,
+                    '3_top': sixDigit.slice(-3),
+                    '2_top': sixDigit.slice(-2),
+                    '2_bottom': secondary_number,
+                    '3_bottom': three_digit_sets
+                }
             } else if (manualLotteryType === 'lao' || manualLotteryType === 'hanoi') {
                 const fourDigit = (manualInputs.primary_4_digit || '').trim()
                 if (!/^\d{4}$/.test(fourDigit)) { toast.error('เลข 4 ตัว ต้องเป็นตัวเลข 4 หลัก'); setManualSaving(false); return }
 
                 primary_number = fourDigit
-                secondary_number = fourDigit.slice(2)
-                win_number_4_set = fourDigit
-                win_number_2_top = fourDigit.slice(0, 2)
-                win_number_2_bottom = fourDigit.slice(2)
-                win_number_3_top = fourDigit.slice(1)
+                secondary_number = fourDigit.slice(0, 2)
+                derivedAll = {
+                    '4_set': fourDigit,
+                    '3_top': fourDigit.slice(-3),
+                    '2_top': fourDigit.slice(-2),
+                    '2_bottom': secondary_number
+                }
             } else if (manualLotteryType === 'stock') {
                 const index2 = (manualInputs.index_2_digit || '').trim()
                 const change2 = (manualInputs.change_2_digit || '').trim()
@@ -287,8 +287,10 @@ export default function SuperAdmin() {
 
                 primary_number = index2
                 secondary_number = change2 || null
-                win_number_2_top = index2
-                win_number_2_bottom = change2 || null
+                derivedAll = {
+                    '2_top': index2,
+                    '2_bottom': change2 || null
+                }
             }
 
             const insertObj = {
@@ -297,15 +299,11 @@ export default function SuperAdmin() {
                 primary_number,
                 secondary_number,
                 three_digit_sets,
-                win_number_6_top,
-                win_number_3_top,
-                win_number_2_top,
-                win_number_2_bottom,
-                win_number_4_set,
-                win_number_3_bottom,
-                is_verified: true,
-                source: 'manual_entry',
-                raw_response: { manual_entry: true, inputs: manualInputs }
+                win_number_3_top: derivedAll['3_top'] || null,
+                win_number_2_bottom: derivedAll['2_bottom'] || null,
+                win_number_3_tod: derivedAll['3_top'] || null,
+                win_number_all: derivedAll,
+                is_verified: true
             }
 
             const { error } = await supabase
