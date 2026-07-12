@@ -4748,7 +4748,7 @@ serve(async (req) => {
                   { role: 'user', content: userPrompt }
                 ],
                 plugins: [
-                  { id: "web-search" }
+                  { id: "web" }
                 ],
                 temperature: 0.1,
                 max_tokens: 1000

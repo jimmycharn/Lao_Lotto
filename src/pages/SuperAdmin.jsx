@@ -77,6 +77,10 @@ export default function SuperAdmin() {
     const [dealerBankAssignments, setDealerBankAssignments] = useState([])
     const [topupRequests, setTopupRequests] = useState([])
     const [billingRecords, setBillingRecords] = useState([])
+    const [aiCrawlerResults, setAiCrawlerResults] = useState([])
+    const [aiCrawlerJobs, setAiCrawlerJobs] = useState([])
+    const [testingCrawler, setTestingCrawler] = useState(false)
+    const [crawlerTestOutput, setCrawlerTestOutput] = useState(null)
 
     // UI States
     const [isLoading, setIsLoading] = useState(true)
@@ -180,7 +184,8 @@ export default function SuperAdmin() {
                 fetchBankAccounts(),
                 fetchTopupRequests(),
                 fetchCreditDeductions(),
-                fetchBillingRecords()
+                fetchBillingRecords(),
+                fetchAICrawlerData()
             ])
         } catch (error) {
             console.error('Error fetching data:', error)
@@ -189,6 +194,70 @@ export default function SuperAdmin() {
         }
     }
     
+    const fetchAICrawlerData = async () => {
+        try {
+            const [resultsRes, jobsRes] = await Promise.all([
+                supabase
+                    .from('central_lottery_results')
+                    .select('*')
+                    .order('round_date', { ascending: false })
+                    .limit(100),
+                supabase
+                    .from('central_ai_search_jobs')
+                    .select('*')
+                    .order('updated_at', { ascending: false })
+                    .limit(100)
+            ])
+            if (!resultsRes.error && resultsRes.data) setAiCrawlerResults(resultsRes.data)
+            if (!jobsRes.error && jobsRes.data) setAiCrawlerJobs(jobsRes.data)
+        } catch (err) {
+            console.log('AI crawler data not available:', err)
+        }
+    }
+
+    const handleTestCrawler = async () => {
+        setTestingCrawler(true)
+        setCrawlerTestOutput(null)
+        try {
+            const { data: settingsRows, error: settingsErr } = await supabase
+                .from('app_settings')
+                .select('key, value')
+                .in('key', ['line_bot_function_url', 'line_bot_cron_secret'])
+
+            if (settingsErr) throw settingsErr
+
+            const functionUrl = settingsRows?.find(r => r.key === 'line_bot_function_url')?.value
+            const cronSecret = settingsRows?.find(r => r.key === 'line_bot_cron_secret')?.value
+
+            if (!functionUrl || !cronSecret) {
+                throw new Error('ไม่พบ line_bot_function_url หรือ line_bot_cron_secret ใน app_settings')
+            }
+
+            const res = await fetch(functionUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'central_crawl_results', secret: cronSecret })
+            })
+
+            const json = await res.json()
+            setCrawlerTestOutput({ status: res.status, body: json })
+
+            if (res.ok) {
+                toast.success('ทดสอบสำเร็จ! กำลังรีเฟรชข้อมูล...')
+            } else {
+                toast.error(`เกิดข้อผิดพลาด: ${json.error || res.statusText}`)
+            }
+
+            await fetchAICrawlerData()
+        } catch (error) {
+            console.error('Error testing crawler:', error)
+            setCrawlerTestOutput({ error: error.message })
+            toast.error('ทดสอบไม่สำเร็จ: ' + error.message)
+        } finally {
+            setTestingCrawler(false)
+        }
+    }
+
     const fetchCreditDeductions = async () => {
         try {
             const { data, error } = await supabase
@@ -2781,6 +2850,154 @@ export default function SuperAdmin() {
         )
     }
 
+    const renderAICrawler = () => {
+        const successJobs = aiCrawlerJobs.filter(j => j.status === 'success')
+        const failedJobs = aiCrawlerJobs.filter(j => j.status === 'failed')
+        const pendingJobs = aiCrawlerJobs.filter(j => j.status === 'pending' || j.status === 'running')
+
+        return (
+            <div className="ai-crawler-tab">
+                {/* Summary Cards */}
+                <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
+                    <div className="stat-card">
+                        <div className="stat-icon" style={{ background: 'rgba(16, 185, 129, 0.2)' }}>
+                            <FiCheck style={{ color: 'var(--color-success)' }} />
+                        </div>
+                        <div className="stat-info">
+                            <span className="stat-label">สำเร็จ</span>
+                            <span className="stat-value">{successJobs.length} รายการ</span>
+                        </div>
+                    </div>
+                    <div className="stat-card">
+                        <div className="stat-icon" style={{ background: 'rgba(239, 68, 68, 0.2)' }}>
+                            <FiAlertCircle style={{ color: 'var(--color-danger)' }} />
+                        </div>
+                        <div className="stat-info">
+                            <span className="stat-label">ล้มเหลว</span>
+                            <span className="stat-value">{failedJobs.length} รายการ</span>
+                        </div>
+                    </div>
+                    <div className="stat-card">
+                        <div className="stat-icon" style={{ background: 'rgba(245, 158, 11, 0.2)' }}>
+                            <FiClock style={{ color: 'var(--color-warning)' }} />
+                        </div>
+                        <div className="stat-info">
+                            <span className="stat-label">รอ / กำลังทำงาน</span>
+                            <span className="stat-value">{pendingJobs.length} รายการ</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Test Trigger */}
+                <div className="settings-section" style={{ marginBottom: '1.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                        <div>
+                            <h3 style={{ margin: 0 }}>ทดสอบระบบ AI ค้นหาผลรางวัล</h3>
+                            <p style={{ color: 'var(--color-text-muted)', margin: '0.25rem 0 0' }}>
+                                สั่งให้ระบบค้นหาผลรางวัลทันที (ปกติ cron job จะรันทุก 10 นาที)
+                            </p>
+                        </div>
+                        <button
+                            className="btn btn-primary"
+                            onClick={handleTestCrawler}
+                            disabled={testingCrawler}
+                        >
+                            <FiSearch /> {testingCrawler ? 'กำลังทดสอบ...' : 'ทดสอบค้นหาทันที'}
+                        </button>
+                    </div>
+
+                    {crawlerTestOutput && (
+                        <pre style={{
+                            marginTop: '1rem',
+                            padding: '1rem',
+                            background: 'rgba(0,0,0,0.3)',
+                            borderRadius: '8px',
+                            fontSize: '0.85rem',
+                            overflowX: 'auto',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word'
+                        }}>
+                            {JSON.stringify(crawlerTestOutput, null, 2)}
+                        </pre>
+                    )}
+                </div>
+
+                {/* Search Jobs Status */}
+                <div className="data-table-container" style={{ marginBottom: '1.5rem' }}>
+                    <h3 style={{ padding: '1rem 1rem 0' }}>สถานะการค้นหา (central_ai_search_jobs)</h3>
+                    <table className="data-table">
+                        <thead>
+                            <tr>
+                                <th>หวย</th>
+                                <th>งวดวันที่</th>
+                                <th>สถานะ</th>
+                                <th>ครั้งที่ลอง</th>
+                                <th>ลองล่าสุด</th>
+                                <th>อัปเดตล่าสุด</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {aiCrawlerJobs.map(job => (
+                                <tr key={job.id}>
+                                    <td>{job.lottery_type}</td>
+                                    <td>{job.round_date}</td>
+                                    <td>
+                                        <span className={`status-badge ${job.status}`}>
+                                            {job.status === 'pending' && 'รอดำเนินการ'}
+                                            {job.status === 'running' && 'กำลังทำงาน'}
+                                            {job.status === 'success' && 'สำเร็จ'}
+                                            {job.status === 'failed' && 'ล้มเหลว'}
+                                        </span>
+                                    </td>
+                                    <td>{job.retry_count} / {job.max_retries}</td>
+                                    <td>{job.last_attempt_at ? new Date(job.last_attempt_at).toLocaleString('th-TH') : '-'}</td>
+                                    <td>{job.updated_at ? new Date(job.updated_at).toLocaleString('th-TH') : '-'}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {aiCrawlerJobs.length === 0 && (
+                        <div className="empty-state">ยังไม่มีงานค้นหา</div>
+                    )}
+                </div>
+
+                {/* Results History */}
+                <div className="data-table-container">
+                    <h3 style={{ padding: '1rem 1rem 0' }}>ผลรางวัลที่ค้นเจอ (central_lottery_results)</h3>
+                    <table className="data-table">
+                        <thead>
+                            <tr>
+                                <th>หวย</th>
+                                <th>งวดวันที่</th>
+                                <th>3 ตัวบน</th>
+                                <th>2 ตัวล่าง</th>
+                                <th>3 ตัวโต๊ด</th>
+                                <th>ยืนยันแล้ว</th>
+                                <th>บันทึกเมื่อ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {aiCrawlerResults.map(r => (
+                                <tr key={r.id}>
+                                    <td>{r.lottery_type}</td>
+                                    <td>{r.round_date}</td>
+                                    <td>{r.win_number_3_top || '-'}</td>
+                                    <td>{r.win_number_2_bottom || '-'}</td>
+                                    <td>{r.win_number_3_tod || '-'}</td>
+                                    <td>{r.is_verified ? '✅' : '❌'}</td>
+                                    <td>{new Date(r.created_at).toLocaleString('th-TH')}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {aiCrawlerResults.length === 0 && (
+                        <div className="empty-state">ยังไม่มีผลรางวัลที่ค้นเจอ</div>
+                    )}
+                </div>
+            </div>
+        )
+    }
+
     // Thai Bank List
     const THAI_BANKS = [
         { code: '002', name: 'ธนาคารกรุงเทพ (BBL)' },
@@ -3598,6 +3815,7 @@ export default function SuperAdmin() {
                         { id: 'invoices', label: 'ใบแจ้งหนี้', icon: <FiFileText /> },
                         { id: 'payments', label: 'การชำระเงิน', icon: <FiDollarSign />, badge: stats.pendingPayments },
                         { id: 'billingRecords', label: 'ค่าธรรมเนียม', icon: <FiFileText /> },
+                        { id: 'aiCrawler', label: 'AI ค้นหาผลรางวัล', icon: <FiSearch /> },
                         { id: 'settings', label: 'ตั้งค่า', icon: <FiSettings /> }
                     ].map(tab => (
                         <button
@@ -3625,6 +3843,7 @@ export default function SuperAdmin() {
                         {activeTab === 'invoices' && 'ใบแจ้งหนี้'}
                         {activeTab === 'payments' && 'การชำระเงิน'}
                         {activeTab === 'billingRecords' && 'ค่าธรรมเนียม'}
+                        {activeTab === 'aiCrawler' && 'AI ค้นหาผลรางวัล'}
                         {activeTab === 'settings' && 'ตั้งค่าระบบ'}
                     </h1>
                     <button className="btn btn-icon" onClick={fetchAllData} title="รีเฟรช">
@@ -3648,6 +3867,7 @@ export default function SuperAdmin() {
                             {activeTab === 'invoices' && renderInvoices()}
                             {activeTab === 'payments' && renderPayments()}
                             {activeTab === 'billingRecords' && renderBillingRecords()}
+                            {activeTab === 'aiCrawler' && renderAICrawler()}
                             {activeTab === 'settings' && renderSettings()}
                         </>
                     )}
