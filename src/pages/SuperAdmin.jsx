@@ -2969,9 +2969,11 @@ export default function SuperAdmin() {
                             <tr>
                                 <th>หวย</th>
                                 <th>งวดวันที่</th>
+                                <th>เลขหลัก</th>
+                                <th>เลขรอง</th>
+                                <th>3 ตัว 4 ชุด</th>
                                 <th>3 ตัวบน</th>
                                 <th>2 ตัวล่าง</th>
-                                <th>3 ตัวโต๊ด</th>
                                 <th>ยืนยันแล้ว</th>
                                 <th>บันทึกเมื่อ</th>
                             </tr>
@@ -2981,9 +2983,11 @@ export default function SuperAdmin() {
                                 <tr key={r.id}>
                                     <td>{r.lottery_type}</td>
                                     <td>{r.round_date}</td>
+                                    <td>{r.primary_number || '-'}</td>
+                                    <td>{r.secondary_number || '-'}</td>
+                                    <td>{Array.isArray(r.three_digit_sets) && r.three_digit_sets.length > 0 ? r.three_digit_sets.join(', ') : '-'}</td>
                                     <td>{r.win_number_3_top || '-'}</td>
                                     <td>{r.win_number_2_bottom || '-'}</td>
-                                    <td>{r.win_number_3_tod || '-'}</td>
                                     <td>{r.is_verified ? '✅' : '❌'}</td>
                                     <td>{new Date(r.created_at).toLocaleString('th-TH')}</td>
                                 </tr>
