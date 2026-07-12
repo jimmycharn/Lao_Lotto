@@ -73,6 +73,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
         layoff_notify_group_enabled: false,
         layoff_notify_group_id: '',
         layoff_schedules: [],
+        layoff_schedule_enabled: false,
         layoff_auto_close: true,
         notify_bets_enabled: false,
         notify_bets_types: [], // 'total', 'remaining', 'layoff'
@@ -147,6 +148,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             layoff_notify_group_enabled: false,
             layoff_notify_group_id: '',
             layoff_schedules: [],
+            layoff_schedule_enabled: false,
             layoff_auto_close: true,
             notify_bets_enabled: false,
             notify_bets_types: [],
@@ -180,6 +182,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             layoff_notify_group_enabled: job.layoff_notify_group_enabled || false,
             layoff_notify_group_id: job.layoff_notify_group_id || '',
             layoff_schedules: Array.isArray(job.layoff_schedules) ? job.layoff_schedules : [],
+            layoff_schedule_enabled: Array.isArray(job.layoff_schedules) && job.layoff_schedules.length > 0,
             layoff_auto_close: job.layoff_auto_close ?? true,
             notify_bets_enabled: job.notify_bets_enabled || false,
             notify_bets_types: Array.isArray(job.notify_bets_types) ? job.notify_bets_types : [],
@@ -841,19 +844,19 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                         <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: '0.8rem' }}>
                                                             <input
                                                                 type="checkbox"
-                                                                checked={jobForm.layoff_schedules.length > 0}
+                                                                checked={jobForm.layoff_schedule_enabled}
                                                                 onChange={(e) => {
                                                                     if (e.target.checked) {
-                                                                        setJobForm({ ...jobForm, layoff_schedules: ['12:00'] })
+                                                                        setJobForm({ ...jobForm, layoff_schedule_enabled: true })
                                                                     } else {
-                                                                        setJobForm({ ...jobForm, layoff_schedules: [] })
+                                                                        setJobForm({ ...jobForm, layoff_schedule_enabled: false, layoff_schedules: [] })
                                                                     }
                                                                 }}
                                                             />
                                                             <span style={{ fontWeight: 600 }}>ตั้งเวลาตีออกเป็นรอบๆ ก่อนปิดรับ</span>
                                                         </label>
 
-                                                        {jobForm.layoff_schedules.length > 0 && (
+                                                        {jobForm.layoff_schedule_enabled && (
                                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', padding: '0.8rem', background: 'rgba(0,0,0,0.1)', borderRadius: '8px' }}>
                                                                 <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                                                                     ระบบจะตีออกอัตโนมัติตามเวลาที่ตั้งไว้ ส่งไปยังกลุ่มที่เลือกด้านบน
@@ -877,7 +880,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                                             type="button"
                                                                             onClick={() => {
                                                                                 const updated = jobForm.layoff_schedules.filter((_, i) => i !== idx)
-                                                                                setJobForm({ ...jobForm, layoff_schedules: updated.length > 0 ? updated : [] })
+                                                                                setJobForm({ ...jobForm, layoff_schedules: updated })
                                                                             }}
                                                                             className="btn btn-danger"
                                                                             style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
