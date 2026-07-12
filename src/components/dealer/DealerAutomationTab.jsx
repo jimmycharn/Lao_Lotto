@@ -72,6 +72,8 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
         layoff_keep_amount: 0,
         layoff_notify_group_enabled: false,
         layoff_notify_group_id: '',
+        layoff_schedules: [],
+        layoff_auto_close: true,
         notify_bets_enabled: false,
         notify_bets_types: [], // 'total', 'remaining', 'layoff'
         notify_bets_group_id: '',
@@ -144,6 +146,8 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             layoff_keep_amount: 0,
             layoff_notify_group_enabled: false,
             layoff_notify_group_id: '',
+            layoff_schedules: [],
+            layoff_auto_close: true,
             notify_bets_enabled: false,
             notify_bets_types: [],
             notify_bets_group_id: '',
@@ -175,6 +179,8 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             layoff_keep_amount: job.layoff_keep_amount || 0,
             layoff_notify_group_enabled: job.layoff_notify_group_enabled || false,
             layoff_notify_group_id: job.layoff_notify_group_id || '',
+            layoff_schedules: Array.isArray(job.layoff_schedules) ? job.layoff_schedules : [],
+            layoff_auto_close: job.layoff_auto_close ?? true,
             notify_bets_enabled: job.notify_bets_enabled || false,
             notify_bets_types: Array.isArray(job.notify_bets_types) ? job.notify_bets_types : [],
             notify_bets_group_id: job.notify_bets_group_id || '',
@@ -255,6 +261,8 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             layoff_keep_amount: jobForm.layoff_keep_amount,
             layoff_notify_group_enabled: jobForm.layoff_notify_group_enabled,
             layoff_notify_group_id: jobForm.layoff_notify_group_id || null,
+            layoff_schedules: jobForm.layoff_schedules,
+            layoff_auto_close: jobForm.layoff_auto_close,
             notify_bets_enabled: jobForm.notify_bets_enabled,
             notify_bets_types: jobForm.notify_bets_types,
             notify_bets_group_id: jobForm.notify_bets_group_id || null,
@@ -471,6 +479,17 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                                         {job.layoff_method !== 'limits' && (
                                                                             <>
                                                                                 <br />ยอดถือสู้: ฿{(job.layoff_keep_amount || 0).toLocaleString()}
+                                                                            </>
+                                                                        )}
+                                                                        {Array.isArray(job.layoff_schedules) && job.layoff_schedules.length > 0 && (
+                                                                            <>
+                                                                                <br />⏰ ตีออกตามเวลา: {[...job.layoff_schedules].sort().join(', ')}
+                                                                                {(job.layoff_auto_close !== false) && ` + ปิดรอบ`}
+                                                                            </>
+                                                                        )}
+                                                                        {(!Array.isArray(job.layoff_schedules) || job.layoff_schedules.length === 0) && (
+                                                                            <>
+                                                                                <br />⏰ ตีออกเมื่อปิดรอบเท่านั้น
                                                                             </>
                                                                         )}
                                                                     </>
@@ -813,6 +832,102 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                                         <option key={lg.id} value={lg.id}>{lg.group_name}</option>
                                                                     ))}
                                                                 </select>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Scheduled Layoff Times */}
+                                                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
+                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: '0.8rem' }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={jobForm.layoff_schedules.length > 0}
+                                                                onChange={(e) => {
+                                                                    if (e.target.checked) {
+                                                                        setJobForm({ ...jobForm, layoff_schedules: ['12:00'] })
+                                                                    } else {
+                                                                        setJobForm({ ...jobForm, layoff_schedules: [] })
+                                                                    }
+                                                                }}
+                                                            />
+                                                            <span style={{ fontWeight: 600 }}>ตั้งเวลาตีออกเป็นรอบๆ ก่อนปิดรับ</span>
+                                                        </label>
+
+                                                        {jobForm.layoff_schedules.length > 0 && (
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', padding: '0.8rem', background: 'rgba(0,0,0,0.1)', borderRadius: '8px' }}>
+                                                                <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                                                    ระบบจะตีออกอัตโนมัติตามเวลาที่ตั้งไว้ ส่งไปยังกลุ่มที่เลือกด้านบน
+                                                                </p>
+
+                                                                {jobForm.layoff_schedules.map((time, idx) => (
+                                                                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                                                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', minWidth: '60px' }}>รอบที่ {idx + 1}:</span>
+                                                                        <input
+                                                                            type="time"
+                                                                            value={time}
+                                                                            onChange={(e) => {
+                                                                                const updated = [...jobForm.layoff_schedules]
+                                                                                updated[idx] = e.target.value
+                                                                                setJobForm({ ...jobForm, layoff_schedules: updated })
+                                                                            }}
+                                                                            className="form-input"
+                                                                            style={{ width: '140px', padding: '0.35rem 0.5rem', fontSize: '0.9rem' }}
+                                                                        />
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                const updated = jobForm.layoff_schedules.filter((_, i) => i !== idx)
+                                                                                setJobForm({ ...jobForm, layoff_schedules: updated.length > 0 ? updated : [] })
+                                                                            }}
+                                                                            className="btn btn-danger"
+                                                                            style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
+                                                                            title="ลบรอบนี้"
+                                                                        >
+                                                                            <FiTrash2 size={13} />
+                                                                        </button>
+                                                                        {/* Validation hint */}
+                                                                        {time && (time < jobForm.open_time || time >= jobForm.close_time) && (
+                                                                            <span style={{ fontSize: '0.75rem', color: '#ff6b6b' }}>⚠️ ควรอยู่ระหว่าง {jobForm.open_time}–{jobForm.close_time}</span>
+                                                                        )}
+                                                                    </div>
+                                                                ))}
+
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const lastTime = jobForm.layoff_schedules[jobForm.layoff_schedules.length - 1] || '12:00'
+                                                                        // Auto-suggest next time: +2 hours from last
+                                                                        const [h, m] = lastTime.split(':').map(Number)
+                                                                        const nextH = Math.min(h + 2, 23)
+                                                                        const nextTime = `${String(nextH).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+                                                                        setJobForm({ ...jobForm, layoff_schedules: [...jobForm.layoff_schedules, nextTime] })
+                                                                    }}
+                                                                    className="btn btn-secondary"
+                                                                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.3rem', alignSelf: 'flex-start' }}
+                                                                >
+                                                                    <FiPlus size={14} /> เพิ่มรอบตีออก
+                                                                </button>
+
+                                                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '0.3rem' }}>
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={jobForm.layoff_auto_close}
+                                                                        onChange={(e) => setJobForm({ ...jobForm, layoff_auto_close: e.target.checked })}
+                                                                    />
+                                                                    <span>ตีออกอีกครั้งเมื่อปิดรอบ (รอบสุดท้าย)</span>
+                                                                </label>
+
+                                                                {/* Timeline preview */}
+                                                                <div style={{ background: 'rgba(79,172,254,0.08)', border: '1px solid rgba(79,172,254,0.2)', borderRadius: '6px', padding: '0.6rem 0.8rem', marginTop: '0.2rem' }}>
+                                                                    <span style={{ fontSize: '0.8rem', color: 'var(--accent-color, #4facfe)' }}>
+                                                                        📋 สรุป: ระบบจะตีออกทั้งหมด{' '}
+                                                                        <strong>
+                                                                            {jobForm.layoff_schedules.length + (jobForm.layoff_auto_close ? 1 : 0)} รอบ
+                                                                        </strong>
+                                                                        {' '}({[...jobForm.layoff_schedules].sort().join(', ')}
+                                                                        {jobForm.layoff_auto_close && `, ${jobForm.close_time} ปิดรอบ`})
+                                                                    </span>
+                                                                </div>
                                                             </div>
                                                         )}
                                                     </div>

@@ -3467,6 +3467,230 @@ serve(async (req) => {
       }
     }
 
+    // ─── CRON CALLBACK: scheduled layoff (periodic, round stays open) ───
+    // Triggered by pg_cron worker (process_due_scheduled_layoffs) via pg_net.
+    // Runs layoff at configured times WITHOUT closing the round.
+    if (apiPayload && apiPayload.action === 'auto_scheduled_layoff') {
+      const { data: secretRow } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'line_bot_cron_secret')
+        .maybeSingle()
+
+      const expectedSecret = secretRow?.value || ''
+      if (!expectedSecret || apiPayload.secret !== expectedSecret) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      const roundId = apiPayload.round_id
+      const scheduleTime = apiPayload.schedule_time || '??:??'
+      if (!roundId) {
+        return new Response(JSON.stringify({ error: 'Missing round_id' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      try {
+        const { data: round } = await supabase
+          .from('lottery_rounds')
+          .select('*')
+          .eq('id', roundId)
+          .eq('status', 'open')
+          .maybeSingle()
+
+        if (!round) {
+          return new Response(JSON.stringify({ success: false, error: 'Round not found or not open' }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          })
+        }
+
+        let job: any = null
+        if (round.created_by_job_id) {
+          const { data: jobData } = await supabase
+            .from('dealer_automation_jobs')
+            .select('*')
+            .eq('id', round.created_by_job_id)
+            .maybeSingle()
+          job = jobData
+        }
+
+        if (!job || !job.layoff_enabled) {
+          return new Response(JSON.stringify({ success: true, message: 'Layoff not enabled for this job' }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          })
+        }
+
+        const layoffMethod = job.layoff_method || 'limits'
+        const keepAmount = Number(job.layoff_keep_amount || 0)
+
+        // Fetch submissions
+        const { data: submissions, error: subErr } = await fetchAllRows(
+          (from: number, to: number) => supabase
+            .from('submissions')
+            .select('id, bet_type, numbers, amount, user_id')
+            .eq('round_id', round.id)
+            .eq('is_deleted', false)
+            .range(from, to)
+        );
+
+        // Fetch existing transfers
+        const { data: transfers } = await fetchAllRows(
+          (from: number, to: number) => supabase
+            .from('bet_transfers')
+            .select('bet_type, numbers, amount')
+            .eq('round_id', round.id)
+            .range(from, to)
+        );
+
+        let layoffPerformed = false
+
+        if (!subErr && submissions && submissions.length > 0) {
+          const uniqueUserIds = [...new Set(submissions.map((s: any) => s.user_id).filter(Boolean))];
+          const userSettingsMap: Record<string, any> = {};
+          if (uniqueUserIds.length > 0) {
+            const { data: allUserSettings } = await supabase
+              .from('user_settings')
+              .select('user_id, lottery_settings')
+              .eq('dealer_id', round.dealer_id)
+              .in('user_id', uniqueUserIds);
+
+            for (const us of (allUserSettings || [])) {
+              userSettingsMap[us.user_id] = us.lottery_settings;
+            }
+          }
+
+          const setPrice = round.set_prices?.['4_top'] || 120;
+          let recommendations: any[] = [];
+
+          if (layoffMethod === 'ai') {
+            try {
+              const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-analyze-transfers`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                  'apikey': SUPABASE_SERVICE_ROLE_KEY
+                },
+                body: JSON.stringify({
+                  round_id: round.id,
+                  budget: keepAmount,
+                  dealer_id: round.dealer_id,
+                  lottery_type: round.lottery_type,
+                  currency_symbol: round.currency_symbol || '฿'
+                })
+              });
+
+              if (response.ok) {
+                const data = await response.json();
+                if (data?.success) {
+                  recommendations = data.data?.recommendations || [];
+                }
+              }
+            } catch (aiErr) {
+              console.error("Scheduled layoff: AI calculation failed, falling back:", aiErr);
+            }
+          }
+
+          // 'limits' method
+          if (recommendations.length === 0 && layoffMethod === 'limits') {
+            const excessItems = await calculateRoundExcess(round.id);
+            recommendations = excessItems.map(item => ({
+              bet_type: item.bet_type,
+              numbers: item.numbers,
+              transfer_amount: item.amount
+            }));
+          }
+
+          // Fallback for formula OR if AI failed
+          if (recommendations.length === 0 && (layoffMethod === 'formula' || layoffMethod === 'ai')) {
+            const betItems = buildBetItems(submissions, transfers || [], userSettingsMap, round.lottery_type, setPrice);
+            const scenarios = calculateScenarios(betItems, round.lottery_type, setPrice);
+            recommendations = greedyRecommendations(scenarios, betItems, keepAmount, setPrice, round.lottery_type);
+          }
+
+          if (recommendations && recommendations.length > 0) {
+            const excessItems = recommendations.map(rec => ({
+              bet_type: rec.bet_type,
+              numbers: rec.numbers,
+              amount: rec.transfer_amount
+            }));
+
+            const layoffResult = await performLayoff(round.dealer_id, round.id, round.lottery_type, excessItems);
+
+            let layoffMessageText: string;
+            if (layoffResult.success) {
+              layoffMessageText = `🛡️ [Auto-Layoff รอบ ${scheduleTime}]\n` + await generateLayoffNumbersSummary(round.id, round.lottery_type);
+              layoffPerformed = true
+            } else {
+              layoffMessageText = `⚠️ [Auto-Layoff รอบ ${scheduleTime}] ระบบตรวจพบเลขที่ต้องตีออก แต่เกิดข้อผิดพลาด:\n❌ ${layoffResult.message}`;
+            }
+
+            // Route notification to configured LINE group
+            let layoffGroups: any[] = [];
+            if (job.layoff_notify_group_enabled && job.layoff_notify_group_id) {
+              const { data: specificGroup } = await supabase
+                .from('line_groups')
+                .select('line_group_id')
+                .eq('id', job.layoff_notify_group_id)
+                .eq('is_active', true)
+                .maybeSingle();
+              if (specificGroup) {
+                layoffGroups.push(specificGroup);
+              }
+            } else {
+              // Legacy fallback
+              const { data: fbGroups } = await supabase
+                .from('line_groups')
+                .select('line_group_id')
+                .eq('dealer_id', round.dealer_id)
+                .eq('notify_layoff_bets', true);
+              if (fbGroups) layoffGroups = fbGroups;
+            }
+
+            if (layoffGroups && layoffGroups.length > 0) {
+              for (const lg of layoffGroups) {
+                if (lg.line_group_id) {
+                  try {
+                    await sendLinePush(lg.line_group_id, layoffMessageText);
+                  } catch (pushErr) {
+                    console.error("Failed to send scheduled layoff push:", pushErr);
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // Update last_layoff_at to track this scheduled layoff execution
+        await supabase
+          .from('lottery_rounds')
+          .update({ last_layoff_at: new Date().toISOString() })
+          .eq('id', roundId)
+
+        return new Response(JSON.stringify({
+          success: true,
+          round_id: roundId,
+          schedule_time: scheduleTime,
+          layoff_performed: layoffPerformed
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      } catch (err: any) {
+        console.error('Error in auto_scheduled_layoff:', err)
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+    }
+
     // ─── CRON CALLBACK: auto-close round + notify groups ───
     // Triggered by the pg_cron worker (process_due_round_closures) via pg_net.
     // Authorized by a shared secret stored in app_settings (no JWT needed).
@@ -3583,7 +3807,11 @@ serve(async (req) => {
         const layoffMethod = job ? job.layoff_method : (template?.auto_layoff_method || 'limits');
         const keepAmount = job ? Number(job.layoff_keep_amount || 0) : (template?.auto_layoff_keep_amount || 0);
 
-        if (layoffEnabled) {
+        // If job has scheduled layoff times and layoff_auto_close is explicitly false, skip close-time layoff
+        const hasScheduledLayoffs = job && Array.isArray(job.layoff_schedules) && job.layoff_schedules.length > 0;
+        const skipCloseLayoff = hasScheduledLayoffs && job.layoff_auto_close === false;
+
+        if (layoffEnabled && !skipCloseLayoff) {
           const { data: submissions, error: subErr } = await fetchAllRows(
             (from, to) => supabase
               .from('submissions')
