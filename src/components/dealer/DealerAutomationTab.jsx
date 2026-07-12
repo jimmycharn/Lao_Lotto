@@ -1067,7 +1067,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                                 checked={jobForm.notify_result_enabled}
                                                                 onChange={(e) => setJobForm({ ...jobForm, notify_result_enabled: e.target.checked })}
                                                             />
-                                                            <span>ส่งผลได้เสียรายคนเข้าไลน์กลุ่มสมาชิก (เสมือนคำสั่ง /แจ้งผล)</span>
+                                                            <span>แจ้งผลเข้ากลุ่มไลน์สมาชิก</span>
                                                         </label>
                                                     </div>
                                                 </div>

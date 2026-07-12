@@ -893,6 +893,15 @@ async function sendMemberResultAnnouncements(roundId: string, dealerId: string):
 
     const winNumStr = formatWinningNumbersForDisplay(activeRound.winning_numbers, activeRound.lottery_type);
 
+    const LOTTERY_TYPE_NAMES: Record<string, string> = {
+      lao: 'หวยลาว',
+      thai: 'หวยไทย',
+      hanoi: 'หวยฮานอย',
+      stock: 'หวยหุ้น',
+      yeekee: 'หวยยี่กี'
+    };
+    const lotteryTypeLabel = LOTTERY_TYPE_NAMES[activeRound.lottery_type] || activeRound.lottery_type.toUpperCase();
+
     const bubbles = sortedUserSummaries.map((u) => {
       const userName = profilesMap[u.userId] || 'ไม่ระบุชื่อ';
       const roundedBet = Math.round(u.totalBet);
@@ -932,7 +941,7 @@ async function sendMemberResultAnnouncements(roundId: string, dealerId: string):
             },
             {
               "type": "text",
-              "text": `งวดวันที่: ${getRoundDisplayDate(activeRound, false)} (${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()})`,
+              "text": `งวดวันที่: ${getRoundDisplayDate(activeRound, false)} (${lotteryTypeLabel})`,
               "size": "xs",
               "color": "#c7d2fe",
               "margin": "xs"
@@ -1028,51 +1037,19 @@ async function sendMemberResultAnnouncements(roundId: string, dealerId: string):
       };
     });
 
-    let groupTotalBet = 0;
-    let groupTotalComm = 0;
-    let groupTotalWin = 0;
-    let groupWinnerCount = 0;
-    for (const u of sortedUserSummaries) {
-      groupTotalBet += u.totalBet;
-      groupTotalComm += u.totalCommission;
-      groupTotalWin += u.totalWin;
-      if (u.totalWin > 0) {
-        groupWinnerCount++;
-      }
-    }
-    const netToPay = groupTotalBet - groupTotalComm - groupTotalWin;
-    const groupNetLabel = netToPay > 0 
-      ? `สมาชิกต้องจ่ายเภา: ฿${Math.round(netToPay).toLocaleString('th-TH')}` 
-      : (netToPay < 0 ? `เภาต้องจ่ายสมาชิก: ฿${Math.abs(Math.round(netToPay)).toLocaleString('th-TH')}` : 'เสมอ');
-
-    const groupSummaryText = `📊 สรุปผลได้เสีย: ${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()}\n` +
-      `📅 งวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n` +
-      `----------------------------------\n` +
-      `💰 ยอดแทงรวม: ฿${Math.round(groupTotalBet).toLocaleString('th-TH')}\n` +
-      `💸 ค่าคอมรวม: ฿${Math.round(groupTotalComm).toLocaleString('th-TH')}\n` +
-      `🎉 ยอดถูกรางวัลรวม: ฿${Math.round(groupTotalWin).toLocaleString('th-TH')}\n` +
-      `----------------------------------\n` +
-      `📝 สรุปยอดได้เสียสุทธิ:\n👉 ${groupNetLabel}\n` +
-      `👥 สมาชิกถูกรางวัล: ${groupWinnerCount} รายการ`;
-
     const carouselMessages: any[] = [];
     const chunkSize = 10;
     for (let i = 0; i < bubbles.length; i += chunkSize) {
       const chunk = bubbles.slice(i, i + chunkSize);
       carouselMessages.push({
         "type": "flex",
-        "altText": `📊 รายงานผลได้เสียสำหรับสมาชิกในกลุ่ม (${activeRound.lottery_type.toUpperCase()})`,
+        "altText": `📊 รายงานผลได้เสียสำหรับสมาชิกในกลุ่ม (${lotteryTypeLabel})`,
         "contents": {
           "type": "carousel",
           "contents": chunk
         }
       });
     }
-
-    carouselMessages.push({
-      "type": "text",
-      "text": groupSummaryText
-    });
 
     console.log(`[sendMemberResultAnnouncements] pushing ${carouselMessages.length} messages to group=${targetGroupId}`);
     for (const msg of carouselMessages) {
@@ -5019,27 +4996,6 @@ serve(async (req) => {
                     .eq('notify_lottery_results', true);
                   if (fallbackGroups) {
                     resultGroups = fallbackGroups;
-                  }
-                }
-
-                if (resultGroups.length > 0) {
-                  const winNumStr = formatWinningNumbersForDisplay(winNumbers, dr.lottery_type);
-                  const announceText = `🏆 ประกาศผลรางวัลอย่างเป็นทางการ [${dr.lottery_name}]\n` +
-                    `📅 งวดวันที่: ${dr.round_date}\n` +
-                    `----------------------------------\n` +
-                    `🎉 เลขที่ออก: ${winNumStr}\n` +
-                    `----------------------------------\n` +
-                    `ระบบได้ทำการคำนวณรางวัลและโอนเครดิตเข้ากระเป๋าสมาชิกเรียบร้อยแล้วค่ะ!\n` +
-                    `พิมพ์ /สรุป เพื่อเช็คบิลที่ถูกรางวัลส่วนตัวได้เลยค่ะ 🧧`;
-
-                  for (const rg of resultGroups) {
-                    if (rg.line_group_id) {
-                      try {
-                        await sendLinePush(rg.line_group_id, announceText);
-                      } catch (pushErr) {
-                        console.error("Failed to send results push:", pushErr);
-                      }
-                    }
                   }
                 }
 
