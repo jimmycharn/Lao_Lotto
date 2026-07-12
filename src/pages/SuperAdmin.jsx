@@ -82,6 +82,13 @@ export default function SuperAdmin() {
     const [testingCrawler, setTestingCrawler] = useState(false)
     const [crawlerTestOutput, setCrawlerTestOutput] = useState(null)
 
+    // Manual Result Entry
+    const [manualResultOpen, setManualResultOpen] = useState(false)
+    const [manualLotteryType, setManualLotteryType] = useState('thai')
+    const [manualRoundDate, setManualRoundDate] = useState('')
+    const [manualInputs, setManualInputs] = useState({})
+    const [manualSaving, setManualSaving] = useState(false)
+
     // UI States
     const [isLoading, setIsLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState('')
@@ -212,6 +219,109 @@ export default function SuperAdmin() {
             if (!jobsRes.error && jobsRes.data) setAiCrawlerJobs(jobsRes.data)
         } catch (err) {
             console.log('AI crawler data not available:', err)
+        }
+    }
+
+    const openManualResultForm = () => {
+        setManualResultOpen(true)
+        setManualLotteryType('thai')
+        setManualRoundDate(new Date().toISOString().slice(0, 10))
+        setManualInputs({})
+    }
+
+    const closeManualResultForm = () => {
+        setManualResultOpen(false)
+        setManualInputs({})
+        setManualRoundDate('')
+    }
+
+    const handleManualInputChange = (field, value) => {
+        setManualInputs(prev => ({ ...prev, [field]: value }))
+    }
+
+    const submitManualResult = async () => {
+        if (!manualRoundDate) { toast.error('กรุณาเลือกงวดวันที่'); return }
+        setManualSaving(true)
+        try {
+            let primary_number = null
+            let secondary_number = null
+            let three_digit_sets = null
+            let win_number_6_top = null
+            let win_number_3_top = null
+            let win_number_2_top = null
+            let win_number_2_bottom = null
+            let win_number_4_set = null
+            let win_number_3_bottom = null
+
+            if (manualLotteryType === 'thai') {
+                const sixDigit = (manualInputs.official_6_digit || '').trim()
+                const twoBottom = (manualInputs.bottom_2_digit || '').trim()
+                const front3 = [manualInputs.three_digit_front_1, manualInputs.three_digit_front_2].filter(v => v && v.trim()).map(v => v.trim())
+                const back3 = [manualInputs.three_digit_back_1, manualInputs.three_digit_back_2].filter(v => v && v.trim()).map(v => v.trim())
+
+                if (!/^\d{6}$/.test(sixDigit)) { toast.error('เลข 6 ตัวบน ต้องเป็นตัวเลข 6 หลัก'); setManualSaving(false); return }
+                if (twoBottom && !/^\d{2}$/.test(twoBottom)) { toast.error('เลข 2 ตัวล่าง ต้องเป็นตัวเลข 2 หลัก'); setManualSaving(false); return }
+
+                primary_number = sixDigit
+                secondary_number = twoBottom || null
+                three_digit_sets = [...front3, ...back3]
+                win_number_6_top = sixDigit
+                win_number_3_top = sixDigit.slice(0, 3)
+                win_number_2_top = sixDigit.slice(0, 2)
+                win_number_2_bottom = twoBottom || null
+            } else if (manualLotteryType === 'lao' || manualLotteryType === 'hanoi') {
+                const fourDigit = (manualInputs.primary_4_digit || '').trim()
+                if (!/^\d{4}$/.test(fourDigit)) { toast.error('เลข 4 ตัว ต้องเป็นตัวเลข 4 หลัก'); setManualSaving(false); return }
+
+                primary_number = fourDigit
+                secondary_number = fourDigit.slice(2)
+                win_number_4_set = fourDigit
+                win_number_2_top = fourDigit.slice(0, 2)
+                win_number_2_bottom = fourDigit.slice(2)
+                win_number_3_top = fourDigit.slice(1)
+            } else if (manualLotteryType === 'stock') {
+                const index2 = (manualInputs.index_2_digit || '').trim()
+                const change2 = (manualInputs.change_2_digit || '').trim()
+                if (!/^\d{2}$/.test(index2)) { toast.error('เลข 2 ตัวบน (index) ต้องเป็นตัวเลข 2 หลัก'); setManualSaving(false); return }
+                if (change2 && !/^\d{2}$/.test(change2)) { toast.error('เลข 2 ตัวล่าง (change) ต้องเป็นตัวเลข 2 หลัก'); setManualSaving(false); return }
+
+                primary_number = index2
+                secondary_number = change2 || null
+                win_number_2_top = index2
+                win_number_2_bottom = change2 || null
+            }
+
+            const insertObj = {
+                lottery_type: manualLotteryType,
+                round_date: manualRoundDate,
+                primary_number,
+                secondary_number,
+                three_digit_sets,
+                win_number_6_top,
+                win_number_3_top,
+                win_number_2_top,
+                win_number_2_bottom,
+                win_number_4_set,
+                win_number_3_bottom,
+                is_verified: true,
+                source: 'manual_entry',
+                raw_response: { manual_entry: true, inputs: manualInputs }
+            }
+
+            const { error } = await supabase
+                .from('central_lottery_results')
+                .insert(insertObj)
+
+            if (error) throw error
+
+            toast.success('บันทึกผลรางวัลเรียบร้อยแล้ว')
+            closeManualResultForm()
+            await fetchAICrawlerData()
+        } catch (error) {
+            console.error('Error saving manual result:', error)
+            toast.error(`เกิดข้อผิดพลาด: ${error.message}`)
+        } finally {
+            setManualSaving(false)
         }
     }
 
@@ -2897,13 +3007,22 @@ export default function SuperAdmin() {
                                 สั่งให้ระบบค้นหาผลรางวัลทันที (ปกติ cron job จะรันทุก 10 นาที)
                             </p>
                         </div>
-                        <button
-                            className="btn btn-primary"
-                            onClick={handleTestCrawler}
-                            disabled={testingCrawler}
-                        >
-                            <FiSearch /> {testingCrawler ? 'กำลังทดสอบ...' : 'ทดสอบค้นหาทันที'}
-                        </button>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleTestCrawler}
+                                disabled={testingCrawler}
+                            >
+                                <FiSearch /> {testingCrawler ? 'กำลังทดสอบ...' : 'ทดสอบค้นหาทันที'}
+                            </button>
+                            <button
+                                className="btn btn-secondary"
+                                onClick={openManualResultForm}
+                                style={{ background: 'rgba(16, 185, 129, 0.2)', borderColor: 'rgba(16, 185, 129, 0.4)' }}
+                            >
+                                <FiEdit2 /> ป้อนผลรางวัลเอง
+                            </button>
+                        </div>
                     </div>
 
                     {crawlerTestOutput && (
@@ -2998,6 +3117,172 @@ export default function SuperAdmin() {
                         <div className="empty-state">ยังไม่มีผลรางวัลที่ค้นเจอ</div>
                     )}
                 </div>
+
+                {/* Manual Result Entry Modal */}
+                {manualResultOpen && (
+                    <div style={{
+                        position: 'fixed', inset: 0, zIndex: 50,
+                        background: 'rgba(0,0,0,0.6)', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center', padding: '1rem'
+                    }} onClick={closeManualResultForm}>
+                        <div style={{
+                            background: 'var(--color-bg-secondary)', borderRadius: '12px',
+                            padding: '1.5rem', maxWidth: '500px', width: '100%',
+                            maxHeight: '90vh', overflowY: 'auto',
+                            border: '1px solid var(--color-border)'
+                        }} onClick={e => e.stopPropagation()}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                <h3 style={{ margin: 0 }}>ป้อนผลรางวัลเอง</h3>
+                                <button onClick={closeManualResultForm} className="btn btn-icon" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.25rem' }}>
+                                    <FiX />
+                                </button>
+                            </div>
+
+                            {/* Lottery Type Selector */}
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>ประเภทหวย</label>
+                                <select
+                                    value={manualLotteryType}
+                                    onChange={e => { setManualLotteryType(e.target.value); setManualInputs({}) }}
+                                    style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+                                >
+                                    <option value="thai">หวยไทย (Thai Government Lottery)</option>
+                                    <option value="lao">หวยลาว (Lao Lottery)</option>
+                                    <option value="hanoi">หวยฮานอย (Hanoi Lottery)</option>
+                                    <option value="stock">หวยหุ้น (Stock Lottery)</option>
+                                </select>
+                            </div>
+
+                            {/* Round Date */}
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>งวดวันที่</label>
+                                <input
+                                    type="date"
+                                    value={manualRoundDate}
+                                    onChange={e => setManualRoundDate(e.target.value)}
+                                    style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+                                />
+                            </div>
+
+                            {/* Dynamic Inputs per Lottery Type */}
+                            {manualLotteryType === 'thai' && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.85rem' }}>เลข 6 ตัวบน (รางวัลที่ 1) <span style={{ color: 'var(--color-danger)' }}>*</span></label>
+                                        <input
+                                            type="text" maxLength={6} placeholder="เช่น 123456"
+                                            value={manualInputs.official_6_digit || ''}
+                                            onChange={e => handleManualInputChange('official_6_digit', e.target.value)}
+                                            style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace', fontSize: '1.1rem' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.85rem' }}>เลข 2 ตัวล่าง (เลขท้าย 2 ตัว)</label>
+                                        <input
+                                            type="text" maxLength={2} placeholder="เช่น 78"
+                                            value={manualInputs.bottom_2_digit || ''}
+                                            onChange={e => handleManualInputChange('bottom_2_digit', e.target.value)}
+                                            style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace', fontSize: '1.1rem' }}
+                                        />
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.85rem' }}>เลขหน้า 3 ตัว #1</label>
+                                            <input
+                                                type="text" maxLength={3} placeholder="123"
+                                                value={manualInputs.three_digit_front_1 || ''}
+                                                onChange={e => handleManualInputChange('three_digit_front_1', e.target.value)}
+                                                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace' }}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.85rem' }}>เลขหน้า 3 ตัว #2</label>
+                                            <input
+                                                type="text" maxLength={3} placeholder="456"
+                                                value={manualInputs.three_digit_front_2 || ''}
+                                                onChange={e => handleManualInputChange('three_digit_front_2', e.target.value)}
+                                                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace' }}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.85rem' }}>เลขท้าย 3 ตัว #1</label>
+                                            <input
+                                                type="text" maxLength={3} placeholder="789"
+                                                value={manualInputs.three_digit_back_1 || ''}
+                                                onChange={e => handleManualInputChange('three_digit_back_1', e.target.value)}
+                                                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace' }}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.85rem' }}>เลขท้าย 3 ตัว #2</label>
+                                            <input
+                                                type="text" maxLength={3} placeholder="012"
+                                                value={manualInputs.three_digit_back_2 || ''}
+                                                onChange={e => handleManualInputChange('three_digit_back_2', e.target.value)}
+                                                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace' }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {(manualLotteryType === 'lao' || manualLotteryType === 'hanoi') && (
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.85rem' }}>เลข 4 ตัวชุด <span style={{ color: 'var(--color-danger)' }}>*</span></label>
+                                    <input
+                                        type="text" maxLength={4} placeholder="เช่น 1234"
+                                        value={manualInputs.primary_4_digit || ''}
+                                        onChange={e => handleManualInputChange('primary_4_digit', e.target.value)}
+                                        style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace', fontSize: '1.1rem' }}
+                                    />
+                                    <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: '0.25rem 0 0' }}>
+                                        2 ตัวบน = 2 ตัวแรก, 2 ตัวล่าง = 2 ตัวท้าย (derive อัตโนมัติ)
+                                    </p>
+                                </div>
+                            )}
+
+                            {manualLotteryType === 'stock' && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.85rem' }}>เลข 2 ตัวบน (index 2 หลักทศนิยม) <span style={{ color: 'var(--color-danger)' }}>*</span></label>
+                                        <input
+                                            type="text" maxLength={2} placeholder="เช่น 56"
+                                            value={manualInputs.index_2_digit || ''}
+                                            onChange={e => handleManualInputChange('index_2_digit', e.target.value)}
+                                            style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace', fontSize: '1.1rem' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.85rem' }}>เลข 2 ตัวล่าง (change/delta 2 หลักทศนิยม)</label>
+                                        <input
+                                            type="text" maxLength={2} placeholder="เช่น 78"
+                                            value={manualInputs.change_2_digit || ''}
+                                            onChange={e => handleManualInputChange('change_2_digit', e.target.value)}
+                                            style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace', fontSize: '1.1rem' }}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Action Buttons */}
+                            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+                                <button onClick={closeManualResultForm} className="btn btn-secondary">
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    onClick={submitManualResult}
+                                    disabled={manualSaving}
+                                    className="btn btn-primary"
+                                    style={{ background: 'rgba(16, 185, 129, 0.8)' }}
+                                >
+                                    <FiSave /> {manualSaving ? 'กำลังบันทึก...' : 'บันทึกผลรางวัล'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         )
     }
