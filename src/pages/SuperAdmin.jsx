@@ -3122,14 +3122,15 @@ export default function SuperAdmin() {
                 {manualResultOpen && (
                     <div style={{
                         position: 'fixed', inset: 0, zIndex: 50,
-                        background: 'rgba(0,0,0,0.6)', display: 'flex',
+                        background: 'rgba(0,0,0,0.85)', display: 'flex',
                         alignItems: 'center', justifyContent: 'center', padding: '1rem'
                     }} onClick={closeManualResultForm}>
                         <div style={{
-                            background: 'var(--color-bg-secondary)', borderRadius: '12px',
+                            background: '#1f2937', borderRadius: '12px',
                             padding: '1.5rem', maxWidth: '500px', width: '100%',
                             maxHeight: '90vh', overflowY: 'auto',
-                            border: '1px solid var(--color-border)'
+                            border: '1px solid #374151',
+                            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.8)'
                         }} onClick={e => e.stopPropagation()}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                                 <h3 style={{ margin: 0 }}>ป้อนผลรางวัลเอง</h3>
@@ -3144,12 +3145,12 @@ export default function SuperAdmin() {
                                 <select
                                     value={manualLotteryType}
                                     onChange={e => { setManualLotteryType(e.target.value); setManualInputs({}) }}
-                                    style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+                                    style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: '#374151', border: '1px solid #4b5563', color: '#f3f4f6' }}
                                 >
-                                    <option value="thai">หวยไทย (Thai Government Lottery)</option>
-                                    <option value="lao">หวยลาว (Lao Lottery)</option>
-                                    <option value="hanoi">หวยฮานอย (Hanoi Lottery)</option>
-                                    <option value="stock">หวยหุ้น (Stock Lottery)</option>
+                                    <option value="thai" style={{ background: '#374151', color: '#f3f4f6' }}>หวยไทย (Thai Government Lottery)</option>
+                                    <option value="lao" style={{ background: '#374151', color: '#f3f4f6' }}>หวยลาว (Lao Lottery)</option>
+                                    <option value="hanoi" style={{ background: '#374151', color: '#f3f4f6' }}>หวยฮานอย (Hanoi Lottery)</option>
+                                    <option value="stock" style={{ background: '#374151', color: '#f3f4f6' }}>หวยหุ้น (Stock Lottery)</option>
                                 </select>
                             </div>
 
@@ -3160,7 +3161,7 @@ export default function SuperAdmin() {
                                     type="date"
                                     value={manualRoundDate}
                                     onChange={e => setManualRoundDate(e.target.value)}
-                                    style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+                                    style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: '#374151', border: '1px solid #4b5563', color: '#f3f4f6' }}
                                 />
                             </div>
 
@@ -3173,7 +3174,7 @@ export default function SuperAdmin() {
                                             type="text" maxLength={6} placeholder="เช่น 123456"
                                             value={manualInputs.official_6_digit || ''}
                                             onChange={e => handleManualInputChange('official_6_digit', e.target.value)}
-                                            style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace', fontSize: '1.1rem' }}
+                                            style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: '#374151', border: '1px solid #4b5563', color: '#f3f4f6', fontFamily: 'monospace', fontSize: '1.1rem' }}
                                         />
                                     </div>
                                     <div>
@@ -3182,7 +3183,7 @@ export default function SuperAdmin() {
                                             type="text" maxLength={2} placeholder="เช่น 78"
                                             value={manualInputs.bottom_2_digit || ''}
                                             onChange={e => handleManualInputChange('bottom_2_digit', e.target.value)}
-                                            style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace', fontSize: '1.1rem' }}
+                                            style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: '#374151', border: '1px solid #4b5563', color: '#f3f4f6', fontFamily: 'monospace', fontSize: '1.1rem' }}
                                         />
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
@@ -3192,7 +3193,7 @@ export default function SuperAdmin() {
                                                 type="text" maxLength={3} placeholder="123"
                                                 value={manualInputs.three_digit_front_1 || ''}
                                                 onChange={e => handleManualInputChange('three_digit_front_1', e.target.value)}
-                                                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace' }}
+                                                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: '#374151', border: '1px solid #4b5563', color: '#f3f4f6', fontFamily: 'monospace' }}
                                             />
                                         </div>
                                         <div>
@@ -3201,7 +3202,7 @@ export default function SuperAdmin() {
                                                 type="text" maxLength={3} placeholder="456"
                                                 value={manualInputs.three_digit_front_2 || ''}
                                                 onChange={e => handleManualInputChange('three_digit_front_2', e.target.value)}
-                                                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace' }}
+                                                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: '#374151', border: '1px solid #4b5563', color: '#f3f4f6', fontFamily: 'monospace' }}
                                             />
                                         </div>
                                     </div>
@@ -3212,7 +3213,7 @@ export default function SuperAdmin() {
                                                 type="text" maxLength={3} placeholder="789"
                                                 value={manualInputs.three_digit_back_1 || ''}
                                                 onChange={e => handleManualInputChange('three_digit_back_1', e.target.value)}
-                                                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace' }}
+                                                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: '#374151', border: '1px solid #4b5563', color: '#f3f4f6', fontFamily: 'monospace' }}
                                             />
                                         </div>
                                         <div>
@@ -3221,7 +3222,7 @@ export default function SuperAdmin() {
                                                 type="text" maxLength={3} placeholder="012"
                                                 value={manualInputs.three_digit_back_2 || ''}
                                                 onChange={e => handleManualInputChange('three_digit_back_2', e.target.value)}
-                                                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace' }}
+                                                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: '#374151', border: '1px solid #4b5563', color: '#f3f4f6', fontFamily: 'monospace' }}
                                             />
                                         </div>
                                     </div>
@@ -3235,7 +3236,7 @@ export default function SuperAdmin() {
                                         type="text" maxLength={4} placeholder="เช่น 1234"
                                         value={manualInputs.primary_4_digit || ''}
                                         onChange={e => handleManualInputChange('primary_4_digit', e.target.value)}
-                                        style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace', fontSize: '1.1rem' }}
+                                        style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: '#374151', border: '1px solid #4b5563', color: '#f3f4f6', fontFamily: 'monospace', fontSize: '1.1rem' }}
                                     />
                                     <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: '0.25rem 0 0' }}>
                                         2 ตัวบน = 2 ตัวแรก, 2 ตัวล่าง = 2 ตัวท้าย (derive อัตโนมัติ)
@@ -3251,7 +3252,7 @@ export default function SuperAdmin() {
                                             type="text" maxLength={2} placeholder="เช่น 56"
                                             value={manualInputs.index_2_digit || ''}
                                             onChange={e => handleManualInputChange('index_2_digit', e.target.value)}
-                                            style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace', fontSize: '1.1rem' }}
+                                            style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: '#374151', border: '1px solid #4b5563', color: '#f3f4f6', fontFamily: 'monospace', fontSize: '1.1rem' }}
                                         />
                                     </div>
                                     <div>
@@ -3260,7 +3261,7 @@ export default function SuperAdmin() {
                                             type="text" maxLength={2} placeholder="เช่น 78"
                                             value={manualInputs.change_2_digit || ''}
                                             onChange={e => handleManualInputChange('change_2_digit', e.target.value)}
-                                            style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'monospace', fontSize: '1.1rem' }}
+                                            style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: '#374151', border: '1px solid #4b5563', color: '#f3f4f6', fontFamily: 'monospace', fontSize: '1.1rem' }}
                                         />
                                     </div>
                                 </div>
