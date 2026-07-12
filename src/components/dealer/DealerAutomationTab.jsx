@@ -847,7 +847,10 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                                 checked={jobForm.layoff_schedule_enabled}
                                                                 onChange={(e) => {
                                                                     if (e.target.checked) {
-                                                                        setJobForm({ ...jobForm, layoff_schedule_enabled: true })
+                                                                        const initialSchedules = Array.isArray(jobForm.layoff_schedules) && jobForm.layoff_schedules.length > 0
+                                                                            ? jobForm.layoff_schedules
+                                                                            : [jobForm.open_time || '06:00']
+                                                                        setJobForm({ ...jobForm, layoff_schedule_enabled: true, layoff_schedules: initialSchedules })
                                                                     } else {
                                                                         setJobForm({ ...jobForm, layoff_schedule_enabled: false, layoff_schedules: [] })
                                                                     }
