@@ -12,6 +12,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const LOTTERY_TYPE_NAMES: Record<string, string> = {
+  thai: 'หวยไทย',
+  lao: 'หวยลาว',
+  hanoi: 'หวยฮานอย',
+  stock: 'หวยหุ้น',
+  yeekee: 'หวยยี่กี',
+  other: 'หวยอื่นๆ',
+  lao_extra: 'หวยลาวพิเศษ',
+  lao_vip: 'หวยลาว VIP'
+}
+
 const LINE_CHANNEL_SECRET = (Deno.env.get('LINE_CHANNEL_SECRET') || '').trim().replace(/^["']|["']$/g, '')
 const LINE_CHANNEL_ACCESS_TOKEN = (Deno.env.get('LINE_CHANNEL_ACCESS_TOKEN') || '').trim().replace(/^["']|["']$/g, '')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || ''
@@ -3121,7 +3132,7 @@ async function generateRoundSummaryFlex(
     summaryText = showOwnOnly && targetUserId !== profile?.id 
       ? `📊 สรุปยอดส่งของสมาชิก ${u.userName}\n`
       : `📊 สรุปยอดส่งของคุณ ${u.userName}\n`;
-    summaryText += `งวดวันที่: ${getRoundDisplayDate(activeRound, false)} (${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()})\n`;
+    summaryText += `งวดวันที่: ${getRoundDisplayDate(activeRound, false)} (${LOTTERY_TYPE_NAMES[activeRound.lottery_type] || activeRound.lottery_type.toUpperCase()})\n`;
     summaryText += `--------------------------\n`;
     summaryText += `- ยอดส่ง: ฿${roundedBet.toLocaleString('th-TH')}\n`;
     summaryText += `- ค่าคอม: ฿${roundedComm.toLocaleString('th-TH')}\n`;
@@ -3150,7 +3161,7 @@ async function generateRoundSummaryFlex(
             },
             {
               "type": "text",
-              "text": `งวดวันที่: ${getRoundDisplayDate(activeRound, false)} (${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()})`,
+              "text": `งวดวันที่: ${getRoundDisplayDate(activeRound, false)} (${LOTTERY_TYPE_NAMES[activeRound.lottery_type] || activeRound.lottery_type.toUpperCase()})`,
               "size": "xs",
               "color": "#c7d2fe",
               "margin": "xs"
@@ -3513,7 +3524,7 @@ async function generateRoundSummaryFlex(
           "contents": [
             {
               "type": "text",
-              "text": `📊 สรุปงวด (${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()})`,
+              "text": `📊 สรุปงวด (${LOTTERY_TYPE_NAMES[activeRound.lottery_type] || activeRound.lottery_type.toUpperCase()})`,
               "weight": "bold",
               "size": "md",
               "color": "#ffffff"
@@ -7669,7 +7680,7 @@ serve(async (req) => {
                         },
                         {
                           "type": "text",
-                          "text": `งวดวันที่: ${getRoundDisplayDate(activeRound, false)} (${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()})`,
+                          "text": `งวดวันที่: ${getRoundDisplayDate(activeRound, false)} (${LOTTERY_TYPE_NAMES[activeRound.lottery_type] || activeRound.lottery_type.toUpperCase()})`,
                           "size": "xs",
                           "color": "#c7d2fe",
                           "margin": "xs"
@@ -7807,12 +7818,6 @@ serve(async (req) => {
                     }
                   });
                 }
-
-                // Add group summary text message!
-                carouselMessages.push({
-                  "type": "text",
-                  "text": groupSummaryText
-                });
 
                 if (targetGroupId === groupId) {
                   const toReply = carouselMessages.slice(0, 5);
