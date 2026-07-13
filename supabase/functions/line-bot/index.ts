@@ -5140,12 +5140,21 @@ serve(async (req) => {
           }
 
           // Fetch LINE groups configured to receive round created notification
-          const { data: groups } = await supabase
+          let groupsQuery = supabase
             .from('line_groups')
             .select('line_group_id, group_name')
             .eq('dealer_id', job.dealer_id)
-            .eq('lottery_type', job.lottery_type)
-            .eq('notify_round_created', true)
+            .eq('is_active', true);
+
+          if (job.open_notify_group_id) {
+            groupsQuery = groupsQuery.eq('id', job.open_notify_group_id);
+          } else {
+            groupsQuery = groupsQuery
+              .eq('lottery_type', job.lottery_type)
+              .eq('notify_round_created', true);
+          }
+
+          const { data: groups } = await groupsQuery;
 
           if (groups && groups.length > 0 && job.open_notify_enabled !== false) {
             // Build the open-round notification from the customizable template (or default)
@@ -5298,10 +5307,14 @@ serve(async (req) => {
             .from('line_groups')
             .select('line_group_id, group_name')
             .eq('dealer_id', template.dealer_id)
-            .eq('lottery_type', template.lottery_type)
-            .eq('notify_round_created', true);
+            .eq('is_active', true);
+
           if (template.open_notify_group_id) {
             groupsQuery = groupsQuery.eq('id', template.open_notify_group_id);
+          } else {
+            groupsQuery = groupsQuery
+              .eq('lottery_type', template.lottery_type)
+              .eq('notify_round_created', true);
           }
           const { data: groups } = await groupsQuery;
 
