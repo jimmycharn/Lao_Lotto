@@ -360,7 +360,20 @@ export default function SuperAdmin() {
             setCrawlerTestOutput({ status: res.status, body: json })
 
             if (res.ok) {
-                toast.success('ค้นหาสำเร็จ! กำลังรีเฟรชข้อมูล...')
+                const result = json.crawlResults?.[0]
+                if (result) {
+                    if (result.status === 'success') {
+                        toast.success(`ค้นหาสำเร็จ! พบผลรางวัลแล้วจากแหล่ง: ${result.source}`)
+                    } else if (result.status === 'failed') {
+                        toast.error(`ค้นหาเสร็จสิ้น: ${result.reason || 'ไม่พบผลรางวัลในรอบนี้'}`)
+                    } else if (result.status === 'deferred') {
+                        toast.warning(`เลื่อนการค้นหา: ${result.reason}`)
+                    } else {
+                        toast.error(`ผลลัพธ์: ${result.status}`)
+                    }
+                } else {
+                    toast.success('ค้นหาเสร็จสิ้น! รีเฟรชข้อมูลเรียบร้อย')
+                }
             } else {
                 toast.error(`เกิดข้อผิดพลาด: ${json.error || res.statusText}`)
             }
@@ -3032,20 +3045,6 @@ export default function SuperAdmin() {
                         </div>
                     </div>
 
-                    {crawlerTestOutput && (
-                        <pre style={{
-                            marginTop: '1rem',
-                            padding: '1rem',
-                            background: 'rgba(0,0,0,0.3)',
-                            borderRadius: '8px',
-                            fontSize: '0.85rem',
-                            overflowX: 'auto',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word'
-                        }}>
-                            {JSON.stringify(crawlerTestOutput, null, 2)}
-                        </pre>
-                    )}
                 </div>
 
                 {/* Search Jobs Status */}
