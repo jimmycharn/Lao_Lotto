@@ -208,10 +208,19 @@ export default function DealerLineBotTab({ user, profile }) {
     useEffect(() => {
         const load = async () => {
             setLoading(true)
-            await refreshGroupNames()
-            await fetchLineGroups()
-            await fetchActiveMembers()
-            await fetchManagers()
+            try {
+                // Do not auto-refresh group names from LINE API on initial load to avoid high latency.
+                // Users can manually refresh names using the "Refresh" button.
+                await Promise.all([
+                    fetchLineGroups(),
+                    fetchActiveMembers(),
+                    fetchManagers()
+                ])
+            } catch (err) {
+                console.error("Error in initial load:", err)
+            } finally {
+                setLoading(false)
+            }
         }
         load()
     }, [user?.id])
