@@ -5149,9 +5149,8 @@ serve(async (req) => {
           if (job.open_notify_group_id) {
             groupsQuery = groupsQuery.eq('id', job.open_notify_group_id);
           } else {
-            groupsQuery = groupsQuery
-              .eq('lottery_type', job.lottery_type)
-              .eq('notify_round_created', true);
+            // When sending to "all groups", notify all active groups of this lottery type
+            groupsQuery = groupsQuery.eq('lottery_type', job.lottery_type);
           }
 
           const { data: groups } = await groupsQuery;
@@ -5312,9 +5311,8 @@ serve(async (req) => {
           if (template.open_notify_group_id) {
             groupsQuery = groupsQuery.eq('id', template.open_notify_group_id);
           } else {
-            groupsQuery = groupsQuery
-              .eq('lottery_type', template.lottery_type)
-              .eq('notify_round_created', true);
+            // When sending to "all groups", notify all active groups of this lottery type
+            groupsQuery = groupsQuery.eq('lottery_type', template.lottery_type);
           }
           const { data: groups } = await groupsQuery;
 
