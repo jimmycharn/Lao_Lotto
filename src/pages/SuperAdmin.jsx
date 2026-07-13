@@ -81,6 +81,9 @@ export default function SuperAdmin() {
     const [aiCrawlerJobs, setAiCrawlerJobs] = useState([])
     const [testingCrawler, setTestingCrawler] = useState(false)
     const [crawlerTestOutput, setCrawlerTestOutput] = useState(null)
+    const [aiSearchModalOpen, setAiSearchModalOpen] = useState(false)
+    const [aiSearchLotteryType, setAiSearchLotteryType] = useState('lao')
+    const [aiSearchRoundDate, setAiSearchRoundDate] = useState(new Date().toISOString().slice(0, 10))
 
     // Manual Result Entry
     const [manualResultOpen, setManualResultOpen] = useState(false)
@@ -326,6 +329,7 @@ export default function SuperAdmin() {
     const handleTestCrawler = async () => {
         setTestingCrawler(true)
         setCrawlerTestOutput(null)
+        setAiSearchModalOpen(false)
         try {
             const { data: settingsRows, error: settingsErr } = await supabase
                 .from('app_settings')
@@ -344,23 +348,28 @@ export default function SuperAdmin() {
             const res = await fetch(functionUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'central_crawl_results', secret: cronSecret })
+                body: JSON.stringify({
+                    action: 'central_crawl_results',
+                    secret: cronSecret,
+                    lottery_type: aiSearchLotteryType,
+                    round_date: aiSearchRoundDate
+                })
             })
 
             const json = await res.json()
             setCrawlerTestOutput({ status: res.status, body: json })
 
             if (res.ok) {
-                toast.success('ทดสอบสำเร็จ! กำลังรีเฟรชข้อมูล...')
+                toast.success('ค้นหาสำเร็จ! กำลังรีเฟรชข้อมูล...')
             } else {
                 toast.error(`เกิดข้อผิดพลาด: ${json.error || res.statusText}`)
             }
 
             await fetchAICrawlerData()
         } catch (error) {
-            console.error('Error testing crawler:', error)
+            console.error('Error initiating AI search:', error)
             setCrawlerTestOutput({ error: error.message })
-            toast.error('ทดสอบไม่สำเร็จ: ' + error.message)
+            toast.error('ค้นหาไม่สำเร็จ: ' + error.message)
         } finally {
             setTestingCrawler(false)
         }
@@ -3000,7 +3009,7 @@ export default function SuperAdmin() {
                 <div className="settings-section" style={{ marginBottom: '1.5rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                         <div>
-                            <h3 style={{ margin: 0 }}>ทดสอบระบบ AI ค้นหาผลรางวัล</h3>
+                            <h3 style={{ margin: 0 }}>AI ค้นหาผลรางวัล</h3>
                             <p style={{ color: 'var(--color-text-muted)', margin: '0.25rem 0 0' }}>
                                 สั่งให้ระบบค้นหาผลรางวัลทันที (ปกติ cron job จะรันทุก 10 นาที)
                             </p>
@@ -3008,10 +3017,10 @@ export default function SuperAdmin() {
                         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                             <button
                                 className="btn btn-primary"
-                                onClick={handleTestCrawler}
+                                onClick={() => setAiSearchModalOpen(true)}
                                 disabled={testingCrawler}
                             >
-                                <FiSearch /> {testingCrawler ? 'กำลังทดสอบ...' : 'ทดสอบค้นหาทันที'}
+                                <FiSearch /> {testingCrawler ? 'กำลังค้นหา...' : 'ค้นหาทันที'}
                             </button>
                             <button
                                 className="btn btn-secondary"
@@ -3115,6 +3124,73 @@ export default function SuperAdmin() {
                         <div className="empty-state">ยังไม่มีผลรางวัลที่ค้นเจอ</div>
                     )}
                 </div>
+
+                {/* AI Search Modal */}
+                {aiSearchModalOpen && (
+                    <div style={{
+                        position: 'fixed', inset: 0, zIndex: 50,
+                        background: 'rgba(0,0,0,0.85)', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center', padding: '1rem'
+                    }} onClick={() => setAiSearchModalOpen(false)}>
+                        <div style={{
+                            background: '#1f2937', borderRadius: '12px',
+                            padding: '1.5rem', maxWidth: '400px', width: '100%',
+                            border: '1px solid #374151',
+                            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.8)'
+                        }} onClick={e => e.stopPropagation()}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                <h3 style={{ margin: 0 }}>ค้นหาผลรางวัลทันที</h3>
+                                <button onClick={() => setAiSearchModalOpen(false)} className="btn btn-icon" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.25rem' }}>
+                                    <FiX />
+                                </button>
+                            </div>
+
+                            {/* Lottery Type Selector */}
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>ประเภทหวย</label>
+                                <select
+                                    value={aiSearchLotteryType}
+                                    onChange={e => setAiSearchLotteryType(e.target.value)}
+                                    style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: '#374151', border: '1px solid #4b5563', color: '#f3f4f6' }}
+                                >
+                                    <option value="lao" style={{ background: '#374151', color: '#f3f4f6' }}>หวยลาว (Lao Lottery)</option>
+                                    <option value="thai" style={{ background: '#374151', color: '#f3f4f6' }}>หวยไทย (Thai Government Lottery)</option>
+                                    <option value="hanoi" style={{ background: '#374151', color: '#f3f4f6' }}>หวยฮานอย (Hanoi Lottery)</option>
+                                    <option value="stock" style={{ background: '#374151', color: '#f3f4f6' }}>หวยหุ้น (Stock Lottery)</option>
+                                </select>
+                            </div>
+
+                            {/* Round Date */}
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>งวดวันที่</label>
+                                <input
+                                    type="date"
+                                    value={aiSearchRoundDate}
+                                    onChange={e => setAiSearchRoundDate(e.target.value)}
+                                    style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', background: '#374151', border: '1px solid #4b5563', color: '#f3f4f6' }}
+                                />
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                <button
+                                    className="btn btn-secondary"
+                                    onClick={() => setAiSearchModalOpen(false)}
+                                    style={{ padding: '0.5rem 1rem' }}
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={handleTestCrawler}
+                                    disabled={testingCrawler}
+                                    style={{ padding: '0.5rem 1rem' }}
+                                >
+                                    {testingCrawler ? 'กำลังค้นหา...' : 'ค้นหาทันที'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Manual Result Entry Modal */}
                 {manualResultOpen && (

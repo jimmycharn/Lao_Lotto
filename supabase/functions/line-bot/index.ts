@@ -5412,38 +5412,63 @@ serve(async (req) => {
         })
       }
 
-      // 1. Find distinct (lottery_type, round_date) of closed rounds that are not announced
-      const { data: pendingRounds, error: roundsErr } = await supabase
-        .from('lottery_rounds')
-        .select('lottery_type, round_date')
-        .eq('status', 'closed')
-        .eq('is_result_announced', false)
-        .order('round_date', { ascending: true })
+      let uniquePending: any[] = [];
+      const isManualTrigger = !!(apiPayload.lottery_type && apiPayload.round_date);
 
-      if (roundsErr) {
-        console.error("Error fetching pending rounds for crawl:", roundsErr);
-        return new Response(JSON.stringify({ error: roundsErr.message }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        })
+      if (isManualTrigger) {
+        // Fetch the specific round to get its close_time or other info if exists
+        const { data: specRound } = await supabase
+          .from('lottery_rounds')
+          .select('lottery_type, round_date, close_time')
+          .eq('lottery_type', apiPayload.lottery_type)
+          .eq('round_date', apiPayload.round_date)
+          .limit(1)
+          .maybeSingle();
+
+        if (specRound) {
+          uniquePending = [specRound];
+        } else {
+          // If no active dealer round exists for this date/type (e.g. adhoc search), construct a mock one
+          uniquePending = [{
+            lottery_type: apiPayload.lottery_type,
+            round_date: apiPayload.round_date,
+            close_time: new Date().toISOString()
+          }];
+        }
+      } else {
+        // 1. Find distinct (lottery_type, round_date) of closed rounds that are not announced
+        const { data: pendingRounds, error: roundsErr } = await supabase
+          .from('lottery_rounds')
+          .select('lottery_type, round_date, close_time')
+          .eq('status', 'closed')
+          .eq('is_result_announced', false)
+          .order('round_date', { ascending: true });
+
+        if (roundsErr) {
+          console.error("Error fetching pending rounds for crawl:", roundsErr);
+          return new Response(JSON.stringify({ error: roundsErr.message }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        if (pendingRounds && pendingRounds.length > 0) {
+          const seenKeys = new Set();
+          for (const r of pendingRounds) {
+            const key = `${r.lottery_type}:${r.round_date}`;
+            if (!seenKeys.has(key)) {
+              seenKeys.add(key);
+              uniquePending.push(r);
+            }
+          }
+        }
       }
 
-      if (!pendingRounds || pendingRounds.length === 0) {
+      if (uniquePending.length === 0) {
         return new Response(JSON.stringify({ success: true, message: "No pending closed rounds to crawl." }), {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        })
-      }
-
-      // Group by lottery_type and round_date to avoid duplicate crawling
-      const uniquePending = [];
-      const seenKeys = new Set();
-      for (const r of pendingRounds) {
-        const key = `${r.lottery_type}:${r.round_date}`;
-        if (!seenKeys.has(key)) {
-          seenKeys.add(key);
-          uniquePending.push(r);
-        }
+        });
       }
 
       // Load API Key & Model
@@ -5463,7 +5488,7 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: "Missing OpenRouter API Key" }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        })
+        });
       }
 
       const crawlResults = [];
@@ -5483,7 +5508,7 @@ serve(async (req) => {
           let winNumbers = null;
           let sourceUrlUsed = null;
 
-          if (existingCentral) {
+          if (existingCentral && !isManualTrigger) {
             winNumbers = existingCentral.win_number_all;
             sourceUrlUsed = "central_cache";
           } else {
@@ -5496,12 +5521,32 @@ serve(async (req) => {
               .maybeSingle();
 
             const retryCount = job?.retry_count || 0;
-            const maxRetries = job?.max_retries || 5;
+            const maxRetries = 5;
 
-            if (job && job.status === 'failed' && retryCount >= maxRetries) {
-              console.log(`Crawl skipped for ${lottery_type} on ${round_date}: Max retries exhausted.`);
+            if (!isManualTrigger && retryCount >= maxRetries) {
+              console.log(`Crawl skipped for ${lottery_type} on ${round_date}: Max retries (${maxRetries}) exhausted.`);
               crawlResults.push({ lottery_type, round_date, status: 'skipped_max_retries' });
               continue;
+            }
+
+            if (!isManualTrigger && job && job.status === 'success') {
+              console.log(`Crawl skipped for ${lottery_type} on ${round_date}: Job already successful.`);
+              continue;
+            }
+
+            // Calculate minutes since close time
+            if (!isManualTrigger) {
+              const closeTime = r.close_time ? new Date(r.close_time) : null;
+              if (closeTime) {
+                const now = new Date();
+                const diffMins = (now.getTime() - closeTime.getTime()) / (1000 * 60);
+                const requiredMins = (retryCount + 1) * 10;
+                if (diffMins < requiredMins) {
+                  console.log(`Crawl deferred for ${lottery_type} on ${round_date}: closeTime was ${r.close_time}, diffMins=${diffMins.toFixed(1)} < requiredMins=${requiredMins}`);
+                  crawlResults.push({ lottery_type, round_date, status: 'deferred', reason: `diffMins < ${requiredMins}` });
+                  continue;
+                }
+              }
             }
 
             // Upsert job status to 'running'
@@ -5511,7 +5556,7 @@ serve(async (req) => {
                 lottery_type,
                 round_date,
                 status: 'running',
-                retry_count: retryCount + 1,
+                retry_count: isManualTrigger ? retryCount : retryCount + 1,
                 last_attempt_at: new Date().toISOString()
               }, {
                 onConflict: 'lottery_type,round_date'
