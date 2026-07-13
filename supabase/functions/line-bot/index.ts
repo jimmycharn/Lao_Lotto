@@ -4868,20 +4868,51 @@ serve(async (req) => {
           });
         }
 
-        // Push to groups matching notify_round_summary = true
-        const { data: summaryGroups } = await supabase
-          .from('line_groups')
-          .select('line_group_id')
-          .eq('dealer_id', round.dealer_id)
-          .eq('notify_round_summary', true)
+        // Route closing summary notification
+        let summaryGroups: any[] = [];
+        if (job && job.result_notify_group_id) {
+          const { data: specificGroup } = await supabase
+            .from('line_groups')
+            .select('line_group_id')
+            .eq('id', job.result_notify_group_id)
+            .eq('is_active', true)
+            .maybeSingle();
+          if (specificGroup) {
+            summaryGroups.push(specificGroup);
+          }
+        } else {
+          // Fallback/Legacy: Push to groups matching notify_round_summary = true
+          const { data: fbGroups } = await supabase
+            .from('line_groups')
+            .select('line_group_id')
+            .eq('dealer_id', round.dealer_id)
+            .eq('notify_round_summary', true);
+          if (fbGroups) {
+            summaryGroups = fbGroups;
+          }
+        }
 
         if (summaryGroups && summaryGroups.length > 0) {
-          for (const sg of summaryGroups) {
-            if (sg.line_group_id) {
-              try {
-                await sendLinePush(sg.line_group_id, closingSummaryText);
-              } catch (pushErr) {
-                console.error("Failed to send summary push:", pushErr);
+          try {
+            const { flexMessage } = await generateRoundSummaryFlex(round, false);
+            for (const sg of summaryGroups) {
+              if (sg.line_group_id) {
+                try {
+                  await sendLinePush(sg.line_group_id, flexMessage);
+                } catch (pushErr) {
+                  console.error("Failed to send summary push:", pushErr);
+                }
+              }
+            }
+          } catch (flexErr) {
+            console.error("Failed to generate Flex Message for closing summary, falling back to text:", flexErr);
+            for (const sg of summaryGroups) {
+              if (sg.line_group_id) {
+                try {
+                  await sendLinePush(sg.line_group_id, closingSummaryText);
+                } catch (pushErr) {
+                  console.error("Failed to send text summary push:", pushErr);
+                }
               }
             }
           }
