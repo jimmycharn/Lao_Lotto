@@ -8692,16 +8692,13 @@ serve(async (req) => {
               const isAnnounced = activeRound.is_result_announced === true && !!activeRound.winning_numbers;
 
               // Generate the summary Flex Message and ALT text using the helper function
-              const { summaryText: generatedText, flexMessage: generatedFlex } = await generateRoundSummaryFlex(
+              const { flexMessage } = await generateRoundSummaryFlex(
                 activeRound,
                 showOwnOnly,
                 showOwnOnly && targetUserId ? targetUserId : null,
                 memberProfileName,
                 profile
               );
-
-              summaryText = generatedText;
-              flexMessage = generatedFlex;
 
               await sendLineReply(replyToken, flexMessage);
               continue;
