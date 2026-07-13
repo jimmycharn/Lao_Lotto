@@ -5412,8 +5412,11 @@ serve(async (req) => {
         })
       }
 
+      const debugLogs: string[] = [];
       let uniquePending: any[] = [];
       const isManualTrigger = !!(apiPayload.lottery_type && apiPayload.round_date);
+      debugLogs.push(`isManualTrigger: ${isManualTrigger}`);
+      debugLogs.push(`payload: ${JSON.stringify(apiPayload)}`);
 
       if (isManualTrigger) {
         // Fetch the specific round to get its close_time or other info if exists
@@ -5425,6 +5428,7 @@ serve(async (req) => {
           .limit(1)
           .maybeSingle();
 
+        debugLogs.push(`specRound: ${JSON.stringify(specRound)}`);
         if (specRound) {
           uniquePending = [specRound];
         } else {
@@ -5495,15 +5499,18 @@ serve(async (req) => {
 
       for (const r of uniquePending) {
         const { lottery_type, round_date } = r;
+        debugLogs.push(`Starting loop iteration for lottery_type=${lottery_type}, round_date=${round_date}`);
 
         try {
           // Check if already exists in central_lottery_results
-          const { data: existingCentral } = await supabase
+          const { data: existingCentral, error: centralErr } = await supabase
             .from('central_lottery_results')
             .select('*')
             .eq('lottery_type', lottery_type)
             .eq('round_date', round_date)
             .maybeSingle();
+
+          debugLogs.push(`Checked existingCentral: error=${JSON.stringify(centralErr)}, exists=${!!existingCentral}`);
 
           let winNumbers = null;
           let sourceUrlUsed = null;
@@ -5511,14 +5518,93 @@ serve(async (req) => {
           if (existingCentral && !isManualTrigger) {
             winNumbers = existingCentral.win_number_all;
             sourceUrlUsed = "central_cache";
+            debugLogs.push("Using cached central results");
           } else {
-            // Check central_ai_search_jobs status and retries
-            const { data: job } = await supabase
-              .from('central_ai_search_jobs')
-              .select('*')
+            debugLogs.push("Bypassing cache, checking database announced fallback");
+            // Check if any dealer has already manually announced results for this round
+            const { data: announcedRound, error: annErr } = await supabase
+              .from('lottery_rounds')
+              .select('winning_numbers')
               .eq('lottery_type', lottery_type)
               .eq('round_date', round_date)
+              .eq('is_result_announced', true)
+              .not('winning_numbers', 'is', null)
+              .limit(1)
               .maybeSingle();
+
+            debugLogs.push(`Checked announced fallback: error=${JSON.stringify(annErr)}, exists=${!!announcedRound}`);
+
+            if (announcedRound && announcedRound.winning_numbers) {
+              winNumbers = announcedRound.winning_numbers;
+              sourceUrlUsed = "database_announced_round";
+              debugLogs.push(`Found announced results in database lottery_rounds: ${JSON.stringify(winNumbers)}`);
+
+              // Derive canonical primary/secondary numbers from winNumbers to store in central_lottery_results
+              let primaryNumber: string | null = null;
+              let secondaryNumber: string | null = null;
+              let threeDigitSets: string[] | null = null;
+
+              if (lottery_type === 'thai') {
+                primaryNumber = winNumbers['6_top'] || null;
+                secondaryNumber = winNumbers['2_bottom'] || null;
+                threeDigitSets = winNumbers['3_bottom'] || null;
+              } else if (lottery_type === 'lao' || lottery_type === 'hanoi') {
+                primaryNumber = winNumbers['4_set'] || null;
+                secondaryNumber = winNumbers['2_bottom'] || null;
+              } else if (lottery_type === 'stock') {
+                primaryNumber = winNumbers['2_top'] || null;
+                secondaryNumber = winNumbers['2_bottom'] || null;
+              } else {
+                primaryNumber = winNumbers['4_set'] || winNumbers['6_top'] || null;
+                secondaryNumber = winNumbers['2_bottom'] || null;
+              }
+
+              // Store to central_lottery_results
+              const { error: insErr } = await supabase
+                .from('central_lottery_results')
+                .upsert({
+                  lottery_type,
+                  round_date,
+                  primary_number: primaryNumber,
+                  secondary_number: secondaryNumber,
+                  three_digit_sets: threeDigitSets,
+                  win_number_3_top: winNumbers['3_top'] || null,
+                  win_number_2_bottom: winNumbers['2_bottom'] || null,
+                  win_number_3_tod: winNumbers['3_top'] || null,
+                  win_number_all: winNumbers,
+                  is_verified: true,
+                  updated_at: new Date().toISOString()
+                }, {
+                  onConflict: 'lottery_type,round_date'
+                });
+
+              if (insErr) {
+                debugLogs.push(`Failed to save fallback to central_lottery_results: ${JSON.stringify(insErr)}`);
+                throw new Error(`Failed to save to central_lottery_results: ${insErr.message || JSON.stringify(insErr)}`);
+              }
+              debugLogs.push("Successfully saved fallback to central_lottery_results");
+
+              // Update job status to 'success'
+              await supabase
+                .from('central_ai_search_jobs')
+                .update({
+                  status: 'success',
+                  updated_at: new Date().toISOString()
+                })
+                .eq('lottery_type', lottery_type)
+                .eq('round_date', round_date);
+
+            } else {
+              debugLogs.push("No announced fallback found, starting search job flow");
+              // Check central_ai_search_jobs status and retries
+              const { data: job, error: jobErr } = await supabase
+                .from('central_ai_search_jobs')
+                .select('*')
+                .eq('lottery_type', lottery_type)
+                .eq('round_date', round_date)
+                .maybeSingle();
+
+              debugLogs.push(`Checked central_ai_search_jobs: error=${JSON.stringify(jobErr)}, job=${JSON.stringify(job)}`);
 
             const retryCount = job?.retry_count || 0;
             const maxRetries = 5;
@@ -5633,52 +5719,27 @@ serve(async (req) => {
               console.error("Error formatting dateBE:", err);
             }
 
-            const systemPrompt = "You are a precise lottery result search grounding assistant. You query web search to find exact winning lottery numbers. Respond ONLY with the requested JSON format.";
+            const systemPrompt = `You are a precise lottery result search grounding assistant. You query web search to find exact winning lottery numbers. 
+You MUST respond with a JSON object in this format (no markdown, no explanations, no trailing text):
+For Lao/Hanoi: {"success":true,"found":true,"source_url":"https://...","numbers":{"primary_4_digit":"1234"}}
+For Thai: {"success":true,"found":true,"source_url":"https://...","numbers":{"official_6_digit":"123456","bottom_2_digit":"78","three_digit_front":["123","456"],"three_digit_back":["789","012"]}}
+For Stock: {"success":true,"found":true,"source_url":"https://...","numbers":{"index_2_digit":"56","change_2_digit":"78"}}
+If not found, return: {"success":true,"found":false}`;
 
             let userPrompt = '';
             if (lottery_type === 'thai') {
-              userPrompt = `Find the official Thai Government Lottery (สลากกินแบ่งรัฐบาล) results for round date ${queryRoundDate} (Format: YYYY-MM-DD), also known as Thai Buddhist Era date: ${dateBE}.\n\n` +
-                `Search for these EXACT independently-drawn numbers:\n` +
-                `1. official_6_digit: The 1st prize number (รางวัลที่ 1), 6 digits.\n` +
-                `2. bottom_2_digit: The last-2-digit prize (เลขท้าย 2 ตัว), 2 digits. This is drawn INDEPENDENTLY, not derived from the 6-digit number.\n` +
-                `3. three_digit_front: Array of the 2 three-digit "front" prizes (เลขหน้า 3 ตัว), e.g. ["123","456"].\n` +
-                `4. three_digit_back: Array of the 2 three-digit "back" prizes (เลขท้าย 3 ตัว), e.g. ["789","012"].\n\n` +
-                `Prioritized Sources (Urls that historically had correct results):\n${sourceUrlsStr || 'None'}\n\n` +
-                `Identify the exact source URL you found the results on.\n\n` +
-                `You MUST respond with a JSON object in this format (no markdown, no explanations):\n` +
-                `{"success":true,"found":true,"source_url":"https://...","numbers":{"official_6_digit":"123456","bottom_2_digit":"78","three_digit_front":["123","456"],"three_digit_back":["789","012"]}}\n` +
-                `If not found, return: {"success":true,"found":false}`;
+              userPrompt = `Find the official Thai Government Lottery (สลากกินแบ่งรัฐบาล) winning numbers for draw date ${queryRoundDate} (${dateBE}). Identify the 6-digit 1st prize (รางวัลที่ 1) and the last 2 digits (เลขท้าย 2 ตัว).`;
             } else if (lottery_type === 'lao' || lottery_type === 'hanoi') {
               const lotteryLabel = lottery_type === 'lao' ? 'Lao lottery (หวยลาว / หวยพัฒนา)' : 'Hanoi lottery (หวยฮานอย)';
-              userPrompt = `Find the official ${lotteryLabel} results for round date ${queryRoundDate} (Format: YYYY-MM-DD), also known as Thai/Lao Buddhist Era date: ${dateBE}.\n\n` +
-                `Search for: primary_4_digit - the main 4-digit winning set, which is the LAST 4 DIGITS of the official draw number, e.g. "1234".\n\n` +
-                `Prioritized Sources (Urls that historically had correct results):\n${sourceUrlsStr || 'None'}\n\n` +
-                `Identify the exact source URL you found the results on.\n\n` +
-                `You MUST respond with a JSON object in this format (no markdown, no explanations):\n` +
-                `{"success":true,"found":true,"source_url":"https://...","numbers":{"primary_4_digit":"1234"}}\n` +
-                `If not found, return: {"success":true,"found":false}`;
+              userPrompt = `Find the official ${lotteryLabel} winning numbers for draw date ${queryRoundDate} (${dateBE}). Identify the 4-digit winning number.`;
             } else if (lottery_type === 'stock') {
-              userPrompt = `Find the official stock index result used for Thai stock lottery (หวยหุ้น) for round date ${queryRoundDate} (Format: YYYY-MM-DD), also known as Thai Buddhist Era date: ${dateBE}.\n\n` +
-                `Search for these EXACT independently-drawn numbers:\n` +
-                `1. index_2_digit: The last 2 digits after the decimal point of the stock index closing value (used as "2 ตัวบน").\n` +
-                `2. change_2_digit: The last 2 digits after the decimal point of the index CHANGE/delta value (used as "2 ตัวล่าง").\n\n` +
-                `Prioritized Sources (Urls that historically had correct results):\n${sourceUrlsStr || 'None'}\n\n` +
-                `Identify the exact source URL you found the results on.\n\n` +
-                `You MUST respond with a JSON object in this format (no markdown, no explanations):\n` +
-                `{"success":true,"found":true,"source_url":"https://...","numbers":{"index_2_digit":"56","change_2_digit":"78"}}\n` +
-                `If not found, return: {"success":true,"found":false}`;
+              userPrompt = `Find the official stock index closing and change/delta values for Thai stock lottery (หวยหุ้น) for date ${queryRoundDate} (${dateBE}).`;
             } else {
               // Fallback generic prompt for unsupported/legacy lottery types
-              userPrompt = `Find the verified winning numbers of the lottery:\n` +
-                `Lottery Type: ${lottery_type}\n` +
-                `Round Date: ${queryRoundDate} (Format: YYYY-MM-DD), also known as Buddhist Era date: ${dateBE}\n\n` +
-                `Prioritized Sources (Urls that historically had correct results):\n${sourceUrlsStr || 'None'}\n\n` +
-                `Please query Google/Web search. Find the winning numbers for this lottery type on this date.\n` +
-                `Identify the exact source URL you found the results on.\n\n` +
-                `You MUST respond with a JSON object in this format (no markdown, no explanations):\n` +
-                `{"success":true,"found":true,"source_url":"https://...","numbers":{"4_set":"1234","3_top":"234","2_bottom":"34"}}\n` +
-                `If not found, return: {"success":true,"found":false}`;
+              userPrompt = `Find the winning numbers of ${lottery_type} lottery for date ${queryRoundDate} (${dateBE}).`;
             }
+
+            debugLogs.push(`Constructed clean userPrompt: "${userPrompt}"`);
 
             // Call OpenRouter
             const openaiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -5695,9 +5756,6 @@ serve(async (req) => {
                   { role: 'system', content: systemPrompt },
                   { role: 'user', content: userPrompt }
                 ],
-                plugins: [
-                  { id: "web" }
-                ],
                 temperature: 0.1,
                 max_tokens: 1000
               })
@@ -5709,15 +5767,19 @@ serve(async (req) => {
             }
 
             const responseData = await openaiResponse.json();
+            debugLogs.push(`Full OpenRouter response: ${JSON.stringify(responseData)}`);
             let aiText = responseData?.choices?.[0]?.message?.content || '';
+            debugLogs.push(`OpenRouter response choices content: "${aiText}"`);
             
             // Clean markdown
             aiText = aiText.replace(/```json|```/g, '').trim();
             const parsed = JSON.parse(aiText);
+            debugLogs.push(`Parsed JSON content: ${JSON.stringify(parsed)}`);
 
             if (parsed.success && parsed.found && parsed.numbers) {
               const raw = parsed.numbers;
               sourceUrlUsed = parsed.source_url || 'unknown';
+              debugLogs.push(`Results found in response. numbers: ${JSON.stringify(raw)}, source: ${sourceUrlUsed}`);
 
               // Derive the canonical winning_numbers object per lottery type.
               // Only the "primary" (and for thai/stock, "secondary") numbers are
@@ -5796,8 +5858,10 @@ serve(async (req) => {
                 });
 
               if (insErr) {
-                console.error("Error storing to central_lottery_results:", insErr);
+                debugLogs.push(`Failed to save to central_lottery_results: ${JSON.stringify(insErr)}`);
+                throw new Error(`Failed to save to central_lottery_results: ${insErr.message || JSON.stringify(insErr)}`);
               }
+              debugLogs.push("Successfully saved to central_lottery_results");
 
               // Update job status to 'success'
               await supabase
@@ -5873,6 +5937,7 @@ serve(async (req) => {
               continue;
             }
           }
+        }
 
           // If we successfully got winNumbers, import to all matching dealer rounds
           if (winNumbers) {
@@ -5994,10 +6059,12 @@ serve(async (req) => {
 
             crawlResults.push({ lottery_type, round_date, status: 'success', source: sourceUrlUsed });
           } else {
+            debugLogs.push("AI search returned parsed.found = false");
             crawlResults.push({ lottery_type, round_date, status: 'failed', reason: 'AI ค้นหาเสร็จสิ้น แต่ไม่พบเลขรางวัลบนเว็บไซต์' });
           }
 
         } catch (itemErr: any) {
+          debugLogs.push(`Exception caught inside loop: ${itemErr.message || JSON.stringify(itemErr)}`);
           console.error(`Error crawling ${lottery_type} on ${round_date}:`, itemErr);
           crawlResults.push({ lottery_type, round_date, status: 'error', error: itemErr.message });
           
@@ -6013,7 +6080,7 @@ serve(async (req) => {
         }
       }
 
-      return new Response(JSON.stringify({ success: true, crawlResults }), {
+      return new Response(JSON.stringify({ success: true, crawlResults, debugLogs }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200
       })
