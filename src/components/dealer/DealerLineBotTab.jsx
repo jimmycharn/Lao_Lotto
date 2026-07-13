@@ -41,6 +41,8 @@ export default function DealerLineBotTab({ user, profile }) {
     const [selectedConfigGroupId, setSelectedConfigGroupId] = useState(null)
     const [activeMembers, setActiveMembers] = useState([])
     const [searchGroupQuery, setSearchGroupQuery] = useState('')
+    const [selectedTypeFilter, setSelectedTypeFilter] = useState('all')
+    const [allowedLotteryTypes, setAllowedLotteryTypes] = useState([])
 
     const isOwnerOrSuper = profile?.role === 'dealer' || profile?.role === 'superadmin'
 
@@ -99,6 +101,21 @@ export default function DealerLineBotTab({ user, profile }) {
         } catch (error) {
             console.error('Error fetching active members:', error)
             toast.error('ไม่สามารถดึงข้อมูลสมาชิกได้')
+        }
+    }
+
+    const fetchAllowedLotteryTypes = async () => {
+        if (!user?.id) return
+        try {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('allowed_lottery_types')
+                .eq('id', user.id)
+                .maybeSingle()
+            if (error) throw error
+            setAllowedLotteryTypes(data?.allowed_lottery_types || Object.keys(LOTTERY_TYPES))
+        } catch (error) {
+            console.error('Error fetching allowed lottery types:', error)
         }
     }
 
@@ -214,7 +231,8 @@ export default function DealerLineBotTab({ user, profile }) {
                 await Promise.all([
                     fetchLineGroups(),
                     fetchActiveMembers(),
-                    fetchManagers()
+                    fetchManagers(),
+                    fetchAllowedLotteryTypes()
                 ])
             } catch (err) {
                 console.error("Error in initial load:", err)
@@ -274,9 +292,12 @@ export default function DealerLineBotTab({ user, profile }) {
     const handleRefresh = async () => {
         setLoading(true)
         await refreshGroupNames()
-        await fetchLineGroups()
-        await fetchActiveMembers()
-        await fetchManagers()
+        await Promise.all([
+            fetchLineGroups(),
+            fetchActiveMembers(),
+            fetchManagers(),
+            fetchAllowedLotteryTypes()
+        ])
     }
 
     // Generate binding code for new group
@@ -557,6 +578,12 @@ export default function DealerLineBotTab({ user, profile }) {
     // Filter list to active groups (those actually bound to a LINE chat)
     const activeGroups = lineGroups.filter(g => g.line_group_id !== 'pending' && g.line_group_id)
     const filteredActiveGroups = activeGroups.filter(g => {
+        // 1. Filter by lottery type
+        if (selectedTypeFilter !== 'all' && g.lottery_type !== selectedTypeFilter) {
+            return false;
+        }
+
+        // 2. Filter by search query
         const query = searchGroupQuery.toLowerCase().trim();
         if (!query) return true;
         const name = (g.group_name || '').toLowerCase();
@@ -748,7 +775,32 @@ export default function DealerLineBotTab({ user, profile }) {
                                             )}
                                         </div>
                                     </td>
-                                    <td></td>
+                                                                  <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center' }}>
+                                        <select
+                                            className="form-input"
+                                            value={selectedTypeFilter}
+                                            onChange={e => setSelectedTypeFilter(e.target.value)}
+                                            style={{
+                                                padding: '0.35rem 0.5rem',
+                                                fontSize: '0.85rem',
+                                                borderRadius: 'var(--radius-md)',
+                                                border: '1px solid var(--color-border)',
+                                                background: 'var(--color-surface)',
+                                                color: 'var(--color-text)',
+                                                outline: 'none',
+                                                width: '100%',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            <option value="all">แสดงทั้งหมด</option>
+                                            {allowedLotteryTypes.map(typeKey => {
+                                                const label = LOTTERY_TYPES[typeKey] || typeKey.toUpperCase()
+                                                return (
+                                                    <option key={typeKey} value={typeKey}>{label}</option>
+                                                )
+                                            })}
+                                        </select>
+                                    </td>
                                     <td></td>
                                     <td></td>
                                     <td></td>
