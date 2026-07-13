@@ -5572,38 +5572,72 @@ serve(async (req) => {
 
             const sourceUrlsStr = (sources || []).map(s => s.source_url).join('\n');
 
-            let dateBE = '';
+            let yearPart = 2026;
+            let monthPart = '01';
+            let dayPart = '01';
+            let beYear = 2569;
             try {
-              const dateParts = round_date.split('-');
-              if (dateParts.length === 3) {
-                const y = parseInt(dateParts[0]);
-                const m = parseInt(dateParts[1]);
-                const d = parseInt(dateParts[2]);
-                const beYear = y + 543;
-                
-                const monthNamesThai = [
-                  "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
-                  "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
-                ];
-                const monthShortThai = [
-                  "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
-                  "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."
-                ];
-                
-                const monthName = monthNamesThai[m - 1] || '';
-                const monthShort = monthShortThai[m - 1] || '';
-                
-                dateBE = `${d}/${m}/${beYear} (also written as "${d} ${monthName} ${beYear}" or "${d} ${monthShort} ${beYear}" or just year ${beYear})`;
+              const parts = round_date.split('-');
+              if (parts.length === 3) {
+                yearPart = parseInt(parts[0]);
+                monthPart = parts[1];
+                dayPart = parts[2];
+                beYear = yearPart + 543;
+              }
+            } catch (e) {
+              console.error("Error splitting round_date:", e);
+            }
+
+            let queryYear = yearPart;
+            let queryBE = beYear;
+            let queryRoundDate = round_date;
+
+            // Dynamically detect year offset between machine clock and real-world internet
+            try {
+              const pingRes = await fetch("https://openrouter.ai/api/v1/models", { method: "HEAD" });
+              const dateHeader = pingRes.headers.get("date");
+              if (dateHeader) {
+                const realDate = new Date(dateHeader);
+                const realYear = realDate.getUTCFullYear();
+                const machineYear = new Date().getUTCFullYear();
+                const yearOffset = machineYear - realYear;
+                if (yearOffset !== 0) {
+                  queryYear = yearPart - yearOffset;
+                  queryBE = beYear - yearOffset;
+                  queryRoundDate = `${queryYear}-${monthPart}-${dayPart}`;
+                  console.log(`[AI Search] Detected year offset of ${yearOffset} years. Adjusting query date to ${queryRoundDate} (BE: ${queryBE})`);
+                }
               }
             } catch (err) {
-              console.error("Error parsing dateBE:", err);
+              console.error("[AI Search] Failed to check real-world date offset:", err);
+            }
+
+            let dateBE = '';
+            try {
+              const monthNamesThai = [
+                "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+                "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
+              ];
+              const monthShortThai = [
+                "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
+                "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."
+              ];
+              
+              const mIdx = parseInt(monthPart) - 1;
+              const monthName = monthNamesThai[mIdx] || '';
+              const monthShort = monthShortThai[mIdx] || '';
+              const dInt = parseInt(dayPart);
+              
+              dateBE = `${dInt}/${parseInt(monthPart)}/${queryBE} (also written as "${dInt} ${monthName} ${queryBE}" or "${dInt} ${monthShort} ${queryBE}" or just year ${queryBE})`;
+            } catch (err) {
+              console.error("Error formatting dateBE:", err);
             }
 
             const systemPrompt = "You are a precise lottery result search grounding assistant. You query web search to find exact winning lottery numbers. Respond ONLY with the requested JSON format.";
 
             let userPrompt = '';
             if (lottery_type === 'thai') {
-              userPrompt = `Find the official Thai Government Lottery (สลากกินแบ่งรัฐบาล) results for round date ${round_date} (Format: YYYY-MM-DD), also known as Thai Buddhist Era date: ${dateBE}.\n\n` +
+              userPrompt = `Find the official Thai Government Lottery (สลากกินแบ่งรัฐบาล) results for round date ${queryRoundDate} (Format: YYYY-MM-DD), also known as Thai Buddhist Era date: ${dateBE}.\n\n` +
                 `Search for these EXACT independently-drawn numbers:\n` +
                 `1. official_6_digit: The 1st prize number (รางวัลที่ 1), 6 digits.\n` +
                 `2. bottom_2_digit: The last-2-digit prize (เลขท้าย 2 ตัว), 2 digits. This is drawn INDEPENDENTLY, not derived from the 6-digit number.\n` +
@@ -5616,7 +5650,7 @@ serve(async (req) => {
                 `If not found, return: {"success":true,"found":false}`;
             } else if (lottery_type === 'lao' || lottery_type === 'hanoi') {
               const lotteryLabel = lottery_type === 'lao' ? 'Lao lottery (หวยลาว / หวยพัฒนา)' : 'Hanoi lottery (หวยฮานอย)';
-              userPrompt = `Find the official ${lotteryLabel} results for round date ${round_date} (Format: YYYY-MM-DD), also known as Thai/Lao Buddhist Era date: ${dateBE}.\n\n` +
+              userPrompt = `Find the official ${lotteryLabel} results for round date ${queryRoundDate} (Format: YYYY-MM-DD), also known as Thai/Lao Buddhist Era date: ${dateBE}.\n\n` +
                 `Search for: primary_4_digit - the main 4-digit winning set, which is the LAST 4 DIGITS of the official draw number, e.g. "1234".\n\n` +
                 `Prioritized Sources (Urls that historically had correct results):\n${sourceUrlsStr || 'None'}\n\n` +
                 `Identify the exact source URL you found the results on.\n\n` +
@@ -5624,7 +5658,7 @@ serve(async (req) => {
                 `{"success":true,"found":true,"source_url":"https://...","numbers":{"primary_4_digit":"1234"}}\n` +
                 `If not found, return: {"success":true,"found":false}`;
             } else if (lottery_type === 'stock') {
-              userPrompt = `Find the official stock index result used for Thai stock lottery (หวยหุ้น) for round date ${round_date} (Format: YYYY-MM-DD), also known as Thai Buddhist Era date: ${dateBE}.\n\n` +
+              userPrompt = `Find the official stock index result used for Thai stock lottery (หวยหุ้น) for round date ${queryRoundDate} (Format: YYYY-MM-DD), also known as Thai Buddhist Era date: ${dateBE}.\n\n` +
                 `Search for these EXACT independently-drawn numbers:\n` +
                 `1. index_2_digit: The last 2 digits after the decimal point of the stock index closing value (used as "2 ตัวบน").\n` +
                 `2. change_2_digit: The last 2 digits after the decimal point of the index CHANGE/delta value (used as "2 ตัวล่าง").\n\n` +
@@ -5637,7 +5671,7 @@ serve(async (req) => {
               // Fallback generic prompt for unsupported/legacy lottery types
               userPrompt = `Find the verified winning numbers of the lottery:\n` +
                 `Lottery Type: ${lottery_type}\n` +
-                `Round Date: ${round_date} (Format: YYYY-MM-DD), also known as Buddhist Era date: ${dateBE}\n\n` +
+                `Round Date: ${queryRoundDate} (Format: YYYY-MM-DD), also known as Buddhist Era date: ${dateBE}\n\n` +
                 `Prioritized Sources (Urls that historically had correct results):\n${sourceUrlsStr || 'None'}\n\n` +
                 `Please query Google/Web search. Find the winning numbers for this lottery type on this date.\n` +
                 `Identify the exact source URL you found the results on.\n\n` +
