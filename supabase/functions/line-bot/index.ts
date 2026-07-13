@@ -5987,6 +5987,21 @@ serve(async (req) => {
         });
       }
 
+      // Check if group is muted (disable_replies = true)
+      if (groupId && (groupId.startsWith('C') || groupId.startsWith('R'))) {
+        const { data: currentGroup } = await supabase
+          .from('line_groups')
+          .select('disable_replies')
+          .eq('line_group_id', groupId)
+          .eq('is_active', true)
+          .maybeSingle();
+
+        if (currentGroup && currentGroup.disable_replies) {
+          console.log(`[LINE BOT SILENT] Group ${groupId} has disable_replies = true. Aborting event handling.`);
+          continue;
+        }
+      }
+
       // Handle Group/Room Join
       if (event.type === 'join') {
         const welcomeText = `สวัสดีค่ะ! ยินดีต้อนรับสู่ระบบ LINE Bot รับโพยหวย Big Lotto 🤖\n\nกรุณาพิมพ์:\n/bind [รหัสผูกกลุ่ม]\n\nเพื่อเชื่อมโยงกลุ่มแชทนี้เข้ากับระบบเจ้ามือหลักของท่านค่ะ`;

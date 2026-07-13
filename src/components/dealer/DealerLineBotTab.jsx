@@ -383,6 +383,29 @@ export default function DealerLineBotTab({ user, profile }) {
         }
     }
 
+    const handleToggleDisableReplies = async (groupId, disabled) => {
+        // Optimistic update for instant UI feedback
+        setLineGroups(prev => prev.map(g => g.id === groupId ? { ...g, disable_replies: disabled } : g))
+
+        try {
+            const { error } = await supabase
+                .from('line_groups')
+                .update({
+                    disable_replies: disabled,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', groupId)
+
+            if (error) throw error
+
+            toast.success(disabled ? 'ตั้งค่าบอทไม่ตอบกลับในกลุ่มนี้แล้ว!' : 'เปิดใช้งานบอทตอบกลับในกลุ่มนี้ตามปกติแล้ว!')
+        } catch (error) {
+            console.error('Error toggling disable replies:', error)
+            toast.error('ไม่สามารถอัปเดตสิทธิ์การตอบกลับได้')
+            fetchLineGroups()
+        }
+    }
+
     const handleUpdateStaffMember = async (groupId, staffMemberId) => {
         const value = staffMemberId === '' ? null : staffMemberId
         // Optimistic update
@@ -794,6 +817,15 @@ export default function DealerLineBotTab({ user, profile }) {
                                                 </td>
                                                 <td style={{ padding: '0.75rem', textAlign: 'center' }}>
                                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                                                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed', margin: 0 }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={group.disable_replies || false}
+                                                                disabled={!isOwnerOrSuper}
+                                                                onChange={e => handleToggleDisableReplies(group.id, e.target.checked)}
+                                                            />
+                                                            <span style={{ fontSize: '0.85rem', color: '#ef4444', fontWeight: 'bold' }}>บอทไม่ตอบกลับ</span>
+                                                        </label>
                                                         <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed', margin: 0 }}>
                                                             <input
                                                                 type="checkbox"
