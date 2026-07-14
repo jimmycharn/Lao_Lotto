@@ -1082,42 +1082,18 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                         </label>
 
                                                         {jobForm.notify_result_enabled && (
-                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingLeft: '1.2rem' }}>
-                                                                <div>
-                                                                    <label className="form-label" style={{ margin: 0, marginBottom: '0.3rem' }}>ส่งไปยังกลุ่มไลน์</label>
-                                                                    <select
-                                                                        value={jobForm.notify_result_group_id ? 'specific' : 'all'}
-                                                                        onChange={(e) => {
-                                                                            const val = e.target.value;
-                                                                            if (val === 'all') {
-                                                                                setJobForm({ ...jobForm, notify_result_group_id: '' });
-                                                                            } else {
-                                                                                setJobForm({ ...jobForm, notify_result_group_id: lineGroups[0]?.id || 'select' });
-                                                                            }
-                                                                        }}
-                                                                        className="form-input"
-                                                                    >
-                                                                        <option value="all">กลุ่มไลน์ที่ส่งเลข</option>
-                                                                        <option value="specific">กลุ่มไลน์อื่นๆ</option>
-                                                                    </select>
-                                                                </div>
-
-                                                                {jobForm.notify_result_group_id !== '' && (
-                                                                    <div>
-                                                                        <label className="form-label" style={{ margin: 0, marginBottom: '0.3rem' }}>เลือกกลุ่มไลน์ทดลอง</label>
-                                                                        <select
-                                                                            value={jobForm.notify_result_group_id === 'select' ? '' : jobForm.notify_result_group_id}
-                                                                            onChange={(e) => setJobForm({ ...jobForm, notify_result_group_id: e.target.value })}
-                                                                            className="form-input"
-                                                                            required
-                                                                        >
-                                                                            <option value="">-- กรุณาเลือกกลุ่มไลน์ --</option>
-                                                                            {lineGroups.map(lg => (
-                                                                                <option key={lg.id} value={lg.id}>{lg.group_name}</option>
-                                                                            ))}
-                                                                        </select>
-                                                                    </div>
-                                                                )}
+                                                            <div style={{ paddingLeft: '1.2rem' }}>
+                                                                <label className="form-label" style={{ margin: 0, marginBottom: '0.3rem' }}>ส่งไปยังกลุ่มไลน์</label>
+                                                                <select
+                                                                    value={jobForm.notify_result_group_id || ''}
+                                                                    onChange={(e) => setJobForm({ ...jobForm, notify_result_group_id: e.target.value })}
+                                                                    className="form-input"
+                                                                >
+                                                                    <option value="">กลุ่มไลน์ที่ส่งเลข</option>
+                                                                    {lineGroups.map(lg => (
+                                                                        <option key={lg.id} value={lg.id}>{lg.group_name}</option>
+                                                                    ))}
+                                                                </select>
                                                             </div>
                                                         )}
                                                     </div>
