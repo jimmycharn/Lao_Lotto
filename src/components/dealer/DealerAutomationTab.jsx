@@ -1015,7 +1015,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                     {/* 5. Award Announcement */}
                                     <div style={{ background: 'rgba(255,255,255,0.01)', padding: '1.2rem', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
                                         <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                            <FiRefreshCw /> ระบบแจ้งผลและสรุปยอดอัตโนมัติ
+                                            <FiRefreshCw /> ระบบแจ้งผลหลังออกเลขรางวัล
                                         </h4>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
