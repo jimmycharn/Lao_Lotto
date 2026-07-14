@@ -6024,6 +6024,30 @@ If not found, return: {"success":true,"found":false}`;
                 // Run calculate winners RPC
                 await supabase.rpc('calculate_round_winners', { p_round_id: dr.id });
 
+                // Deduct billing based on subscription package
+                try {
+                  const { data: dealerSubs } = await supabase
+                    .from('dealer_subscriptions')
+                    .select('billing_model, subscription_packages(billing_model, profit_percentage_rate)')
+                    .eq('dealer_id', dr.dealer_id)
+                    .in('status', ['active', 'trial'])
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+                  
+                  const dealerSub = dealerSubs?.[0];
+                  const billingModel = dealerSub?.subscription_packages?.billing_model || dealerSub?.billing_model;
+
+                  if (billingModel === 'profit_percentage') {
+                    const previousPending = dr.charged_credit_amount || 0;
+                    await deductProfitBasedCreditDeno(dr.dealer_id, dr.id, previousPending);
+                  } else {
+                    const previouslyCharged = dr.charged_credit_amount || 0;
+                    await deductAdditionalCreditForRoundDeno(dr.dealer_id, dr.id, previouslyCharged);
+                  }
+                } catch (billingErr) {
+                  console.error('Billing deduction calculation failed in crawler:', billingErr);
+                }
+
                 // Fetch target announcement LINE groups
                 let resultGroups = [];
                 if (job) {
