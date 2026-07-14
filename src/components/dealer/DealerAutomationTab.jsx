@@ -949,7 +949,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                     {/* 4. Number Reports */}
                                     <div style={{ background: 'rgba(255,255,255,0.01)', padding: '1.2rem', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
                                         <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                            <FiList /> ส่งรายงานยอดตัวเลขเมื่อปิดงวด
+                                            <FiList /> ส่งรายงานเมื่อปิดงวด
                                         </h4>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
@@ -972,7 +972,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                                     checked={jobForm.notify_bets_types.includes('total')}
                                                                     onChange={() => toggleFormReportType('total')}
                                                                 />
-                                                                <span>ยอดรวมทั้งหมด (Total)</span>
+                                                                <span>เลขรวมทั้งหมด (Total)</span>
                                                             </label>
                                                             <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.9rem' }}>
                                                                 <input
@@ -980,7 +980,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                                     checked={jobForm.notify_bets_types.includes('remaining')}
                                                                     onChange={() => toggleFormReportType('remaining')}
                                                                 />
-                                                                <span>ยอดถือสู้เอง (Remaining)</span>
+                                                                <span>เลขเหลือในมือ (Remaining)</span>
                                                             </label>
                                                             <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.9rem' }}>
                                                                 <input
@@ -988,7 +988,15 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                                     checked={jobForm.notify_bets_types.includes('layoff')}
                                                                     onChange={() => toggleFormReportType('layoff')}
                                                                 />
-                                                                <span>ยอดตีออก (Layoffs)</span>
+                                                                <span>เลขตีออก (Layoffs)</span>
+                                                            </label>
+                                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.9rem' }}>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={jobForm.notify_bets_types.includes('individual')}
+                                                                    onChange={() => toggleFormReportType('individual')}
+                                                                />
+                                                                <span>ยอดส่งรายคน (Individual)</span>
                                                             </label>
                                                         </div>
                                                     </div>

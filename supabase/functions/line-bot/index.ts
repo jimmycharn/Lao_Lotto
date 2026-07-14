@@ -476,6 +476,245 @@ const AUTOMATION_TYPE_RANKS: Record<string, number> = {
   '4_set': 400, '4_tod': 401, '4_float': 402, '5_float': 403, '6_top': 404
 };
 
+async function generateIndividualSubmissionsSummaryFlex(roundId: string, lotteryType: string): Promise<{ summaryText: string; flexMessage: any }> {
+  // get round
+  const { data: activeRound } = await supabase
+    .from('lottery_rounds')
+    .select('id, round_date, close_time')
+    .eq('id', roundId)
+    .maybeSingle();
+
+  if (!activeRound) {
+    return { summaryText: "❌ ไม่พบรอบหวย", flexMessage: null };
+  }
+
+  // Get all submissions for this round
+  let submissions = [];
+  try {
+    submissions = await fetchAllSubmissions(activeRound.id);
+  } catch (err) {
+    console.error("Error fetching submissions:", err);
+  }
+
+  const userTotals: Record<string, number> = {};
+  const userComms: Record<string, number> = {};
+  (submissions || []).forEach((s: any) => {
+    userTotals[s.user_id] = (userTotals[s.user_id] || 0) + Number(s.amount);
+    userComms[s.user_id] = (userComms[s.user_id] || 0) + Number(s.commission_amount || 0);
+  });
+
+  const activeUserIds = Object.keys(userTotals)
+    .filter(uid => userTotals[uid] > 0)
+    .sort((a, b) => userTotals[b] - userTotals[a]);
+
+  if (activeUserIds.length === 0) {
+    const emptyText = `👥 ยังไม่มีสมาชิกส่งเลขเข้ามาในงวดนี้ค่ะ`;
+    return {
+      summaryText: emptyText,
+      flexMessage: {
+        "type": "text",
+        "text": emptyText
+      }
+    };
+  }
+
+  const { data: profiles, error: profErr } = await supabase
+    .from('profiles')
+    .select('id, full_name, line_user_id')
+    .in('id', activeUserIds);
+
+  if (profErr || !profiles) {
+    return { summaryText: "❌ เกิดข้อผิดพลาดในการดึงชื่อสมาชิก", flexMessage: null };
+  }
+
+  const profilesMap: Record<string, { name: string; isLinked: boolean }> = {};
+  profiles.forEach((p: any) => {
+    profilesMap[p.id] = {
+      name: p.full_name || 'Unknown User',
+      isLinked: !!p.line_user_id
+    };
+  });
+
+  const typeName = LOTTERY_TYPE_NAMES[lotteryType] || lotteryType.toUpperCase();
+  let summaryText = `👥 สมาชิกที่ส่งเลขแล้ว (${typeName})\nงวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
+  summaryText += `--------------------------\n`;
+  summaryText += `ชื่อ | ยอดส่ง | ค่าคอม | คงเหลือส่ง\n`;
+
+  const bubbleBodyContents: any[] = [
+    {
+      "type": "box",
+      "layout": "horizontal",
+      "contents": [
+        { "type": "text", "text": "ชื่อ", "size": "xs", "color": "#888888", "weight": "bold", "flex": 4 },
+        { "type": "text", "text": "ยอดส่ง (ค่าคอม)", "size": "xs", "color": "#888888", "weight": "bold", "align": "end", "flex": 4 },
+        { "type": "text", "text": "สุทธิส่ง", "size": "xs", "color": "#888888", "weight": "bold", "align": "end", "flex": 3 }
+      ]
+    },
+    {
+      "type": "separator",
+      "margin": "xs",
+      "color": "#e5e5e5"
+    }
+  ];
+
+  let index = 1;
+  let overallTotal = 0;
+  let overallComm = 0;
+  activeUserIds.forEach((uid) => {
+    const userProf = profilesMap[uid] || { name: 'Unknown User', isLinked: false };
+    const name = userProf.name;
+    const total = userTotals[uid];
+    const comm = userComms[uid];
+    const net = total - comm;
+
+    const roundedTotal = Math.round(total);
+    const roundedComm = Math.round(comm);
+    const roundedNet = Math.round(net);
+
+    summaryText += `${index}. คุณ ${name} | ฿${roundedTotal.toLocaleString('th-TH')} | ฿${roundedComm.toLocaleString('th-TH')} | ฿${roundedNet.toLocaleString('th-TH')}\n`;
+
+    bubbleBodyContents.push({
+      "type": "box",
+      "layout": "horizontal",
+      "margin": "md",
+      "contents": [
+        {
+          "type": "text",
+          "text": `${index}. คุณ ${name}`,
+          "size": "sm",
+          "color": "#333333",
+          "weight": "bold",
+          "flex": 4,
+          "wrap": true
+        },
+        {
+          "type": "box",
+          "layout": "vertical",
+          "flex": 4,
+          "contents": [
+            { "type": "text", "text": `฿${roundedTotal.toLocaleString('th-TH')}`, "size": "sm", "align": "end", "weight": "bold", "color": "#333333" },
+            { "type": "text", "text": `(฿${roundedComm.toLocaleString('th-TH')})`, "size": "xs", "align": "end", "color": "#888888" }
+          ]
+        },
+        {
+          "type": "text",
+          "text": `฿${roundedNet.toLocaleString('th-TH')}`,
+          "size": "sm",
+          "color": "#00A86B",
+          "weight": "bold",
+          "align": "end",
+          "flex": 3
+        }
+      ]
+    });
+
+    overallTotal += roundedTotal;
+    overallComm += roundedComm;
+    index++;
+  });
+
+  const overallNet = overallTotal - overallComm;
+  summaryText += `--------------------------\n`;
+  summaryText += `รวมส่งเลขทั้งหมด: ${activeUserIds.length} คน\n`;
+  summaryText += `💰 ยอดรวม: ฿${overallTotal.toLocaleString('th-TH')}\n`;
+  summaryText += `💸 ค่าคอม: ฿${overallComm.toLocaleString('th-TH')}\n`;
+  summaryText += `💵 เหลือ: ฿${overallNet.toLocaleString('th-TH')}`;
+
+  const flexMessage = {
+    "type": "flex",
+    "altText": summaryText,
+    "contents": {
+      "type": "bubble",
+      "size": "mega",
+      "header": {
+        "type": "box",
+        "layout": "vertical",
+        "backgroundColor": "#4A2E80",
+        "paddingAll": "lg",
+        "contents": [
+          {
+            "type": "text",
+            "text": `👥 สมาชิกที่ส่งเลขแล้ว (${typeName})`,
+            "weight": "bold",
+            "size": "md",
+            "color": "#ffffff"
+          },
+          {
+            "type": "text",
+            "text": `งวดวันที่: ${getRoundDisplayDate(activeRound, false)}`,
+            "size": "xs",
+            "color": "#e1d9f0",
+            "margin": "xs"
+          }
+        ]
+      },
+      "body": {
+        "type": "box",
+        "layout": "vertical",
+        "paddingAll": "md",
+        "contents": bubbleBodyContents
+      },
+      "footer": {
+        "type": "box",
+        "layout": "vertical",
+        "contents": [
+          {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#f8f9fa",
+            "paddingAll": "md",
+            "cornerRadius": "md",
+            "contents": [
+              {
+                "type": "box",
+                "layout": "horizontal",
+                "contents": [
+                  { "type": "text", "text": "รวมส่งเลข:", "size": "sm", "color": "#555555" },
+                  { "type": "text", "text": `${activeUserIds.length} คน`, "size": "sm", "weight": "bold", "align": "end", "color": "#333333" }
+                ]
+              },
+              {
+                "type": "box",
+                "layout": "horizontal",
+                "margin": "xs",
+                "contents": [
+                  { "type": "text", "text": "💰 ยอดรวม:", "size": "sm", "color": "#555555" },
+                  { "type": "text", "text": `฿${overallTotal.toLocaleString('th-TH')}`, "size": "sm", "weight": "bold", "align": "end", "color": "#333333" }
+                ]
+              },
+              {
+                "type": "box",
+                "layout": "horizontal",
+                "margin": "xs",
+                "contents": [
+                  { "type": "text", "text": "💸 ค่าคอมรวม:", "size": "sm", "color": "#555555" },
+                  { "type": "text", "text": `฿${overallComm.toLocaleString('th-TH')}`, "size": "sm", "weight": "bold", "align": "end", "color": "#666666" }
+                ]
+              },
+              {
+                "type": "separator",
+                "margin": "sm",
+                "color": "#dddddd"
+              },
+              {
+                "type": "box",
+                "layout": "horizontal",
+                "margin": "sm",
+                "contents": [
+                  { "type": "text", "text": "💵 คงเหลือสุทธิ:", "size": "sm", "weight": "bold", "color": "#333333" },
+                  { "type": "text", "text": `฿${overallNet.toLocaleString('th-TH')}`, "size": "sm", "weight": "bold", "align": "end", "color": "#00A86B" }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  };
+
+  return { summaryText, flexMessage };
+}
+
 async function generateTotalNumbersSummary(roundId: string, lotteryType: string): Promise<string> {
   let submissions = [];
   try {
@@ -4770,13 +5009,16 @@ serve(async (req) => {
           if (reportGroup && reportGroup.line_group_id) {
             const reportTypes = Array.isArray(job.notify_bets_types) ? job.notify_bets_types : [];
             for (const type of reportTypes) {
-              let textMsg = "";
+              let textMsg: any = "";
               if (type === 'total') {
                 textMsg = await generateTotalNumbersSummary(round.id, round.lottery_type);
               } else if (type === 'remaining') {
                 textMsg = await generateRemainingNumbersSummary(round.id, round.lottery_type);
               } else if (type === 'layoff') {
                 textMsg = await generateLayoffNumbersSummary(round.id, round.lottery_type, "ปิดรับ");
+              } else if (type === 'individual') {
+                const res = await generateIndividualSubmissionsSummaryFlex(round.id, round.lottery_type);
+                textMsg = res.flexMessage;
               }
 
               if (textMsg) {
@@ -6821,317 +7063,7 @@ If not found, return: {"success":true,"found":false}`;
                 continue;
               }
 
-              // Get all submissions for this round
-              let submissions = [];
-              let subErr = null;
-              try {
-                submissions = await fetchAllSubmissions(activeRound.id);
-              } catch (err) {
-                subErr = err;
-              }
-
-              if (subErr) {
-                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลผู้ส่งเลข`);
-                continue;
-              }
-
-              const userTotals: Record<string, number> = {};
-              const userComms: Record<string, number> = {};
-              (submissions || []).forEach((s: any) => {
-                userTotals[s.user_id] = (userTotals[s.user_id] || 0) + Number(s.amount);
-                userComms[s.user_id] = (userComms[s.user_id] || 0) + Number(s.commission_amount || 0);
-              });
-
-              // Filter out users who have sent 0 or null amount and sort descending by total amount
-              const activeUserIds = Object.keys(userTotals)
-                .filter(uid => userTotals[uid] > 0)
-                .sort((a, b) => userTotals[b] - userTotals[a]);
-
-              if (activeUserIds.length === 0) {
-                await sendLineReply(replyToken, `👥 ยังไม่มีสมาชิกส่งเลขเข้ามาในงวดนี้ค่ะ`);
-                continue;
-              }
-
-              // Fetch profiles for active users
-              const { data: profiles, error: profErr } = await supabase
-                .from('profiles')
-                .select('id, full_name, line_user_id')
-                .in('id', activeUserIds);
-
-              if (profErr || !profiles) {
-                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงชื่อสมาชิก`);
-                continue;
-              }
-
-              const profilesMap: Record<string, { name: string; isLinked: boolean }> = {};
-              profiles.forEach((p: any) => {
-                profilesMap[p.id] = {
-                  name: p.full_name || 'Unknown User',
-                  isLinked: !!p.line_user_id
-                };
-              });
-
-              let summaryText = `👥 สมาชิกที่ส่งเลขแล้ว (${groupLink.lottery_type.toUpperCase()})\nงวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
-              summaryText += `--------------------------\n`;
-              summaryText += `ชื่อ | ยอดส่ง | ค่าคอม | คงเหลือส่ง\n`;
-
-              const bubbleBodyContents: any[] = [
-                {
-                  "type": "box",
-                  "layout": "horizontal",
-                  "contents": [
-                    {
-                      "type": "text",
-                      "text": "ชื่อ",
-                      "size": "xs",
-                      "color": "#888888",
-                      "weight": "bold",
-                      "flex": 4
-                    },
-                    {
-                      "type": "text",
-                      "text": "ยอดส่ง (ค่าคอม)",
-                      "size": "xs",
-                      "color": "#888888",
-                      "weight": "bold",
-                      "align": "end",
-                      "flex": 4
-                    },
-                    {
-                      "type": "text",
-                      "text": "สุทธิส่ง",
-                      "size": "xs",
-                      "color": "#888888",
-                      "weight": "bold",
-                      "align": "end",
-                      "flex": 3
-                    }
-                  ]
-                },
-                {
-                  "type": "separator",
-                  "margin": "xs",
-                  "color": "#e5e5e5"
-                }
-              ];
-
-              let index = 1;
-              let overallTotal = 0;
-              let overallComm = 0;
-              activeUserIds.forEach((uid) => {
-                const userProf = profilesMap[uid] || { name: 'Unknown User', isLinked: false };
-                const name = userProf.name;
-                const total = userTotals[uid];
-                const comm = userComms[uid];
-                const net = total - comm;
-
-                const roundedTotal = Math.round(total);
-                const roundedComm = Math.round(comm);
-                const roundedNet = Math.round(net);
-
-                summaryText += `${index}. คุณ ${name} | ฿${roundedTotal.toLocaleString('th-TH')} | ฿${roundedComm.toLocaleString('th-TH')} | ฿${roundedNet.toLocaleString('th-TH')}\n`;
-
-                bubbleBodyContents.push({
-                  "type": "box",
-                  "layout": "horizontal",
-                  "margin": "md",
-                  "contents": [
-                    {
-                      "type": "text",
-                      "text": `${index}. คุณ ${name}`,
-                      "size": "sm",
-                      "color": "#333333",
-                      "weight": "bold",
-                      "flex": 4,
-                      "wrap": true
-                    },
-                    {
-                      "type": "box",
-                      "layout": "vertical",
-                      "flex": 4,
-                      "contents": [
-                        {
-                          "type": "text",
-                          "text": `฿${roundedTotal.toLocaleString('th-TH')}`,
-                          "size": "sm",
-                          "align": "end",
-                          "weight": "bold",
-                          "color": "#333333"
-                        },
-                        {
-                          "type": "text",
-                          "text": `(฿${roundedComm.toLocaleString('th-TH')})`,
-                          "size": "xs",
-                          "align": "end",
-                          "color": "#888888"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "text",
-                      "text": `฿${roundedNet.toLocaleString('th-TH')}`,
-                      "size": "sm",
-                      "color": "#00A86B",
-                      "weight": "bold",
-                      "align": "end",
-                      "flex": 3
-                    }
-                  ]
-                });
-
-                overallTotal += roundedTotal;
-                overallComm += roundedComm;
-                index++;
-              });
-
-              const overallNet = overallTotal - overallComm;
-              summaryText += `--------------------------\n`;
-              summaryText += `รวมส่งเลขทั้งหมด: ${activeUserIds.length} คน\n`;
-              summaryText += `💰 ยอดรวม: ฿${overallTotal.toLocaleString('th-TH')}\n`;
-              summaryText += `💸 ค่าคอม: ฿${overallComm.toLocaleString('th-TH')}\n`;
-              summaryText += `💵 เหลือ: ฿${overallNet.toLocaleString('th-TH')}`;
-
-              const flexMessage = {
-                "type": "flex",
-                "altText": summaryText,
-                "contents": {
-                  "type": "bubble",
-                  "size": "mega",
-                  "header": {
-                    "type": "box",
-                    "layout": "vertical",
-                    "backgroundColor": "#4A2E80",
-                    "paddingAll": "lg",
-                    "contents": [
-                      {
-                        "type": "text",
-                        "text": `👥 สมาชิกที่ส่งเลขแล้ว (${groupLink.lottery_type.toUpperCase()})`,
-                        "weight": "bold",
-                        "size": "md",
-                        "color": "#ffffff"
-                      },
-                      {
-                        "type": "text",
-                        "text": `งวดวันที่: ${getRoundDisplayDate(activeRound, false)}`,
-                        "size": "xs",
-                        "color": "#e1d9f0",
-                        "margin": "xs"
-                      }
-                    ]
-                  },
-                  "body": {
-                    "type": "box",
-                    "layout": "vertical",
-                    "paddingAll": "md",
-                    "contents": bubbleBodyContents
-                  },
-                  "footer": {
-                    "type": "box",
-                    "layout": "vertical",
-                    "contents": [
-                      {
-                        "type": "box",
-                        "layout": "vertical",
-                        "backgroundColor": "#f8f9fa",
-                        "paddingAll": "md",
-                        "cornerRadius": "md",
-                        "contents": [
-                          {
-                            "type": "box",
-                            "layout": "horizontal",
-                            "contents": [
-                              {
-                                "type": "text",
-                                "text": "รวมส่งเลข:",
-                                "size": "sm",
-                                "color": "#555555"
-                              },
-                              {
-                                "type": "text",
-                                "text": `${activeUserIds.length} คน`,
-                                "size": "sm",
-                                "weight": "bold",
-                                "align": "end",
-                                "color": "#333333"
-                              }
-                            ]
-                          },
-                          {
-                            "type": "box",
-                            "layout": "horizontal",
-                            "margin": "xs",
-                            "contents": [
-                              {
-                                "type": "text",
-                                "text": "💰 ยอดรวม:",
-                                "size": "sm",
-                                "color": "#555555"
-                              },
-                              {
-                                "type": "text",
-                                "text": `฿${overallTotal.toLocaleString('th-TH')}`,
-                                "size": "sm",
-                                "weight": "bold",
-                                "align": "end",
-                                "color": "#333333"
-                              }
-                            ]
-                          },
-                          {
-                            "type": "box",
-                            "layout": "horizontal",
-                            "margin": "xs",
-                            "contents": [
-                              {
-                                "type": "text",
-                                "text": "💸 ค่าคอมรวม:",
-                                "size": "sm",
-                                "color": "#555555"
-                              },
-                              {
-                                "type": "text",
-                                "text": `฿${overallComm.toLocaleString('th-TH')}`,
-                                "size": "sm",
-                                "weight": "bold",
-                                "align": "end",
-                                "color": "#666666"
-                              }
-                            ]
-                          },
-                          {
-                            "type": "separator",
-                            "margin": "sm",
-                            "color": "#dddddd"
-                          },
-                          {
-                            "type": "box",
-                            "layout": "horizontal",
-                            "margin": "sm",
-                            "contents": [
-                              {
-                                "type": "text",
-                                "text": "💵 ยอดสุทธิคงเหลือ:",
-                                "size": "sm",
-                                "weight": "bold",
-                                "color": "#111111"
-                              },
-                              {
-                                "type": "text",
-                                "text": `฿${overallNet.toLocaleString('th-TH')}`,
-                                "size": "sm",
-                                "weight": "bold",
-                                "align": "end",
-                                "color": "#4A2E80"
-                              }
-                            ]
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                }
-              };
-
+              const { flexMessage } = await generateIndividualSubmissionsSummaryFlex(activeRound.id, groupLink.lottery_type);
               await sendLineReply(replyToken, flexMessage);
               continue;
             }
