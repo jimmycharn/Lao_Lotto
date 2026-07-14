@@ -555,7 +555,7 @@ async function generateTotalNumbersSummary(roundId: string, lotteryType: string)
   return summaryText;
 }
 
-async function generateLayoffNumbersSummary(roundId: string, lotteryType: string): Promise<string> {
+async function generateLayoffNumbersSummary(roundId: string, lotteryType: string, scheduleTime?: string): Promise<string> {
   const { data: transfers, error: trErr } = await supabase
     .from('bet_transfers')
     .select('bet_type, numbers, amount, status')
@@ -568,7 +568,7 @@ async function generateLayoffNumbersSummary(roundId: string, lotteryType: string
 
   const { data: roundData } = await supabase
     .from('lottery_rounds')
-    .select('round_date, close_time')
+    .select('round_date, close_time, set_prices')
     .eq('id', roundId)
     .maybeSingle();
   const roundDisplayDate = getRoundDisplayDate(roundData, false);
@@ -604,12 +604,26 @@ async function generateLayoffNumbersSummary(roundId: string, lotteryType: string
   };
   const typeNameInThai = LOTTERY_TYPE_NAMES[lotteryType] || `หวย${lotteryType.toUpperCase()}`;
 
-  let summaryText = `เลขตีออก (${typeNameInThai})\n`;
+  let summaryText = "";
+  if (scheduleTime) {
+    summaryText += `[ตีออก(auto): ${typeNameInThai}\nรอบเวลา: ${scheduleTime}]\n`;
+  } else {
+    summaryText += `ตีออก(ทั้งหมด): ${typeNameInThai}\n`;
+  }
   if (roundDisplayDate) {
     summaryText += `งวดวันที่: ${roundDisplayDate}\n`;
   }
+
+  let totalItemsCount = 0;
+  transferMap.forEach((typeMap) => {
+    totalItemsCount += typeMap.size;
+  });
+
+  summaryText += `ทั้งหมด (${totalItemsCount} รายการ)\n`;
   summaryText += `รวมยอดตีออก: ฿${grandTotal.toLocaleString('th-TH')}\n`;
   summaryText += `--------------------------\n`;
+
+  const setPrice = roundData?.set_prices?.['4_top'] || roundData?.set_prices?.['4_set'] || 120;
 
   if (transferMap.size === 0) {
     summaryText += `ไม่มีการตีออกตัวเลขในงวดนี้ค่ะ\n`;
@@ -627,6 +641,10 @@ async function generateLayoffNumbersSummary(roundId: string, lotteryType: string
 
       const betItemsStr = sortedNums.map(num => {
         const amt = typeMap.get(num)!;
+        if (type === '4_set') {
+          const numSets = Math.max(1, Math.floor(amt / setPrice));
+          return `${num}= (${numSets} ชุด)`;
+        }
         return `${num}=${amt}`;
       }).join('\n');
 
@@ -755,7 +773,7 @@ async function generateRemainingNumbersSummary(roundId: string, lotteryType: str
   return summaryText;
 }
 
-async function sendMemberResultAnnouncements(roundId: string, dealerId: string): Promise<void> {
+async function sendMemberResultAnnouncements(roundId: string, dealerId: string, notifyResultGroupId?: string | null): Promise<void> {
   const { data: activeRound } = await supabase
     .from('lottery_rounds')
     .select('*')
@@ -765,6 +783,18 @@ async function sendMemberResultAnnouncements(roundId: string, dealerId: string):
   if (!activeRound || !activeRound.is_result_announced) {
     console.log(`[sendMemberResultAnnouncements] Round ${roundId} not found or results not announced.`);
     return;
+  }
+
+  let redirectLineGroupId: string | null = null;
+  if (notifyResultGroupId) {
+    const { data: tg } = await supabase
+      .from('line_groups')
+      .select('line_group_id')
+      .eq('id', notifyResultGroupId)
+      .maybeSingle();
+    if (tg?.line_group_id) {
+      redirectLineGroupId = tg.line_group_id;
+    }
   }
 
   const { data: allGroups, error: groupsErr } = await supabase
@@ -1062,12 +1092,13 @@ async function sendMemberResultAnnouncements(roundId: string, dealerId: string):
       });
     }
 
-    console.log(`[sendMemberResultAnnouncements] pushing ${carouselMessages.length} messages to group=${targetGroupId}`);
+    const pushGroupId = redirectLineGroupId || targetGroupId;
+    console.log(`[sendMemberResultAnnouncements] pushing ${carouselMessages.length} messages to group=${pushGroupId} (original=${targetGroupId})`);
     for (const msg of carouselMessages) {
       try {
-        await sendLinePush(targetGroupId, msg);
+        await sendLinePush(pushGroupId, msg);
       } catch (pushErr) {
-        console.error(`[sendMemberResultAnnouncements] Failed push to group ${targetGroupId}:`, pushErr);
+        console.error(`[sendMemberResultAnnouncements] Failed push to group ${pushGroupId}:`, pushErr);
       }
     }
   }
@@ -4406,7 +4437,7 @@ serve(async (req) => {
 
             let layoffMessageText: string;
             if (layoffResult.success) {
-              layoffMessageText = `🛡️ [Auto-Layoff รอบ ${scheduleTime}]\n` + await generateLayoffNumbersSummary(round.id, round.lottery_type);
+              layoffMessageText = await generateLayoffNumbersSummary(round.id, round.lottery_type, scheduleTime);
               layoffPerformed = true
             } else {
               layoffMessageText = `⚠️ [Auto-Layoff รอบ ${scheduleTime}] ระบบตรวจพบเลขที่ต้องตีออก แต่เกิดข้อผิดพลาด:\n❌ ${layoffResult.message}`;
@@ -4685,7 +4716,7 @@ serve(async (req) => {
 
               let layoffMessageText: string;
               if (layoffResult.success) {
-                layoffMessageText = await generateLayoffNumbersSummary(round.id, round.lottery_type);
+                layoffMessageText = await generateLayoffNumbersSummary(round.id, round.lottery_type, "ปิดรับ");
               } else {
                 layoffMessageText = `⚠️ [Auto-Layoff] ระบบตรวจพบเลขที่ต้องตีออก แต่เกิดข้อผิดพลาด:\n❌ ${layoffResult.message}`;
               }
@@ -4745,7 +4776,7 @@ serve(async (req) => {
               } else if (type === 'remaining') {
                 textMsg = await generateRemainingNumbersSummary(round.id, round.lottery_type);
               } else if (type === 'layoff') {
-                textMsg = await generateLayoffNumbersSummary(round.id, round.lottery_type);
+                textMsg = await generateLayoffNumbersSummary(round.id, round.lottery_type, "ปิดรับ");
               }
 
               if (textMsg) {
@@ -5485,7 +5516,7 @@ serve(async (req) => {
       const openRouterModelRow = settingsRows?.find(r => r.key === 'openrouter_model');
 
       const AI_API_KEY = openRouterKeyRow?.value || Deno.env.get('OPENROUTER_API_KEY') || '';
-      const AI_MODEL = openRouterModelRow?.value || 'google/gemini-2.5-flash';
+      const AI_MODEL = openRouterModelRow?.value || 'google/gemini-2.5-flash:online';
 
       if (!AI_API_KEY) {
         console.error("Missing OpenRouter API Key in app_settings or environment");
@@ -6041,7 +6072,8 @@ If not found, return: {"success":true,"found":false}`;
                 // Notify individual member results (Flex Carousels)
                 if (job && notifyResultEnabled) {
                   try {
-                    await sendMemberResultAnnouncements(dr.id, dr.dealer_id);
+                    const notifyResultGroupId = job.notify_result_group_id || null;
+                    await sendMemberResultAnnouncements(dr.id, dr.dealer_id, notifyResultGroupId);
                   } catch (notifyErr) {
                     console.error("Failed sendMemberResultAnnouncements in crawler:", notifyErr);
                   }
@@ -9692,7 +9724,7 @@ If not found, return: {"success":true,"found":false}`;
 
               const { data: activeRound } = await supabase
                 .from('lottery_rounds')
-                .select('id, round_date, close_time, lottery_type')
+                .select('id, round_date, close_time, lottery_type, set_prices')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
                 .in('status', ['open', 'closed', 'announced'])
@@ -9766,8 +9798,13 @@ If not found, return: {"success":true,"found":false}`;
                     return a.localeCompare(b);
                   });
 
+                  const setPrice = activeRound?.set_prices?.['4_top'] || activeRound?.set_prices?.['4_set'] || 120;
                   const items = sortedNums.map(num => {
                     const amt = typeMap.get(num)!;
+                    if (type === '4_set') {
+                      const numSets = Math.max(1, Math.floor(amt / setPrice));
+                      return { numbers: num, amountText: `${numSets} ชุด` };
+                    }
                     return { numbers: num, amountText: amt.toLocaleString('th-TH') };
                   });
                   pdfCategories.push({ label, items });
@@ -9775,14 +9812,14 @@ If not found, return: {"success":true,"found":false}`;
 
                 try {
                   const pdfBytes = await generateReportPDF(
-                    `เลขตีออก (${typeNameInThai})`,
+                    `ตีออก(ทั้งหมด): ${typeNameInThai}`,
                     roundDateStr ? `งวดวันที่: ${roundDateStr}` : '',
                     pdfCategories,
                     `รวมยอดตีออก: ฿${grandTotal.toLocaleString('th-TH')}`
                   );
                   const fileName = `transfers_${activeRound.id}_${Date.now()}.pdf`;
                   const signedUrl = await uploadPDFToStorage(pdfBytes, fileName);
-                  await sendLineReply(replyToken, `📄 ดาวน์โหลด PDF เลขตีออก (${typeNameInThai})\nงวดวันที่: ${roundDateStr}\n\n👉 กดที่นี่เพื่อดาวน์โหลด:\n${signedUrl}`);
+                  await sendLineReply(replyToken, `📄 ดาวน์โหลด PDF ตีออก(ทั้งหมด): ${typeNameInThai}\nงวดวันที่: ${roundDateStr}\n\n👉 กดที่นี่เพื่อดาวน์โหลด:\n${signedUrl}`);
                 } catch (pdfErr) {
                   console.error("PDF generation/upload error:", pdfErr);
                   await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการสร้างไฟล์ PDF: ${pdfErr.message}`);
@@ -9790,12 +9827,21 @@ If not found, return: {"success":true,"found":false}`;
                 continue;
               }
 
-              let summaryText = `เลขตีออก (${typeNameInThai})\n`;
+              let summaryText = `ตีออก(ทั้งหมด): ${typeNameInThai}\n`;
               if (roundDateStr) {
                 summaryText += `งวดวันที่: ${roundDateStr}\n`;
               }
+              
+              let totalItemsCount = 0;
+              transferMap.forEach((typeMap) => {
+                totalItemsCount += typeMap.size;
+              });
+
+              summaryText += `ทั้งหมด (${totalItemsCount} รายการ)\n`;
               summaryText += `รวมยอดตีออก: ฿${grandTotal.toLocaleString('th-TH')}\n`;
               summaryText += `--------------------------\n`;
+
+              const setPrice = activeRound?.set_prices?.['4_top'] || activeRound?.set_prices?.['4_set'] || 120;
 
               if (transferMap.size === 0) {
                 summaryText += `ยังไม่มีรายการตีออกในงวดนี้ค่ะ\n`;
@@ -9820,6 +9866,10 @@ If not found, return: {"success":true,"found":false}`;
 
                   const betItemsStr = sortedNums.map(num => {
                     const amt = typeMap.get(num)!;
+                    if (type === '4_set') {
+                      const numSets = Math.max(1, Math.floor(amt / setPrice));
+                      return `${num}= (${numSets} ชุด)`;
+                    }
                     return `${num}=${amt}`;
                   }).join('\n');
 

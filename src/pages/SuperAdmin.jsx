@@ -4124,7 +4124,7 @@ export default function SuperAdmin() {
                         <div className="setting-input">
                             <input
                                 type="text"
-                                placeholder="เช่น google/gemini-2.5-flash หรือ google/gemini-2.5-pro"
+                                placeholder="เช่น google/gemini-2.5-flash:online (แนะนำ) หรือ google/gemini-2.5-pro:online"
                                 value={settings.openrouter_model || ''}
                                 onChange={(e) => setSettings({ ...settings, openrouter_model: e.target.value })}
                             />

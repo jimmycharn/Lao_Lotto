@@ -81,6 +81,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
         auto_import_result_enabled: false,
         result_notify_group_id: '',
         notify_result_enabled: false,
+        notify_result_group_id: '',
         is_active: true
     })
 
@@ -156,6 +157,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             auto_import_result_enabled: false,
             result_notify_group_id: '',
             notify_result_enabled: false,
+            notify_result_group_id: '',
             is_active: true
         })
         setIsFormOpen(true)
@@ -190,6 +192,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             auto_import_result_enabled: job.auto_import_result_enabled || false,
             result_notify_group_id: job.result_notify_group_id || '',
             notify_result_enabled: job.notify_result_enabled || false,
+            notify_result_group_id: job.notify_result_group_id || '',
             is_active: job.is_active ?? true
         })
         setIsFormOpen(true)
@@ -272,6 +275,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
             auto_import_result_enabled: jobForm.auto_import_result_enabled,
             result_notify_group_id: jobForm.result_notify_group_id || null,
             notify_result_enabled: jobForm.notify_result_enabled,
+            notify_result_group_id: jobForm.notify_result_group_id || null,
             is_active: jobForm.is_active
         }
 
@@ -504,7 +508,7 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                             <div style={{ color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
                                                                 ส่งยอด: {job.notify_bets_enabled ? '✅ เปิดแจ้งกลุ่ม' : '❌ ปิด'}<br />
                                                                 ดึงผลออโต้: {job.auto_import_result_enabled ? '✅ เปิด' : '❌ ปิด'}<br />
-                                                                ส่งได้เสีย: {job.notify_result_enabled ? '✅ แจ้งสมาชิก' : '❌ ปิด'}
+                                                                ส่งได้เสีย: {job.notify_result_enabled ? (job.notify_result_group_id ? '✅ แจ้งเฉพาะกลุ่มทดลอง' : '✅ แจ้งสมาชิก') : '❌ ปิด'}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1065,10 +1069,57 @@ export default function DealerAutomationTab({ user, profile, allowedLotteryTypes
                                                             <input
                                                                 type="checkbox"
                                                                 checked={jobForm.notify_result_enabled}
-                                                                onChange={(e) => setJobForm({ ...jobForm, notify_result_enabled: e.target.checked })}
+                                                                onChange={(e) => {
+                                                                    const isChecked = e.target.checked;
+                                                                    setJobForm({
+                                                                        ...jobForm,
+                                                                        notify_result_enabled: isChecked,
+                                                                        notify_result_group_id: isChecked ? jobForm.notify_result_group_id : ''
+                                                                    });
+                                                                }}
                                                             />
                                                             <span>แจ้งผลเข้ากลุ่มไลน์สมาชิก</span>
                                                         </label>
+
+                                                        {jobForm.notify_result_enabled && (
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingLeft: '1.2rem' }}>
+                                                                <div>
+                                                                    <label className="form-label" style={{ margin: 0, marginBottom: '0.3rem' }}>ส่งไปยังกลุ่มไลน์</label>
+                                                                    <select
+                                                                        value={jobForm.notify_result_group_id ? 'specific' : 'all'}
+                                                                        onChange={(e) => {
+                                                                            const val = e.target.value;
+                                                                            if (val === 'all') {
+                                                                                setJobForm({ ...jobForm, notify_result_group_id: '' });
+                                                                            } else {
+                                                                                setJobForm({ ...jobForm, notify_result_group_id: lineGroups[0]?.id || 'select' });
+                                                                            }
+                                                                        }}
+                                                                        className="form-input"
+                                                                    >
+                                                                        <option value="all">กลุ่มไลน์ที่ส่งเลข</option>
+                                                                        <option value="specific">กลุ่มไลน์อื่นๆ</option>
+                                                                    </select>
+                                                                </div>
+
+                                                                {jobForm.notify_result_group_id !== '' && (
+                                                                    <div>
+                                                                        <label className="form-label" style={{ margin: 0, marginBottom: '0.3rem' }}>เลือกกลุ่มไลน์ทดลอง</label>
+                                                                        <select
+                                                                            value={jobForm.notify_result_group_id === 'select' ? '' : jobForm.notify_result_group_id}
+                                                                            onChange={(e) => setJobForm({ ...jobForm, notify_result_group_id: e.target.value })}
+                                                                            className="form-input"
+                                                                            required
+                                                                        >
+                                                                            <option value="">-- กรุณาเลือกกลุ่มไลน์ --</option>
+                                                                            {lineGroups.map(lg => (
+                                                                                <option key={lg.id} value={lg.id}>{lg.group_name}</option>
+                                                                            ))}
+                                                                        </select>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             )}
