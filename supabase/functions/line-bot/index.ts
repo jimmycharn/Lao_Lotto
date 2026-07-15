@@ -14892,7 +14892,16 @@ If not found, return: {"success":true,"found":false}`;
         let finalBillNote = buyerNote;
         if (!finalBillNote) {
           if (!groupLink) {
-            finalBillNote = senderProfile?.full_name || 'LINE Bot';
+            let lineDisplayName = 'LINE Bot';
+            try {
+              const lineProfile = await fetchLineUserProfile(groupId, userId, sourceType);
+              if (lineProfile?.displayName) {
+                lineDisplayName = lineProfile.displayName;
+              }
+            } catch (err) {
+              console.error("Failed to fetch current LINE display name:", err);
+            }
+            finalBillNote = lineDisplayName;
           } else {
             finalBillNote = 'LINE Bot';
           }
