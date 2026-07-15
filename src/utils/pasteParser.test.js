@@ -351,6 +351,20 @@ describe('pasteParser - parseMultiLinePaste', () => {
     })
   })
 
+  it('should parse parenthetical reverse shorthand (e.g. 508=40(10x5)) as กลับ, not เต็งโต๊ด', () => {
+    const text = '508=40(10x5)'
+    const result = parseMultiLinePaste(text, 'lao')
+    expect(result.length).toBe(1)
+    expect(result[0]).toMatchObject({
+      numbers: '508',
+      amount: 40,
+      amount2: 10,
+      betType: '3_top',
+      specialType: 'reverse',
+      typeLabel: 'กลับ (6)'
+    })
+  })
+
   it('should not parse last number as amount if it has same length (e.g. 12/34/56/10), falling back to legacy parser behavior', () => {
     const text = '12/34/56/10'
     const result = parseMultiLinePaste(text, 'lao')

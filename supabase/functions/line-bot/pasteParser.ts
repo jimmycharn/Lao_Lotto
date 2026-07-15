@@ -1772,7 +1772,16 @@ function parseNumberLine(line: string, contextMode: string, isLaoOrHanoi: boolea
     if (normalizedMode) {
         effectiveContext = normalizedMode;
     }
-    const isReverseBet = effectiveContext === 'reverse';
+    // Handle parenthetical reverse shorthand: "40(10x5)" means straight=40, กลับ(reverse) per-number=10
+    // (the trailing count is informational only; the actual permutation count is derived from the number itself)
+    const parenReverseMatch = normalized.match(/^(\d+)\s*=\s*(\d+)\s*\(\s*(\d+)\s*[xX×]\s*\d+\s*\)\s*$/);
+    let forcedReverseBet = false;
+    if (parenReverseMatch) {
+        const [, numPart, amt1, amt2] = parenReverseMatch;
+        normalized = `${numPart}=${amt1}*${amt2}`;
+        forcedReverseBet = true;
+    }
+    const isReverseBet = effectiveContext === 'reverse' || forcedReverseBet;
     const parseContext = (effectiveContext === 'both') ? 'top' : (isReverseBet ? 'top' : effectiveContext);
     if (isDateLine(normalized)) return null;
 

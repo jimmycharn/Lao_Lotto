@@ -14479,7 +14479,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 }
               }
 
-              const countSuffix = count > 1 ? ` (${count})` : '';
+              const alreadyHasCountSuffix = /\(\d+\)\s*$/.test(disp);
+              const countSuffix = (count > 1 && !alreadyHasCountSuffix) ? ` (${count})` : '';
               formattedLines.push(`${disp}${countSuffix}`);
             });
 
