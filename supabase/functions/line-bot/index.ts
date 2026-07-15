@@ -6697,12 +6697,12 @@ If not found, return: {"success":true,"found":false}`;
               .replace(/^\/โพย(?:ปกติ|ปกติ)/, '/โพยปกติ');
           }
 
-          // Fetch group link details if in a group or room
+          // Fetch group link details or private session
           let groupLink = null;
-          let xSeparatorBehavior = 'auto';
-          let hyphenSeparatorBehavior = 'equal';
-          let dealerName = 'ไม่ระบุ';
-          if (groupId && (groupId.startsWith('C') || groupId.startsWith('R'))) {
+          let privateSession = null;
+          const isPrivateChat = sourceType === 'user' || (!groupId.startsWith('C') && !groupId.startsWith('R'));
+
+          if (!isPrivateChat) {
             const { data: gl } = await supabase
               .from('line_groups')
               .select('*')
@@ -6710,34 +6710,251 @@ If not found, return: {"success":true,"found":false}`;
               .eq('is_active', true)
               .maybeSingle();
             groupLink = gl;
+          } else {
+            const { data: ps } = await supabase
+              .from('line_user_sessions')
+              .select('*')
+              .eq('line_user_id', userId)
+              .maybeSingle();
+            privateSession = ps;
+          }
 
-            if (gl && gl.dealer_id) {
-              const { data: dealerProfile } = await supabase
-                .from('profiles')
-                .select('x_separator_behavior, hyphen_separator_behavior, full_name')
-                .eq('id', gl.dealer_id)
-                .maybeSingle();
-              if (dealerProfile) {
-                if (dealerProfile.x_separator_behavior) {
-                  xSeparatorBehavior = dealerProfile.x_separator_behavior;
-                }
-                if (dealerProfile.hyphen_separator_behavior) {
-                  hyphenSeparatorBehavior = dealerProfile.hyphen_separator_behavior;
-                }
-                if (dealerProfile.full_name) {
-                  dealerName = dealerProfile.full_name;
-                }
+          let xSeparatorBehavior = 'auto';
+          let hyphenSeparatorBehavior = 'equal';
+          let dealerName = 'ไม่ระบุ';
+          const activeDealerId = groupLink?.dealer_id || privateSession?.dealer_id;
+
+          if (activeDealerId) {
+            const { data: dealerProfile } = await supabase
+              .from('profiles')
+              .select('x_separator_behavior, hyphen_separator_behavior, full_name')
+              .eq('id', activeDealerId)
+              .maybeSingle();
+            if (dealerProfile) {
+              if (dealerProfile.x_separator_behavior) {
+                xSeparatorBehavior = dealerProfile.x_separator_behavior;
+              }
+              if (dealerProfile.hyphen_separator_behavior) {
+                hyphenSeparatorBehavior = dealerProfile.hyphen_separator_behavior;
+              }
+              if (dealerProfile.full_name) {
+                dealerName = dealerProfile.full_name;
               }
             }
           }
 
-          // ─── GENERAL GROUP COMMAND: /หวย ───
-          if (text.startsWith('/หวย')) {
-            if (!groupLink) {
+          // ─── PRIVATE CHAT COMMANDS: /ส่งเภา ───
+          if (text.startsWith('/ส่งเภา ')) {
+            if (!isPrivateChat) {
+              await sendLineReply(replyToken, `⚠️ เพื่อความปลอดภัย กรุณาพิมพ์คำสั่งนี้ในแชทส่วนตัวกับบอท (1-on-1) เท่านั้นค่ะ`);
               continue;
             }
 
-            const currentType = groupLink.lottery_type || 'thai';
+            const args = text.replace('/ส่งเภา ', '').trim();
+            const parts = args.split('/');
+            if (parts.length !== 2) {
+              await sendLineReply(replyToken, `❌ รูปแบบคำสั่งไม่ถูกต้อง กรุณาใช้รูปแบบ:\n/ส่งเภา [รหัสเจ้ามือ]/[new]\nหรือ\n/ส่งเภา [รหัสเจ้ามือ]/[รหัสสมาชิก หรือ UUID]`);
+              continue;
+            }
+
+            const dealerRef = parts[0].trim();
+            const userRef = parts[1].trim();
+
+            // 1. Resolve Dealer
+            // Search by member_code or id (UUID)
+            let dealerQuery = supabase.from('profiles').select('id, full_name').eq('role', 'dealer');
+            
+            // Check if dealerRef is a UUID or member_code
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dealerRef);
+            if (isUuid) {
+              dealerQuery = dealerQuery.eq('id', dealerRef);
+            } else {
+              dealerQuery = dealerQuery.eq('member_code', dealerRef);
+            }
+            
+            const { data: dealer, error: dealerErr } = await dealerQuery.maybeSingle();
+
+            if (dealerErr || !dealer) {
+              await sendLineReply(replyToken, `❌ ไม่พบข้อมูลเจ้ามือรหัส "${dealerRef}" กรุณาตรวจสอบรหัสเจ้ามืออีกครั้งค่ะ`);
+              continue;
+            }
+
+            const dealerId = dealer.id;
+            const dealerName = dealer.full_name || 'เจ้ามือ';
+
+            // 2. Handle Case: new registration
+            if (userRef.toLowerCase() === 'new') {
+              // Check if profile with line_user_id = userId already exists
+              let { data: existingProfile } = await supabase
+                .from('profiles')
+                .select('id, full_name')
+                .eq('line_user_id', userId)
+                .maybeSingle();
+
+              let targetProfileId = existingProfile?.id || null;
+
+              if (existingProfile) {
+                // Check if they already have membership with this dealer
+                const { data: existingMembership } = await supabase
+                  .from('user_dealer_memberships')
+                  .select('status')
+                  .eq('user_id', existingProfile.id)
+                  .eq('dealer_id', dealerId)
+                  .maybeSingle();
+
+                if (existingMembership) {
+                  if (existingMembership.status === 'active') {
+                    await sendLineReply(replyToken, `✅ คุณมีบัญชีผู้ใช้งาน "${existingProfile.full_name}" และได้รับการอนุมัติจากเจ้ามือ ${dealerName} แล้ว สามารถแทงหวยได้โดยตรงเลยค่ะ`);
+                  } else if (existingMembership.status === 'pending') {
+                    await sendLineReply(replyToken, `⏳ บัญชีของคุณอยู่ระหว่างรอเจ้ามือ ${dealerName} อนุมัติค่ะ`);
+                  } else {
+                    await sendLineReply(replyToken, `🚫 บัญชีของคุณถูกระงับการใช้งานโดยเจ้ามือ ${dealerName} ค่ะ`);
+                  }
+                  
+                  // Still upsert the session for convenience
+                  await supabase
+                    .from('line_user_sessions')
+                    .upsert({
+                      line_user_id: userId,
+                      dealer_id: dealerId,
+                      target_user_id: existingProfile.id,
+                      is_assistant: false,
+                      updated_at: new Date().toISOString()
+                    });
+                  continue;
+                }
+              }
+
+              // If no profile exists, create a new user profile
+              if (!targetProfileId) {
+                const displayName = (await fetchLineUserProfile(groupId, userId, sourceType))?.displayName || 'สมาชิก LINE';
+                const dummyEmail = `line_${userId}@gmail.com`;
+
+                // Check if auth user already exists with this email
+                const { data: profileWithEmail } = await supabase
+                  .from('profiles')
+                  .select('id')
+                  .eq('email', dummyEmail)
+                  .maybeSingle();
+
+                if (profileWithEmail) {
+                  targetProfileId = profileWithEmail.id;
+                  // Update profile with line_user_id
+                  await supabase
+                    .from('profiles')
+                    .update({ line_user_id: userId, full_name: displayName })
+                    .eq('id', targetProfileId);
+                } else {
+                  // Create auth user
+                  const { data: authUser, error: authErr } = await supabase.auth.admin.createUser({
+                    email: dummyEmail,
+                    password: Math.random().toString(36).substring(2, 12),
+                    email_confirm: true,
+                    user_metadata: { full_name: displayName }
+                  });
+
+                  if (authErr || !authUser) {
+                    console.error("Failed to create auth user:", authErr);
+                    await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการสร้างบัญชีระบบใหม่ กรุณาติดต่อแอดมินช่วยเหลือค่ะ`);
+                    continue;
+                  }
+
+                  targetProfileId = authUser.user.id;
+                  
+                  // Update profile details
+                  await supabase
+                    .from('profiles')
+                    .update({ line_user_id: userId, full_name: displayName })
+                    .eq('id', targetProfileId);
+                }
+              }
+
+              // Create pending membership
+              const { error: memberErr } = await supabase
+                .from('user_dealer_memberships')
+                .insert({
+                  user_id: targetProfileId,
+                  dealer_id: dealerId,
+                  status: 'pending'
+                });
+
+              if (memberErr) {
+                console.error("Failed to create membership:", memberErr);
+                await sendLineReply(replyToken, `❌ บัญชีถูกสร้างแล้ว แต่เกิดข้อผิดพลาดในการส่งคำขอสมาชิกไปยังเจ้ามือ กรุณาลองใหม่อีกครั้งค่ะ`);
+                continue;
+              }
+
+              // Upsert line_user_sessions
+              await supabase
+                .from('line_user_sessions')
+                .upsert({
+                  line_user_id: userId,
+                  dealer_id: dealerId,
+                  target_user_id: targetProfileId,
+                  is_assistant: false,
+                  updated_at: new Date().toISOString()
+                });
+
+              await sendLineReply(replyToken, `⏳ บันทึกคำขอสมัครเข้าใช้งานกับเจ้ามือ ${dealerName} สำเร็จแล้วค่ะ กรุณารอเจ้ามืออนุมัติบัญชีของท่านในระบบก่อนเริ่มส่งโพยค่ะ`);
+              continue;
+            }
+
+            // 3. Handle Case: Existing user (Assistant mapping)
+            else {
+              let userQuery = supabase.from('profiles').select('id, full_name').eq('role', 'user');
+              const isUserUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userRef);
+              if (isUserUuid) {
+                userQuery = userQuery.eq('id', userRef);
+              } else {
+                userQuery = userQuery.eq('member_code', userRef);
+              }
+
+              const { data: targetUser, error: userErr } = await userQuery.maybeSingle();
+
+              if (userErr || !targetUser) {
+                await sendLineReply(replyToken, `❌ ไม่พบข้อมูลสมาชิกปลายทางรหัส "${userRef}" ในระบบ กรุณาตรวจสอบรหัสสมาชิกอีกครั้งค่ะ`);
+                continue;
+              }
+
+              // Check if this target user has a membership with the dealer
+              const { data: membership } = await supabase
+                .from('user_dealer_memberships')
+                .select('status')
+                .eq('user_id', targetUser.id)
+                .eq('dealer_id', dealerId)
+                .maybeSingle();
+
+              if (!membership) {
+                await sendLineReply(replyToken, `❌ บัญชีผู้ใช้งาน "${targetUser.full_name}" ไม่มีข้อมูลสิทธิ์สมาชิกกับเจ้ามือ ${dealerName} ค่ะ`);
+                continue;
+              }
+
+              const displayName = (await fetchLineUserProfile(groupId, userId, sourceType))?.displayName || 'ผู้ช่วย LINE';
+
+              // Upsert line_user_sessions as assistant
+              await supabase
+                .from('line_user_sessions')
+                .upsert({
+                  line_user_id: userId,
+                  dealer_id: dealerId,
+                  target_user_id: targetUser.id,
+                  is_assistant: true,
+                  assistant_name: displayName,
+                  updated_at: new Date().toISOString()
+                });
+
+              await sendLineReply(replyToken, `✅ เชื่อมต่อเป็นผู้ช่วยป้อนข้อมูลให้กับบัญชี คุณ ${targetUser.full_name} ของเจ้ามือ ${dealerName} เรียบร้อยแล้วค่ะ! ท่านสามารถพิมพ์ส่งโพยในแชทนี้ได้โดยตรง บอทจะบันทึกโน้ตชื่อท่านลงไปในทุกโพยโดยอัตโนมัติค่ะ`);
+              continue;
+            }
+          }
+
+          // ─── GENERAL GROUP/PRIVATE COMMAND: /หวย ───
+          if (text.startsWith('/หวย')) {
+            if (!groupLink && !privateSession) {
+              continue;
+            }
+
+            const currentType = groupLink ? (groupLink.lottery_type || 'thai') : (privateSession.lottery_type || 'lao');
             const typeNames: Record<string, string> = {
               thai: 'หวยไทย',
               lao: 'หวยลาว',
@@ -6749,30 +6966,18 @@ If not found, return: {"success":true,"found":false}`;
 
             if (text === '/หวย') {
               const currentName = typeNames[currentType] || currentType.toUpperCase();
-              await sendLineReply(replyToken, `📊 ขณะนี้กลุ่มนี้กำลังทำงานอยู่กับเภา ${dealerName} หวยประเภท: ${currentName}`);
+              await sendLineReply(replyToken, `📊 ขณะนี้กำลังทำงานอยู่กับเภา ${dealerName} หวยประเภท: ${currentName}`);
               continue;
             }
 
             const targetTypeText = text.substring(4).trim().toLowerCase();
             const textToTypeMap: Record<string, string> = {
-              'ไทย': 'thai',
-              'หวยไทย': 'thai',
-              'thai': 'thai',
-              'ลาว': 'lao',
-              'หวยลาว': 'lao',
-              'lao': 'lao',
-              'ฮานอย': 'hanoi',
-              'หวยฮานอย': 'hanoi',
-              'hanoi': 'hanoi',
-              'หุ้น': 'stock',
-              'หวยหุ้น': 'stock',
-              'stock': 'stock',
-              'ยี่กี': 'yeekee',
-              'หวยยี่กี': 'yeekee',
-              'yeekee': 'yeekee',
-              'อื่นๆ': 'other',
-              'หวยอื่นๆ': 'other',
-              'other': 'other'
+              'ไทย': 'thai', 'หวยไทย': 'thai', 'thai': 'thai',
+              'ลาว': 'lao', 'หวยลาว': 'lao', 'lao': 'lao',
+              'ฮานอย': 'hanoi', 'หวยฮานอย': 'hanoi', 'hanoi': 'hanoi',
+              'หุ้น': 'stock', 'หวยหุ้น': 'stock', 'stock': 'stock',
+              'ยี่กี': 'yeekee', 'หวยยี่กี': 'yeekee', 'yeekee': 'yeekee',
+              'อื่นๆ': 'other', 'หวยอื่นๆ': 'other', 'other': 'other'
             };
 
             const targetType = textToTypeMap[targetTypeText];
@@ -6781,17 +6986,32 @@ If not found, return: {"success":true,"found":false}`;
               continue;
             }
 
-            const { error: updateError } = await supabase
-              .from('line_groups')
-              .update({ lottery_type: targetType, updated_at: new Date().toISOString() })
-              .eq('line_group_id', groupId);
+            if (groupLink) {
+              const { error: updateError } = await supabase
+                .from('line_groups')
+                .update({ lottery_type: targetType, updated_at: new Date().toISOString() })
+                .eq('id', groupLink.id);
 
-            if (updateError) {
-              console.error('Error updating lottery type for line group:', updateError);
-              await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการเปลี่ยนประเภทหวย กรุณาลองใหม่อีกครั้ง หรือติดต่อผู้ดูแลระบบ`);
+              if (updateError) {
+                console.error('Error updating lottery type for line group:', updateError);
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการเปลี่ยนประเภทหวย กรุณาลองใหม่อีกครั้ง หรือติดต่อผู้ดูแลระบบ`);
+              } else {
+                const newName = typeNames[targetType] || targetType.toUpperCase();
+                await sendLineReply(replyToken, `🔄 เปลี่ยนประเภทหวยของกลุ่มนี้เป็น: ${newName} เรียบร้อยแล้ว`);
+              }
             } else {
-              const newName = typeNames[targetType] || targetType.toUpperCase();
-              await sendLineReply(replyToken, `🔄 เปลี่ยนประเภทหวยของกลุ่มนี้เป็น: ${newName} เรียบร้อยแล้ว`);
+              const { error: updateError } = await supabase
+                .from('line_user_sessions')
+                .update({ lottery_type: targetType, updated_at: new Date().toISOString() })
+                .eq('line_user_id', userId);
+
+              if (updateError) {
+                console.error('Error updating lottery type for line session:', updateError);
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการเปลี่ยนประเภทหวย กรุณาลองใหม่อีกครั้ง หรือติดต่อผู้ดูแลระบบ`);
+              } else {
+                const newName = typeNames[targetType] || targetType.toUpperCase();
+                await sendLineReply(replyToken, `🔄 เปลี่ยนประเภทหวยการส่งส่วนตัวของท่านเป็น: ${newName} เรียบร้อยแล้ว`);
+              }
             }
             continue;
           }
@@ -6827,12 +7047,12 @@ If not found, return: {"success":true,"found":false}`;
             text.toLowerCase() === 'y' || text === 'ยืนยัน';
 
           if (isManagerCommand) {
-            if (!groupLink) {
-              // Not a registered group, ignore it
+            if (!groupLink && !privateSession) {
+              // Not a registered group and no active private session, ignore it
               continue;
             }
 
-            const dealerId = groupLink.dealer_id;
+            const dealerId = activeDealerId;
 
             // 2. Check manager permissions
             const { data: manager } = await supabase
@@ -6844,12 +7064,24 @@ If not found, return: {"success":true,"found":false}`;
               .maybeSingle();
 
             // Verify sender profile to check role
-            const { data: profile } = await supabase
+            let { data: profile } = await supabase
               .from('profiles')
               .select('id, full_name, is_active, role')
               .eq('line_user_id', userId)
               .eq('is_active', true)
               .maybeSingle();
+
+            if (privateSession && privateSession.is_assistant) {
+              const { data: targetProfile } = await supabase
+                .from('profiles')
+                .select('id, full_name, is_active, role')
+                .eq('id', privateSession.target_user_id)
+                .eq('is_active', true)
+                .maybeSingle();
+              if (targetProfile) {
+                profile = targetProfile;
+              }
+            }
 
             const isStaff = profile?.role === 'dealer' || profile?.role === 'superadmin' || profile?.role === 'admin';
             const isAdminOrDealer = isStaff || (manager && manager.role === 'admin');
@@ -6866,7 +7098,7 @@ If not found, return: {"success":true,"found":false}`;
             if (!manager && !isStaff) {
               if (isTotalCommand || isSummaryCommand || isHelpCommand || isOpenCloseCommand || isReportCommand) {
                 // Check member permissions toggles
-                const memberPerms = groupLink.member_permissions || {};
+                const memberPerms = groupLink ? (groupLink.member_permissions || {}) : { total: true, summary: true, help: true };
 
                 if (isTotalCommand && memberPerms.total === false) {
                   await sendLineReply(replyToken, `❌ ดีลเลอร์ปิดการใช้งานรายงานยอดรวมสำหรับสมาชิกในกลุ่มนี้`);
@@ -6902,7 +7134,10 @@ If not found, return: {"success":true,"found":false}`;
                   .maybeSingle();
 
                 if (!membership) {
-                  await sendLineReply(replyToken, `❌ ขออภัยค่ะ คุณ ${profile.full_name} ไม่มีสิทธิ์ใช้งานกลุ่มนี้ หรือสิทธิ์ของท่านถูกระงับชั่วคราว`);
+                  const replyMsg = groupLink 
+                    ? `❌ ขออภัยค่ะ คุณ ${profile.full_name} ไม่มีสิทธิ์ใช้งานกลุ่มนี้ หรือสิทธิ์ของท่านถูกระงับชั่วคราว`
+                    : `❌ ขออภัยค่ะ คุณ ${profile.full_name} ไม่มีสิทธิ์ส่งโพยกับเจ้ามือรายนี้ หรือสิทธิ์ของท่านถูกระงับ/ปฏิเสธชั่วคราวค่ะ`;
+                  await sendLineReply(replyToken, replyMsg);
                   continue;
                 }
 
@@ -13602,21 +13837,24 @@ If not found, return: {"success":true,"found":false}`;
             const isWinningQuery = billCode === 'ถูก' || billCode === 'win' || billCode === 'won';
 
             if (isWinningQuery) {
-              // 1. Group must be bound to a dealer
-              const { data: groupLink } = await supabase
-                .from('line_groups')
-                .select('dealer_id, lottery_type')
-                .eq('line_group_id', groupId)
-                .eq('is_active', true)
-                .maybeSingle();
+              let listDealerId = null;
+              let listLotteryType = null;
+              let hasAccess = false;
 
-              if (!groupLink) {
-                await sendLineReply(replyToken, `❌ กลุ่มนี้ยังไม่ได้ผูกกับเจ้ามือ ไม่สามารถเรียกดูใบโพยได้`);
-                continue;
+              if (groupLink) {
+                listDealerId = groupLink.dealer_id;
+                listLotteryType = groupLink.lottery_type;
+                hasAccess = true;
+              } else if (privateSession) {
+                listDealerId = privateSession.dealer_id;
+                listLotteryType = privateSession.lottery_type;
+                hasAccess = true;
               }
 
-              const listDealerId = groupLink.dealer_id;
-              const listLotteryType = groupLink.lottery_type;
+              if (!hasAccess) {
+                await sendLineReply(replyToken, `❌ กลุ่มนี้ยังไม่ได้ผูกกับเจ้ามือ หรือท่านยังไม่ได้เชื่อมต่อระบบส่งโพยส่วนตัวค่ะ`);
+                continue;
+              }
 
               // 2. Identify the sender's linked profile
               const { data: senderProfile } = await supabase
@@ -13898,21 +14136,24 @@ If not found, return: {"success":true,"found":false}`;
 
             if (!billCode) {
               // ─── /โพย (no argument): show ALL of the sender's bills for the active round ───
-              // 1. Group must be bound to a dealer
-              const { data: groupLink } = await supabase
-                .from('line_groups')
-                .select('dealer_id, lottery_type')
-                .eq('line_group_id', groupId)
-                .eq('is_active', true)
-                .maybeSingle();
+              let listDealerId = null;
+              let listLotteryType = null;
+              let hasAccess = false;
 
-              if (!groupLink) {
-                await sendLineReply(replyToken, `❌ กลุ่มนี้ยังไม่ได้ผูกกับเจ้ามือ ไม่สามารถเรียกดูใบโพยได้`);
-                continue;
+              if (groupLink) {
+                listDealerId = groupLink.dealer_id;
+                listLotteryType = groupLink.lottery_type;
+                hasAccess = true;
+              } else if (privateSession) {
+                listDealerId = privateSession.dealer_id;
+                listLotteryType = privateSession.lottery_type;
+                hasAccess = true;
               }
 
-              const listDealerId = groupLink.dealer_id;
-              const listLotteryType = groupLink.lottery_type;
+              if (!hasAccess) {
+                await sendLineReply(replyToken, `❌ กลุ่มนี้ยังไม่ได้ผูกกับเจ้ามือ หรือท่านยังไม่ได้เชื่อมต่อระบบส่งโพยส่วนตัวค่ะ`);
+                continue;
+              }
 
               // 2. Identify the sender's linked profile
               const { data: senderProfile } = await supabase
@@ -14328,14 +14569,14 @@ If not found, return: {"success":true,"found":false}`;
           continue;
         }
 
-// ─── NORMAL MESSAGE (Check if in a bound group for processing bets) ───
-        if (!groupLink) {
-          // Message not in a registered group, ignore it
+// ─── NORMAL MESSAGE (Check if in a bound group or have a private session for processing bets) ───
+        if (!groupLink && !privateSession) {
+          // Message not in a registered group and no active private session, ignore it
           continue;
         }
 
-        // Auto-heal group name if empty or missing
-        if (!groupLink.group_name && groupId.startsWith('C')) {
+        // Auto-heal group name if empty or missing (only if groupLink exists)
+        if (groupLink && !groupLink.group_name && groupId.startsWith('C')) {
           const fetchedName = await fetchGroupName(groupId);
           if (fetchedName) {
             await supabase
@@ -14346,10 +14587,10 @@ If not found, return: {"success":true,"found":false}`;
           }
         }
 
-        const dealerId = groupLink.dealer_id;
-        const lotteryType = groupLink.lottery_type;
+        const dealerId = activeDealerId;
+        const lotteryType = groupLink ? groupLink.lottery_type : privateSession.lottery_type;
 
-        console.log(`[LINE BOT MSG] Found groupLink for group: ${groupId}, dealerId: ${dealerId}`);
+        console.log(`[LINE BOT MSG] Found session for target dealerId: ${dealerId}`);
 
         // Verify if sender has a linked profile
         let { data: profile, error: profileErr } = await supabase
@@ -14360,6 +14601,19 @@ If not found, return: {"success":true,"found":false}`;
           .maybeSingle();
 
         const senderProfile = profile;
+
+        // Override profile if using an assistant private session
+        if (privateSession && privateSession.is_assistant) {
+          const { data: targetProfile } = await supabase
+            .from('profiles')
+            .select('id, full_name, is_active, role, line_poy_display, admin_poy_display, member_code')
+            .eq('id', privateSession.target_user_id)
+            .eq('is_active', true)
+            .maybeSingle();
+          if (targetProfile) {
+            profile = targetProfile;
+          }
+        }
 
         // Verify sender's group membership for display settings
         const { data: memberRecord } = await supabase
@@ -14484,11 +14738,13 @@ If not found, return: {"success":true,"found":false}`;
           .select('id, status')
           .eq('user_id', profile.id)
           .eq('dealer_id', dealerId)
-          .eq('status', 'active')
-          .single();
+          .maybeSingle();
 
-        if (!membership) {
-          await sendLineReply(replyToken, `❌ ขออภัยค่ะ คุณ ${profile.full_name} ไม่มีสิทธิ์ส่งโพยกับดีลเลอร์กลุ่มนี้ หรือสิทธิ์ของท่านถูกระงับชั่วคราว`);
+        if (!membership || membership.status !== 'active') {
+          const statusText = membership?.status === 'pending'
+            ? 'อยู่ระหว่างรอเจ้ามืออนุมัติค่ะ'
+            : 'ไม่มีสิทธิ์ส่งโพยกับเจ้ามือรายนี้ หรือสิทธิ์ของท่านถูกระงับ/ปฏิเสธชั่วคราวค่ะ';
+          await sendLineReply(replyToken, `❌ ขออภัยค่ะ คุณ ${profile.full_name} ${statusText}`);
           continue;
         }
 
@@ -14633,7 +14889,14 @@ If not found, return: {"success":true,"found":false}`;
         const baseTimestamp = new Date();
         let insertIndex = 0;
         const buyerNote = extractBuyerNote(text, lotteryType);
-        const finalBillNote = buyerNote || 'LINE Bot';
+        let finalBillNote = buyerNote || 'LINE Bot';
+
+        if (privateSession && privateSession.is_assistant) {
+          finalBillNote = `ผู้ช่วย: ${privateSession.assistant_name || 'LINE Bot'}`;
+          if (buyerNote) {
+            finalBillNote += ` (${buyerNote})`;
+          }
+        }
 
         // Group bets to fetch commissions
         for (const bet of parsedBets) {
