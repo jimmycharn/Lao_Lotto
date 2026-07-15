@@ -192,12 +192,12 @@ const parseLine = (line) => {
         if (typeStr.includes('คูณชุด')) {
             betType = '3_top'
             specialType = permCount === 3 ? 'set3' : (permCount === 6 ? 'set6' : 'set' + permCount)
-        } else if (typeStr.includes('เต็งโต๊ด') || (amount2 !== null && typeStr === '')) {
+        } else if (typeStr.includes('เต็งโต๊ด') || (amount2 !== null && typeStr === '' && mode !== 'reverse')) {
             betType = '3_top'
             specialType = 'tengTod'
         } else if (typeStr.includes('โต๊ด') || typeStr.includes('3ตัวโต๊ด') || mode === 'float_top' || mode === 'float_bottom') {
             betType = '3_tod'
-        } else if (typeStr.includes('กลับ')) {
+        } else if (typeStr.includes('กลับ') || mode === 'reverse') {
             betType = '3_top'
             specialType = 'reverse'
         } else if (typeStr.includes('ล่าง') || typeStr.includes('3ตัวล่าง') || mode === 'bottom') {
