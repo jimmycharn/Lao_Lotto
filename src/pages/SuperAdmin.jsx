@@ -91,6 +91,7 @@ export default function SuperAdmin() {
     const [manualRoundDate, setManualRoundDate] = useState('')
     const [manualInputs, setManualInputs] = useState({})
     const [manualSaving, setManualSaving] = useState(false)
+    const [editingResult, setEditingResult] = useState(null)
 
     // UI States
     const [isLoading, setIsLoading] = useState(true)
@@ -226,6 +227,7 @@ export default function SuperAdmin() {
     }
 
     const openManualResultForm = () => {
+        setEditingResult(null)
         setManualResultOpen(true)
         setManualLotteryType('thai')
         setManualRoundDate(new Date().toISOString().slice(0, 10))
@@ -234,6 +236,7 @@ export default function SuperAdmin() {
 
     const closeManualResultForm = () => {
         setManualResultOpen(false)
+        setEditingResult(null)
         setManualInputs({})
         setManualRoundDate('')
     }
@@ -309,13 +312,23 @@ export default function SuperAdmin() {
                 is_verified: true
             }
 
-            const { error } = await supabase
-                .from('central_lottery_results')
-                .insert(insertObj)
+            let queryError
+            if (editingResult) {
+                const { error } = await supabase
+                    .from('central_lottery_results')
+                    .update(insertObj)
+                    .eq('id', editingResult.id)
+                queryError = error
+            } else {
+                const { error } = await supabase
+                    .from('central_lottery_results')
+                    .insert(insertObj)
+                queryError = error
+            }
 
-            if (error) throw error
+            if (queryError) throw queryError
 
-            toast.success('บันทึกผลรางวัลเรียบร้อยแล้ว')
+            toast.success(editingResult ? 'แก้ไขผลรางวัลเรียบร้อยแล้ว' : 'บันทึกผลรางวัลเรียบร้อยแล้ว')
             closeManualResultForm()
             await fetchAICrawlerData()
         } catch (error) {
@@ -324,6 +337,64 @@ export default function SuperAdmin() {
         } finally {
             setManualSaving(false)
         }
+    }
+
+    const handleDeleteJob = async (job) => {
+        const confirmDelete = window.confirm(`คุณต้องการลบสถานะการค้นหาของ ${job.lottery_type} งวดวันที่ ${job.round_date} ใช่หรือไม่?`)
+        if (!confirmDelete) return
+        try {
+            const { error } = await supabase
+                .from('central_ai_search_jobs')
+                .delete()
+                .eq('id', job.id)
+            if (error) throw error
+            toast.success('ลบสถานะการค้นหาเรียบร้อยแล้ว')
+            await fetchAICrawlerData()
+        } catch (err) {
+            console.error(err)
+            toast.error(`ไม่สามารถลบรายการได้: ${err.message}`)
+        }
+    }
+
+    const handleDeleteResult = async (result) => {
+        const confirmDelete = window.confirm(`คุณต้องการลบผลรางวัลของ ${result.lottery_type} งวดวันที่ ${result.round_date} ใช่หรือไม่?`)
+        if (!confirmDelete) return
+        try {
+            const { error } = await supabase
+                .from('central_lottery_results')
+                .delete()
+                .eq('id', result.id)
+            if (error) throw error
+            toast.success('ลบผลรางวัลเรียบร้อยแล้ว')
+            await fetchAICrawlerData()
+        } catch (err) {
+            console.error(err)
+            toast.error(`ไม่สามารถลบรายการได้: ${err.message}`)
+        }
+    }
+
+    const handleEditResult = (result) => {
+        setEditingResult(result)
+        setManualLotteryType(result.lottery_type)
+        setManualRoundDate(result.round_date)
+        
+        const inputs = {}
+        if (result.lottery_type === 'thai') {
+            inputs.official_6_digit = result.primary_number || ''
+            inputs.bottom_2_digit = result.secondary_number || ''
+            const threeDigits = result.three_digit_sets || []
+            inputs.three_digit_front_1 = threeDigits[0] || ''
+            inputs.three_digit_front_2 = threeDigits[1] || ''
+            inputs.three_digit_back_1 = threeDigits[2] || ''
+            inputs.three_digit_back_2 = threeDigits[3] || ''
+        } else if (result.lottery_type === 'lao' || result.lottery_type === 'hanoi') {
+            inputs.primary_4_digit = result.primary_number || ''
+        } else if (result.lottery_type === 'stock') {
+            inputs.index_2_digit = result.primary_number || ''
+            inputs.change_2_digit = result.secondary_number || ''
+        }
+        setManualInputs(inputs)
+        setManualResultOpen(true)
     }
 
     const handleTestCrawler = async () => {
@@ -3059,11 +3130,17 @@ export default function SuperAdmin() {
                                 <th>ครั้งที่ลอง</th>
                                 <th>ลองล่าสุด</th>
                                 <th>อัปเดตล่าสุด</th>
+                                <th style={{ textAlign: 'center' }}>จัดการ</th>
                             </tr>
                         </thead>
                         <tbody>
                             {aiCrawlerJobs.map(job => (
-                                <tr key={job.id}>
+                                <tr 
+                                    key={job.id} 
+                                    onContextMenu={(e) => { e.preventDefault(); handleDeleteJob(job); }}
+                                    style={{ cursor: 'context-menu' }}
+                                    title="คลิกขวา หรือ กดค้าง เพื่อลบรายการนี้"
+                                >
                                     <td>{job.lottery_type}</td>
                                     <td>{job.round_date}</td>
                                     <td>
@@ -3077,6 +3154,16 @@ export default function SuperAdmin() {
                                     <td>{job.retry_count} / {job.max_retries}</td>
                                     <td>{job.last_attempt_at ? new Date(job.last_attempt_at).toLocaleString('th-TH') : '-'}</td>
                                     <td>{job.updated_at ? new Date(job.updated_at).toLocaleString('th-TH') : '-'}</td>
+                                    <td style={{ textAlign: 'center' }}>
+                                        <button 
+                                            className="btn btn-icon" 
+                                            onClick={() => handleDeleteJob(job)} 
+                                            style={{ color: '#ef4444', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                                            title="ลบรายการนี้"
+                                        >
+                                            <FiTrash2 size={16} />
+                                        </button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -3101,11 +3188,17 @@ export default function SuperAdmin() {
                                 <th>2 ตัวล่าง</th>
                                 <th>ยืนยันแล้ว</th>
                                 <th>บันทึกเมื่อ</th>
+                                <th style={{ textAlign: 'center' }}>จัดการ</th>
                             </tr>
                         </thead>
                         <tbody>
                             {aiCrawlerResults.map(r => (
-                                <tr key={r.id}>
+                                <tr 
+                                    key={r.id} 
+                                    onContextMenu={(e) => { e.preventDefault(); handleDeleteResult(r); }}
+                                    style={{ cursor: 'context-menu' }}
+                                    title="คลิกขวา หรือ กดค้าง เพื่อลบรายการนี้"
+                                >
                                     <td>{r.lottery_type}</td>
                                     <td>{r.round_date}</td>
                                     <td>{r.primary_number || '-'}</td>
@@ -3115,6 +3208,26 @@ export default function SuperAdmin() {
                                     <td>{r.win_number_2_bottom || '-'}</td>
                                     <td>{r.is_verified ? '✅' : '❌'}</td>
                                     <td>{new Date(r.created_at).toLocaleString('th-TH')}</td>
+                                    <td style={{ textAlign: 'center' }}>
+                                        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                                            <button 
+                                                className="btn btn-icon" 
+                                                onClick={() => handleEditResult(r)} 
+                                                style={{ color: 'var(--color-primary)', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                                                title="แก้ไขผลรางวัล"
+                                            >
+                                                <FiEdit2 size={16} />
+                                            </button>
+                                            <button 
+                                                className="btn btn-icon" 
+                                                onClick={() => handleDeleteResult(r)} 
+                                                style={{ color: '#ef4444', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                                                title="ลบผลรางวัล"
+                                            >
+                                                <FiTrash2 size={16} />
+                                            </button>
+                                        </div>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -3206,7 +3319,7 @@ export default function SuperAdmin() {
                             boxShadow: '0 25px 50px -12px rgba(0,0,0,0.8)'
                         }} onClick={e => e.stopPropagation()}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                <h3 style={{ margin: 0 }}>ป้อนผลรางวัลเอง</h3>
+                                <h3 style={{ margin: 0 }}>{editingResult ? 'แก้ไขผลรางวัล' : 'ป้อนผลรางวัลเอง'}</h3>
                                 <button onClick={closeManualResultForm} className="btn btn-icon" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.25rem' }}>
                                     <FiX />
                                 </button>
@@ -3351,7 +3464,7 @@ export default function SuperAdmin() {
                                     className="btn btn-primary"
                                     style={{ background: 'rgba(16, 185, 129, 0.8)' }}
                                 >
-                                    <FiSave /> {manualSaving ? 'กำลังบันทึก...' : 'บันทึกผลรางวัล'}
+                                    <FiSave /> {manualSaving ? 'กำลังบันทึก...' : (editingResult ? 'อัปเดตผลรางวัล' : 'บันทึกผลรางวัล')}
                                 </button>
                             </div>
                         </div>
