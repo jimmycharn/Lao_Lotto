@@ -6929,7 +6929,7 @@ If not found, return: {"success":true,"found":false}`;
                 continue;
               }
 
-              const displayName = (await fetchLineUserProfile(groupId, userId, sourceType))?.displayName || 'ผู้ช่วย LINE';
+              const displayName = (await fetchLineUserProfile(groupId, userId, sourceType))?.displayName || 'ผู้ส่ง LINE';
 
               // Upsert line_user_sessions as assistant
               await supabase
@@ -6943,7 +6943,7 @@ If not found, return: {"success":true,"found":false}`;
                   updated_at: new Date().toISOString()
                 });
 
-              await sendLineReply(replyToken, `✅ เชื่อมต่อเป็นผู้ช่วยป้อนข้อมูลให้กับบัญชี คุณ ${targetUser.full_name} ของเจ้ามือ ${dealerName} เรียบร้อยแล้วค่ะ! ท่านสามารถพิมพ์ส่งโพยในแชทนี้ได้โดยตรง บอทจะบันทึกโน้ตชื่อท่านลงไปในทุกโพยโดยอัตโนมัติค่ะ`);
+              await sendLineReply(replyToken, `✅ เชื่อมต่อเป็นผู้ส่งข้อมูลให้กับบัญชี คุณ ${targetUser.full_name} ของเจ้ามือ ${dealerName} เรียบร้อยแล้วค่ะ! ท่านสามารถพิมพ์ส่งโพยในแชทนี้ได้โดยตรง บอทจะบันทึกโน้ตชื่อท่านลงไปในทุกโพยโดยอัตโนมัติค่ะ`);
               continue;
             }
           }
@@ -14908,7 +14908,7 @@ If not found, return: {"success":true,"found":false}`;
         }
 
         if (privateSession && privateSession.is_assistant) {
-          finalBillNote = `ผู้ช่วย: ${privateSession.assistant_name || 'LINE Bot'}`;
+          finalBillNote = `ผู้ส่ง: ${privateSession.assistant_name || 'LINE Bot'}`;
           if (buyerNote) {
             finalBillNote += ` (${buyerNote})`;
           }

@@ -611,7 +611,7 @@ export default function DealerLineBotTab({ user, profile }) {
                             <CopyButton text={profile?.member_code || ''} />
                         </div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
-                            ส่งรหัสหรือข้อความด้านขวาเพื่อให้ผู้ส่ง/สมาชิก นำไปใช้สมัครหรือตั้งค่าผู้ช่วยส่วนตัวกับบอทในแชท 1-on-1
+                            ส่งรหัสหรือข้อความด้านขวาเพื่อให้ผู้ส่ง/สมาชิก นำไปใช้สมัครหรือตั้งค่าผู้ส่งข้อมูลส่วนตัวกับบอทในแชท 1-on-1
                         </div>
                     </div>
                     <div>
@@ -627,7 +627,7 @@ export default function DealerLineBotTab({ user, profile }) {
                                 </div>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.03)', padding: '0.4rem 0.75rem', borderRadius: '6px', border: '1px solid var(--color-border)' }}>
-                                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>2. สำหรับเพิ่มผู้ช่วยป้อน:</span>
+                                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>2. สำหรับเพิ่มผู้ส่งข้อมูล:</span>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <code style={{ fontSize: '0.85rem', fontFamily: 'monospace', color: '#ffb300' }}>
                                         /ส่งเภา {profile?.member_code || '[รหัส]'}/[รหัสสมาชิก]
@@ -1502,7 +1502,7 @@ export default function DealerLineBotTab({ user, profile }) {
                                         /ส่งเภา [รหัสเจ้ามือ]/[รหัสสมาชิก]
                                     </code>
                                 </td>
-                                <td style={{ padding: '0.75rem' }}>ใช้แชทส่วนตัวเพื่อขอเข้าป้อนโพยในนามผู้ช่วยส่ง (Assistant) ให้กับบัญชีผู้ใช้ที่มีอยู่ในระบบ</td>
+                                <td style={{ padding: '0.75rem' }}>ใช้แชทส่วนตัวเพื่อขอเข้าป้อนโพยในนามผู้ส่ง (Sender) ให้กับบัญชีผู้ใช้ที่มีอยู่ในระบบ</td>
                                 <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
                                 <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
                                 <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้ (ส่วนตัว)</td>
