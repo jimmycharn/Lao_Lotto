@@ -851,38 +851,75 @@ export default function WriteSubmissionModal({
                     })
                 }
             } else if (p.specialType === 'reverse') {
-                // กลับ (2 digit)
-                const reversedNumbers = p.numbers.split('').reverse().join('')
                 const amt1 = p.amount
                 const amt2 = p.amount2 || p.amount
                 const commInfo = getCommissionForBetType(p.betType)
-                if (amt1 > 0) {
-                    newDrafts.push({
-                        entry_id: entryId,
-                        bet_type: p.betType,
-                        numbers: p.numbers,
-                        amount: amt1,
-                        commission_rate: commInfo.rate,
-                        commission_amount: commInfo.isFixed ? commInfo.rate : (amt1 * commInfo.rate) / 100,
-                        display_numbers: p.numbers,
-                        display_amount: `${amt1}*${amt2}`,
-                        display_bet_type: p.typeLabel,
-                        created_at: timestamp
-                    })
-                }
-                if (amt2 > 0 && reversedNumbers !== p.numbers) {
-                    newDrafts.push({
-                        entry_id: entryId,
-                        bet_type: p.betType,
-                        numbers: reversedNumbers,
-                        amount: amt2,
-                        commission_rate: commInfo.rate,
-                        commission_amount: commInfo.isFixed ? commInfo.rate : (amt2 * commInfo.rate) / 100,
-                        display_numbers: p.numbers,
-                        display_amount: `${amt1}*${amt2}`,
-                        display_bet_type: p.typeLabel,
-                        created_at: timestamp
-                    })
+                if (p.numbers.length === 3) {
+                    // เลข 3 ตัวกลับ: ตัวตรงราคา amt1, ทุก permutation ที่เหลือราคา amt2 ต่อตัว
+                    // เช่น 508=40*10 กลับ → 508=40, 580=10, 058=10, 085=10, 850=10, 805=10 (รวม 90)
+                    const allPerms = getPermutations(p.numbers) // returns all unique permutations
+                    if (amt1 > 0) {
+                        newDrafts.push({
+                            entry_id: entryId,
+                            bet_type: p.betType,
+                            numbers: p.numbers,
+                            amount: amt1,
+                            commission_rate: commInfo.rate,
+                            commission_amount: commInfo.isFixed ? commInfo.rate : (amt1 * commInfo.rate) / 100,
+                            display_numbers: p.numbers,
+                            display_amount: `${amt1}*${amt2}`,
+                            display_bet_type: p.typeLabel,
+                            created_at: timestamp
+                        })
+                    }
+                    if (amt2 > 0) {
+                        for (const perm of allPerms) {
+                            if (perm === p.numbers) continue // ข้ามตัวตรง
+                            newDrafts.push({
+                                entry_id: entryId,
+                                bet_type: p.betType,
+                                numbers: perm,
+                                amount: amt2,
+                                commission_rate: commInfo.rate,
+                                commission_amount: commInfo.isFixed ? commInfo.rate : (amt2 * commInfo.rate) / 100,
+                                display_numbers: p.numbers,
+                                display_amount: `${amt1}*${amt2}`,
+                                display_bet_type: p.typeLabel,
+                                created_at: timestamp
+                            })
+                        }
+                    }
+                } else {
+                    // เลข 2 ตัวกลับ: simple reverse
+                    const reversedNumbers = p.numbers.split('').reverse().join('')
+                    if (amt1 > 0) {
+                        newDrafts.push({
+                            entry_id: entryId,
+                            bet_type: p.betType,
+                            numbers: p.numbers,
+                            amount: amt1,
+                            commission_rate: commInfo.rate,
+                            commission_amount: commInfo.isFixed ? commInfo.rate : (amt1 * commInfo.rate) / 100,
+                            display_numbers: p.numbers,
+                            display_amount: `${amt1}*${amt2}`,
+                            display_bet_type: p.typeLabel,
+                            created_at: timestamp
+                        })
+                    }
+                    if (amt2 > 0 && reversedNumbers !== p.numbers) {
+                        newDrafts.push({
+                            entry_id: entryId,
+                            bet_type: p.betType,
+                            numbers: reversedNumbers,
+                            amount: amt2,
+                            commission_rate: commInfo.rate,
+                            commission_amount: commInfo.isFixed ? commInfo.rate : (amt2 * commInfo.rate) / 100,
+                            display_numbers: p.numbers,
+                            display_amount: `${amt1}*${amt2}`,
+                            display_bet_type: p.typeLabel,
+                            created_at: timestamp
+                        })
+                    }
                 }
             } else if (p.betType === '4_float' || p.betType === '5_float') {
                 // ลอยแพ
@@ -1749,27 +1786,54 @@ export default function WriteSubmissionModal({
                                                         })
                                                     }
                                                 } else if (p.specialType === 'reverse') {
-                                                    const reversedNumbers = p.numbers.split('').reverse().join('')
                                                     const amt1 = p.amount
                                                     const amt2 = p.amount2 || p.amount
                                                     const commInfo = getCommissionForBetType(p.betType)
-                                                    if (amt1 > 0) {
-                                                        newDrafts.push({
-                                                            entry_id: entryId, bet_type: p.betType, numbers: p.numbers,
-                                                            amount: amt1, commission_rate: commInfo.rate,
-                                                            commission_amount: commInfo.isFixed ? commInfo.rate : (amt1 * commInfo.rate) / 100,
-                                                            display_numbers: p.numbers, display_amount: `${amt1}*${amt2}`,
-                                                            display_bet_type: p.typeLabel, created_at: timestamp
-                                                        })
-                                                    }
-                                                    if (amt2 > 0 && reversedNumbers !== p.numbers) {
-                                                        newDrafts.push({
-                                                            entry_id: entryId, bet_type: p.betType, numbers: reversedNumbers,
-                                                            amount: amt2, commission_rate: commInfo.rate,
-                                                            commission_amount: commInfo.isFixed ? commInfo.rate : (amt2 * commInfo.rate) / 100,
-                                                            display_numbers: p.numbers, display_amount: `${amt1}*${amt2}`,
-                                                            display_bet_type: p.typeLabel, created_at: timestamp
-                                                        })
+                                                    if (p.numbers.length === 3) {
+                                                        // เลข 3 ตัวกลับ: ตัวตรงราคา amt1, ทุก permutation ที่เหลือราคา amt2 ต่อตัว
+                                                        const allPerms = getPermutations(p.numbers)
+                                                        if (amt1 > 0) {
+                                                            newDrafts.push({
+                                                                entry_id: entryId, bet_type: p.betType, numbers: p.numbers,
+                                                                amount: amt1, commission_rate: commInfo.rate,
+                                                                commission_amount: commInfo.isFixed ? commInfo.rate : (amt1 * commInfo.rate) / 100,
+                                                                display_numbers: p.numbers, display_amount: `${amt1}*${amt2}`,
+                                                                display_bet_type: p.typeLabel, created_at: timestamp
+                                                            })
+                                                        }
+                                                        if (amt2 > 0) {
+                                                            for (const perm of allPerms) {
+                                                                if (perm === p.numbers) continue
+                                                                newDrafts.push({
+                                                                    entry_id: entryId, bet_type: p.betType, numbers: perm,
+                                                                    amount: amt2, commission_rate: commInfo.rate,
+                                                                    commission_amount: commInfo.isFixed ? commInfo.rate : (amt2 * commInfo.rate) / 100,
+                                                                    display_numbers: p.numbers, display_amount: `${amt1}*${amt2}`,
+                                                                    display_bet_type: p.typeLabel, created_at: timestamp
+                                                                })
+                                                            }
+                                                        }
+                                                    } else {
+                                                        // เลข 2 ตัวกลับ: simple reverse
+                                                        const reversedNumbers = p.numbers.split('').reverse().join('')
+                                                        if (amt1 > 0) {
+                                                            newDrafts.push({
+                                                                entry_id: entryId, bet_type: p.betType, numbers: p.numbers,
+                                                                amount: amt1, commission_rate: commInfo.rate,
+                                                                commission_amount: commInfo.isFixed ? commInfo.rate : (amt1 * commInfo.rate) / 100,
+                                                                display_numbers: p.numbers, display_amount: `${amt1}*${amt2}`,
+                                                                display_bet_type: p.typeLabel, created_at: timestamp
+                                                            })
+                                                        }
+                                                        if (amt2 > 0 && reversedNumbers !== p.numbers) {
+                                                            newDrafts.push({
+                                                                entry_id: entryId, bet_type: p.betType, numbers: reversedNumbers,
+                                                                amount: amt2, commission_rate: commInfo.rate,
+                                                                commission_amount: commInfo.isFixed ? commInfo.rate : (amt2 * commInfo.rate) / 100,
+                                                                display_numbers: p.numbers, display_amount: `${amt1}*${amt2}`,
+                                                                display_bet_type: p.typeLabel, created_at: timestamp
+                                                            })
+                                                        }
                                                     }
                                                 } else if (p.betType === '4_float' || p.betType === '5_float') {
                                                     const sortedNumbers = p.numbers.split('').sort().join('')

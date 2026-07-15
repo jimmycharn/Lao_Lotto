@@ -246,6 +246,8 @@ function findAmountIndex(tokens) {
     return -1;
 }
 function expandLines(rawLines, lotteryType = 'lao', settings) {
+    const behavior = settings?.x_separator_behavior || 'auto';
+    const shouldRevert = behavior === 'revert' || (behavior === 'auto' && lotteryType === 'stock');
     rawLines = rawLines.map(line => {
         let s = preprocessShorthands(line);
         s = normalizeThreeGroupShorthand(s);
@@ -392,9 +394,6 @@ function expandLines(rawLines, lotteryType = 'lao', settings) {
             const amount = xMatch[4];
             const suffix = xMatch[5] || '';
             const hasOtherParts = /[\d*×xX=:\-]/.test(suffix);
-            const behavior = settings?.x_separator_behavior || 'auto';
-            const shouldRevert = behavior === 'revert' ||
-                (behavior === 'auto' && lotteryType === 'stock');
             if (!hasOtherParts && shouldRevert) {
                 const perms = numberStr.length === 2
                     ? get2DigitPermutations(numberStr)
@@ -628,7 +627,7 @@ function expandLines(rawLines, lotteryType = 'lao', settings) {
                     continue;
                 }
                 let finalAmt = amt;
-                if (!amt.includes('*') && !amt.includes('-') && !amt.includes('ชุด') && !amt.includes('ช')) {
+                if (shouldRevert && !amt.includes('*') && !amt.includes('-') && !amt.includes('ชุด') && !amt.includes('ช')) {
                     finalAmt = `${amt}*${amt}`;
                 }
                 line = `${prefixCtx}${numsPart}=${finalAmt}${suffix}`;
@@ -1417,11 +1416,11 @@ export function extractInlineContext(line, contextMode) {
         const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom';
         return { cleaned: rest.trim(), mode };
     }
-    const bothSuffix = s.match(/^(.+?)\s*(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล|ล[+\-]?บ|บล|ลบ)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/);
+    const bothSuffix = s.match(/^(.+?)\s*(บนล่าง|ล่างบน|บน[\s\-]?ล่าง|ล่าง[\s\-]?บน|บ[+\-]?ล|ล[+\-]?บ|บล|ลบ)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*(?:\s+[^0-9]+)?\s*$/);
     if (bothSuffix) {
         return { cleaned: bothSuffix[1].trim(), mode: 'both' };
     }
-    const suffixMatch = s.match(/^(.+?)(?<=\d|\s|=)(บน|บ|ล่าง|ล)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*$/);
+    const suffixMatch = s.match(/^(.+?)(?<=\d|\s|=)(บน|บ|ล่าง|ล)\.?\s*(?:กลับ|กลับตัว|กลับด้วย)?\s*(?:\s+[^0-9]+)?\s*$/);
     if (suffixMatch) {
         const rest = suffixMatch[1];
         const modeStr = suffixMatch[2].replace('.', '');
@@ -1429,7 +1428,7 @@ export function extractInlineContext(line, contextMode) {
         return { cleaned: rest.trim(), mode };
     }
     // Handle กลับ suffix for 3-digit reverse bets (only when not preceded by บน/ล่าง)
-    const reverseSuffix = s.match(/^(.+?)\s*กลับ\s*$/);
+    const reverseSuffix = s.match(/^(.+?)\s*กลับ\s*(?:\s+[^0-9]+)?\s*$/);
     if (reverseSuffix) {
         return { cleaned: reverseSuffix[1].trim(), mode: 'reverse' };
     }
@@ -1882,7 +1881,7 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
                 matched = true;
             }
             if (matched && finalAmt1 !== null && finalAmt2 !== null) {
-                const typeLabel = 'กลับ';
+                const typeLabel = `กลับ (${permCount})`;
                 results.push({
                     numbers,
                     amount: finalAmt1,
@@ -1897,10 +1896,10 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
             }
         }
         // Handle explicit กลับ keyword (from parenthetical NxM format or direct keyword)
-        if (isReverseBet && amount2 !== null && amount1 !== null && !shouldStraightOnly) {
-            const finalAmt1 = amount1 + amount2 * (permCount - 1);
+        if (isReverseBet && amount2 !== null && amount1 !== null && amount2 !== permCount && !shouldStraightOnly) {
+            const finalAmt1 = amount1;
             const finalAmt2 = amount2;
-            const typeLabel = 'กลับ';
+            const typeLabel = `กลับ (${permCount})`;
             results.push({
                 numbers,
                 amount: finalAmt1,
@@ -2153,13 +2152,20 @@ function cleanNoteText(str) {
             s = prefixMatch[2].trim();
         }
     }
+    let trailingText = '';
     const split = splitAmountAndTrailingText(s);
     if (split && split.trailingText) {
-        return split.trailingText;
+        trailingText = split.trailingText.trim();
+    } else {
+        const spaceMatch = s.match(/^(\d+)(?:\s+(.+))?$/);
+        if (spaceMatch && spaceMatch[2]) {
+            trailingText = spaceMatch[2].trim();
+        } else {
+            trailingText = s;
+        }
     }
-    const spaceMatch = s.match(/^(\d+)(?:\s+(.+))?$/);
-    if (spaceMatch && spaceMatch[2]) {
-        return spaceMatch[2].trim();
-    }
-    return s;
+    // Strip context keywords and กลับ keywords from trailingText
+    trailingText = trailingText.replace(/^(?:บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|ล่าง|บ(?=\s|$)|ล(?=\s|$)|กลับตัว|กลับด้วย|กลับ(?=\s|$))\s*/g, '');
+    trailingText = trailingText.replace(/\s*(?:บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|ล่าง|(?<=\s)บ|(?<=\s)ล|กลับตัว|กลับด้วย|(?<=\s)กลับ)$/g, '');
+    return trailingText.trim();
 }
