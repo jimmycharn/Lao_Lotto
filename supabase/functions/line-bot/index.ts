@@ -14661,7 +14661,7 @@ If not found, return: {"success":true,"found":false}`;
         const isStaffSender = isDealer || isAdmin || isManager;
         let originalSenderId = profile?.id || null;
 
-        if (isStaffSender) {
+        if (isStaffSender && groupLink) {
           if (parsedBets.length > 0) {
             // Check if group settings allow staff betting and have a valid representative member
             if (!groupLink.allow_staff_bet || !groupLink.staff_member_id) {
@@ -14696,7 +14696,7 @@ If not found, return: {"success":true,"found":false}`;
           }
 
           // Check if bets are allowed for members
-          if (groupLink.member_permissions?.bet === false) {
+          if (groupLink && groupLink.member_permissions?.bet === false) {
             await sendLineReply(replyToken, `❌ ดีลเลอร์ปิดการรับยอดแทงผ่านแชท LINE ในกลุ่มนี้สำหรับสมาชิกทั่วไป`);
             continue;
           }
