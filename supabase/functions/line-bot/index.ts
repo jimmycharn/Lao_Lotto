@@ -14889,7 +14889,14 @@ If not found, return: {"success":true,"found":false}`;
         const baseTimestamp = new Date();
         let insertIndex = 0;
         const buyerNote = extractBuyerNote(text, lotteryType);
-        let finalBillNote = buyerNote || 'LINE Bot';
+        let finalBillNote = buyerNote;
+        if (!finalBillNote) {
+          if (!groupLink) {
+            finalBillNote = senderProfile?.full_name || 'LINE Bot';
+          } else {
+            finalBillNote = 'LINE Bot';
+          }
+        }
 
         if (privateSession && privateSession.is_assistant) {
           finalBillNote = `ผู้ช่วย: ${privateSession.assistant_name || 'LINE Bot'}`;
