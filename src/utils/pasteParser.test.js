@@ -335,7 +335,7 @@ describe('pasteParser - parseMultiLinePaste', () => {
       amount2: 500,
       betType: '3_top',
       specialType: 'reverse',
-      typeLabel: 'กลับ (6)'
+      typeLabel: 'กลับ'
     })
 
     const text2 = '852=1000*500*5'
@@ -347,7 +347,7 @@ describe('pasteParser - parseMultiLinePaste', () => {
       amount2: 500,
       betType: '3_top',
       specialType: 'reverse',
-      typeLabel: 'กลับ (6)'
+      typeLabel: 'กลับ'
     })
   })
 
@@ -361,7 +361,7 @@ describe('pasteParser - parseMultiLinePaste', () => {
       amount2: 10,
       betType: '3_top',
       specialType: 'reverse',
-      typeLabel: 'กลับ (6)'
+      typeLabel: 'กลับ'
     })
   })
 
@@ -553,7 +553,7 @@ describe('pasteParser - parseMultiLinePaste', () => {
         amount2: 10,
         betType: '3_top',
         specialType: 'reverse',
-        typeLabel: 'กลับ (6)'
+        typeLabel: 'กลับ'
       })
       expect(extractBuyerNote(text, 'lao')).toBe('พี่แดง')
     })
@@ -594,7 +594,7 @@ describe('pasteParser - parseMultiLinePaste', () => {
         amount2: 10,
         betType: '3_top',
         specialType: 'reverse',
-        typeLabel: 'กลับ (3)'
+        typeLabel: 'กลับ'
       })
     })
 

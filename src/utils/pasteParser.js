@@ -1890,7 +1890,7 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
                 matched = true;
             }
             if (matched && finalAmt1 !== null && finalAmt2 !== null) {
-                const typeLabel = `กลับ (${permCount})`;
+                const typeLabel = 'กลับ';
                 results.push({
                     numbers,
                     amount: finalAmt1,
@@ -1908,7 +1908,7 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
         if (isReverseBet && amount2 !== null && amount1 !== null && amount2 !== permCount && !shouldStraightOnly) {
             const finalAmt1 = amount1;
             const finalAmt2 = amount2;
-            const typeLabel = `กลับ (${permCount})`;
+            const typeLabel = 'กลับ';
             results.push({
                 numbers,
                 amount: finalAmt1,
