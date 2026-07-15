@@ -4459,6 +4459,7 @@ serve(async (req) => {
     }
 
 
+
     // ─── BACKGROUND QUEUE PROCESSOR: process_queue ───
     if (apiPayload && apiPayload.action === 'process_queue') {
       const { data: secretRow } = await supabase
@@ -5934,12 +5935,28 @@ serve(async (req) => {
 
             const sourceUrlsStr = (sources || []).map(s => s.source_url).join('\n');
 
+            let closeDateStr = round_date;
+            if (r.close_time) {
+              try {
+                const dateObj = new Date(r.close_time);
+                // Convert UTC to GMT+7 (Thailand timezone)
+                const localTime = new Date(dateObj.getTime() + (7 * 60 * 60 * 1000));
+                const y = localTime.getUTCFullYear();
+                const m = String(localTime.getUTCMonth() + 1).padStart(2, '0');
+                const d = String(localTime.getUTCDate()).padStart(2, '0');
+                closeDateStr = `${y}-${m}-${d}`;
+                debugLogs.push(`Derived local close date: ${closeDateStr} from close_time: ${r.close_time}`);
+              } catch (err) {
+                console.error("Error parsing close_time for query date:", err);
+              }
+            }
+
             let yearPart = 2026;
             let monthPart = '01';
             let dayPart = '01';
             let beYear = 2569;
             try {
-              const parts = round_date.split('-');
+              const parts = closeDateStr.split('-');
               if (parts.length === 3) {
                 yearPart = parseInt(parts[0]);
                 monthPart = parts[1];
@@ -5947,12 +5964,12 @@ serve(async (req) => {
                 beYear = yearPart + 543;
               }
             } catch (e) {
-              console.error("Error splitting round_date:", e);
+              console.error("Error splitting closeDateStr:", e);
             }
 
             let queryYear = yearPart;
             let queryBE = beYear;
-            let queryRoundDate = round_date;
+            let queryRoundDate = closeDateStr;
 
             // Dynamically detect year offset between machine clock and real-world internet
             try {
@@ -6000,7 +6017,9 @@ You MUST respond with a JSON object in this format (no markdown, no explanations
 For Lao/Hanoi: {"success":true,"found":true,"source_url":"https://...","numbers":{"primary_4_digit":"1234"}}
 For Thai: {"success":true,"found":true,"source_url":"https://...","numbers":{"official_6_digit":"123456","bottom_2_digit":"78","three_digit_front":["123","456"],"three_digit_back":["789","012"]}}
 For Stock: {"success":true,"found":true,"source_url":"https://...","numbers":{"index_2_digit":"56","change_2_digit":"78"}}
-If not found, return: {"success":true,"found":false}`;
+If not found, return: {"success":true,"found":false}
+
+CRITICAL: You must verify that the draw date of the lottery results in the search page matches the requested date EXACTLY. If the latest results available on the web are for a different date (e.g. an older draw date), you MUST return {"success":true,"found":false}. Do NOT return results for a different date.`;
 
             let userPrompt = '';
             if (lottery_type === 'thai') {
