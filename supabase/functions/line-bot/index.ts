@@ -15433,8 +15433,10 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           entryGroups.forEach((group) => {
             const first = group[0];
             const count = group.length;
-            const countSuffix = count > 1 ? ` (${count})` : '';
-            formattedDetailLines.push(`${first.display_numbers}${countSuffix}`);
+            const disp = first.display_numbers || '';
+            const alreadyHasCountSuffix = /\(\d+\)\s*$/.test(disp);
+            const countSuffix = (count > 1 && !alreadyHasCountSuffix) ? ` (${count})` : '';
+            formattedDetailLines.push(`${disp}${countSuffix}`);
           });
         }
 

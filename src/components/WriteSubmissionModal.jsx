@@ -762,10 +762,11 @@ export default function WriteSubmissionModal({
             }
         } else if (numLen === 3) {
             if (endsWithAsterisk) {
-                // Input ends with * (e.g., "834=20*") - show เต็งโต๊ด and คูณชุด only (ไม่แสดง กลับ)
+                // Input ends with * (e.g., "834=20*") - show เต็งโต๊ด, กลับ และ คูณชุด
                 if (isTop) {
                     buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: true, appendAmount: amount1 })
                     if (permCount > 1) {
+                        buttons.push({ label: 'กลับ', value: 'กลับ', autoSubmit: true, appendAmount: amount1 })
                         buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true, appendAmount: permCount.toString() })
                     }
                 }
@@ -1463,7 +1464,7 @@ export default function WriteSubmissionModal({
                 amount1 = parts[0] || ''
                 
                 // Special handling for different types
-                if (type === 'บนกลับ' || type === 'ล่างกลับ' || type === 'หน้ากลับ' || type === 'ถ่างกลับ') {
+                if (type === 'บนกลับ' || type === 'ล่างกลับ' || type === 'หน้ากลับ' || type === 'ถ่างกลับ' || type === 'กลับ') {
                     // กลับ without * means same amount for both
                     displayLine = `${numbers}=${amount1}*${amount1} ${type}`
                 } else if (type === 'เต็งโต๊ด' && numLen === 3) {
@@ -2350,10 +2351,11 @@ export default function WriteSubmissionModal({
         } else if (numLen === 3) {
             // 3 digits
             if (endsWithAsterisk) {
-                // Input ends with * (e.g., "123=20*") - show เต็งโต๊ด and คูณชุด only (ไม่แสดง กลับ เพราะให้ผลเหมือน คูณชุด)
+                // Input ends with * (e.g., "123=20*") - show เต็งโต๊ด, กลับ และ คูณชุด
                 if (isTop) {
                     buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: true })
                     if (permCount > 1) {
+                        buttons.push({ label: 'กลับ', value: 'กลับ', autoSubmit: true })
                         buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
                     }
                 }
@@ -2371,7 +2373,7 @@ export default function WriteSubmissionModal({
                     }
                 }
             } else {
-                // ไม่มี * ในจำนวนเงิน - ไม่แสดงปุ่ม กลับ (ต้องมี second amount)
+                // ไม่มี * ในจำนวนเงิน - แสดงปุ่ม กลับ ได้ (handleTypeClick จะเติม *amount อัตโนมัติ)
                 if (isTop) {
                     if (isLaoOrHanoi) {
                         buttons.push({ label: 'ตรง', value: 'ตรง', autoSubmit: true })
@@ -2381,6 +2383,7 @@ export default function WriteSubmissionModal({
                     buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: true })
                     buttons.push({ label: 'โต๊ด', value: 'โต๊ด', autoSubmit: true })
                     if (permCount > 1) {
+                        buttons.push({ label: 'กลับ', value: 'กลับ', autoSubmit: true })
                         buttons.push({ label: 'คูณชุด', value: 'คูณชุด', autoSubmit: true })
                     }
                 } else {
