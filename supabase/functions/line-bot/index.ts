@@ -5176,6 +5176,8 @@ serve(async (req) => {
           }
         }
 
+        // Disabled: do not send the round closing summary to the group automatically when closed
+        /*
         if (summaryGroups && summaryGroups.length > 0) {
           try {
             const { flexMessage } = await generateRoundSummaryFlex(round, false);
@@ -5201,6 +5203,7 @@ serve(async (req) => {
             }
           }
         }
+        */
       } catch (automationErr) {
         console.error("Error in auto layoff or closing summary trigger:", automationErr);
       }
