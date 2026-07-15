@@ -85,7 +85,8 @@ export default function DealerLineBotTab({ user, profile }) {
                     user_id,
                     profiles:user_id (
                         id,
-                        full_name
+                        full_name,
+                        member_code
                     )
                 `)
                 .eq('dealer_id', user.id)
@@ -131,7 +132,8 @@ export default function DealerLineBotTab({ user, profile }) {
                     display_name,
                     user_id,
                     profiles:user_id (
-                        full_name
+                        full_name,
+                        member_code
                     )
                 `)
                 .eq('line_group_id', lineGroupId)
@@ -594,6 +596,50 @@ export default function DealerLineBotTab({ user, profile }) {
 
     return (
         <div className="line-bot-section">
+            {/* Dealer Member Code & 1-on-1 Registration Guide Card */}
+            <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeft: '4px solid #36a2eb', background: 'rgba(54, 162, 235, 0.02)' }}>
+                <h3 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#36a2eb' }}>
+                    <FiTerminal /> ข้อมูลเจ้ามือสำหรับการส่งโพยส่วนตัว (1-on-1)
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
+                    <div>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>รหัสเจ้ามือของคุณ (Member Code)</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <code style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--color-primary)', background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.6rem', borderRadius: '6px', fontFamily: 'monospace' }}>
+                                {profile?.member_code || '-'}
+                            </code>
+                            <CopyButton text={profile?.member_code || ''} />
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
+                            ส่งรหัสหรือข้อความด้านขวาเพื่อให้ผู้ส่ง/สมาชิก นำไปใช้สมัครหรือตั้งค่าผู้ช่วยส่วนตัวกับบอทในแชท 1-on-1
+                        </div>
+                    </div>
+                    <div>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.5rem' }}>คำสั่งพิมพ์ส่งให้สมาชิก (Copy ไปส่งต่อได้เลย):</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.03)', padding: '0.4rem 0.75rem', borderRadius: '6px', border: '1px solid var(--color-border)' }}>
+                                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>1. สำหรับสมัครคนใหม่:</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <code style={{ fontSize: '0.85rem', fontFamily: 'monospace', color: 'var(--color-success)' }}>
+                                        /ส่งเภา {profile?.member_code || '[รหัส]'}/new
+                                    </code>
+                                    <CopyButton text={`/ส่งเภา ${profile?.member_code || ''}/new`} />
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.03)', padding: '0.4rem 0.75rem', borderRadius: '6px', border: '1px solid var(--color-border)' }}>
+                                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>2. สำหรับเพิ่มผู้ช่วยป้อน:</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <code style={{ fontSize: '0.85rem', fontFamily: 'monospace', color: '#ffb300' }}>
+                                        /ส่งเภา {profile?.member_code || '[รหัส]'}/[รหัสสมาชิก]
+                                    </code>
+                                    <CopyButton text={`/ส่งเภา ${profile?.member_code || ''}/`} />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             {/* Guide Card */}
             <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeft: '4px solid var(--color-primary)' }}>
                 <h3 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-primary)' }}>
@@ -906,7 +952,7 @@ export default function DealerLineBotTab({ user, profile }) {
                                                             >
                                                                 <option value="">-- เลือกบัญชีตัวแทน --</option>
                                                                 {activeMembers.map(m => (
-                                                                    <option key={m.id} value={m.id}>{m.full_name}</option>
+                                                                    <option key={m.id} value={m.id}>{m.full_name} {m.member_code ? `(รหัส: ${m.member_code})` : ''}</option>
                                                                 ))}
                                                             </select>
                                                         )}
@@ -1071,7 +1117,7 @@ export default function DealerLineBotTab({ user, profile }) {
                                                                                                 border: '1px solid rgba(34, 197, 94, 0.15)',
                                                                                                 fontWeight: 600
                                                                                             }}>
-                                                                                                ผูกแล้ว: {member.profiles?.full_name || 'ไม่ทราบชื่อ'}
+                                                                                                ผูกแล้ว: {member.profiles?.full_name || 'ไม่ทราบชื่อ'}{member.profiles?.member_code ? ` (รหัส: ${member.profiles.member_code})` : ''}
                                                                                             </span>
                                                                                         ) : (
                                                                                             <span style={{ 
@@ -1438,6 +1484,28 @@ export default function DealerLineBotTab({ user, profile }) {
                                 <td style={{ padding: '0.75rem', textAlign: 'center' }}>
                                     {renderMemberPermission('help')}
                                 </td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.85rem', fontFamily: 'monospace', color: '#36a2eb' }}>
+                                        /ส่งเภา [รหัสเจ้ามือ]/new
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>ใช้แชทส่วนตัวเพื่อลงทะเบียนแทงหวย 1-on-1 โดยตรงกับร้านค้าเจ้ามือ (คนส่งรายใหม่)</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้ (ส่วนตัว)</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.85rem', fontFamily: 'monospace', color: '#ffb300' }}>
+                                        /ส่งเภา [รหัสเจ้ามือ]/[รหัสสมาชิก]
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>ใช้แชทส่วนตัวเพื่อขอเข้าป้อนโพยในนามผู้ช่วยส่ง (Assistant) ให้กับบัญชีผู้ใช้ที่มีอยู่ในระบบ</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้ (ส่วนตัว)</td>
                             </tr>
 
                             {/* Store/Admin Commands */}
