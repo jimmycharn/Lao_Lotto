@@ -14703,27 +14703,29 @@ If not found, return: {"success":true,"found":false}`;
         }
 
         // Re-evaluate senderPoyDisplay based on active profile/membership and sender role
-        let finalPoyDisplay = 'short';
-        if (isStaffSender) {
-          // Admin/Staff/Manager bypasses global overrides and specific overrides.
-          finalPoyDisplay = groupMemberPoy;
-        } else {
-          // Regular members are subject to group-level settings and specific overrides.
-          finalPoyDisplay = groupMemberPoy;
-          
-          if (groupMemberAdminPoy === 'force_close') {
-            finalPoyDisplay = 'none';
-          } else if (groupMemberAdminPoy === 'force_open') {
-            if (finalPoyDisplay === 'none') {
-              finalPoyDisplay = 'short';
-            }
+        let finalPoyDisplay = groupLink ? 'short' : 'full';
+        if (groupLink) {
+          if (isStaffSender) {
+            // Admin/Staff/Manager bypasses global overrides and specific overrides.
+            finalPoyDisplay = groupMemberPoy;
           } else {
-            // Respect global group settings when no specific admin override
-            if (globalPoy === 'force_close') {
+            // Regular members are subject to group-level settings and specific overrides.
+            finalPoyDisplay = groupMemberPoy;
+            
+            if (groupMemberAdminPoy === 'force_close') {
               finalPoyDisplay = 'none';
-            } else if (globalPoy === 'force_open') {
+            } else if (groupMemberAdminPoy === 'force_open') {
               if (finalPoyDisplay === 'none') {
                 finalPoyDisplay = 'short';
+              }
+            } else {
+              // Respect global group settings when no specific admin override
+              if (globalPoy === 'force_close') {
+                finalPoyDisplay = 'none';
+              } else if (globalPoy === 'force_open') {
+                if (finalPoyDisplay === 'none') {
+                  finalPoyDisplay = 'short';
+                }
               }
             }
           }
