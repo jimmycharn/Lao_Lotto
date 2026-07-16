@@ -11646,6 +11646,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                       cmdRow("/โพยปกติ", "ยกเลิกการบังคับระบบใบโพยในหวยประเภทนี้ และเคารพสิทธิ์รายคน"),
                       cmdRow("/โพยปิด [รหัส/ชื่อ] หรือ /โพยเปิด [รหัส/ชื่อ]", "ล็อกปิด/เปิดโพยถาวรเฉพาะบุคคลสำหรับหวยประเภทนี้"),
                       cmdRow("/โพยปกติ [รหัส/ชื่อ]", "ยกเลิกการล็อกรายบุคคลสำหรับหวยประเภทนี้"),
+                      cmdRow("/โพย ถูก หรือ /โพยถูก [id]", "ดูโพยที่ถูกรางวัลทั้งหมด หรือเฉพาะสมาชิกที่ระบุ ID"),
 
                       sectionHeader("💸", "จัดการยอดเกิน / ตีออก"),
                       cmdRow("/ยอดเกิน", "แสดงตัวเลขและยอดเงินที่เกินลิมิตอั้น"),
@@ -13857,8 +13858,10 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             }
 
             const isWinningQuery = billCode === 'ถูก' || billCode === 'win' || billCode === 'won';
+            const isWinningMemberQuery = billCode.startsWith('ถูก ') || billCode.startsWith('win ') || billCode.startsWith('won ');
+            const targetMemberId = isWinningMemberQuery ? billCode.split(/\s+/)[1]?.trim() : null;
 
-            if (isWinningQuery) {
+            if (isWinningQuery || isWinningMemberQuery) {
               let listDealerId = null;
               let listLotteryType = null;
               let hasAccess = false;
@@ -14012,6 +14015,83 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 'run_top': 'ลอยบน',
                 'run_bottom': 'ลอยล่าง'
               };
+
+              // Admin querying a specific member's winning slips
+              if (isWinningMemberQuery && targetMemberId && isAuthorized) {
+                // Look up the target member's profile
+                const { data: targetProfile } = await supabase
+                  .from('profiles')
+                  .select('id, full_name')
+                  .eq('id', targetMemberId)
+                  .maybeSingle();
+
+                if (!targetProfile) {
+                  await sendLineReply(replyToken, `❌ ไม่พบสมาชิกที่มี ID "${targetMemberId}" ในระบบค่ะ`);
+                  continue;
+                }
+
+                // Filter winning subs to only this member
+                const memberWinningSubs = winningSubs.filter((s: any) => s.user_id === targetMemberId);
+
+                if (memberWinningSubs.length === 0) {
+                  await sendLineReply(replyToken, `📭 ในงวดวันที่ ${roundDateStr} คุณ ${targetProfile.full_name} ยังไม่มีเลขที่ถูกรางวัลค่ะ`);
+                  continue;
+                }
+
+                const billOrder: string[] = [];
+                const billMap = new Map<string, { billId: string; note: string; totalWin: number; lines: string[] }>();
+
+                memberWinningSubs.forEach((s: any) => {
+                  const bid = s.bill_id || '-';
+                  if (!billMap.has(bid)) {
+                    billMap.set(bid, {
+                      billId: bid,
+                      note: s.bill_note || '-',
+                      totalWin: 0,
+                      lines: []
+                    });
+                    billOrder.push(bid);
+                  }
+                  const b = billMap.get(bid)!;
+                  const payout = calculatePayout(s);
+                  b.totalWin += payout;
+
+                  const label = LABELS[s.bet_type] || s.bet_type;
+                  b.lines.push(`- ${s.numbers}=${s.amount} (${label}) [ถูกรางวัล: ฿${payout.toLocaleString('th-TH')}]`);
+                });
+
+                const lotteryName = (activeRound.lottery_type || '').toUpperCase();
+                let out = `🏆 รายการถูกรางวัลของ คุณ ${targetProfile.full_name}\n`;
+                out += `ประเภท: ${lotteryName}\n`;
+                out += `งวดวันที่: ${roundDateStr}\n`;
+                out += `----------------------\n`;
+
+                let grandTotalWin = 0;
+                billOrder.forEach((bid) => {
+                  const b = billMap.get(bid)!;
+                  grandTotalWin += b.totalWin;
+                  out += `📄 ใบโพยเลขที่: ${b.billId}\n`;
+                  if (b.note && b.note !== '-') {
+                    out += `โน๊ต: ${b.note}\n`;
+                  }
+                  out += `เลขที่ถูกรางวัล:\n`;
+                  out += b.lines.join('\n') + '\n';
+                  out += `รวมถูกรางวัลในใบนี้: ฿${b.totalWin.toLocaleString('th-TH')}\n`;
+                  out += `----------------------\n`;
+                });
+
+                out += `รวมถูกรางวัลทั้งหมด: ${billOrder.length} ใบโพย\n`;
+                out += `🏆 ยอดรวมรางวัลรวม: ฿${grandTotalWin.toLocaleString('th-TH')}`;
+
+                await sendLineReply(replyToken, out);
+                continue;
+              }
+
+              // Non-admin trying to use member-specific query
+              if (isWinningMemberQuery && targetMemberId && !isAuthorized) {
+                await sendLineReply(replyToken, `❌ คำสั่งดูโพยถูกของสมาชิกเฉพาะเจาะจง ใช้ได้เฉพาะแอดมิน/เจ้ามือ/ผู้จัดการ เท่านั้นค่ะ\n💡 หากต้องการดูโพยถูกของตัวเอง พิมพ์ /โพย ถูก`);
+                continue;
+              }
 
               if (!isAuthorized) {
                 // Member specific view
