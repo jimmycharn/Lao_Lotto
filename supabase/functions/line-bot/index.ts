@@ -14018,20 +14018,23 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               // Admin querying a specific member's winning slips
               if (isWinningMemberQuery && targetMemberId && isAuthorized) {
-                // Look up the target member's profile
-                const { data: targetProfile } = await supabase
-                  .from('profiles')
-                  .select('id, full_name')
-                  .eq('id', targetMemberId)
-                  .maybeSingle();
+                // Look up the target member's profile by member_code or id (UUID)
+                const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetMemberId);
+                let targetQuery = supabase.from('profiles').select('id, full_name');
+                if (isUuid) {
+                  targetQuery = targetQuery.eq('id', targetMemberId);
+                } else {
+                  targetQuery = targetQuery.eq('member_code', targetMemberId);
+                }
+                const { data: targetProfile } = await targetQuery.maybeSingle();
 
                 if (!targetProfile) {
-                  await sendLineReply(replyToken, `❌ ไม่พบสมาชิกที่มี ID "${targetMemberId}" ในระบบค่ะ`);
+                  await sendLineReply(replyToken, `❌ ไม่พบสมาชิกที่มีรหัส "${targetMemberId}" ในระบบค่ะ`);
                   continue;
                 }
 
                 // Filter winning subs to only this member
-                const memberWinningSubs = winningSubs.filter((s: any) => s.user_id === targetMemberId);
+                const memberWinningSubs = winningSubs.filter((s: any) => s.user_id === targetProfile.id);
 
                 if (memberWinningSubs.length === 0) {
                   await sendLineReply(replyToken, `📭 ในงวดวันที่ ${roundDateStr} คุณ ${targetProfile.full_name} ยังไม่มีเลขที่ถูกรางวัลค่ะ`);
