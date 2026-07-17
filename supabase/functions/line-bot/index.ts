@@ -4571,8 +4571,8 @@ serve(async (req) => {
           job = jobData
         }
 
-        if (!job || !job.layoff_enabled) {
-          return new Response(JSON.stringify({ success: true, message: 'Layoff not enabled for this job' }), {
+        if (!job || !job.is_active || !job.layoff_enabled) {
+          return new Response(JSON.stringify({ success: true, message: 'Job is inactive or layoff not enabled' }), {
             status: 200,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           })
@@ -4782,9 +4782,24 @@ serve(async (req) => {
         })
       }
 
+      let job: any = null;
+      let isJobActive = true;
+      if (round.created_by_job_id) {
+        const { data: jobData } = await supabase
+          .from('dealer_automation_jobs')
+          .select('*')
+          .eq('id', round.created_by_job_id)
+          .maybeSingle();
+        job = jobData;
+        if (job && !job.is_active) {
+          isJobActive = false;
+        }
+      }
+
       // Check if notifications or automation is enabled for this round
-      if (round.notify_close_to_groups === false && !round.created_by_job_id) {
-        return new Response(JSON.stringify({ success: true, round_id: roundId, message: 'Automation and notifications disabled by setting' }), {
+      const isAutomationActive = round.created_by_job_id ? isJobActive : (round.notify_close_to_groups !== false);
+      if (!isAutomationActive) {
+        return new Response(JSON.stringify({ success: true, round_id: roundId, message: 'Automation and notifications disabled (job is inactive or settings are off)' }), {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
@@ -4837,15 +4852,6 @@ serve(async (req) => {
 
       // --- AUTO LAYOFF & REPORTING SYSTEM ---
       try {
-        let job: any = null;
-        if (round.created_by_job_id) {
-          const { data: jobData } = await supabase
-            .from('dealer_automation_jobs')
-            .select('*')
-            .eq('id', round.created_by_job_id)
-            .maybeSingle();
-          job = jobData;
-        }
 
         const { data: template } = await supabase
           .from('dealer_lottery_templates')
@@ -6256,15 +6262,13 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   .select('*')
                   .eq('id', dr.created_by_job_id)
                   .maybeSingle();
-                if (jobData) {
+                if (jobData && jobData.is_active) {
                   job = jobData;
                   autoImportEnabled = jobData.auto_import_result_enabled;
                   resultNotifyGroupId = jobData.result_notify_group_id;
                   notifyResultEnabled = jobData.notify_result_enabled;
                 }
-              }
-
-              if (!job) {
+              } else {
                 const { data: tmpl } = await supabase
                   .from('dealer_lottery_templates')
                   .select('auto_import_result_enabled')
