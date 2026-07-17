@@ -8407,17 +8407,23 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               if (activeClosedRounds && activeClosedRounds.length > 0) {
                 for (const round of activeClosedRounds) {
                   // 1. Fetch submissions for this round
-                  const { data: submissions } = await supabase
-                    .from('submissions')
-                    .select('amount, commission_amount, prize_amount, is_winner, bet_type, numbers')
-                    .eq('round_id', round.id)
-                    .eq('is_deleted', false);
+                  const { data: submissions } = await fetchAllRows(
+                    (from, to) => supabase
+                      .from('submissions')
+                      .select('amount, commission_amount, prize_amount, is_winner, bet_type, numbers')
+                      .eq('round_id', round.id)
+                      .eq('is_deleted', false)
+                      .range(from, to)
+                  );
 
                   // 2. Fetch transfers for this round
-                  const { data: transfers } = await supabase
-                    .from('bet_transfers')
-                    .select('*')
-                    .eq('round_id', round.id);
+                  const { data: transfers } = await fetchAllRows(
+                    (from, to) => supabase
+                      .from('bet_transfers')
+                      .select('*')
+                      .eq('round_id', round.id)
+                      .range(from, to)
+                  );
 
                   // 3. Calculate aggregates
                   const setPrice = round.set_prices?.['4_top'] || 120;
@@ -8471,13 +8477,21 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
                     const upstreamSubsMap: Record<string, any> = {};
                     if (targetSubmissionIds.length > 0) {
-                      const { data: upstreamSubs } = await supabase
-                        .from('submissions')
-                        .select('id, is_winner, prize_amount, amount, bet_type')
-                        .in('id', targetSubmissionIds)
-                        .eq('is_deleted', false);
+                      const upstreamSubs: any[] = [];
+                      const chunkSize = 500;
+                      for (let i = 0; i < targetSubmissionIds.length; i += chunkSize) {
+                        const chunk = targetSubmissionIds.slice(i, i + chunkSize);
+                        const { data: chunkData } = await supabase
+                          .from('submissions')
+                          .select('id, is_winner, prize_amount, amount, bet_type')
+                          .in('id', chunk)
+                          .eq('is_deleted', false);
+                        if (chunkData) {
+                          upstreamSubs.push(...chunkData);
+                        }
+                      }
 
-                      (upstreamSubs || []).forEach((sub: any) => {
+                      upstreamSubs.forEach((sub: any) => {
                         upstreamSubsMap[sub.id] = sub;
                       });
                     }
