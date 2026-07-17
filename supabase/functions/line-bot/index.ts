@@ -8288,18 +8288,40 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               const param = text.substring('/กำไร'.length).trim().toLowerCase();
 
+              const TYPE_MAP: Record<string, string> = {
+                'ไทย': 'thai', 'thai': 'thai',
+                'ลาว': 'lao', 'lao': 'lao',
+                'ฮานอย': 'hanoi', 'hanoi': 'hanoi',
+                'หุ้น': 'stock', 'stock': 'stock',
+                'ยี่กี': 'yeekee', 'yeekee': 'yeekee',
+                'อื่นๆ': 'other', 'other': 'other'
+              };
+
+              let filterLotteryType: string | null = null;
+              let filterTime: string | null = null;
+              let isValidFilter = true;
+
+              const parts = param.split(/\s+/).filter(Boolean);
+              for (const part of parts) {
+                if (TYPE_MAP[part]) {
+                  filterLotteryType = TYPE_MAP[part];
+                } else if (part === 'w' || part === 'm' || parseMonthYearParam(part) !== null) {
+                  filterTime = part;
+                } else {
+                  isValidFilter = false;
+                }
+              }
+
               let startDate: string | null = null;
               let endDate: string | null = null;
               let rangeText = 'ทั้งหมด';
-              let isValidFilter = true;
-              let requestedMonthText = '';
 
               const THAI_MONTH_NAMES = [
                 "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
                 "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
               ];
 
-              if (param === 'm') {
+              if (filterTime === 'm') {
                 const nowBangkok = new Date(Date.now() + 7 * 60 * 60 * 1000);
                 const year = nowBangkok.getUTCFullYear();
                 const month = nowBangkok.getUTCMonth(); // 0-11
@@ -8308,8 +8330,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 const lastDay = new Date(Date.UTC(year, month + 1, 0));
                 startDate = `${firstDay.getUTCFullYear()}-${String(firstDay.getUTCMonth() + 1).padStart(2, '0')}-${String(firstDay.getUTCDate()).padStart(2, '0')}`;
                 endDate = `${lastDay.getUTCFullYear()}-${String(lastDay.getUTCMonth() + 1).padStart(2, '0')}-${String(lastDay.getUTCDate()).padStart(2, '0')}`;
-              } else if (param === 'w') {
-                rangeText = 'สัปดาห์ปัจจุบัน';
+              } else if (filterTime === 'w') {
+                rangeText = 'สัปดาห์ที่ผ่านมา';
                 const nowBangkok = new Date(Date.now() + 7 * 60 * 60 * 1000);
                 const day = nowBangkok.getUTCDay(); // 0 (Sun) to 6 (Sat)
                 const dayOffset = day === 0 ? 6 : day - 1; // days since Monday
@@ -8317,8 +8339,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000);
                 startDate = `${monday.getUTCFullYear()}-${String(monday.getUTCMonth() + 1).padStart(2, '0')}-${String(monday.getUTCDate()).padStart(2, '0')}`;
                 endDate = `${sunday.getUTCFullYear()}-${String(sunday.getUTCMonth() + 1).padStart(2, '0')}-${String(sunday.getUTCDate()).padStart(2, '0')}`;
-              } else if (param !== '') {
-                const parsed = parseMonthYearParam(param);
+              } else if (filterTime != null) {
+                const parsed = parseMonthYearParam(filterTime);
                 if (parsed) {
                   const { month, year } = parsed;
                   rangeText = `เดือน${THAI_MONTH_NAMES[month - 1]} ${year + 543}`;
@@ -8332,7 +8354,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               }
 
               if (!isValidFilter) {
-                await sendLineReply(replyToken, `❌ รูปแบบคำสั่งไม่ถูกต้อง\n\nคำสั่งที่รองรับ:\n• /กำไร - ดูประวัติกำไรทั้งหมด\n• /กำไร m - ดูกำไรเดือนปัจจุบัน\n• /กำไร w - ดูกำไรสัปดาห์ปัจจุบัน\n• /กำไร [เดือน-ปี] - เช่น /กำไร 6-69 หรือ /กำไร 6-2569`);
+                await sendLineReply(replyToken, `❌ รูปแบบคำสั่งไม่ถูกต้อง\n\nคำสั่งที่รองรับ:\n• /กำไร [หวย] - ดูประวัติกำไรทั้งหมด\n• /กำไร [หวย] m - ดูกำไรเดือนปัจจุบัน\n• /กำไร [หวย] w - ดูกำไรสัปดาห์ที่ผ่านมา\n• /กำไร [หวย] [เดือน-ปี] - เช่น /กำไร ไทย 7-26 หรือ /กำไร ลาว 7-69\n\n*หมายเหตุ: ระบุประเภทหวย เช่น ไทย, ลาว, ฮานอย, หุ้น หรือเว้นว่างเพื่อดูทุกประเภทหวย`);
                 continue;
               }
 
@@ -8344,6 +8366,10 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               if (startDate && endDate) {
                 query = query.gte('round_date', startDate).lte('round_date', endDate);
+              }
+
+              if (filterLotteryType) {
+                query = query.eq('lottery_type', filterLotteryType);
               }
 
               query = query.order('round_date', { ascending: false });
@@ -8365,6 +8391,10 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               if (startDate && endDate) {
                 roundsQuery = roundsQuery.gte('round_date', startDate).lte('round_date', endDate);
+              }
+
+              if (filterLotteryType) {
+                roundsQuery = roundsQuery.eq('lottery_type', filterLotteryType);
               }
 
               const { data: activeClosedRounds, error: roundsErr } = await roundsQuery;
@@ -8630,7 +8660,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 'yeekee': 'ยี่กี',
                 'other': 'อื่นๆ'
               };
-              const lotteryTypesText = uniqueTypes.map((t: any) => typeMap[t] || t).join(', ');
+              const lotteryTypesText = filterLotteryType 
+                ? (typeMap[filterLotteryType] || filterLotteryType)
+                : uniqueTypes.map((t: any) => typeMap[t] || t).join(', ');
 
               if (historyList.length === 0) {
                 await sendLineReply(replyToken, `📊 ไม่พบประวัติงวดหวยในช่วงเวลา "${rangeText}" ค่ะ`);
@@ -10960,7 +10992,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               const batchesMap: Record<string, {
                 batchId: string;
                 createdAt: string;
-                targetDealer: string;
+                  targetDealer: string;
                 transfers: any[];
                 totalAmount: number;
               }> = {};
@@ -11597,7 +11629,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                       cmdRow("/สรุป [เลขที่ออก]", "ประกาศผลและสรุปงวด เช่น /สรุป 1234"),
                       cmdRow("/สรุป [งวดวันที่]", "ดูสรุปย้อนหลัง เช่น /สรุป 10-6-69"),
                       cmdRow("/ยอดรวม", "รายงานยอดรับรวมแยกตามประเภทเลข"),
-                      cmdRow("/กำไร [m/w/เดือน-ปี]", "สรุปกำไร/ขาดทุน (m=เดือน, w=สัปดาห์, ทั้งหมด)"),
+                      cmdRow("/กำไร [หวย] [m/w/เดือน-ปี]", "สรุปกำไร/ขาดทุน (ระบุประเภทหวย หรือช่วงเวลาได้)"),
                       cmdRow("/คนส่ง", "รายงานยอดรับแทงแยกตามสมาชิกแต่ละคน"),
                       cmdRow("/สมาชิก [ชื่อ]", "ค้นหายอดคงเหลือและข้อมูลสมาชิก"),
 
