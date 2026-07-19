@@ -723,6 +723,7 @@ export function parseMultiLinePaste(text, lotteryType = 'lao', settings) {
     let contextMode = 'top';
     let bareNumberBuffer = [];
     let lastProcessedNumLen = null;
+    let justSetContext = false;
     function flushBareBuffer() {
         for (const bareNum of bareNumberBuffer) {
             const parsed = parseNumberLine(bareNum, contextMode, isLaoOrHanoi, lotteryType, settings);
@@ -762,12 +763,15 @@ export function parseMultiLinePaste(text, lotteryType = 'lao', settings) {
             if (bareNumberBuffer.length > 0)
                 flushBareBuffer();
             contextMode = modeResult;
+            justSetContext = true;
             continue;
         }
+        let skipReset = justSetContext;
+        justSetContext = false;
         if (isBareNumberLine(trimmed)) {
             const currentNumLen = trimmed.length;
             if (currentNumLen === 3 && lastProcessedNumLen !== null && lastProcessedNumLen !== 3) {
-                if (['float_top', 'float_bottom'].includes(contextMode)) {
+                if (!skipReset && ['float_top', 'float_bottom'].includes(contextMode)) {
                     contextMode = 'top';
                 }
             }
@@ -794,6 +798,7 @@ export function parseMultiLinePaste(text, lotteryType = 'lao', settings) {
             if (bareNumberBuffer.length > 0)
                 flushBareBuffer();
             contextMode = strippedMode;
+            justSetContext = true;
             continue;
         }
         const trailingCtx = extractTrailingContext(trimmed);
@@ -801,12 +806,13 @@ export function parseMultiLinePaste(text, lotteryType = 'lao', settings) {
             if (bareNumberBuffer.length > 0)
                 flushBareBuffer();
             contextMode = trailingCtx;
+            justSetContext = true;
             continue;
         }
         if (lineToProcess && isBareNumberLine(lineToProcess)) {
             const currentNumLen = lineToProcess.length;
             if (currentNumLen === 3 && lastProcessedNumLen !== null && lastProcessedNumLen !== 3) {
-                if (['float_top', 'float_bottom'].includes(contextMode)) {
+                if (!skipReset && ['float_top', 'float_bottom'].includes(contextMode)) {
                     contextMode = 'top';
                 }
             }
@@ -820,7 +826,7 @@ export function parseMultiLinePaste(text, lotteryType = 'lao', settings) {
                 if (amountInfo.number) {
                     const currentNumLen = amountInfo.number.length;
                     if (currentNumLen === 3 && lastProcessedNumLen !== null && lastProcessedNumLen !== 3) {
-                        if (['float_top', 'float_bottom'].includes(contextMode)) {
+                        if (!skipReset && ['float_top', 'float_bottom'].includes(contextMode)) {
                             contextMode = 'top';
                         }
                     }
@@ -843,7 +849,7 @@ export function parseMultiLinePaste(text, lotteryType = 'lao', settings) {
         if (numMatch) {
             const currentNumLen = numMatch[1].length;
             if (currentNumLen === 3 && lastProcessedNumLen !== null && lastProcessedNumLen !== 3) {
-                if (['float_top', 'float_bottom'].includes(contextMode)) {
+                if (!skipReset && ['float_top', 'float_bottom'].includes(contextMode)) {
                     contextMode = 'top';
                 }
             }

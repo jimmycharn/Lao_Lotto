@@ -1630,6 +1630,21 @@ describe('pasteParser - parseMultiLinePaste', () => {
       expect(result[0]).toMatchObject({ numbers: '25', amount: 20, amount2: 20 })
     })
 
+    describe('float context auto-reset handling for 3-digit lists', () => {
+      it('retains float_top (โต๊ด) context when 3-digit section header is parsed', () => {
+        const text = `2 ตัวบน
+55=20
+3 ตัวโต๊ด
+124=50
+125=50`;
+        const res = parseMultiLinePaste(text, 'thai');
+        expect(res.length).toBe(3);
+        expect(res[0]).toMatchObject({ numbers: '55', amount: 20, betType: '2_top' });
+        expect(res[1]).toMatchObject({ numbers: '124', amount: 50, betType: '3_tod', typeLabel: 'โต๊ด' });
+        expect(res[2]).toMatchObject({ numbers: '125', amount: 50, betType: '3_tod', typeLabel: 'โต๊ด' });
+      });
+    });
+
     describe('three_digit_perm_mode settings', () => {
       it('interprets 288=20*6 as literal (เต็งโต๊ด) by default or under literal mode', () => {
         const text = '288=20*6';
