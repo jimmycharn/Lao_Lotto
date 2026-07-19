@@ -4438,6 +4438,7 @@ serve(async (req) => {
     let isProcessingQueue = false
     let currentQueueId = ""
     let payloadToProcess: any = null
+    let debugInfo = ""
 
     // Check if it is a JSON API call from our frontend
     let isApiCall = false
@@ -6747,13 +6748,14 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
           let xSeparatorBehavior = 'auto';
           let hyphenSeparatorBehavior = 'equal';
+          let threeDigitPermMode = 'literal';
           let dealerName = 'ไม่ระบุ';
           const activeDealerId = groupLink?.dealer_id || privateSession?.dealer_id;
 
           if (activeDealerId) {
             const { data: dealerProfile } = await supabase
               .from('profiles')
-              .select('x_separator_behavior, hyphen_separator_behavior, full_name')
+              .select('x_separator_behavior, hyphen_separator_behavior, three_digit_perm_mode, full_name')
               .eq('id', activeDealerId)
               .maybeSingle();
             if (dealerProfile) {
@@ -6762,6 +6764,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               }
               if (dealerProfile.hyphen_separator_behavior) {
                 hyphenSeparatorBehavior = dealerProfile.hyphen_separator_behavior;
+              }
+              if (dealerProfile.three_digit_perm_mode) {
+                threeDigitPermMode = dealerProfile.three_digit_perm_mode;
               }
               if (dealerProfile.full_name) {
                 dealerName = dealerProfile.full_name;
@@ -10933,7 +10938,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               } else {
                 const parsedBets = parseMultiLinePaste(commandArg, groupLink.lottery_type, { 
                   x_separator_behavior: xSeparatorBehavior,
-                  hyphen_separator_behavior: hyphenSeparatorBehavior
+                  hyphen_separator_behavior: hyphenSeparatorBehavior,
+                  three_digit_perm_mode: threeDigitPermMode
                 });
                 if (parsedBets.length === 0) {
                   await sendLineReply(replyToken, `❌ รูปแบบคำสั่งตีออกไม่ถูกต้อง\n\n- ตีออกยอดเกิน:พิมพ์ /ตีออก เกิน\n- ตีออกเจาะจง: พิมพ์ /ตีออก [เลข] [ประเภท] [จำนวน]\n(เช่น /ตีออก 362 บน 200)`);
@@ -14840,7 +14846,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
         const parsedBets = parseMultiLinePaste(text, lotteryType, { 
           x_separator_behavior: xSeparatorBehavior,
-          hyphen_separator_behavior: hyphenSeparatorBehavior
+          hyphen_separator_behavior: hyphenSeparatorBehavior,
+          three_digit_perm_mode: threeDigitPermMode
         });
         const isStaffSender = isDealer || isAdmin || isManager;
         let originalSenderId = profile?.id || null;
@@ -14909,6 +14916,10 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             }
             finalPoyDisplay = isGroupVisible ? gFormat : 'none';
           }
+
+          const logMsg = `[LINE BOT RENDER POY] groupId=${groupId}, userId=${userId}, isStaffSender=${isStaffSender}, gDisplay=${gDisplay}, gFormat=${gFormat}, dGlobal=${dGlobal}, groupMemberAdminPoy=${groupMemberAdminPoy}, finalPoyDisplay=${finalPoyDisplay}`;
+          console.log(logMsg);
+          debugInfo = logMsg;
         }
         senderPoyDisplay = finalPoyDisplay;
 
@@ -15687,7 +15698,10 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
     if (isProcessingQueue) {
       await supabase
         .from('line_webhook_queue')
-        .update({ status: 'completed' })
+        .update({ 
+          status: 'completed',
+          error_message: debugInfo || null
+        })
         .eq('id', currentQueueId)
     }
 

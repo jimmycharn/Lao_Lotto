@@ -855,7 +855,7 @@ function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_sep
     return expanded;
 }
 
-export function parseMultiLinePaste(text: string, lotteryType = 'lao', settings?: { x_separator_behavior?: string, hyphen_separator_behavior?: string }): ParsedBet[] {
+export function parseMultiLinePaste(text: string, lotteryType = 'lao', settings?: { x_separator_behavior?: string, hyphen_separator_behavior?: string, three_digit_perm_mode?: string }): ParsedBet[] {
     if (!text || !text.trim()) return [];
 
     // Filter out laughter (555, 5555, etc.) that are standalone and not part of a bet specification
@@ -1727,7 +1727,7 @@ function extractInlineContext(line: string, contextMode?: string): InlineContext
     return { cleaned: line, mode: null };
 }
 
-function parseNumberLine(line: string, contextMode: string, isLaoOrHanoi: boolean, lotteryType: string, settings?: { x_separator_behavior?: string }): ParsedBet[] | null {
+function parseNumberLine(line: string, contextMode: string, isLaoOrHanoi: boolean, lotteryType: string, settings?: { x_separator_behavior?: string, hyphen_separator_behavior?: string, three_digit_perm_mode?: string }): ParsedBet[] | null {
     const preClean = normalizeUnicode(line.trim());
     if (isDateLine(preClean)) return null;
     let inlineCtx = extractInlineContext(preClean, contextMode);
@@ -1951,7 +1951,7 @@ function determineBetType(
     isLaoOrHanoi: boolean,
     lotteryType: string,
     rawLine: string,
-    settings?: { x_separator_behavior?: string },
+    settings?: { x_separator_behavior?: string, hyphen_separator_behavior?: string, three_digit_perm_mode?: string },
     isReverseBet: boolean = false,
     hasMultiplierChud: boolean = false
 ): ParsedBet[] | null {
@@ -2195,8 +2195,14 @@ function determineBetType(
             return results;
         }
 
-        if (amount2 !== null || hasChud) {
-            const effectiveAmount2 = hasChud ? permCount : amount2;
+        let isChudOrPermSet = hasChud;
+        if (settings?.three_digit_perm_mode === 'perm_set') {
+            if (amount2 === 3 || amount2 === 6) {
+                isChudOrPermSet = true;
+            }
+        }
+        if (amount2 !== null || isChudOrPermSet) {
+            const effectiveAmount2 = isChudOrPermSet ? permCount : amount2;
 
             if (effectiveAmount2 === permCount && !shouldStraightOnly) {
                 const typeLabel = 'คูณชุด';
