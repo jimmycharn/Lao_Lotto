@@ -182,6 +182,8 @@ const parseLine = (line) => {
         } else if (typeStr.includes('ถ่าง')) {
             betType = '2_tang'
             if (isReversed) specialType = 'reverse'
+        } else if (typeStr.includes('ลอย') || typeStr.includes('วิ่ง') || mode === 'float_top') {
+            betType = '2_run'
         } else {
             betType = '2_top'
             if (isReversed) specialType = 'reverse'
