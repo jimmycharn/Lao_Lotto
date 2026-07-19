@@ -1921,8 +1921,14 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
             });
             return results;
         }
-        if (amount2 !== null || hasChud) {
-            const effectiveAmount2 = hasChud ? permCount : amount2;
+        let isChudOrPermSet = hasChud;
+        if (settings?.three_digit_perm_mode === 'perm_set') {
+            if (amount2 === 3 || amount2 === 6) {
+                isChudOrPermSet = true;
+            }
+        }
+        if (amount2 !== null || isChudOrPermSet) {
+            const effectiveAmount2 = isChudOrPermSet ? permCount : amount2;
             if (effectiveAmount2 === permCount && !shouldStraightOnly) {
                 const typeLabel = 'คูณชุด';
                 results.push({

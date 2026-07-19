@@ -1629,6 +1629,52 @@ describe('pasteParser - parseMultiLinePaste', () => {
       expect(result.length).toBe(1)
       expect(result[0]).toMatchObject({ numbers: '25', amount: 20, amount2: 20 })
     })
+
+    describe('three_digit_perm_mode settings', () => {
+      it('interprets 288=20*6 as literal (เต็งโต๊ด) by default or under literal mode', () => {
+        const text = '288=20*6';
+        const resDefault = parseMultiLinePaste(text, 'thai');
+        expect(resDefault[0].typeLabel).toBe('เต็งโต๊ด');
+        expect(resDefault[0].specialType).toBe('tengTod');
+
+        const resLiteral = parseMultiLinePaste(text, 'thai', { three_digit_perm_mode: 'literal' });
+        expect(resLiteral[0].typeLabel).toBe('เต็งโต๊ด');
+      });
+
+      it('interprets 288=20*6 as perm_set (คูณชุด 3) under perm_set mode', () => {
+        const text = '288=20*6';
+        const res = parseMultiLinePaste(text, 'thai', { three_digit_perm_mode: 'perm_set' });
+        expect(res[0].typeLabel).toBe('คูณชุด');
+        expect(res[0].specialType).toBe('set3');
+        expect(res[0].amount2).toBe(3); // 288 has 3 permutations
+      });
+
+      it('interprets 239=10*3 as perm_set (คูณชุด 6) under perm_set mode', () => {
+        const text = '239=10*3';
+        const res = parseMultiLinePaste(text, 'thai', { three_digit_perm_mode: 'perm_set' });
+        expect(res[0].typeLabel).toBe('คูณชุด');
+        expect(res[0].specialType).toBe('set6');
+        expect(res[0].amount2).toBe(6); // 239 has 6 permutations
+      });
+
+      it('works correctly for bare list formatting with multiplier suffix', () => {
+        const text = `123
+244
+267
+364
+20*3`;
+        const res = parseMultiLinePaste(text, 'thai', { three_digit_perm_mode: 'perm_set' });
+        expect(res.length).toBe(4);
+        
+        // 123 (6 combinations)
+        expect(res[0].numbers).toBe('123');
+        expect(res[0].specialType).toBe('set6');
+
+        // 244 (3 combinations)
+        expect(res[1].numbers).toBe('244');
+        expect(res[1].specialType).toBe('set3');
+      });
+    });
   })
 })
 
