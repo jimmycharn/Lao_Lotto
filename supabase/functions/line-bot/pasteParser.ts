@@ -380,6 +380,7 @@ function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_sep
         const trimmed = normalizeUnicode(line);
         if (!trimmed) { expanded.push(trimmed); continue; }
         if (isConversationalSingleNumberLine(trimmed)) continue;
+        if (isHeaderLine(trimmed)) continue;
         if (isDateLine(trimmed)) continue;
 
         // Clean prefix noise (timestamps, names) but preserve context prefixes and numbers
@@ -902,6 +903,7 @@ export function parseMultiLinePaste(text: string, lotteryType = 'lao', settings?
     for (let i = 0; i < lines.length; i++) {
         const trimmed = normalizeUnicode(lines[i].trim());
         if (!trimmed) continue;
+        if (isHeaderLine(trimmed)) continue;
 
         const modeResult = parseContextLine(trimmed, contextMode);
         if (modeResult !== null) {
@@ -1258,6 +1260,7 @@ function hasPendingBareNumbersBefore(rawLines: string[], currentIndex: number): 
         const trimmed = normalizeUnicode(raw.trim());
         if (!trimmed) continue;
         if (isConversationalSingleNumberLine(trimmed)) continue;
+        if (isHeaderLine(trimmed)) continue;
         if (isDateLine(trimmed)) continue;
 
         const cleaned = cleanPrefixNoiseButKeepContext(trimmed);
@@ -1736,6 +1739,7 @@ function extractInlineContext(line: string, contextMode?: string): InlineContext
 
 function parseNumberLine(line: string, contextMode: string, isLaoOrHanoi: boolean, lotteryType: string, settings?: { x_separator_behavior?: string, hyphen_separator_behavior?: string, three_digit_perm_mode?: string }): ParsedBet[] | null {
     const preClean = normalizeUnicode(line.trim());
+    if (isHeaderLine(preClean)) return null;
     if (isDateLine(preClean)) return null;
     let inlineCtx = extractInlineContext(preClean, contextMode);
     let normalized: string | null = null;
@@ -1935,6 +1939,15 @@ function isDateLine(line: string): boolean {
             return true;
         }
     }
+    return false;
+}
+
+function isHeaderLine(line: string): boolean {
+    if (!line) return false;
+    const s = line.trim();
+    if (/^[📋📅👤📊💰📤📥✅🔴⚠️]/.test(s)) return true;
+    if (/^[━─\-]{5,}/.test(s)) return true;
+    if (/^(งวดวันที่|ผู้ส่ง|ยอดรวม|ทั้งหมด|วันที่)\s*[:]/.test(s)) return true;
     return false;
 }
 

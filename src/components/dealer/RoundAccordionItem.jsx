@@ -1850,7 +1850,7 @@ export default function RoundAccordionItem({
         text += `━━━━━━━━━━━━━━━━\n`
         
         // Group by bet type with specific order
-        const betTypeOrder = ['2_bottom', '2_top', '3_tod', '3_top', '3_front', '3_bottom', '4_set', '4_top', '5_top', '6_top']
+        const betTypeOrder = ['run_top', 'run_bottom', '2_bottom', '2_top', '2_run', '2_front', '2_spread', '2_have', '2_teng', '3_tod', '3_top', '3_front', '3_bottom', '4_set', '4_top', '4_float', '5_top', '5_float', '6_top']
         const byType = {}
         itemsToCopy.forEach(sub => {
             const betType = sub.bet_type
@@ -1936,7 +1936,7 @@ export default function RoundAccordionItem({
         text += `💰 ยอดรวม: ${round.currency_symbol}${totalRemaining.toLocaleString()}\n`
         text += `━━━━━━━━━━━━━━━━\n`
 
-        const betTypeOrder = ['2_bottom', '2_top', '3_tod', '3_top', '3_front', '3_bottom', '4_set', '4_top', '5_top', '6_top']
+        const betTypeOrder = ['run_top', 'run_bottom', '2_bottom', '2_top', '2_run', '2_front', '2_spread', '2_have', '2_teng', '3_tod', '3_top', '3_front', '3_bottom', '4_set', '4_top', '4_float', '5_top', '5_float', '6_top']
         const byType = {}
         remainingItems.forEach(item => {
             if (!byType[item.bet_type]) byType[item.bet_type] = []
@@ -1994,7 +1994,7 @@ export default function RoundAccordionItem({
         text += `💰 ยอดรวม: ${round.currency_symbol}${grandTotal.toLocaleString()}\n`
         text += `━━━━━━━━━━━━━━━━\n`
 
-        const betTypeOrder = ['2_bottom', '2_top', '3_tod', '3_top', '3_front', '3_bottom', '4_set', '4_top', '5_top', '6_top']
+        const betTypeOrder = ['run_top', 'run_bottom', '2_bottom', '2_top', '2_run', '2_front', '2_spread', '2_have', '2_teng', '3_tod', '3_top', '3_front', '3_bottom', '4_set', '4_top', '4_float', '5_top', '5_float', '6_top']
         const byType = {}
         filteredExcessItems.forEach(item => {
             if (!byType[item.bet_type]) byType[item.bet_type] = []

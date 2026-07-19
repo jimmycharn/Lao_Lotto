@@ -311,6 +311,8 @@ function expandLines(rawLines, lotteryType = 'lao', settings) {
         }
         if (isConversationalSingleNumberLine(trimmed))
             continue;
+        if (isHeaderLine(trimmed))
+            continue;
         if (isDateLine(trimmed))
             continue;
         const cleaned = cleanPrefixNoiseButKeepContext(trimmed);
@@ -758,6 +760,8 @@ export function parseMultiLinePaste(text, lotteryType = 'lao', settings) {
         const trimmed = normalizeUnicode(lines[i].trim());
         if (!trimmed)
             continue;
+        if (isHeaderLine(trimmed))
+            continue;
         const modeResult = parseContextLine(trimmed, contextMode);
         if (modeResult !== null) {
             if (bareNumberBuffer.length > 0)
@@ -1078,6 +1082,8 @@ function hasPendingBareNumbersBefore(rawLines, currentIndex) {
         if (!trimmed)
             continue;
         if (isConversationalSingleNumberLine(trimmed))
+            continue;
+        if (isHeaderLine(trimmed))
             continue;
         if (isDateLine(trimmed))
             continue;
@@ -1507,6 +1513,8 @@ export function extractInlineContext(line, contextMode) {
 }
 function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType, settings) {
     const preClean = normalizeUnicode(line.trim());
+    if (isHeaderLine(preClean))
+        return null;
     if (isDateLine(preClean))
         return null;
     let inlineCtx = extractInlineContext(preClean, contextMode);
@@ -1685,6 +1693,14 @@ function isDateLine(line) {
             return true;
         }
     }
+    return false;
+}
+function isHeaderLine(line) {
+    if (!line) return false;
+    const s = line.trim();
+    if (/^[📋📅👤📊💰📤📥✅🔴⚠️]/.test(s)) return true;
+    if (/^[━─\-]{5,}/.test(s)) return true;
+    if (/^(งวดวันที่|ผู้ส่ง|ยอดรวม|ทั้งหมด|วันที่)\s*[:]/.test(s)) return true;
     return false;
 }
 function isValidBare4DigitLine(rawLine, numbers) {
