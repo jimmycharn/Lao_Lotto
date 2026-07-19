@@ -22,7 +22,8 @@ import CopyButton from '../CopyButton'
 
 // Dealer Profile Tab Component
 export default function DealerProfileTab({ user, profile, subscription, formatDate }) {
-    const [isEditing, setIsEditing] = useState(false)
+    const [isEditingInfo, setIsEditingInfo] = useState(false)
+    const [isEditingInterpretation, setIsEditingInterpretation] = useState(false)
     const [saving, setSaving] = useState(false)
     const [bankAccounts, setBankAccounts] = useState([])
     const [loadingBanks, setLoadingBanks] = useState(true)
@@ -128,15 +129,43 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
         }
     }
 
-    // Save profile changes
-    async function handleSaveProfile() {
+    // Save personal info changes
+    async function handleSaveInfo() {
         setSaving(true)
         try {
             const { error } = await supabase
                 .from('profiles')
                 .update({
                     full_name: formData.full_name,
-                    phone: formData.phone,
+                    phone: formData.phone
+                })
+                .eq('id', user.id)
+
+            if (error) throw error
+
+            setProfileData({
+                ...profileData,
+                full_name: formData.full_name,
+                phone: formData.phone
+            })
+
+            setIsEditingInfo(false)
+            setToast({ type: 'success', message: 'บันทึกข้อมูลส่วนตัวสำเร็จ!' })
+        } catch (error) {
+            console.error('Error saving profile info:', error)
+            setToast({ type: 'error', message: 'เกิดข้อผิดพลาด: ' + error.message })
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    // Save symbol interpretation settings
+    async function handleSaveInterpretation() {
+        setSaving(true)
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .update({
                     x_separator_behavior: formData.x_separator_behavior,
                     hyphen_separator_behavior: formData.hyphen_separator_behavior,
                     three_digit_perm_mode: formData.three_digit_perm_mode
@@ -147,17 +176,15 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
 
             setProfileData({
                 ...profileData,
-                full_name: formData.full_name,
-                phone: formData.phone,
                 x_separator_behavior: formData.x_separator_behavior,
                 hyphen_separator_behavior: formData.hyphen_separator_behavior,
                 three_digit_perm_mode: formData.three_digit_perm_mode
             })
 
-            setIsEditing(false)
-            setToast({ type: 'success', message: 'บันทึกข้อมูลสำเร็จ!' })
+            setIsEditingInterpretation(false)
+            setToast({ type: 'success', message: 'บันทึกการตีความสัญลักษณ์สำเร็จ!' })
         } catch (error) {
-            console.error('Error saving profile:', error)
+            console.error('Error saving interpretation settings:', error)
             setToast({ type: 'error', message: 'เกิดข้อผิดพลาด: ' + error.message })
         } finally {
             setSaving(false)
@@ -284,14 +311,6 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                             </span>
                         </div>
                     </div>
-                    {!isEditing && (
-                        <button
-                            className="btn btn-outline edit-btn"
-                            onClick={() => setIsEditing(true)}
-                        >
-                            <FiEdit2 /> แก้ไข
-                        </button>
-                    )}
                 </div>
 
                 {/* Subscription/Package Info */}
@@ -369,9 +388,19 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
 
             {/* Personal Info Card */}
             <div className="profile-details card">
-                <h3>ข้อมูลส่วนตัว</h3>
+                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h3 style={{ margin: 0 }}>ข้อมูลส่วนตัว</h3>
+                    {!isEditingInfo && (
+                        <button
+                            className="btn btn-outline btn-sm"
+                            onClick={() => setIsEditingInfo(true)}
+                        >
+                            <FiEdit2 /> แก้ไข
+                        </button>
+                    )}
+                </div>
 
-                {isEditing ? (
+                {isEditingInfo ? (
                     <div className="profile-form">
                         <div className="form-group">
                             <label className="form-label">ชื่อ-นามสกุล</label>
@@ -393,6 +422,63 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                                 placeholder="0xx-xxx-xxxx"
                             />
                         </div>
+                        <div className="form-actions">
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => {
+                                    setIsEditingInfo(false)
+                                    setFormData({
+                                        ...formData,
+                                        full_name: profileData.full_name || '',
+                                        phone: profileData.phone || ''
+                                    })
+                                }}
+                            >
+                                ยกเลิก
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleSaveInfo}
+                                disabled={saving}
+                            >
+                                {saving ? 'กำลังบันทึก...' : <><FiSave /> บันทึก</>}
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="profile-info-list">
+                        <div className="info-row">
+                            <span className="info-label">ชื่อ-นามสกุล</span>
+                            <span className="info-value">{profileData.full_name || '-'}</span>
+                        </div>
+                        <div className="info-row">
+                            <span className="info-label">อีเมล</span>
+                            <span className="info-value">{user?.email || '-'}</span>
+                        </div>
+                        <div className="info-row">
+                            <span className="info-label">เบอร์โทรศัพท์</span>
+                            <span className="info-value">{profileData.phone || '-'}</span>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Symbol Interpretation Settings Card */}
+            <div className="profile-details card">
+                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h3 style={{ margin: 0 }}>การตีความสัญลักษณ์</h3>
+                    {!isEditingInterpretation && (
+                        <button
+                            className="btn btn-outline btn-sm"
+                            onClick={() => setIsEditingInterpretation(true)}
+                        >
+                            <FiEdit2 /> แก้ไข
+                        </button>
+                    )}
+                </div>
+
+                {isEditingInterpretation ? (
+                    <div className="profile-form">
                         <div className="form-group">
                             <label className="form-label">การตีความเครื่องหมาย x / *</label>
                             <select
@@ -431,10 +517,9 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                             <button
                                 className="btn btn-secondary"
                                 onClick={() => {
-                                    setIsEditing(false)
+                                    setIsEditingInterpretation(false)
                                     setFormData({
-                                        full_name: profileData.full_name || '',
-                                        phone: profileData.phone || '',
+                                        ...formData,
                                         x_separator_behavior: profileData.x_separator_behavior || 'auto',
                                         hyphen_separator_behavior: profileData.hyphen_separator_behavior || 'equal',
                                         three_digit_perm_mode: profileData.three_digit_perm_mode || 'literal'
@@ -445,7 +530,7 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                             </button>
                             <button
                                 className="btn btn-primary"
-                                onClick={handleSaveProfile}
+                                onClick={handleSaveInterpretation}
                                 disabled={saving}
                             >
                                 {saving ? 'กำลังบันทึก...' : <><FiSave /> บันทึก</>}
@@ -454,18 +539,6 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                     </div>
                 ) : (
                     <div className="profile-info-list">
-                        <div className="info-row">
-                            <span className="info-label">ชื่อ-นามสกุล</span>
-                            <span className="info-value">{profileData.full_name || '-'}</span>
-                        </div>
-                        <div className="info-row">
-                            <span className="info-label">อีเมล</span>
-                            <span className="info-value">{user?.email || '-'}</span>
-                        </div>
-                        <div className="info-row">
-                            <span className="info-label">เบอร์โทรศัพท์</span>
-                            <span className="info-value">{profileData.phone || '-'}</span>
-                        </div>
                         <div className="info-row">
                             <span className="info-label">การตีความเครื่องหมาย x / *</span>
                             <span className="info-value">
