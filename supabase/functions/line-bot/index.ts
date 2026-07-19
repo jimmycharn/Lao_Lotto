@@ -12243,6 +12243,31 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               continue;
             }
 
+            const dealerId = activeDealerId;
+            if (!dealerId) {
+              await sendLineReply(replyToken, `❌ ไม่พบข้อมูลเจ้ามือสำหรับกลุ่มแชทนี้`);
+              continue;
+            }
+
+            // Identify sender's profile and manager status
+            const { data: senderProfile } = await supabase
+              .from('profiles')
+              .select('id, role')
+              .eq('line_user_id', userId)
+              .eq('is_active', true)
+              .maybeSingle();
+
+            const { data: managerRecord } = await supabase
+              .from('line_managers')
+              .select('id, role')
+              .eq('dealer_id', dealerId)
+              .eq('line_user_id', userId)
+              .eq('is_active', true)
+              .maybeSingle();
+
+            const isStaff = senderProfile?.role === 'dealer' || senderProfile?.role === 'superadmin' || senderProfile?.role === 'admin';
+            const isAdminOrDealer = isStaff || (managerRecord && managerRecord.role === 'admin');
+
             const currentDealerPoy = groupLink.dealer_poy_display || 'normal';
             const currentPoyDisplay = groupLink.poy_display || 'open';
 
