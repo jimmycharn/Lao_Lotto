@@ -11472,49 +11472,51 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 const lotName = groupLink.lottery_type === 'lao' ? 'หวยลาว' : groupLink.lottery_type === 'thai' ? 'หวยไทย' : groupLink.lottery_type === 'hanoi' ? 'หวยฮานอย' : groupLink.lottery_type === 'stock' ? 'หวยหุ้น' : 'หวยประเภทนี้';
 
                 if (commandPrefix === '/โพยเต็มหมด' || commandPrefix === '/โพยย่อหมด') {
-                  const targetPoy = commandPrefix === '/โพยเต็มหมด' ? 'full' : 'short';
-                  const label = commandPrefix === '/โพยเต็มหมด' ? `เปิดการแสดงผลโพยเต็มของทุกคนในทุกกลุ่มที่ผูกกับ ${lotName}` : `เปิดการแสดงผลโพยย่อของทุกคนในทุกกลุ่มที่ผูกกับ ${lotName}`;
-
-                  // Fetch all groups of this dealer sharing the same lottery_type
-                  const { data: grps } = await supabase
-                    .from('line_groups')
-                    .select('line_group_id')
-                    .eq('dealer_id', dealerId)
-                    .eq('lottery_type', groupLink.lottery_type);
-                   
-                  const grpIds = (grps || []).map(g => g.line_group_id).filter(Boolean);
+                  const targetFormat = commandPrefix === '/โพยเต็มหมด' ? 'full' : 'short';
+                  const label = commandPrefix === '/โพยเต็มหมด' ? `เปิดการแสดงผลโพยเต็มของทุกกลุ่มที่ผูกกับ ${lotName}` : `เปิดการแสดงผลโพยย่อของทุกกลุ่มที่ผูกกับ ${lotName}`;
 
                   const { error: updateErr } = await supabase
-                    .from('line_group_members')
+                    .from('line_groups')
                     .update({ 
-                      admin_poy_display: 'force_open',
-                      poy_display: targetPoy
+                      poy_format: targetFormat
                     })
-                    .in('line_group_id', grpIds);
+                    .eq('dealer_id', dealerId)
+                    .eq('lottery_type', groupLink.lottery_type);
 
                   if (updateErr) {
-                    console.error("Error setting bulk poy display:", updateErr);
+                    console.error("Error setting bulk poy format:", updateErr);
                     await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการตั้งค่าระบบแสดงผลหวย ${lotName}`);
                   } else {
+                    groupLink.poy_format = targetFormat;
                     await sendLineReply(replyToken, `✅ ทำการ "${label}" เรียบร้อยแล้วค่ะ!`);
                   }
                   continue;
                 }
 
-                let mode = 'normal';
+                let dealerPoyMode = 'normal';
+                let poyMode = 'open';
                 let label = `เคารพสิทธิ์ตั้งค่าส่วนบุคคลตามปกติของทุกกลุ่มที่ผูกกับ ${lotName}`;
                 
                 if (commandPrefix === '/โพยปิดหมด') {
-                  mode = 'force_close';
+                  dealerPoyMode = 'force_close';
+                  poyMode = 'close';
                   label = `ปิดการแสดงผลของทุกคนในทุกกลุ่มที่ผูกกับ ${lotName}`;
                 } else if (commandPrefix === '/โพยเปิดหมด') {
-                  mode = 'force_open';
+                  dealerPoyMode = 'force_open';
+                  poyMode = 'open';
                   label = `เปิดการแสดงผลของทุกคนในทุกกลุ่มที่ผูกกับ ${lotName}`;
+                } else if (commandPrefix === '/โพยปกติ') {
+                  dealerPoyMode = 'normal';
+                  poyMode = 'open';
+                  label = `ตั้งค่าเป็นระบบปกติของทุกกลุ่มที่ผูกกับ ${lotName}`;
                 }
 
                 const { error: updateErr } = await supabase
                   .from('line_groups')
-                  .update({ poy_display: mode })
+                  .update({ 
+                    dealer_poy_display: dealerPoyMode,
+                    poy_display: poyMode
+                  })
                   .eq('dealer_id', dealerId)
                   .eq('lottery_type', groupLink.lottery_type);
 
@@ -11525,7 +11527,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 }
 
                 // Update local object reference
-                groupLink.poy_display = mode;
+                groupLink.dealer_poy_display = dealerPoyMode;
+                groupLink.poy_display = poyMode;
 
                 await sendLineReply(replyToken, `✅ ตั้งค่าระบบใบโพยสลากเรียบร้อยแล้ว:\n👉 "${label}"\n(การตั้งค่ารายบุคคลของสมาชิกที่แอดมินกำหนดข้อยกเว้นไว้จะยังคงอยู่ปกติ)`);
                 continue;
@@ -12235,68 +12238,68 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
         if (isPoySettingsCmd) {
           try {
-            // Find sender's membership record in this group
-            const { data: memberRec } = await supabase
-              .from('line_group_members')
-              .select('id, display_name, admin_poy_display')
-              .eq('line_group_id', groupId)
-              .eq('line_user_id', userId)
-              .maybeSingle();
-
-            let activeMemberRec = memberRec;
-            if (!activeMemberRec) {
-              await upsertGroupMember(groupId, userId, event.source?.type || 'group');
-              const { data: retryRec } = await supabase
-                .from('line_group_members')
-                .select('id, display_name, admin_poy_display')
-                .eq('line_group_id', groupId)
-                .eq('line_user_id', userId)
-                .maybeSingle();
-              activeMemberRec = retryRec;
-            }
-
-            if (!activeMemberRec) {
-              await sendLineReply(replyToken, `❌ ไม่พบข้อมูลสมาชิกกลุ่มแชทในระบบ กรุณาลองส่งข้อความแทงปกติเพื่อลงทะเบียนก่อนค่ะ`);
+            if (!groupLink) {
+              await sendLineReply(replyToken, `❌ คำสั่งนี้สามารถใช้งานได้เฉพาะในกลุ่มแชทเท่านั้นค่ะ`);
               continue;
             }
 
-            let displayMode = 'short';
-            if (normText === '/โพยเต็ม') {
-              displayMode = 'full';
-            } else if (normText === '/โพยปิด') {
-              displayMode = 'none';
-            } else if (normText === '/โพยเปิด') {
-              displayMode = 'short';
-            }
+            const currentDealerPoy = groupLink.dealer_poy_display || 'normal';
+            const currentPoyDisplay = groupLink.poy_display || 'open';
 
-            if (activeMemberRec.admin_poy_display === 'force_close' && displayMode !== 'none') {
-              await sendLineReply(replyToken, `❌ ขออภัยค่ะ ผู้ดูแลระบบได้ปิดการแสดงผลโพยของคุณไว้เฉพาะตัว หากต้องการเปิดกรุณาติดต่อผู้ดูแลระบบค่ะ`);
-              continue;
-            }
+            if (normText === '/โพยปิด' || normText === '/โพยเปิด') {
+              if (!isAdminOrDealer) {
+                if (currentDealerPoy === 'force_close') {
+                  await sendLineReply(replyToken, `❌ ขออภัยค่ะ ขณะนี้เจ้ามือได้ทำการปิดการแสดงผลโพยในระบบหลักทุกกลุ่มชั่วคราว สมาชิกไม่สามารถเปลี่ยนสถานะได้ค่ะ`);
+                  continue;
+                }
 
-            const { error: updateErr } = await supabase
-              .from('line_group_members')
-              .update({ poy_display: displayMode })
-              .eq('id', activeMemberRec.id);
+                if (normText === '/โพยเปิด') {
+                  if (currentPoyDisplay === 'close') {
+                    const { error: updateErr } = await supabase
+                      .from('line_groups')
+                      .update({ poy_display: 'open' })
+                      .eq('line_group_id', groupId);
 
-            if (updateErr) {
-              console.error("Failed to update poy display mode:", updateErr);
-              await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการตั้งค่าการแสดงผลโพย`);
-            } else {
-              let displayLabel = 'แบบย่อ';
-              if (displayMode === 'full') {
-                displayLabel = 'แบบเต็ม';
-              } else if (displayMode === 'none') {
-                displayLabel = 'ปิดการแสดงผล';
+                    if (updateErr) throw updateErr;
+                    groupLink.poy_display = 'open';
+                    await sendLineReply(replyToken, `✅ เปิดการแสดงผลใบโพยสำหรับกลุ่มนี้เรียบร้อยแล้วค่ะ!`);
+                  } else {
+                    await sendLineReply(replyToken, `💡 ระบบแสดงใบโพยของกลุ่มนี้เปิดใช้งานอยู่แล้วค่ะ`);
+                  }
+                } else { // /โพยปิด
+                  const { error: updateErr } = await supabase
+                    .from('line_groups')
+                    .update({ poy_display: 'close' })
+                    .eq('line_group_id', groupId);
+
+                  if (updateErr) throw updateErr;
+                  groupLink.poy_display = 'close';
+                  await sendLineReply(replyToken, `✅ ปิดการแสดงผลใบโพยสำหรับกลุ่มนี้เรียบร้อยแล้วค่ะ!`);
+                }
+              } else {
+                // Admin or authorized staff can toggle immediately
+                const targetDisplay = normText === '/โพยเปิด' ? 'open' : 'close';
+                const { error: updateErr } = await supabase
+                  .from('line_groups')
+                  .update({ poy_display: targetDisplay })
+                  .eq('line_group_id', groupId);
+
+                if (updateErr) throw updateErr;
+                groupLink.poy_display = targetDisplay;
+                const label = targetDisplay === 'open' ? 'เปิด' : 'ปิด';
+                await sendLineReply(replyToken, `✅ ${label}การแสดงผลใบโพยสำหรับกลุ่มนี้เรียบร้อยแล้วค่ะ!`);
               }
-              
-              let warnMsg = '';
-              const currentGlobalPoy = groupLink?.poy_display || 'normal';
-              if (currentGlobalPoy === 'force_close' && displayMode !== 'none') {
-                warnMsg = '\n(⚠️ หมายเหตุ: ขณะนี้ระบบหลักของกลุ่มแชทถูกผู้ดูแลสั่งปิดการแสดงผลไว้ สรุปใบโพยจะยังไม่แสดงขึ้นในกลุ่มจนกว่าผู้ดูแลจะเปิดระบบค่ะ)';
-              }
-              
-              await sendLineReply(replyToken, `✅ ตั้งค่าการแสดงผลโพยหลังบันทึกในกลุ่มนี้เป็น "${displayLabel}" สำเร็จแล้วค่ะ!${warnMsg}`);
+            } else { // /โพยเต็ม or /โพยย่อ
+              const targetFormat = normText === '/โพยเต็ม' ? 'full' : 'short';
+              const { error: updateErr } = await supabase
+                .from('line_groups')
+                .update({ poy_format: targetFormat })
+                .eq('line_group_id', groupId);
+
+              if (updateErr) throw updateErr;
+              groupLink.poy_format = targetFormat;
+              const formatLabel = targetFormat === 'full' ? 'แบบเต็ม' : 'แบบย่อ';
+              await sendLineReply(replyToken, `✅ ตั้งค่ารูปแบบใบโพยในกลุ่มนี้เป็น "${formatLabel}" เรียบร้อยแล้วค่ะ!`);
             }
           } catch (err: any) {
             console.error("Error setting poy display mode:", err);
@@ -14861,29 +14864,25 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
         // Re-evaluate senderPoyDisplay based on active profile/membership and sender role
         let finalPoyDisplay = groupLink ? 'short' : 'full';
         if (groupLink) {
-          if (isStaffSender) {
-            // Admin/Staff/Manager bypasses global overrides and specific overrides.
-            finalPoyDisplay = groupMemberPoy;
+          const gDisplay = groupLink.poy_display || 'open';
+          const gFormat = groupLink.poy_format || 'short';
+          const dGlobal = groupLink.dealer_poy_display || 'normal';
+          const groupMemberAdminPoy = memberRecord?.admin_poy_display || 'normal';
+
+          if (groupMemberAdminPoy === 'force_close') {
+            finalPoyDisplay = 'none';
+          } else if (groupMemberAdminPoy === 'force_open') {
+            finalPoyDisplay = gFormat;
           } else {
-            // Regular members are subject to group-level settings and specific overrides.
-            finalPoyDisplay = groupMemberPoy;
-            
-            if (groupMemberAdminPoy === 'force_close') {
-              finalPoyDisplay = 'none';
-            } else if (groupMemberAdminPoy === 'force_open') {
-              if (finalPoyDisplay === 'none') {
-                finalPoyDisplay = 'short';
-              }
+            let isGroupVisible = true;
+            if (dGlobal === 'force_close') {
+              isGroupVisible = (gDisplay === 'open');
+            } else if (dGlobal === 'force_open') {
+              isGroupVisible = (gDisplay !== 'close');
             } else {
-              // Respect global group settings when no specific admin override
-              if (globalPoy === 'force_close') {
-                finalPoyDisplay = 'none';
-              } else if (globalPoy === 'force_open') {
-                if (finalPoyDisplay === 'none') {
-                  finalPoyDisplay = 'short';
-                }
-              }
+              isGroupVisible = (gDisplay === 'open');
             }
+            finalPoyDisplay = isGroupVisible ? gFormat : 'none';
           }
         }
         senderPoyDisplay = finalPoyDisplay;
