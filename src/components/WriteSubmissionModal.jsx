@@ -1940,7 +1940,8 @@ export default function WriteSubmissionModal({
 
         const parsed = parseMultiLinePaste(pasteText, lotteryType, { 
             x_separator_behavior: profile?.x_separator_behavior,
-            hyphen_separator_behavior: profile?.hyphen_separator_behavior
+            hyphen_separator_behavior: profile?.hyphen_separator_behavior,
+            three_digit_perm_mode: profile?.three_digit_perm_mode
         })
         if (parsed.length === 0) {
             setError('ไม่พบรายการเลขในข้อความ')
@@ -3001,7 +3002,8 @@ export default function WriteSubmissionModal({
                                             setTimeout(() => {
                                                 const parsed = parseMultiLinePaste(text, lotteryType, { 
                                                     x_separator_behavior: profile?.x_separator_behavior,
-                                                    hyphen_separator_behavior: profile?.hyphen_separator_behavior
+                                                    hyphen_separator_behavior: profile?.hyphen_separator_behavior,
+                                                    three_digit_perm_mode: profile?.three_digit_perm_mode
                                                 })
                                                 if (parsed.length === 0) {
                                                     setError('ไม่พบรายการเลขในข้อความ')

@@ -14813,11 +14813,11 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           .eq('line_user_id', userId)
           .maybeSingle();
 
-        const groupMemberPoy = memberRecord?.poy_display || 'short';
+        const groupMemberPoy = memberRecord?.poy_display || null;
         const groupMemberAdminPoy = memberRecord?.admin_poy_display || 'normal';
         const globalPoy = groupLink?.poy_display || 'normal';
 
-        let senderPoyDisplay = groupMemberPoy;
+        let senderPoyDisplay = groupMemberPoy || 'short';
 
         // Check if sender is a manager for this dealer
         const { data: managerRecord, error: managerErr } = await supabase
@@ -14904,7 +14904,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           if (groupMemberAdminPoy === 'force_close') {
             finalPoyDisplay = 'none';
           } else if (groupMemberAdminPoy === 'force_open') {
-            finalPoyDisplay = gFormat;
+            finalPoyDisplay = groupMemberPoy || gFormat;
           } else {
             let isGroupVisible = true;
             if (dGlobal === 'force_close') {
@@ -14914,7 +14914,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             } else {
               isGroupVisible = (gDisplay === 'open');
             }
-            finalPoyDisplay = isGroupVisible ? gFormat : 'none';
+            finalPoyDisplay = isGroupVisible ? (groupMemberPoy || gFormat) : 'none';
           }
 
           const logMsg = `[LINE BOT RENDER POY] groupId=${groupId}, userId=${userId}, isStaffSender=${isStaffSender}, gDisplay=${gDisplay}, gFormat=${gFormat}, dGlobal=${dGlobal}, groupMemberAdminPoy=${groupMemberAdminPoy}, finalPoyDisplay=${finalPoyDisplay}`;
