@@ -37,13 +37,15 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
         phone: profile?.phone || '',
         role: profile?.role || 'dealer',
         x_separator_behavior: profile?.x_separator_behavior || 'auto',
-        hyphen_separator_behavior: profile?.hyphen_separator_behavior || 'equal'
+        hyphen_separator_behavior: profile?.hyphen_separator_behavior || 'equal',
+        three_digit_perm_mode: profile?.three_digit_perm_mode || 'literal'
     })
     const [formData, setFormData] = useState({
         full_name: profile?.full_name || '',
         phone: profile?.phone || '',
         x_separator_behavior: profile?.x_separator_behavior || 'auto',
-        hyphen_separator_behavior: profile?.hyphen_separator_behavior || 'equal'
+        hyphen_separator_behavior: profile?.hyphen_separator_behavior || 'equal',
+        three_digit_perm_mode: profile?.three_digit_perm_mode || 'literal'
     })
 
     // Bank form data
@@ -79,13 +81,15 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                 phone: profile.phone || '',
                 role: profile.role || 'dealer',
                 x_separator_behavior: profile.x_separator_behavior || 'auto',
-                hyphen_separator_behavior: profile.hyphen_separator_behavior || 'equal'
+                hyphen_separator_behavior: profile.hyphen_separator_behavior || 'equal',
+                three_digit_perm_mode: profile.three_digit_perm_mode || 'literal'
             })
             setFormData({
                 full_name: profile.full_name || '',
                 phone: profile.phone || '',
                 x_separator_behavior: profile.x_separator_behavior || 'auto',
-                hyphen_separator_behavior: profile.hyphen_separator_behavior || 'equal'
+                hyphen_separator_behavior: profile.hyphen_separator_behavior || 'equal',
+                three_digit_perm_mode: profile.three_digit_perm_mode || 'literal'
             })
         }
     }, [profile])
@@ -134,7 +138,8 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                     full_name: formData.full_name,
                     phone: formData.phone,
                     x_separator_behavior: formData.x_separator_behavior,
-                    hyphen_separator_behavior: formData.hyphen_separator_behavior
+                    hyphen_separator_behavior: formData.hyphen_separator_behavior,
+                    three_digit_perm_mode: formData.three_digit_perm_mode
                 })
                 .eq('id', user.id)
 
@@ -145,7 +150,8 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                 full_name: formData.full_name,
                 phone: formData.phone,
                 x_separator_behavior: formData.x_separator_behavior,
-                hyphen_separator_behavior: formData.hyphen_separator_behavior
+                hyphen_separator_behavior: formData.hyphen_separator_behavior,
+                three_digit_perm_mode: formData.three_digit_perm_mode
             })
 
             setIsEditing(false)
@@ -410,6 +416,17 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                                 <option value="separator">เปลี่ยนเป็นเครื่องหมายคั่น / (เช่น 123-100*100 เป็น 123/100=100*100)</option>
                             </select>
                         </div>
+                        <div className="form-group">
+                            <label className="form-label">การตีความตัวคูณเลข 3 ตัว (เช่น 288-20*6)</label>
+                            <select
+                                className="form-input"
+                                value={formData.three_digit_perm_mode}
+                                onChange={e => setFormData({ ...formData, three_digit_perm_mode: e.target.value })}
+                            >
+                                <option value="literal">ตีความแบบตรงตัว (เช่น 288-20*6 เป็น เต็ง 20, โต๊ด 6)</option>
+                                <option value="perm_set">ตีความเป็นคูณชุด (เช่น 288-20*6 เป็น กลับ 3 ประตู ตัวละ 20)</option>
+                            </select>
+                        </div>
                         <div className="form-actions">
                             <button
                                 className="btn btn-secondary"
@@ -419,7 +436,8 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                                         full_name: profileData.full_name || '',
                                         phone: profileData.phone || '',
                                         x_separator_behavior: profileData.x_separator_behavior || 'auto',
-                                        hyphen_separator_behavior: profileData.hyphen_separator_behavior || 'equal'
+                                        hyphen_separator_behavior: profileData.hyphen_separator_behavior || 'equal',
+                                        three_digit_perm_mode: profileData.three_digit_perm_mode || 'literal'
                                     })
                                 }}
                             >
@@ -462,6 +480,14 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                                 {profileData.hyphen_separator_behavior === 'separator' 
                                     ? 'เปลี่ยนเป็นเครื่องหมายคั่น / (เช่น 123-100*100 เป็น 123/100=100*100)' 
                                     : 'เปลี่ยนเป็นเครื่องหมายเท่ากับ = (เช่น 123-100*100 เป็น 123=100*100)'}
+                            </span>
+                        </div>
+                        <div className="info-row">
+                            <span className="info-label">การตีความตัวคูณเลข 3 ตัว (เช่น 288-20*6)</span>
+                            <span className="info-value">
+                                {profileData.three_digit_perm_mode === 'perm_set' 
+                                    ? 'ตีความเป็นคูณชุด (เช่น 288-20*6 เป็น กลับ 3 ประตู ตัวละ 20)' 
+                                    : 'ตีความแบบตรงตัว (เช่น 288-20*6 เป็น เต็ง 20, โต๊ด 6)'}
                             </span>
                         </div>
                     </div>
