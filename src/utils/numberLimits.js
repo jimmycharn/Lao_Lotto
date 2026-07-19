@@ -1,4 +1,5 @@
 import { supabase, fetchAllRows } from '../lib/supabase'
+import { normalizeNumber, PERMUTATION_BET_TYPES } from '../constants/lotteryTypes'
 
 /**
  * Fetch all active number limits for a round
@@ -42,7 +43,8 @@ export async function fetchCurrentTotals(roundId) {
 
     const totals = new Map()
     ;(data || []).forEach(s => {
-        const key = `${s.bet_type}|${s.numbers}`
+        const normalizedNums = normalizeNumber(s.numbers, s.bet_type)
+        const key = `${s.bet_type}|${normalizedNums}`
         totals.set(key, (totals.get(key) || 0) + parseFloat(s.amount || 0))
     })
     return totals
@@ -50,7 +52,7 @@ export async function fetchCurrentTotals(roundId) {
 
 /**
  * Find matching number limit for a given bet_type + numbers
- * Checks direct match first, then reversed match
+ * Checks direct match first, then reversed match, then normalized match for permutation bet types
  */
 export function findMatchingLimit(numberLimits, betType, numbers) {
     // 1. Direct match: same bet_type and same numbers
@@ -66,7 +68,20 @@ export function findMatchingLimit(numberLimits, betType, numbers) {
             Array.isArray(nl.reversed_numbers) &&
             nl.reversed_numbers.includes(numbers)
     )
-    return reversedMatch || null
+    if (reversedMatch) return reversedMatch
+
+    // 3. Normalized match for permutation bet types (e.g. 2_run, 3_tod, 4_float, 5_float)
+    //    For these types, digit order doesn't matter, so '84' and '48' are the same bet
+    if (PERMUTATION_BET_TYPES.includes(betType)) {
+        const normalizedNumbers = normalizeNumber(numbers, betType)
+        const normalizedMatch = numberLimits.find(
+            nl => nl.bet_type === betType &&
+                normalizeNumber(nl.numbers, nl.bet_type) === normalizedNumbers
+        )
+        if (normalizedMatch) return normalizedMatch
+    }
+
+    return null
 }
 
 /**
@@ -118,7 +133,8 @@ export function checkSingleSubmission(numberLimits, currentTotals, betType, numb
         }
     }
 
-    const key = `${betType}|${numbers}`
+    const normalizedNums = normalizeNumber(numbers, betType)
+    const key = `${betType}|${normalizedNums}`
     const currentTotal = currentTotals.get(key) || 0
     const maxAllowed = parseFloat(limit.max_amount) || 0
     const remaining = Math.max(maxAllowed - currentTotal, 0)
@@ -208,8 +224,9 @@ export function checkBatchSubmissions(numberLimits, currentTotals, lines) {
         const result = checkSingleSubmission(numberLimits, runningTotals, betType, numbers, amount)
         results.push({ ...result, betType, numbers, amount })
 
-        // Update running totals
-        const key = `${betType}|${numbers}`
+        // Update running totals (normalized for permutation bet types)
+        const normalizedNums = normalizeNumber(numbers, betType)
+        const key = `${betType}|${normalizedNums}`
         const amountNum = parseFloat(amount) || 0
         runningTotals.set(key, (runningTotals.get(key) || 0) + amountNum)
     }

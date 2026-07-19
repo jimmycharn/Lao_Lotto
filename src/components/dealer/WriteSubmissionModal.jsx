@@ -30,7 +30,7 @@ const getBetPosition = (betType) => {
     if (!betType) return ''
     const BOTTOM_TYPES = ['2_bottom', '2_bottom_rev', 'run_bottom', 'front_bottom_1', 'back_bottom_1', '3_bottom', '2_spread', '2_spread_rev', '2_tang']
     if (BOTTOM_TYPES.includes(betType)) return 'bottom'
-    const TOP_TYPES = ['2_top', '2_top_rev', '3_top', '3_tod', 'run_top', 'front_top_1', 'middle_top_1', 'back_top_1', '2_front', '2_front_rev', '4_set', '4_top', '4_float', '5_float', '3_straight', '3_tod_single']
+    const TOP_TYPES = ['2_top', '2_top_rev', '2_run', '2_run_rev', '2_have', '2_teng', '3_top', '3_tod', 'run_top', 'front_top_1', 'middle_top_1', 'back_top_1', '2_front', '2_front_rev', '4_set', '4_top', '4_float', '5_float', '3_straight', '3_tod_single']
     if (TOP_TYPES.includes(betType)) return 'top'
     return ''
 }
