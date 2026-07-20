@@ -7077,7 +7077,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             text.startsWith('/total') || text.startsWith('/ยอดรวม') ||
             text.startsWith('/เลขรวม') || text.startsWith('/เลขเหลือ') ||
             text.startsWith('/เลขตี') || text.startsWith('/เลขตีออก') ||
-            text.startsWith('/excess') || text.startsWith('/ยอดเกิน') ||
+            text.startsWith('/excess') || text.startsWith('/เลขเกิน') ||
             text.startsWith('/transfer') || text.startsWith('/ตีออก') ||
             text.startsWith('/เอาคืน') || text.startsWith('/return') ||
             text.startsWith('/คนส่ง') || text.startsWith('/ใครส่ง') || text.startsWith('/ส่งเลข') ||
@@ -9643,7 +9643,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             }
 
             // ─── COMMAND: /ยอดเกิน หรือ /excess ───
-            if (text.startsWith('/excess') || text.startsWith('/ยอดเกิน')) {
+            if (text.startsWith('/excess') || text.startsWith('/เลขเกิน')) {
               if (!permissions.can_view_excess) {
                 await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์เข้าถึงรายงานยอดเกินอั้น`);
                 continue;
@@ -9751,21 +9751,26 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 continue;
               }
 
+              let totalExcess = 0;
+              // Group items by bet_type
+              const betTypeOrder = ['run_top', 'run_bottom', 'pak_top', 'pak_bottom', '2_top', '2_front', '2_center', '2_run', '2_bottom', '3_top', '3_tod', '3_front', '3_back', '3_bottom', '4_set', '4_top', '4_tod', '4_float', '5_float', '6_top'];
+              const grouped: Record<string, typeof excessItems> = {};
+              excessItems.forEach((item) => {
+                if (!grouped[item.bet_type]) grouped[item.bet_type] = [];
+                grouped[item.bet_type].push(item);
+                totalExcess += item.amount;
+              });
+
               let summaryText = `รายการเลขเกินอั้น ${lotteryDisplayName}\nงวดวันที่: ${roundDateStr}\n`;
+              if (excessItems.length > 0) {
+                summaryText += `จำนวน: ${excessItems.length} รายการ\n`;
+                summaryText += `รวมยอดเกิน: ฿${totalExcess.toLocaleString('th-TH')}\n`;
+              }
               summaryText += `--------------------------\n`;
 
-              let totalExcess = 0;
               if (excessItems.length === 0) {
                 summaryText += `ไม่มียอดเกินอั้นค่ะ 🎉\n`;
               } else {
-                // Group items by bet_type
-                const betTypeOrder = ['run_top', 'run_bottom', 'pak_top', 'pak_bottom', '2_top', '2_front', '2_center', '2_run', '2_bottom', '3_top', '3_tod', '3_front', '3_back', '3_bottom', '4_set', '4_top', '4_tod', '4_float', '5_float', '6_top'];
-                const grouped: Record<string, typeof excessItems> = {};
-                excessItems.forEach((item) => {
-                  if (!grouped[item.bet_type]) grouped[item.bet_type] = [];
-                  grouped[item.bet_type].push(item);
-                  totalExcess += item.amount;
-                });
                 const sortedTypes = Object.keys(grouped).sort((a, b) => {
                   const idxA = betTypeOrder.indexOf(a);
                   const idxB = betTypeOrder.indexOf(b);
@@ -9792,8 +9797,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   }
                 });
               }
-              summaryText += `--------------------------\n`;
-              summaryText += `รวมยอดเกิน: ฿${totalExcess.toLocaleString('th-TH')}`;
+              summaryText += `--------------------------`;
 
               await sendLineReply(replyToken, summaryText);
               continue;
@@ -10864,8 +10868,6 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
                 const LOTTERY_NAMES2: Record<string, string> = { 'thai': 'หวยไทย', 'lao': 'หวยลาว', 'hanoi': 'หวยฮานอย', 'stock': 'หวยหุ้น', 'yeekee': 'หวยยี่กี', 'other': 'อื่นๆ' };
                 const lotteryDisplayName2 = activeRound.lottery_name || LOTTERY_NAMES2[groupLink.lottery_type] || groupLink.lottery_type.toUpperCase();
-                let summaryText = `รายการเลขเกินอั้น ${lotteryDisplayName2}\nงวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
-                summaryText += `--------------------------\n`;
                 let totalExcess = 0;
                 // Group items by bet_type
                 const betTypeOrder2 = ['run_top', 'run_bottom', 'pak_top', 'pak_bottom', '2_top', '2_front', '2_center', '2_run', '2_bottom', '3_top', '3_tod', '3_front', '3_back', '3_bottom', '4_set', '4_top', '4_tod', '4_float', '5_float', '6_top'];
@@ -10875,6 +10877,14 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   grouped2[item.bet_type].push(item);
                   totalExcess += item.amount;
                 });
+
+                let summaryText = `รายการเลขเกินอั้น ${lotteryDisplayName2}\nงวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
+                if (excessItems.length > 0) {
+                  summaryText += `จำนวน: ${excessItems.length} รายการ\n`;
+                  summaryText += `รวมยอดเกิน: ฿${totalExcess.toLocaleString('th-TH')}\n`;
+                }
+                summaryText += `--------------------------\n`;
+
                 const sortedTypes2 = Object.keys(grouped2).sort((a, b) => {
                   const idxA = betTypeOrder2.indexOf(a);
                   const idxB = betTypeOrder2.indexOf(b);
@@ -10900,8 +10910,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                     summaryText += `---------------\n`;
                   }
                 });
-                summaryText += `--------------------------\n`;
-                summaryText += `รวมยอดเกิน: ฿${totalExcess.toLocaleString('th-TH')}`;
+                summaryText += `--------------------------`;
 
                 await sendLineReply(replyToken, {
                   type: "text",
