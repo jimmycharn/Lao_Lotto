@@ -306,11 +306,15 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
         // Group submissions by bet_type + numbers
         const grouped = {}
         submissions.forEach(sub => {
-            const key = `${sub.bet_type}|${sub.numbers}`
+            let subNum = sub.numbers
+            if (sub.bet_type === '3_tod' || sub.bet_type === '4_tod') {
+                subNum = subNum.split('').sort().join('')
+            }
+            const key = `${sub.bet_type}|${subNum}`
             if (!grouped[key]) {
                 grouped[key] = {
                     bet_type: sub.bet_type,
-                    numbers: sub.numbers,
+                    numbers: subNum,
                     total: 0,
                     setCount: 0, // Track number of sets for set-based bets
                     submissions: []
@@ -504,14 +508,18 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
             const typeLimit = typeLimits[limitLookupBetType]
             const limit = numberLimit ? numberLimit.max_amount : (typeLimit || 999999999)
 
-            // Calculate already transferred amount for this number
-            const transferredAmount = transfers
-                .filter(t => {
-                    // Handle 4_set -> 4_top mapping for transfers
-                    const tBetType = t.bet_type === '4_set' ? '4_top' : t.bet_type
-                    return tBetType === limitLookupBetType && t.numbers === group.numbers
-                })
-                .reduce((sum, t) => sum + (t.amount || 0), 0)
+             // Calculate already transferred amount for this number
+             const transferredAmount = transfers
+                 .filter(t => {
+                     // Handle 4_set -> 4_top mapping for transfers
+                     const tBetType = t.bet_type === '4_set' ? '4_top' : t.bet_type
+                     let tNum = t.numbers
+                     if (t.bet_type === '3_tod' || t.bet_type === '4_tod') {
+                         tNum = tNum.split('').sort().join('')
+                     }
+                     return tBetType === limitLookupBetType && tNum === group.numbers
+                 })
+                 .reduce((sum, t) => sum + (t.amount || 0), 0)
 
             // For set-based bets in Lao/Hanoi, compare by number of sets, not money amount
             const isSetBased = isSetBasedLottery && (group.bet_type === '4_set' || group.bet_type === '4_top')

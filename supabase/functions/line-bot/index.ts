@@ -2021,11 +2021,15 @@ async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
   }> = {};
 
   submissions.forEach((sub: any) => {
-    const key = `${sub.bet_type}|${sub.numbers}`;
+    let subNum = sub.numbers;
+    if (sub.bet_type === '3_tod' || sub.bet_type === '4_tod') {
+      subNum = subNum.split('').sort().join('');
+    }
+    const key = `${sub.bet_type}|${subNum}`;
     if (!grouped[key]) {
       grouped[key] = {
         bet_type: sub.bet_type,
-        numbers: sub.numbers,
+        numbers: subNum,
         totalAmt: 0,
         setCount: 0,
         submissions: []
@@ -2176,7 +2180,13 @@ async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
     const limit = numLimit !== undefined ? numLimit : (typeLimit !== undefined ? typeLimit : 999999999);
 
     const alreadyTransferred = transfersList
-      .filter(t => t.bet_type === limitLookupBetType && t.numbers === group.numbers)
+      .filter(t => {
+        let tNum = t.numbers;
+        if (t.bet_type === '3_tod' || t.bet_type === '4_tod') {
+          tNum = tNum.split('').sort().join('');
+        }
+        return t.bet_type === limitLookupBetType && tNum === group.numbers;
+      })
       .reduce((sum, t) => sum + Number(t.amount || 0), 0);
 
     const currentExcess = group.totalAmt - limit - alreadyTransferred;
@@ -15562,7 +15572,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               bill_id: billId,
               bill_note: finalBillNote,
               bet_type: betType,
-              numbers: bet.numbers,
+              numbers: (betType === '3_tod' || betType === '4_tod') ? bet.numbers.split('').sort().join('') : bet.numbers,
               amount: boostedStraightAmt,
               commission_rate: commInfo.rate,
               commission_amount: commissionAmount,
