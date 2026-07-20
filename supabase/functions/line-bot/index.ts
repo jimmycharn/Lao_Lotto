@@ -1993,7 +1993,7 @@ async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
 
   const { data: numberLimits, error: nlErr } = await supabase
     .from('number_limits')
-    .select('bet_type, numbers, max_amount')
+    .select('bet_type, numbers, max_amount, include_reversed, reversed_numbers')
     .eq('round_id', roundId);
 
   const numberLimitsMap: Record<string, number> = {};
@@ -2159,7 +2159,19 @@ async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
     const limitLookupBetType = group.bet_type;
     const key = `${group.bet_type}|${group.numbers}`;
     
-    const numLimit = numberLimitsMap[key];
+    // Find number limit (respecting reversed_numbers/include_reversed)
+    const numberLimit = (numberLimits || []).find((nl: any) => {
+      const nlBetType = nl.bet_type === '4_set' ? '4_top' : nl.bet_type;
+      if (nlBetType === limitLookupBetType && nl.numbers === group.numbers) {
+        return true;
+      }
+      if (nl.include_reversed && nlBetType === limitLookupBetType && nl.reversed_numbers?.includes(group.numbers)) {
+        return true;
+      }
+      return false;
+    });
+
+    const numLimit = numberLimit !== undefined ? Number(numberLimit.max_amount) : undefined;
     const typeLimit = typeLimitsMap[limitLookupBetType];
     const limit = numLimit !== undefined ? numLimit : (typeLimit !== undefined ? typeLimit : 999999999);
 
