@@ -7078,7 +7078,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             text.startsWith('/เลขรวม') || text.startsWith('/เลขเหลือ') ||
             text.startsWith('/เลขตี') || text.startsWith('/เลขตีออก') ||
             text.startsWith('/excess') || text.startsWith('/เลขเกิน') ||
-            text.startsWith('/transfer') || text.startsWith('/ตีออก') ||
+            text.startsWith('/transfer') || text.startsWith('/ตีออก') || text.startsWith('/ตีออกเกิน') ||
             text.startsWith('/เอาคืน') || text.startsWith('/return') ||
             text.startsWith('/คนส่ง') || text.startsWith('/ใครส่ง') || text.startsWith('/ส่งเลข') ||
             text.startsWith('/summary') || text.startsWith('/สรุป') ||
@@ -10361,7 +10361,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             }
 
             // ─── COMMAND: /ตีออก ───
-            if (text.startsWith('/ตีออก') || text.startsWith('/transfer')) {
+            if ((text.startsWith('/ตีออก') && !text.startsWith('/ตีออกเกิน')) || text.startsWith('/transfer')) {
               if (!permissions.can_transfer) {
                 await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ในการสั่งตีออกตัวเลข`);
                 continue;
@@ -11063,6 +11063,112 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 }
                 continue;
               }
+            }
+
+            // ─── COMMAND: /ตีออกเกิน ───
+            if (text.startsWith('/ตีออกเกิน')) {
+              if (!permissions.can_transfer) {
+                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ในการทำรายการตีออก`);
+                continue;
+              }
+
+              const { data: activeRound } = await supabase
+                .from('lottery_rounds')
+                .select('id, round_date, close_time, set_prices, lottery_type')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', groupLink.lottery_type)
+                .in('status', ['open', 'closed', 'announced'])
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (!activeRound) {
+                await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงสำหรับหวยประเภท ${groupLink.lottery_type.toUpperCase()}`);
+                continue;
+              }
+
+              const commandArg = text.substring('/ตีออกเกิน'.length).trim();
+              if (!commandArg) {
+                await sendLineReply(replyToken, `❌ กรุณาระบุรายการเลขที่ต้องการตีออกเฉพาะเจาะจงเมื่อเกินอั้นค่ะ เช่น\n/ตีออกเกิน 123 บน\n/ตีออกเกิน 457 บน ก`);
+                continue;
+              }
+
+              const lines = commandArg.split('\n').map(l => l.trim()).filter(Boolean);
+              const filters: { numbers: string[]; betTypes: string[] }[] = [];
+              
+              for (const line of lines) {
+                const match = line.match(/^([\d,\s]+)\s+(.+)$/);
+                if (!match) continue;
+                
+                const numbersPart = match[1];
+                const restPart = match[2].trim().toLowerCase();
+                
+                const inputNumbers = numbersPart.split(/[\s,]+/).map(n => n.trim()).filter(n => /^\d+$/.test(n));
+                if (inputNumbers.length === 0) continue;
+                
+                // Check permutation flag
+                const isPermuted = restPart.includes('ก') || restPart.includes('กลับ') || restPart.endsWith('บก') || restPart.endsWith('ลก');
+                const isBottom = restPart.includes('ล') || restPart.includes('ล่าง');
+                const isTop = restPart.includes('บ') || restPart.includes('บน') || (!isBottom);
+
+                const targetNumbers: string[] = [];
+                const targetBetTypesSet = new Set<string>();
+                
+                inputNumbers.forEach(num => {
+                  const perms = isPermuted ? getPermutations(num) : [num];
+                  perms.forEach(p => targetNumbers.push(p));
+                  
+                  if (isTop) {
+                    if (num.length === 3) targetBetTypesSet.add('3_top');
+                    else if (num.length === 2) targetBetTypesSet.add('2_top');
+                  }
+                  if (isBottom) {
+                    if (num.length === 3) targetBetTypesSet.add('3_bottom');
+                    else if (num.length === 2) targetBetTypesSet.add('2_bottom');
+                  }
+                });
+
+                filters.push({
+                  numbers: Array.from(new Set(targetNumbers)),
+                  betTypes: Array.from(targetBetTypesSet)
+                });
+              }
+
+              if (filters.length === 0) {
+                await sendLineReply(replyToken, `❌ รูปแบบเงื่อนไขการตีออกเกินไม่ถูกต้อง`);
+                continue;
+              }
+
+              // Fetch current excess items
+              const excessItems = await calculateRoundExcess(activeRound.id);
+              if (excessItems.length === 0) {
+                await sendLineReply(replyToken, `ℹ️ ไม่มียอดเกินลิมิตในงวดนี้ค่ะ`);
+                continue;
+              }
+
+              // Filter excess items matching our filters
+              const itemsToTransfer: ExcessItem[] = [];
+              excessItems.forEach(item => {
+                const matched = filters.some(f => {
+                  return f.betTypes.includes(item.bet_type) && f.numbers.includes(item.numbers);
+                });
+                if (matched) {
+                  itemsToTransfer.push(item);
+                }
+              });
+
+              if (itemsToTransfer.length === 0) {
+                await sendLineReply(replyToken, `ℹ️ ไม่พบเลขตามเงื่อนไขที่ระบุที่มียอดเกินอั้นในขณะนี้ค่ะ`);
+                continue;
+              }
+
+              const result = await performLayoff(dealerId, activeRound.id, groupLink.lottery_type, itemsToTransfer);
+              if (result.success && result.text) {
+                await sendLineReply(replyToken, `✅ ทำรายการตีออกเฉพาะเจาะจงสำเร็จแล้วค่ะ!\n\n${result.text}`);
+              } else {
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาด: ${result.message}`);
+              }
+              continue;
             }
 
             // ─── COMMAND: /เอาคืน [ครั้งที่ตีออก] ───
