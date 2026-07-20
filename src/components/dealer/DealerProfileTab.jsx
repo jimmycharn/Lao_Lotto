@@ -37,14 +37,14 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
         full_name: profile?.full_name || '',
         phone: profile?.phone || '',
         role: profile?.role || 'dealer',
-        x_separator_behavior: profile?.x_separator_behavior || 'auto',
+        x_separator_behavior: profile?.x_separator_behavior || 'revert',
         hyphen_separator_behavior: profile?.hyphen_separator_behavior || 'equal',
         three_digit_perm_mode: profile?.three_digit_perm_mode || 'literal'
     })
     const [formData, setFormData] = useState({
         full_name: profile?.full_name || '',
         phone: profile?.phone || '',
-        x_separator_behavior: profile?.x_separator_behavior || 'auto',
+        x_separator_behavior: profile?.x_separator_behavior || 'revert',
         hyphen_separator_behavior: profile?.hyphen_separator_behavior || 'equal',
         three_digit_perm_mode: profile?.three_digit_perm_mode || 'literal'
     })
@@ -81,14 +81,14 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                 full_name: profile.full_name || '',
                 phone: profile.phone || '',
                 role: profile.role || 'dealer',
-                x_separator_behavior: profile.x_separator_behavior || 'auto',
+                x_separator_behavior: profile.x_separator_behavior || 'revert',
                 hyphen_separator_behavior: profile.hyphen_separator_behavior || 'equal',
                 three_digit_perm_mode: profile.three_digit_perm_mode || 'literal'
             })
             setFormData({
                 full_name: profile.full_name || '',
                 phone: profile.phone || '',
-                x_separator_behavior: profile.x_separator_behavior || 'auto',
+                x_separator_behavior: profile.x_separator_behavior || 'revert',
                 hyphen_separator_behavior: profile.hyphen_separator_behavior || 'equal',
                 three_digit_perm_mode: profile.three_digit_perm_mode || 'literal'
             })
@@ -520,7 +520,7 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                                     setIsEditingInterpretation(false)
                                     setFormData({
                                         ...formData,
-                                        x_separator_behavior: profileData.x_separator_behavior || 'auto',
+                                        x_separator_behavior: profileData.x_separator_behavior || 'revert',
                                         hyphen_separator_behavior: profileData.hyphen_separator_behavior || 'equal',
                                         three_digit_perm_mode: profileData.three_digit_perm_mode || 'literal'
                                     })
