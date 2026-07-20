@@ -5332,6 +5332,7 @@ html.theme-light .icon-btn-sm:hover {
     gap: 0.6rem;
     flex-wrap: wrap;
     flex: 0 0 auto;
+    margin-left: auto;
 }
 
 .round-modal-footer .btn {
@@ -5439,6 +5440,10 @@ html.theme-light .icon-btn-sm:hover {
         display: grid;
         grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
         gap: 0.55rem;
+    }
+
+    .round-footer-actions {
+        margin-left: 0;
     }
 
     .round-footer-actions .btn,
