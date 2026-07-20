@@ -11199,25 +11199,35 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 const inputNumbers = numbersPart.split(/[\s,]+/).map(n => n.trim()).filter(n => /^\d+$/.test(n));
                 if (inputNumbers.length === 0) continue;
                 
-                // Check permutation flag
+                // Check permutation flag and type
                 const isPermuted = restPart.includes('ก') || restPart.includes('กลับ') || restPart.endsWith('บก') || restPart.endsWith('ลก');
-                const isBottom = restPart.includes('ล') || restPart.includes('ล่าง');
-                const isTop = restPart.includes('บ') || restPart.includes('บน') || (!isBottom);
+                const isTod = restPart.includes('โต๊ด') || restPart.includes('ต');
+                const isBottom = !isTod && (restPart.includes('ล') || restPart.includes('ล่าง'));
+                const isTop = !isTod && !isBottom; // Default to top only if not tod and not bottom
 
                 const targetNumbers: string[] = [];
                 const targetBetTypesSet = new Set<string>();
                 
                 inputNumbers.forEach(num => {
                   const perms = isPermuted ? getPermutations(num) : [num];
-                  perms.forEach(p => targetNumbers.push(p));
                   
-                  if (isTop) {
-                    if (num.length === 3) targetBetTypesSet.add('3_top');
-                    else if (num.length === 2) targetBetTypesSet.add('2_top');
-                  }
-                  if (isBottom) {
-                    if (num.length === 3) targetBetTypesSet.add('3_bottom');
-                    else if (num.length === 2) targetBetTypesSet.add('2_bottom');
+                  if (isTod) {
+                    if (num.length === 3) {
+                      targetBetTypesSet.add('3_tod');
+                      perms.forEach(p => {
+                        targetNumbers.push(p.split('').sort().join(''));
+                      });
+                    }
+                  } else {
+                    perms.forEach(p => targetNumbers.push(p));
+                    if (restPart.includes('บ') || restPart.includes('บน') || (!isBottom)) {
+                      if (num.length === 3) targetBetTypesSet.add('3_top');
+                      else if (num.length === 2) targetBetTypesSet.add('2_top');
+                    }
+                    if (isBottom) {
+                      if (num.length === 3) targetBetTypesSet.add('3_bottom');
+                      else if (num.length === 2) targetBetTypesSet.add('2_bottom');
+                    }
                   }
                 });
 
