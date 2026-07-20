@@ -5323,10 +5323,14 @@ html.theme-light .icon-btn-sm:hover {
     align-items: center;
     gap: 0.6rem;
     flex-wrap: wrap;
-    flex: 1 1 auto;
+    flex: 0 0 auto;
 }
 
 .round-footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
     flex: 0 0 auto;
 }
 
