@@ -10957,7 +10957,30 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 }
                 continue;
               } else {
-                const parsedBets = parseMultiLinePaste(commandArg, groupLink.lottery_type, { 
+                // Preprocess commandArg to expand 'ก' suffix for permutations
+                const preprocessedArg = (() => {
+                  const lines = commandArg.split('\n');
+                  const resultLines: string[] = [];
+                  for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (!trimmed) continue;
+                    const match = trimmed.match(/^(\d+)\s+([^\d]+)\s+([\d*]+)(?:ก|ก\.)\s*$/i);
+                    if (match) {
+                      const numbers = match[1];
+                      const typeStr = match[2];
+                      const amountStr = match[3];
+                      const perms = getPermutations(numbers);
+                      perms.forEach(perm => {
+                        resultLines.push(`${perm} ${typeStr} ${amountStr}`);
+                      });
+                    } else {
+                      resultLines.push(line);
+                    }
+                  }
+                  return resultLines.join('\n');
+                })();
+
+                const parsedBets = parseMultiLinePaste(preprocessedArg, groupLink.lottery_type, { 
                   x_separator_behavior: xSeparatorBehavior,
                   hyphen_separator_behavior: hyphenSeparatorBehavior,
                   three_digit_perm_mode: threeDigitPermMode
@@ -10967,11 +10990,70 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   continue;
                 }
 
-                const itemsToTransfer: ExcessItem[] = parsedBets.map((b) => ({
-                  bet_type: b.betType,
-                  numbers: b.numbers,
-                  amount: b.amount
-                }));
+                const itemsToTransfer: ExcessItem[] = [];
+                const seenKeys = new Set<string>();
+
+                parsedBets.forEach((b) => {
+                  // 1. Primary bet
+                  const mainBetType = b.betType;
+                  let mainNumbers = b.numbers;
+                  
+                  if (mainBetType === '3_tod') {
+                    mainNumbers = mainNumbers.split('').sort().join('');
+                  }
+                  
+                  const key1 = `${mainBetType}|${mainNumbers}`;
+                  if (!seenKeys.has(key1)) {
+                    seenKeys.add(key1);
+                    itemsToTransfer.push({
+                      bet_type: mainBetType,
+                      numbers: mainNumbers,
+                      amount: b.amount
+                    });
+                  }
+
+                  // 2. Handle amount2 / specialType (e.g. 100*50 or set bets)
+                  if (b.amount2 !== null && b.amount2 > 0) {
+                    if (b.specialType === 'tengTod') {
+                      const todNumbers = b.numbers.split('').sort().join('');
+                      const key2 = `3_tod|${todNumbers}`;
+                      if (!seenKeys.has(key2)) {
+                        seenKeys.add(key2);
+                        itemsToTransfer.push({
+                          bet_type: '3_tod',
+                          numbers: todNumbers,
+                          amount: b.amount2
+                        });
+                      }
+                    } else if (b.specialType === 'reverse') {
+                      const perms = getPermutations(b.numbers).filter(p => p !== b.numbers);
+                      perms.forEach((perm) => {
+                        const key2 = `${mainBetType}|${perm}`;
+                        if (!seenKeys.has(key2)) {
+                          seenKeys.add(key2);
+                          itemsToTransfer.push({
+                            bet_type: mainBetType,
+                            numbers: perm,
+                            amount: b.amount2
+                          });
+                        }
+                      });
+                    } else if (b.specialType === '3xPerm' || b.specialType === 'set3' || b.specialType === 'set6' || b.specialType?.startsWith('set')) {
+                      const perms = getPermutations(b.numbers).filter(p => p !== b.numbers);
+                      perms.forEach((perm) => {
+                        const key2 = `${mainBetType}|${perm}`;
+                        if (!seenKeys.has(key2)) {
+                          seenKeys.add(key2);
+                          itemsToTransfer.push({
+                            bet_type: mainBetType,
+                            numbers: perm,
+                            amount: b.amount2 || b.amount
+                          });
+                        }
+                      });
+                    }
+                  }
+                });
 
                 const result = await performLayoff(dealerId, activeRound.id, groupLink.lottery_type, itemsToTransfer);
                 if (result.success && result.text) {
