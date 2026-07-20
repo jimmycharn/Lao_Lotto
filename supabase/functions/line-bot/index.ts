@@ -2374,12 +2374,24 @@ async function performLayoff(
   }
   copyableBlock = copyableBlock.trim();
 
+  const { data: roundObj } = await supabase
+    .from('lottery_rounds')
+    .select('lottery_name, round_date, close_time')
+    .eq('id', roundId)
+    .maybeSingle();
+
+  const lotteryName = roundObj?.lottery_name || lotteryType.toUpperCase();
+  const roundDateStr = roundObj ? getRoundDisplayDate(roundObj, false) : '';
+
   const grandTotal = items.reduce((sum, item) => sum + item.amount, 0);
-  let detailText = `📦 ยอดส่งออกไปที่: ${targetDealerName}\n`;
+  let detailText = `✅ ตีเลขออกสำเร็จแล้ว!\n`;
+  detailText += `ประเภทหวย: ${lotteryName}\n`;
+  detailText += `งวดวันที่: ${roundDateStr}\n`;
+  detailText += `ตีออกไปที่: ${targetDealerName}\n`;
+  detailText += `💰 ยอดรวมตีออก: ฿${grandTotal.toLocaleString('th-TH')}\n`;
   detailText += `--------------------------\n`;
   detailText += `${copyableBlock}\n`;
-  detailText += `--------------------------\n`;
-  detailText += `💰 ยอดรวมตีออก: ฿${grandTotal.toLocaleString('th-TH')}`;
+  detailText += `--------------------------`;
 
   return { success: true, message: 'ตีออกสำเร็จ', text: detailText, targetDealerName };
 }
@@ -10961,7 +10973,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
                 const result = await performLayoff(dealerId, activeRound.id, groupLink.lottery_type, excessItems);
                 if (result.success && result.text) {
-                  await sendLineReply(replyToken, `✅ ทำรายการตีออกยอดเกินอั้นสำเร็จแล้วค่ะ!\n\n${result.text}`);
+                  await sendLineReply(replyToken, result.text);
                 } else {
                   await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาด: ${result.message}`);
                 }
@@ -11067,7 +11079,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
                 const result = await performLayoff(dealerId, activeRound.id, groupLink.lottery_type, itemsToTransfer);
                 if (result.success && result.text) {
-                  await sendLineReply(replyToken, `✅ ทำรายการตีออกเฉพาะเจาะจงสำเร็จแล้วค่ะ!\n\n${result.text}`);
+                  await sendLineReply(replyToken, result.text);
                 } else {
                   await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาด: ${result.message}`);
                 }
@@ -11277,7 +11289,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               const result = await performLayoff(dealerId, activeRound.id, groupLink.lottery_type, itemsToTransfer);
               if (result.success && result.text) {
-                await sendLineReply(replyToken, `✅ ทำรายการตีออกเฉพาะเจาะจงสำเร็จแล้วค่ะ!\n\n${result.text}`);
+                await sendLineReply(replyToken, result.text);
               } else {
                 await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาด: ${result.message}`);
               }
@@ -12137,7 +12149,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               const result = await performLayoff(dealerId, activeRound.id, groupLink.lottery_type, excessItems);
               if (result.success && result.text) {
-                await sendLineReply(replyToken, `✅ ทำรายการตีออกยอดเกินอั้นสำเร็จแล้วค่ะ!\n\n${result.text}`);
+                await sendLineReply(replyToken, result.text);
               } else {
                 await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาด: ${result.message}`);
               }
