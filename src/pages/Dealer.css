@@ -5308,6 +5308,7 @@ html.theme-light .icon-btn-sm:hover {
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
+    flex-wrap: wrap;
 }
 
 .round-footer-presets,
@@ -5318,8 +5319,11 @@ html.theme-light .icon-btn-sm:hover {
 }
 
 .round-footer-presets {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
     flex: 1 1 auto;
-    min-width: 0;
 }
 
 .round-footer-actions {
