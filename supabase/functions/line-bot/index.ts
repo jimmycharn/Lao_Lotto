@@ -11089,7 +11089,100 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               const commandArg = text.substring('/ตีออกเกิน'.length).trim();
               if (!commandArg) {
-                await sendLineReply(replyToken, `❌ กรุณาระบุรายการเลขที่ต้องการตีออกเฉพาะเจาะจงเมื่อเกินอั้นค่ะ เช่น\n/ตีออกเกิน 123 บน\n/ตีออกเกิน 457 บน ก`);
+                // Work exactly like '/ตีออก เกิน'
+                const excessItems = await calculateRoundExcess(activeRound.id);
+                if (excessItems.length === 0) {
+                  await sendLineReply(replyToken, `ℹ️ ไม่มียอดเกินลิมิตให้ออกในงวดนี้ค่ะ`);
+                  continue;
+                }
+
+                const LABELS: Record<string, string> = {
+                  '2_top': '2 ตัวบน',
+                  '2_bottom': '2 ตัวล่าง',
+                  '2_run': '2 ตัวลอย',
+                  '3_top': groupLink.lottery_type === 'lao' || groupLink.lottery_type === 'hanoi' ? '3 ตัวตรง' : '3 ตัวบน',
+                  '3_tod': '3 ตัวโต๊ด',
+                  '3_front': '3 ตัวหน้า',
+                  '3_back': '3 ตัวหลัง',
+                  '4_tod': '4 ตัวโต๊ด',
+                  '4_set': '4 ตัวชุด',
+                  '6_top': '6 ตัวบน',
+                  '4_float': '4 ตัวลอยแพ',
+                  '5_float': '5 ตัวลอยแพ',
+                  'run_top': 'ลอยบน',
+                  'run_bottom': 'ลอยล่าง'
+                };
+
+                const LOTTERY_NAMES2: Record<string, string> = { 'thai': 'หวยไทย', 'lao': 'หวยลาว', 'hanoi': 'หวยฮานอย', 'stock': 'หวยหุ้น', 'yeekee': 'หวยยี่กี', 'other': 'อื่นๆ' };
+                const lotteryDisplayName2 = activeRound.lottery_name || LOTTERY_NAMES2[groupLink.lottery_type] || groupLink.lottery_type.toUpperCase();
+                let totalExcess = 0;
+                // Group items by bet_type
+                const betTypeOrder2 = ['run_top', 'run_bottom', 'pak_top', 'pak_bottom', '2_top', '2_front', '2_center', '2_run', '2_bottom', '3_top', '3_tod', '3_front', '3_back', '3_bottom', '4_set', '4_top', '4_tod', '4_float', '5_float', '6_top'];
+                const grouped2: Record<string, typeof excessItems> = {};
+                excessItems.forEach((item) => {
+                  if (!grouped2[item.bet_type]) grouped2[item.bet_type] = [];
+                  grouped2[item.bet_type].push(item);
+                  totalExcess += item.amount;
+                });
+
+                let summaryText = `รายการเลขเกินอั้น ${lotteryDisplayName2}\nงวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
+                if (excessItems.length > 0) {
+                  summaryText += `จำนวน: ${excessItems.length} รายการ\n`;
+                  summaryText += `รวมยอดเกิน: ฿${totalExcess.toLocaleString('th-TH')}\n`;
+                }
+                summaryText += `--------------------------\n`;
+
+                const sortedTypes2 = Object.keys(grouped2).sort((a, b) => {
+                  const idxA = betTypeOrder2.indexOf(a);
+                  const idxB = betTypeOrder2.indexOf(b);
+                  if (idxA === -1 && idxB === -1) return a.localeCompare(b);
+                  if (idxA === -1) return 1;
+                  if (idxB === -1) return -1;
+                  return idxA - idxB;
+                });
+                sortedTypes2.forEach((betType, idx) => {
+                  const items = grouped2[betType];
+                  const label = LABELS[betType] || betType;
+                  summaryText += `[${label}]\n`;
+                  items.forEach((item) => {
+                    if (betType === '4_set') {
+                      const setPrice = activeRound.set_prices?.['4_top'] || 120;
+                      const numSets = Math.round(item.amount / setPrice);
+                      summaryText += `${item.numbers}=${numSets} ชุด\n`;
+                    } else {
+                      summaryText += `${item.numbers}=${item.amount}\n`;
+                    }
+                  });
+                  if (idx < sortedTypes2.length - 1) {
+                    summaryText += `---------------\n`;
+                  }
+                });
+                summaryText += `--------------------------`;
+
+                await sendLineReply(replyToken, {
+                  type: "text",
+                  text: summaryText + `\n\n⚠️ ต้องการตีออกยอดเกินอั้นทั้งหมดนี้หรือไม่?\n👉 พิมพ์ Y หรือกดปุ่มด้านล่างเพื่อยืนยันการทำรายการค่ะ`,
+                  quickReply: {
+                    items: [
+                      {
+                        type: "action",
+                        action: {
+                          type: "message",
+                          label: "Y (ยืนยัน)",
+                          text: "Y"
+                        }
+                      },
+                      {
+                        type: "action",
+                        action: {
+                          type: "message",
+                          label: "ยกเลิก",
+                          text: "ยกเลิก"
+                        }
+                      }
+                    ]
+                  }
+                });
                 continue;
               }
 
