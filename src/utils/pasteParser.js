@@ -1402,7 +1402,7 @@ export function extractInlineContext(line, contextMode) {
     if (floatSuffix) {
         const kw = floatSuffix[2];
         const beforeKw = floatSuffix[1].trim();
-        if ((kw === 'โต๊ด' || kw === 'โต้ด' || kw === 'โตด') && (beforeKw.endsWith('เต็ง') || beforeKw.endsWith('เต็ง-') || beforeKw.endsWith('เต็ง/'))) {
+        if ((kw === 'โต๊ด' || kw === 'โต้ด' || kw === 'โตด') && (/(?:เต็ง|เต้ง|เตง|เต๊ง|ตง)[-\/]?$/.test(beforeKw))) {
             // Rejection: it's part of a compound keyword "เต็งโต๊ด", not a float suffix
         } else {
             let mode = 'float_top';
@@ -1872,16 +1872,24 @@ function determineBetType(numbers, numLen, amount1, amount2, amount3, hasChud, p
         if (amount1 === null)
             return null;
         if (isFloat) {
-            results.push({
-                numbers,
-                amount: amount1,
-                amount2: null,
-                betType: '3_tod',
-                typeLabel: 'โต๊ด',
-                rawLine,
-                formattedLine: `${numbers}=${amount1} โต๊ด`
-            });
-            return results;
+            let isChudOrPermSet = hasChud;
+            if (settings?.three_digit_perm_mode === 'perm_set') {
+                if (amount2 === 3 || amount2 === 6) {
+                    isChudOrPermSet = true;
+                }
+            }
+            if (amount2 === null && !isChudOrPermSet && !hasMultiplierChud) {
+                results.push({
+                    numbers,
+                    amount: amount1,
+                    amount2: null,
+                    betType: '3_tod',
+                    typeLabel: 'โต๊ด',
+                    rawLine,
+                    formattedLine: `${numbers}=${amount1} โต๊ด`
+                });
+                return results;
+            }
         }
         if (amount3 !== null && amount1 !== null && amount2 !== null && !shouldStraightOnly) {
             const isAmt2PermMinusOne = (amount2 === permCount - 1);

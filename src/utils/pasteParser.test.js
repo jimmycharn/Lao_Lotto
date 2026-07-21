@@ -1689,6 +1689,42 @@ describe('pasteParser - parseMultiLinePaste', () => {
         expect(res[1].numbers).toBe('244');
         expect(res[1].specialType).toBe('set3');
       });
+
+      it('interprets multiplication pattern 507=3*3 as เต็งโต๊ด under *เต้งโต๊ด context and bypassing simple 3_tod', () => {
+        const text = `*เต้งโต๊ด
+507=3*3`;
+        const res = parseMultiLinePaste(text, 'thai');
+        expect(res.length).toBe(1);
+        expect(res[0].numbers).toBe('507');
+        expect(res[0].amount).toBe(3);
+        expect(res[0].amount2).toBe(3);
+        expect(res[0].specialType).toBe('tengTod');
+        expect(res[0].typeLabel).toBe('เต็งโต๊ด');
+      });
+
+      it('interprets multiplication pattern 123=3*3 as เต็งโต๊ด under โต๊ด context and bypassing simple 3_tod', () => {
+        const text = `โต๊ด
+123=3*3`;
+        const res = parseMultiLinePaste(text, 'thai');
+        expect(res.length).toBe(1);
+        expect(res[0].numbers).toBe('123');
+        expect(res[0].amount).toBe(3);
+        expect(res[0].amount2).toBe(3);
+        expect(res[0].specialType).toBe('tengTod');
+        expect(res[0].typeLabel).toBe('เต็งโต๊ด');
+      });
+
+      it('retains simple 3_tod parser for traditional single amount under โต๊ด context', () => {
+        const text = `โต๊ด
+123=10`;
+        const res = parseMultiLinePaste(text, 'thai');
+        expect(res.length).toBe(1);
+        expect(res[0].numbers).toBe('123');
+        expect(res[0].amount).toBe(10);
+        expect(res[0].amount2).toBeNull();
+        expect(res[0].betType).toBe('3_tod');
+        expect(res[0].typeLabel).toBe('โต๊ด');
+      });
     });
   })
 })
