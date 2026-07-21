@@ -472,7 +472,25 @@ export default function SuperAdmin() {
                 .limit(100)
             
             if (!error && data) {
-                setCreditDeductions(data)
+                const roundIds = [...new Set(data.filter(d => d.reference_type === 'round' && d.reference_id).map(d => d.reference_id))]
+                let roundsMap = {}
+                if (roundIds.length > 0) {
+                    const { data: roundsData, error: roundsError } = await supabase
+                        .from('lottery_rounds')
+                        .select('id, lottery_type, draw_date')
+                        .in('id', roundIds)
+                    if (!roundsError && roundsData) {
+                        roundsMap = roundsData.reduce((map, r) => {
+                            map[r.id] = r
+                            return map
+                        }, {})
+                    }
+                }
+                const mappedData = data.map(d => ({
+                    ...d,
+                    round: d.reference_type === 'round' ? roundsMap[d.reference_id] : null
+                }))
+                setCreditDeductions(mappedData)
             }
         } catch (err) {
             console.log('Credit deductions not available:', err)
@@ -2115,6 +2133,55 @@ export default function SuperAdmin() {
     }
 
     // === RENDER HELPERS ===
+    const getLotteryTypeLabel = (type) => {
+        const labels = {
+            'thai': 'ไทย',
+            'lao': 'ลาว',
+            'hanoi': 'ฮานอย',
+            'stock': 'หุ้น',
+            'yeekee': 'ยี่กี'
+        }
+        return labels[type] || type || '-'
+    }
+
+    const formatDeductionDescription = (deduction) => {
+        const { description, metadata } = deduction
+        
+        // 1. Check metadata type
+        if (metadata?.type === 'profit_percentage_deduction') {
+            const rate = metadata.profitPercentageRate || 5
+            return `หักกำไร ${rate}%`
+        }
+        
+        // 2. Check metadata details percentage_rate (standard percentage fee)
+        if (metadata?.details?.percentage_rate) {
+            return `หักยอด ${metadata.details.percentage_rate}%`
+        }
+        
+        // 3. Fallback: parse percentage from description string
+        if (description) {
+            const match = description.match(/(\d+(?:\.\d+)?)%/);
+            if (match) {
+                const rate = match[1];
+                if (description.includes('กำไร')) {
+                    return `หักกำไร ${rate}%`;
+                } else {
+                    return `หักยอด ${rate}%`;
+                }
+            }
+        }
+        
+        return description || '-';
+    }
+
+    const displayProfit = (deduction) => {
+        const profit = deduction.metadata?.profit
+        if (profit !== undefined && profit !== null) {
+            return Math.abs(profit).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        }
+        return '-'
+    }
+
     const formatCurrency = (amount) => {
         return new Intl.NumberFormat('th-TH', {
             style: 'currency',
@@ -2762,7 +2829,9 @@ export default function SuperAdmin() {
                                 </th>
                             )}
                             <th>เจ้ามือ</th>
+                            <th>ประเภทหวย</th>
                             <th>รายละเอียด</th>
+                            <th>กำไร</th>
                             <th>ยอดเงิน</th>
                             <th>ยอดคงเหลือ</th>
                             <th>วันที่</th>
@@ -2793,7 +2862,9 @@ export default function SuperAdmin() {
                                     <div>{deduction.dealer?.full_name || 'ไม่ทราบชื่อ'}</div>
                                     <small className="text-muted">{deduction.dealer?.email}</small>
                                 </td>
-                                <td>{deduction.description || '-'}</td>
+                                <td>{getLotteryTypeLabel(deduction.round?.lottery_type)}</td>
+                                <td>{formatDeductionDescription(deduction)}</td>
+                                <td style={{ color: 'var(--color-success)' }}>{displayProfit(deduction)}</td>
                                 <td><strong style={{ color: 'var(--color-success)' }}>฿{Math.abs(deduction.amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</strong></td>
                                 <td>฿{(deduction.balance_after || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
                                 <td>{formatDate(deduction.created_at)}</td>
