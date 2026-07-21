@@ -477,7 +477,7 @@ export default function SuperAdmin() {
                 if (roundIds.length > 0) {
                     const { data: roundsData, error: roundsError } = await supabase
                         .from('lottery_rounds')
-                        .select('id, lottery_type, draw_date')
+                        .select('id, lottery_type, round_date')
                         .in('id', roundIds)
                     if (!roundsError && roundsData) {
                         roundsMap = roundsData.reduce((map, r) => {
@@ -504,7 +504,7 @@ export default function SuperAdmin() {
                 .select(`
                     *,
                     dealer:dealer_id (id, full_name, email),
-                    round:round_id (id, lottery_type, draw_date)
+                    round:round_id (id, lottery_type, round_date)
                 `)
                 .order('created_at', { ascending: false })
                 .limit(100)
@@ -3088,7 +3088,7 @@ export default function SuperAdmin() {
                                             <div>
                                                 <div>{record.round.lottery_type}</div>
                                                 <small className="text-muted">
-                                                    {record.round.draw_date ? new Date(record.round.draw_date).toLocaleDateString('th-TH') : '-'}
+                                                    {record.round.round_date ? new Date(record.round.round_date).toLocaleDateString('th-TH') : '-'}
                                                 </small>
                                             </div>
                                         ) : '-'}
