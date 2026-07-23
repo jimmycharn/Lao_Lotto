@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
@@ -32,7 +32,10 @@ import {
     FiImage,
     FiSave,
     FiShare2,
-    FiCopy
+    FiCopy,
+    FiChevronDown,
+    FiChevronUp,
+    FiCpu
 } from 'react-icons/fi'
 import QRCode from 'react-qr-code'
 import ChangePasswordModal from '../components/ChangePasswordModal'
@@ -41,11 +44,82 @@ import { LOTTERY_TYPES } from '../constants/lotteryTypes'
 import { confirmDialog } from '../utils/confirmDialog'
 import './SuperAdmin.css'
 
+const DEFAULT_OPENROUTER_MODELS = [
+    { id: 'google/gemini-2.5-flash-lite:online', name: 'Google: Gemini 2.5 Flash Lite (แนะนำ)' },
+    { id: 'google/gemini-2.5-flash:online', name: 'Google: Gemini 2.5 Flash' },
+    { id: 'google/gemini-2.5-pro:online', name: 'Google: Gemini 2.5 Pro' },
+    { id: 'google/gemini-3.6-flash', name: 'Google: Gemini 3.6 Flash' },
+    { id: 'google/gemini-flash-1.5', name: 'Google: Gemini Flash 1.5' },
+    { id: 'anthropic/claude-3.5-sonnet', name: 'Anthropic: Claude 3.5 Sonnet' },
+    { id: 'anthropic/claude-3.5-haiku', name: 'Anthropic: Claude 3.5 Haiku' },
+    { id: 'openai/gpt-4o-mini', name: 'OpenAI: GPT-4o Mini' },
+    { id: 'openai/gpt-4o', name: 'OpenAI: GPT-4o' },
+    { id: 'deepseek/deepseek-chat', name: 'DeepSeek: DeepSeek V3' },
+    { id: 'deepseek/deepseek-r1', name: 'DeepSeek: DeepSeek R1' },
+    { id: 'meta-llama/llama-3.3-70b-instruct', name: 'Meta: Llama 3.3 70B' }
+]
+
 export default function SuperAdmin() {
     const { user, profile, isSuperAdmin, loading } = useAuth()
     const { toast } = useToast()
     const { setActiveDashboard } = useTheme()
     const [activeTab, setActiveTab] = useState('dashboard')
+
+    // OpenRouter Models state for Combobox
+    const [openRouterModels, setOpenRouterModels] = useState(DEFAULT_OPENROUTER_MODELS)
+    const [isLoadingModels, setIsLoadingModels] = useState(false)
+    const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
+    const [modelSearchTerm, setModelSearchTerm] = useState('')
+    const [modelProviderFilter, setModelProviderFilter] = useState('')
+    const modelComboboxRef = useRef(null)
+
+    const prioritizeModels = (models) => {
+        const popularPrefixes = ['google/', 'anthropic/', 'openai/', 'deepseek/', 'meta-llama/']
+        return [...models].sort((a, b) => {
+            const aIndex = popularPrefixes.findIndex(p => a.id.toLowerCase().startsWith(p))
+            const bIndex = popularPrefixes.findIndex(p => b.id.toLowerCase().startsWith(p))
+            if (aIndex !== -1 && bIndex !== -1) {
+                if (aIndex !== bIndex) return aIndex - bIndex
+                return a.id.localeCompare(b.id)
+            }
+            if (aIndex !== -1) return -1
+            if (bIndex !== -1) return 1
+            return a.id.localeCompare(b.id)
+        })
+    }
+
+    const fetchOpenRouterModels = async () => {
+        setIsLoadingModels(true)
+        try {
+            const res = await fetch('https://openrouter.ai/api/v1/models')
+            if (res.ok) {
+                const json = await res.json()
+                if (json && Array.isArray(json.data) && json.data.length > 0) {
+                    const fetchedList = json.data.map(m => ({
+                        id: m.id,
+                        name: m.name || m.id
+                    }))
+                    setOpenRouterModels(prioritizeModels(fetchedList))
+                }
+            }
+        } catch (err) {
+            console.error('Error fetching OpenRouter models:', err)
+        } finally {
+            setIsLoadingModels(false)
+        }
+    }
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (modelComboboxRef.current && !modelComboboxRef.current.contains(event.target)) {
+                setModelDropdownOpen(false)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside)
+        }
+    }, [])
     
     // Set active dashboard for theme on mount
     useEffect(() => {
@@ -196,7 +270,8 @@ export default function SuperAdmin() {
                 fetchTopupRequests(),
                 fetchCreditDeductions(),
                 fetchBillingRecords(),
-                fetchAICrawlerData()
+                fetchAICrawlerData(),
+                fetchOpenRouterModels()
             ])
         } catch (error) {
             console.error('Error fetching data:', error)
@@ -4304,14 +4379,182 @@ export default function SuperAdmin() {
                     </div>
 
                     <div className="setting-item" style={{ gridColumn: 'span 2' }}>
-                        <label>AI Model Name (จากระบบ OpenRouter)</label>
+                        <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>AI Model Name (จากระบบ OpenRouter)</span>
+                            {isLoadingModels && (
+                                <span style={{ fontSize: '0.75rem', color: 'var(--color-primary, #667eea)' }}>
+                                    กำลังอัปเดตรายชื่อโมเดลจาก OpenRouter...
+                                </span>
+                            )}
+                        </label>
                         <div className="setting-input">
-                            <input
-                                type="text"
-                                placeholder="เช่น google/gemini-2.5-flash:online (แนะนำ) หรือ google/gemini-2.5-pro:online"
-                                value={settings.openrouter_model || ''}
-                                onChange={(e) => setSettings({ ...settings, openrouter_model: e.target.value })}
-                            />
+                            <div className="model-combobox-wrapper" ref={modelComboboxRef}>
+                                <input
+                                    type="text"
+                                    list="openrouter-models-datalist"
+                                    placeholder="เช่น google/gemini-2.5-flash-lite:online หรือป้อน/เลือกโมเดลที่ต้องการ..."
+                                    value={settings.openrouter_model || ''}
+                                    onChange={(e) => setSettings({ ...settings, openrouter_model: e.target.value })}
+                                    onFocus={() => setModelDropdownOpen(true)}
+                                    style={{ width: '100%', paddingRight: '2.5rem' }}
+                                />
+                                <button
+                                    type="button"
+                                    className="combobox-toggle-btn"
+                                    onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
+                                    title="เลือกรายชื่อโมเดลจาก OpenRouter"
+                                    style={{
+                                        position: 'absolute',
+                                        right: '8px',
+                                        background: 'transparent',
+                                        border: 'none',
+                                        color: 'rgba(255,255,255,0.6)',
+                                        cursor: 'pointer',
+                                        padding: '4px 8px',
+                                        display: 'flex',
+                                        alignItems: 'center'
+                                    }}
+                                >
+                                    {modelDropdownOpen ? <FiChevronUp /> : <FiChevronDown />}
+                                </button>
+
+                                {/* Native HTML Datalist */}
+                                <datalist id="openrouter-models-datalist">
+                                    {openRouterModels.slice(0, 100).map(m => (
+                                        <option key={m.id} value={m.id}>{m.name}</option>
+                                    ))}
+                                </datalist>
+
+                                {/* Custom Dropdown Menu */}
+                                {modelDropdownOpen && (
+                                    <div className="openrouter-models-dropdown">
+                                        <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                                                <FiSearch style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem' }} />
+                                                <input
+                                                    type="text"
+                                                    placeholder="ค้นหาโมเดล (เช่น gemini, claude, gpt, deepseek)..."
+                                                    value={modelSearchTerm}
+                                                    onChange={(e) => setModelSearchTerm(e.target.value)}
+                                                    style={{
+                                                        background: 'transparent',
+                                                        border: 'none',
+                                                        color: '#fff',
+                                                        fontSize: '0.85rem',
+                                                        outline: 'none',
+                                                        width: '100%',
+                                                        padding: '2px 0'
+                                                    }}
+                                                />
+                                                {modelSearchTerm && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setModelSearchTerm('')}
+                                                        style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer' }}
+                                                    >
+                                                        <FiX />
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                                {['ทั้งหมด', 'google', 'anthropic', 'openai', 'deepseek'].map(provider => {
+                                                    const provKey = provider === 'ทั้งหมด' ? '' : provider
+                                                    const isActive = modelProviderFilter === provKey
+                                                    return (
+                                                        <button
+                                                            key={provider}
+                                                            type="button"
+                                                            onClick={() => setModelProviderFilter(provKey)}
+                                                            style={{
+                                                                padding: '2px 8px',
+                                                                fontSize: '0.75rem',
+                                                                borderRadius: '12px',
+                                                                border: 'none',
+                                                                background: isActive ? 'var(--color-primary, #667eea)' : 'rgba(255,255,255,0.1)',
+                                                                color: '#fff',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                        >
+                                                            {provider.toUpperCase()}
+                                                        </button>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+
+                                        <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
+                                            {openRouterModels.filter(m => {
+                                                const matchesSearch = !modelSearchTerm || 
+                                                    m.id.toLowerCase().includes(modelSearchTerm.toLowerCase()) || 
+                                                    m.name.toLowerCase().includes(modelSearchTerm.toLowerCase())
+                                                const matchesProvider = !modelProviderFilter || 
+                                                    m.id.toLowerCase().startsWith(modelProviderFilter.toLowerCase() + '/')
+                                                return matchesSearch && matchesProvider
+                                            }).length === 0 ? (
+                                                <div style={{ padding: '12px', textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem' }}>
+                                                    ไม่พบโมเดลที่ตรงกับการค้นหา
+                                                </div>
+                                            ) : (
+                                                openRouterModels.filter(m => {
+                                                    const matchesSearch = !modelSearchTerm || 
+                                                        m.id.toLowerCase().includes(modelSearchTerm.toLowerCase()) || 
+                                                        m.name.toLowerCase().includes(modelSearchTerm.toLowerCase())
+                                                    const matchesProvider = !modelProviderFilter || 
+                                                        m.id.toLowerCase().startsWith(modelProviderFilter.toLowerCase() + '/')
+                                                    return matchesSearch && matchesProvider
+                                                }).map(m => {
+                                                    const isSelected = settings.openrouter_model === m.id
+                                                    return (
+                                                        <div
+                                                            key={m.id}
+                                                            onClick={() => {
+                                                                setSettings({ ...settings, openrouter_model: m.id })
+                                                                setModelDropdownOpen(false)
+                                                            }}
+                                                            style={{
+                                                                padding: '8px 12px',
+                                                                cursor: 'pointer',
+                                                                background: isSelected ? 'rgba(102, 126, 234, 0.25)' : 'transparent',
+                                                                borderLeft: isSelected ? '3px solid var(--color-primary, #667eea)' : '3px solid transparent',
+                                                                display: 'flex',
+                                                                flexDirection: 'column',
+                                                                gap: '2px'
+                                                            }}
+                                                            className="model-item-row"
+                                                        >
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                <span style={{ fontWeight: isSelected ? '600' : 'normal', color: isSelected ? '#a3b8ff' : '#fff', fontSize: '0.85rem' }}>
+                                                                    {m.name}
+                                                                </span>
+                                                                {isSelected && <FiCheck style={{ color: '#a3b8ff', fontSize: '0.85rem' }} />}
+                                                            </div>
+                                                            <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>
+                                                                {m.id}
+                                                            </span>
+                                                        </div>
+                                                    )
+                                                })
+                                            )}
+                                        </div>
+
+                                        <div style={{ padding: '6px 12px', background: 'rgba(0,0,0,0.3)', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>
+                                            <span>แสดงข้อมูลโมเดลจาก OpenRouter.com ({openRouterModels.length} รายการ)</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <button
+                                type="button"
+                                className="btn btn-sm btn-outline-secondary"
+                                onClick={fetchOpenRouterModels}
+                                disabled={isLoadingModels}
+                                title="ดึงรายชื่อโมเดลล่าสุดจาก OpenRouter.com"
+                            >
+                                <FiRefreshCw className={isLoadingModels ? 'spin' : ''} />
+                            </button>
+
                             <button
                                 className="btn btn-sm btn-primary"
                                 onClick={() => handleUpdateSetting('openrouter_model', settings.openrouter_model)}

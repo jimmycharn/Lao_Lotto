@@ -1853,3 +1853,49 @@ html.theme-light .dealer-assign-info {
 html.theme-light .dealer-assign-info strong {
     color: rgba(0, 0, 0, 0.7) !important;
 }
+
+/* OpenRouter Model Combobox Dropdown */
+.model-combobox-wrapper {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: center;
+}
+
+.openrouter-models-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    max-height: 320px;
+    background: #1a1e2d;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.model-item-row:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-theme="light"] .openrouter-models-dropdown,
+html.theme-light .openrouter-models-dropdown {
+    background: #ffffff !important;
+    border: 1px solid rgba(0, 0, 0, 0.15) !important;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.15) !important;
+}
+
+[data-theme="light"] .openrouter-models-dropdown input,
+html.theme-light .openrouter-models-dropdown input {
+    color: #1a1a2e !important;
+}
+
+[data-theme="light"] .model-item-row:hover,
+html.theme-light .model-item-row:hover {
+    background: rgba(0, 0, 0, 0.05) !important;
+}
+
