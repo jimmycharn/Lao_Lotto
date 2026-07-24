@@ -628,6 +628,25 @@ describe('pasteParser - parseMultiLinePaste', () => {
       }
     })
 
+    it('should correctly parse ลอย บน with spaces overriding preceding both context', () => {
+      const text = `300=30ชุด
+800=20ชุด
+ล่างบน
+03=20
+30=20
+00=20
+ลอย บน 0=200`
+      const result = parseMultiLinePaste(text, 'lao')
+      const floatBets = result.filter(b => b.numbers === '0')
+      expect(floatBets.length).toBe(1)
+      expect(floatBets[0]).toMatchObject({
+        numbers: '0',
+        amount: 200,
+        betType: 'run_top',
+        typeLabel: 'ลอยบน'
+      })
+    })
+
     it('should not ignore multiple number sets or valid lottery formats in text (e.g. ซื้อ 23 20*20 บน)', () => {
       const text = 'ซื้อ 23 20*20 บน'
       const result = parseMultiLinePaste(text, 'lao')
