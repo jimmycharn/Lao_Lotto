@@ -15248,7 +15248,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             } else {
               isGroupVisible = (gDisplay === 'open');
             }
-            finalPoyDisplay = isGroupVisible ? (groupMemberPoy || gFormat) : 'none';
+            finalPoyDisplay = isGroupVisible ? gFormat : 'none';
           }
 
           const logMsg = `[LINE BOT RENDER POY] groupId=${groupId}, userId=${userId}, isStaffSender=${isStaffSender}, gDisplay=${gDisplay}, gFormat=${gFormat}, dGlobal=${dGlobal}, groupMemberAdminPoy=${groupMemberAdminPoy}, finalPoyDisplay=${finalPoyDisplay}`;
