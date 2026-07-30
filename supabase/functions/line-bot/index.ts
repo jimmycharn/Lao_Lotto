@@ -6648,10 +6648,12 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             welcomeMsgs.push(`ยินดีต้อนรับคุณ ${existingProfile.full_name} กลับสู่กลุ่มค่ะ! 🎉\n(LINE User ID: ${mUserId})`);
           } else {
             // Create dummy auth user
-            const dummyEmail = `line_${mUserId}@lotto-line-bot.local`;
+            const shortId = mUserId.slice(-8).toLowerCase();
+            const dummyEmail = `line_${shortId}@biglotto.app`;
+            const generatedPassword = Math.random().toString(36).substring(2, 10);
             const { data: authUser, error: authErr } = await supabase.auth.admin.createUser({
               email: dummyEmail,
-              password: Math.random().toString(36).substring(2, 12),
+              password: generatedPassword,
               email_confirm: true,
               user_metadata: { full_name: displayName }
             });
@@ -6677,7 +6679,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   status: 'active'
                 });
 
-              welcomeMsgs.push(`ยินดีต้อนรับคุณ ${displayName} สมาชิกใหม่เข้าสู่กลุ่มค่ะ! 🎉\n(LINE User ID: ${mUserId})\n\nบอทได้ทำการบันทึกข้อมูลเรียบร้อยแล้วค่ะ สมาชิกสามารถพิมพ์ส่งโพยได้ทันที 🤖`);
+              welcomeMsgs.push(`ยินดีต้อนรับคุณ ${displayName} สมาชิกใหม่เข้าสู่กลุ่มค่ะ! 🎉\n(LINE User ID: ${mUserId})\n\nบอทได้ทำการบันทึกข้อมูลเรียบร้อยแล้วค่ะ สมาชิกสามารถพิมพ์ส่งโพยได้ทันที 🤖\n\n📧 ข้อมูลเข้าสู่ระบบเว็บแอป:\nอีเมล: ${dummyEmail}\nรหัสผ่าน: ${generatedPassword}\nลิงก์: https://biglotto.app/login\n\n⚠️ กรุณาเปลี่ยนรหัสผ่านหลังเข้าสู่ระบบ`);
             }
           }
 
