@@ -847,7 +847,7 @@ async function generateLayoffNumbersSummary(roundId: string, lotteryType: string
   if (scheduleTime) {
     summaryText += `[ตีออก(auto): ${typeNameInThai}\nรอบเวลา: ${scheduleTime}]\n`;
   } else {
-    summaryText += `ตีออก(ทั้งหมด): ${typeNameInThai}\n`;
+    summaryText += `เลขตีออกทั้งหมด: ${typeNameInThai}\n`;
   }
   if (roundDisplayDate) {
     summaryText += `งวดวันที่: ${roundDisplayDate}\n`;
@@ -5057,7 +5057,7 @@ serve(async (req) => {
               } else if (type === 'remaining') {
                 textMsg = await generateRemainingNumbersSummary(round.id, round.lottery_type);
               } else if (type === 'layoff') {
-                textMsg = await generateLayoffNumbersSummary(round.id, round.lottery_type, "ปิดรับ");
+                textMsg = await generateLayoffNumbersSummary(round.id, round.lottery_type);
               } else if (type === 'individual') {
                 const res = await generateIndividualSubmissionsSummaryFlex(round.id, round.lottery_type);
                 textMsg = res.flexMessage;
@@ -9023,20 +9023,22 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               // A date param (e.g. 10-6-26, 10-6-2569) selects a past round for read-only summary
               const requestedRoundDate = param !== "" ? parseRoundDateParam(param) : null;
 
+              const summaryLotteryType = groupLink ? (groupLink.lottery_type || 'thai') : (privateSession?.lottery_type || 'lao');
+
               let activeRound: any;
               if (requestedRoundDate) {
                 const { data: recentRounds } = await supabase
                   .from('lottery_rounds')
                   .select('*')
                   .eq('dealer_id', dealerId)
-                  .eq('lottery_type', groupLink.lottery_type)
+                  .eq('lottery_type', summaryLotteryType)
                   .order('created_at', { ascending: false })
                   .limit(20);
 
                 const dateRound = findRoundByDate(recentRounds || [], requestedRoundDate);
 
                 if (!dateRound) {
-                  await sendLineReply(replyToken, `❌ ไม่พบงวดหวย ${groupLink.lottery_type.toUpperCase()} ของวันที่ ${param}\n(งวดอาจถูกลบไปแล้ว หรือยังไม่ได้สร้างงวดของวันนั้น)`);
+                  await sendLineReply(replyToken, `❌ ไม่พบงวดหวย ${summaryLotteryType.toUpperCase()} ของวันที่ ${param}\n(งวดอาจถูกลบไปแล้ว หรือยังไม่ได้สร้างงวดของวันนั้น)`);
                   continue;
                 }
                 activeRound = dateRound;
@@ -9045,14 +9047,14 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   .from('lottery_rounds')
                   .select('*')
                   .eq('dealer_id', dealerId)
-                  .eq('lottery_type', groupLink.lottery_type)
+                  .eq('lottery_type', summaryLotteryType)
                   .in('status', ['open', 'closed', 'announced'])
                   .order('created_at', { ascending: false })
                   .limit(1)
                   .maybeSingle();
 
                 if (!latestRound) {
-                  await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงหรือกำลังตรวจผลสำหรับหวยประเภท ${groupLink.lottery_type.toUpperCase()}`);
+                  await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงหรือกำลังตรวจผลสำหรับหวยประเภท ${summaryLotteryType.toUpperCase()}`);
                   continue;
                 }
                 activeRound = latestRound;
