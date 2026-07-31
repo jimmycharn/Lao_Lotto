@@ -15374,14 +15374,15 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
         );
         const shouldLoadLimits = returnExcess || hasReturnExcessBehaviors;
 
-        if (shouldLoadLimits) {
+        // Always fetch number limits (needed to always enforce blocked numbers/เลขปิด
+        // and to always show payout percent/เลขอั้นเฉพาะจ่าย% info), regardless of returnExcess setting
+        const { data: numberLimitsData } = await supabase
+          .from('number_limits')
+          .select('bet_type, numbers, max_amount, is_active, limit_type, payout_percent, include_reversed, reversed_numbers')
+          .eq('round_id', activeRound.id);
+        numberLimits = (numberLimitsData || []).filter((nl: any) => nl.is_active === undefined || nl.is_active === true);
 
-          // Fetch number limits
-          const { data: numberLimitsData } = await supabase
-            .from('number_limits')
-            .select('bet_type, numbers, max_amount, is_active, limit_type, include_reversed, reversed_numbers')
-            .eq('round_id', activeRound.id);
-          numberLimits = (numberLimitsData || []).filter((nl: any) => nl.is_active === undefined || nl.is_active === true);
+        if (shouldLoadLimits) {
 
           // Fetch submissions totals
           let submissionsData = [];
@@ -15687,7 +15688,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
         }
 
         const finalInserts = [];
-        const returnedBets: { numbers: string; betType: string; amount: number; typeLabel: string; reason?: 'closed' | 'overflow' }[] = [];
+        const returnedBets: { numbers: string; betType: string; amount: number; typeLabel: string; reason?: 'closed' | 'overflow' | 'blocked'; entry_id?: string; displayNumbers?: string }[] = [];
+        const insertPayoutPercentMap = new Map<any, number>();
 
         const currentExactSetsMap = new Map<string, number>();
         const current3SetTotalMap = new Map<string, number>();
@@ -15735,6 +15737,33 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             }
           }
 
+          // Always check for blocked numbers (เลขปิด), regardless of returnExcess setting
+          let isBlocked = false;
+          if (isSetBasedLottery && (betType === '4_set' || betType === '4_top') && numbers?.length === 4) {
+            const matching4SetBlock = findMatchingLimit(numberLimits, '4_set', numbers);
+            if (matching4SetBlock && matching4SetBlock.limit_type === 'blocked') {
+              isBlocked = true;
+            }
+          } else {
+            const matchingBlock = findMatchingLimit(numberLimits, betType, numbers);
+            if (matchingBlock && matchingBlock.limit_type === 'blocked') {
+              isBlocked = true;
+            }
+          }
+
+          if (isBlocked) {
+            returnedBets.push({
+              numbers,
+              betType,
+              amount,
+              typeLabel: getThaiBetTypeLabel(betType, lotteryType),
+              reason: 'blocked',
+              entry_id: insert.entry_id,
+              displayNumbers: insert.display_numbers
+            });
+            continue;
+          }
+
           const shouldEnforceLimits = returnExcess || (isPastTypeCloseTime && closeBehavior === 'return_excess');
 
           if (shouldEnforceLimits) {
@@ -15743,9 +15772,13 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               const last3 = numbers.slice(-3);
 
               const matching4SetLimit = findMatchingLimit(numberLimits, '4_set', numbers);
+              let payoutPercent4Set = 100;
               const limit4Set = matching4SetLimit !== null
-                ? (matching4SetLimit.limit_type === 'blocked' ? 0 : Number(matching4SetLimit.max_amount) / setPrice)
+                ? (Number(matching4SetLimit.max_amount) / setPrice)
                 : (typeLimitsMap['4_set'] !== undefined ? typeLimitsMap['4_set'] : (typeLimitsMap['4_top'] !== undefined ? typeLimitsMap['4_top'] : 999999999));
+              if (matching4SetLimit && matching4SetLimit.payout_percent) {
+                payoutPercent4Set = matching4SetLimit.payout_percent;
+              }
               const exactTransferred = transfersList
                 .filter(t => (t.bet_type === '4_set' || t.bet_type === '4_top') && t.numbers === numbers)
                 .reduce((sum, t) => sum + Math.floor((Number(t.amount) || 0) / setPrice), 0);
@@ -15777,6 +15810,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
                 currentExactSetsMap.set(numbers, currentExactSets + acceptedSets);
                 current3SetTotalMap.set(last3, current3SetTotal + acceptedSets);
+                if (payoutPercent4Set < 100) {
+                  insertPayoutPercentMap.set(insert, payoutPercent4Set);
+                }
               }
 
               if (excessAmount > 0) {
@@ -15786,14 +15822,17 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   amount: excessAmount,
                   typeLabel: '4 ตัวชุด',
                   reason: 'overflow',
-                  entry_id: insert.entry_id
+                  entry_id: insert.entry_id,
+                  displayNumbers: insert.display_numbers
                 });
               }
             } else {
               const matchingLimit = findMatchingLimit(numberLimits, betType, numbers);
               let limit = 999999999;
+              let payoutPercent = 100;
               if (matchingLimit) {
-                limit = matchingLimit.limit_type === 'blocked' ? 0 : Number(matchingLimit.max_amount);
+                limit = Number(matchingLimit.max_amount);
+                payoutPercent = matchingLimit.payout_percent || 100;
               } else {
                 const typeLimit = typeLimitsMap[betType];
                 if (typeLimit !== undefined) {
@@ -15824,6 +15863,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 finalInserts.push(insert);
 
                 currentTotals.set(`${betType}|${numbers}`, currentTotal + acceptedAmount);
+                if (payoutPercent < 100) {
+                  insertPayoutPercentMap.set(insert, payoutPercent);
+                }
               }
 
               if (excessAmount > 0) {
@@ -15837,12 +15879,19 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   amount: baseExcess,
                   typeLabel: getThaiBetTypeLabel(betType, lotteryType),
                   reason: 'overflow',
-                  entry_id: insert.entry_id
+                  entry_id: insert.entry_id,
+                  displayNumbers: insert.display_numbers
                 });
               }
             }
           } else {
             // shouldEnforceLimits is false, accept all bets that didn't fail close time check
+            // Still track payout percent for receipt display
+            const checkBetType = (isSetBasedLottery && (betType === '4_set' || betType === '4_top')) ? '4_set' : betType;
+            const matchingLimit = findMatchingLimit(numberLimits, checkBetType, numbers);
+            if (matchingLimit && matchingLimit.payout_percent && matchingLimit.payout_percent < 100) {
+              insertPayoutPercentMap.set(insert, matchingLimit.payout_percent);
+            }
             finalInserts.push(insert);
           }
         }
@@ -15855,7 +15904,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           if (processedInserts.length === 0) {
             const setPrice = activeRound?.set_prices?.['4_top'] || 120;
             // Group and summarize returned bets
-            const groupedReturned = new Map<string, { numbers: string; betType: string; typeLabel: string; amount: number; reason?: string }>();
+            const groupedReturned = new Map<string, { numbers: string; betType: string; typeLabel: string; amount: number; reason?: string; displayNumbers?: string }>();
             returnedBets.forEach(rb => {
               const key = `${rb.numbers}|${rb.typeLabel}`;
               const existing = groupedReturned.get(key);
@@ -15868,11 +15917,14 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
             const hasClosed = returnedBets.some(rb => rb.reason === 'closed');
             const hasOverflow = returnedBets.some(rb => rb.reason === 'overflow');
+            const hasBlocked = returnedBets.some(rb => rb.reason === 'blocked');
             let summaryText = `❌ ส่งโพยไม่สำเร็จ! ❌\n`;
-            if (hasClosed && !hasOverflow) {
+            if (hasClosed && !hasOverflow && !hasBlocked) {
               summaryText += `เลขทุกตัวในโพยที่ส่งมาปิดรับแทง\n\n`;
-            } else if (!hasClosed && hasOverflow) {
+            } else if (!hasClosed && hasOverflow && !hasBlocked) {
               summaryText += `เลขทุกตัวในโพยที่ส่งมามีมูลค่าเกินลิมิต\n\n`;
+            } else if (hasBlocked && !hasClosed && !hasOverflow) {
+              summaryText += `เลขทุกตัวในโพยที่ส่งมาเป็นเลขปิด\n\n`;
             } else {
               summaryText += `เลขที่ส่งมาปิดรับแทงหรือมีมูลค่าเกินลิมิต\n\n`;
             }
@@ -15880,11 +15932,12 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             summaryText += `⚠️ เลขคืนสมาชิก ⚠️\n`;
             for (const rb of groupedReturned.values()) {
               const cleanTypeLabel = rb.typeLabel.replace(/\s+/g, '');
+              const blockedSuffix = rb.reason === 'blocked' ? ' (คืน)' : '';
               if (isSetBasedLottery && (rb.betType === '4_set' || rb.betType === '4_top')) {
                 const sets = Math.round(rb.amount / setPrice);
-                summaryText += `${rb.numbers} (${cleanTypeLabel}) คืน: ${sets} ชุด=฿${rb.amount.toLocaleString('th-TH')}\n`;
+                summaryText += `${rb.numbers} (${cleanTypeLabel}) คืน: ${sets} ชุด=฿${rb.amount.toLocaleString('th-TH')}${blockedSuffix}\n`;
               } else {
-                summaryText += `${rb.numbers} (${cleanTypeLabel}) คืน: ฿${rb.amount.toLocaleString('th-TH')}\n`;
+                summaryText += `${rb.numbers} (${cleanTypeLabel}) คืน: ฿${rb.amount.toLocaleString('th-TH')}${blockedSuffix}\n`;
               }
             }
             await sendLineReply(replyToken, summaryText.trim());
@@ -15942,7 +15995,14 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             const disp = first.display_numbers || '';
             const alreadyHasCountSuffix = /\(\d+\)\s*$/.test(disp);
             const countSuffix = (count > 1 && !alreadyHasCountSuffix) ? ` (${count})` : '';
-            formattedDetailLines.push(`${disp}${countSuffix}`);
+            // Check for payout percent annotation (เลขอั้นเฉพาะจ่าย%)
+            let payoutSuffix = '';
+            const insertWithPayout = group.find(i => insertPayoutPercentMap.has(i));
+            if (insertWithPayout) {
+              const pct = insertPayoutPercentMap.get(insertWithPayout)!;
+              payoutSuffix = ` (${pct}%)`;
+            }
+            formattedDetailLines.push(`${disp}${countSuffix}${payoutSuffix}`);
           });
         }
 
@@ -15980,7 +16040,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           summaryText += `⚠️ เลขคืนสมาชิก ⚠️\n`;
 
           // Group and summarize returned bets
-          const groupedReturned = new Map<string, { numbers: string; betType: string; typeLabel: string; amount: number }>();
+          const groupedReturned = new Map<string, { numbers: string; betType: string; typeLabel: string; amount: number; reason?: string; displayNumbers?: string }>();
           returnedBets.forEach(rb => {
             const key = `${rb.numbers}|${rb.typeLabel}`;
             const existing = groupedReturned.get(key);
@@ -15993,11 +16053,12 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
           for (const rb of groupedReturned.values()) {
             const cleanTypeLabel = rb.typeLabel.replace(/\s+/g, '');
+            const blockedSuffix = rb.reason === 'blocked' ? ' (คืน)' : '';
             if (isSetBasedLottery && (rb.betType === '4_set' || rb.betType === '4_top')) {
               const sets = Math.round(rb.amount / setPrice);
-              summaryText += `${rb.numbers} (${cleanTypeLabel}) คืน: ${sets} ชุด=฿${rb.amount.toLocaleString('th-TH')}\n`;
+              summaryText += `${rb.numbers} (${cleanTypeLabel}) คืน: ${sets} ชุด=฿${rb.amount.toLocaleString('th-TH')}${blockedSuffix}\n`;
             } else {
-              summaryText += `${rb.numbers} (${cleanTypeLabel}) คืน: ฿${rb.amount.toLocaleString('th-TH')}\n`;
+              summaryText += `${rb.numbers} (${cleanTypeLabel}) คืน: ฿${rb.amount.toLocaleString('th-TH')}${blockedSuffix}\n`;
             }
           }
           summaryText = summaryText.trimEnd();
