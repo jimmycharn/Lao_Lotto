@@ -1744,6 +1744,32 @@ describe('pasteParser - parseMultiLinePaste', () => {
         expect(res[0].betType).toBe('3_tod');
         expect(res[0].typeLabel).toBe('โต๊ด');
       });
+
+      it('correctly parses 2-digit float bets (2_run / ลอย) with ลอยบน, ลอย, มี, and โต๊ด', () => {
+        const inputs = [
+          'ลอยบน17=1,000',
+          'ลอยบน 17=1,000',
+          'ลอย 17=1,000',
+          '17=1000 ลอย',
+          '17=1000 ลอยบน',
+          'มี17=1,000',
+          '17=1,000 มี',
+          'โต๊ด17=1,000',
+          '17=1,000 โต๊ด',
+          'ลอยบน\n17=1,000'
+        ];
+
+        for (const input of inputs) {
+          const res = parseMultiLinePaste(input, 'lao');
+          expect(res.length).toBe(1);
+          expect(res[0]).toMatchObject({
+            numbers: '17',
+            amount: 1000,
+            betType: '2_run',
+            typeLabel: 'ลอย'
+          });
+        }
+      });
     });
   })
 })
