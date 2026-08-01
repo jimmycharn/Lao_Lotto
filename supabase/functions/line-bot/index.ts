@@ -8405,15 +8405,11 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 .select('*')
                 .eq('dealer_id', dealerId);
 
-              if (startDate && endDate) {
-                query = query.gte('round_date', startDate).lte('round_date', endDate);
-              }
-
               if (filterLotteryType) {
                 query = query.eq('lottery_type', filterLotteryType);
               }
 
-              query = query.order('round_date', { ascending: false });
+              query = query.order('created_at', { ascending: false });
 
               const { data: dbHistoryList, error: historyErr } = await query;
 
@@ -8429,10 +8425,6 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 .select('*')
                 .eq('dealer_id', dealerId)
                 .in('status', ['closed', 'announced']);
-
-              if (startDate && endDate) {
-                roundsQuery = roundsQuery.gte('round_date', startDate).lte('round_date', endDate);
-              }
 
               if (filterLotteryType) {
                 roundsQuery = roundsQuery.eq('lottery_type', filterLotteryType);
@@ -8714,25 +8706,62 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 }
               }
 
-              // Filter combined history by date matching Web App logic
+              // Filter combined history by closing time (close_time || open_time || round_date) matching Web App logic
               let historyList = combinedHistory;
               if (filterTime === 'm' || filterTime === 'w' || parseMonthYearParam(filterTime) !== null) {
-                if (startDate && endDate) {
-                  historyList = historyList.filter((h: any) => {
-                    const hDateStr = h.close_time || h.open_time || h.round_date;
-                    if (!hDateStr) return true;
-                    const d = new Date(hDateStr);
-                    const bkkDate = new Date(d.getTime() + 7 * 60 * 60 * 1000);
-                    const yyyy = bkkDate.getUTCFullYear();
-                    const mm = String(bkkDate.getUTCMonth() + 1).padStart(2, '0');
-                    const dd = String(bkkDate.getUTCDate()).padStart(2, '0');
-                    const dateStr = `${yyyy}-${mm}-${dd}`;
-                    return dateStr >= startDate! && dateStr <= endDate!;
-                  });
+                let targetYear: number | null = null;
+                let targetMonth: number | null = null;
+
+                if (filterTime === 'm') {
+                  const nowBangkok = new Date(Date.now() + 7 * 60 * 60 * 1000);
+                  targetYear = nowBangkok.getUTCFullYear();
+                  targetMonth = nowBangkok.getUTCMonth() + 1;
+                } else if (filterTime !== 'w' && filterTime !== null) {
+                  const parsed = parseMonthYearParam(filterTime);
+                  if (parsed) {
+                    targetYear = parsed.year;
+                    targetMonth = parsed.month;
+                  }
                 }
+
+                historyList = combinedHistory.filter((h: any) => {
+                  const hDateStr = h.close_time || h.open_time || h.round_date;
+                  if (!hDateStr) return true;
+
+                  let yyyy: number;
+                  let mm: number;
+                  let ddStr: string;
+
+                  if (/^\d{4}-\d{2}-\d{2}$/.test(String(hDateStr).trim())) {
+                    const [y, m, d] = String(hDateStr).trim().split('-').map(Number);
+                    yyyy = y;
+                    mm = m;
+                    ddStr = String(d).padStart(2, '0');
+                  } else {
+                    const d = new Date(hDateStr);
+                    if (isNaN(d.getTime())) return true;
+                    // If string contains timezone (e.g. +07:00 or Z), getUTC functions after parsing ISO string
+                    // ISO strings with offset like +07:00 parsed by JS Date have correct UTC timestamp
+                    // We extract local Bangkok year/month/date by shifting UTC by +7 hours:
+                    const bkkDate = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+                    yyyy = bkkDate.getUTCFullYear();
+                    mm = bkkDate.getUTCMonth() + 1;
+                    ddStr = String(bkkDate.getUTCDate()).padStart(2, '0');
+                  }
+
+                  if (targetYear !== null && targetMonth !== null) {
+                    return yyyy === targetYear && mm === targetMonth;
+                  }
+                  if (startDate && endDate) {
+                    const mmStr = String(mm).padStart(2, '0');
+                    const dateStr = `${yyyy}-${mmStr}-${ddStr}`;
+                    return dateStr >= startDate! && dateStr <= endDate!;
+                  }
+                  return true;
+                });
               }
 
-              // Sort combined history by round_date descending
+              // Sort combined history by close_time / open_time / round_date descending
               historyList.sort((a: any, b: any) => new Date(b.close_time || b.open_time || b.round_date).getTime() - new Date(a.close_time || a.open_time || a.round_date).getTime());
 
               const uniqueTypes = Array.from(new Set(historyList.map((h: any) => h.lottery_type))).filter(Boolean);
