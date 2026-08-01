@@ -8445,8 +8445,17 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               const combinedHistory = dbHistoryList ? [...dbHistoryList] : [];
 
+              const existingRoundIds = new Set<string>();
+              (dbHistoryList || []).forEach((h: any) => {
+                if (h.round_id) existingRoundIds.add(h.round_id);
+                if (h.id) existingRoundIds.add(h.id);
+              });
+
               if (activeClosedRounds && activeClosedRounds.length > 0) {
                 for (const round of activeClosedRounds) {
+                  if (existingRoundIds.has(round.id)) {
+                    continue;
+                  }
                   // 1. Fetch submissions for this round
                   const { data: submissions } = await fetchAllRows(
                     (from, to) => supabase
@@ -8686,6 +8695,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
                   // Append virtual round history item
                   combinedHistory.push({
+                    id: round.id,
+                    round_id: round.id,
                     total_entries: submissions?.length || 0,
                     total_amount: grandTotalBet,
                     total_commission: grandTotalCommission,
@@ -8695,16 +8706,34 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                     upstream_commission: outgoingTotalCommission,
                     upstream_winnings: outgoingTotalWin,
                     round_date: round.round_date,
+                    open_time: round.open_time,
+                    close_time: round.close_time,
                     lottery_type: round.lottery_type,
                     lottery_name: round.lottery_name || round.lottery_type.toUpperCase(),
                   });
                 }
               }
 
-              // Sort combined history by round_date descending
-              combinedHistory.sort((a, b) => new Date(b.round_date).getTime() - new Date(a.round_date).getTime());
+              // Filter combined history by date matching Web App logic
+              let historyList = combinedHistory;
+              if (filterTime === 'm' || filterTime === 'w' || parseMonthYearParam(filterTime) !== null) {
+                if (startDate && endDate) {
+                  historyList = historyList.filter((h: any) => {
+                    const hDateStr = h.close_time || h.open_time || h.round_date;
+                    if (!hDateStr) return true;
+                    const d = new Date(hDateStr);
+                    const bkkDate = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+                    const yyyy = bkkDate.getUTCFullYear();
+                    const mm = String(bkkDate.getUTCMonth() + 1).padStart(2, '0');
+                    const dd = String(bkkDate.getUTCDate()).padStart(2, '0');
+                    const dateStr = `${yyyy}-${mm}-${dd}`;
+                    return dateStr >= startDate! && dateStr <= endDate!;
+                  });
+                }
+              }
 
-              const historyList = combinedHistory;
+              // Sort combined history by round_date descending
+              historyList.sort((a: any, b: any) => new Date(b.close_time || b.open_time || b.round_date).getTime() - new Date(a.close_time || a.open_time || a.round_date).getTime());
 
               const uniqueTypes = Array.from(new Set(historyList.map((h: any) => h.lottery_type))).filter(Boolean);
               const typeMap: Record<string, string> = {
