@@ -2662,7 +2662,7 @@ export default function Dealer() {
                                     else if (bt === '2_bottom' && w2bottom && num.length === 2) isWinner = num === w2bottom
                                     else if (bt === '2_top' && w2top && num.length === 2) isWinner = num === w2top
                                     else if ((bt === '3_top' || bt === '3_straight') && w3top && num.length === 3) isWinner = num === w3top
-                                    else if ((bt === '3_tod' || bt === '3_tod_single') && w3top && num.length === 3) isWinner = num.split('').sort().join('') === w3topSorted && num !== w3top
+                                    else if ((bt === '3_tod' || bt === '3_tod_single') && w3top && num.length === 3) isWinner = num.split('').sort().join('') === w3topSorted
                                     else if (bt === '4_set' && w4set && num.length === 4) {
                                         const r = calculate4SetPrizes(num, w4set)
                                         if (r.totalPrize > 0) { isWinner = true; prize = r.totalPrize }

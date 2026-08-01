@@ -797,7 +797,7 @@ export default function RoundAccordionItem({
                             } else if ((bt === '3_top' || bt === '3_straight') && w3top && num.length === 3) {
                                 isWinner = num === w3top
                             } else if ((bt === '3_tod' || bt === '3_tod_single') && w3top && num.length === 3) {
-                                isWinner = num.split('').sort().join('') === w3topSorted && num !== w3top
+                                isWinner = num.split('').sort().join('') === w3topSorted
                             } else if (bt === '4_float' && w3top && w3top.length === 3 && num.length === 4) {
                                 isWinner = floatCheck(w3top, num)
                             } else if (bt === '5_float' && w3top && w3top.length === 3 && num.length === 5) {

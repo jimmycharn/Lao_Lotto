@@ -145,10 +145,10 @@ export function checkBetWin(betType, betNumbers, winNums, payoutRate, amount, se
         if (num === w3top) return { wins: true, payout: amount * payoutRate }
     }
 
-    // 3_tod / 3_tod_single (same digits different order, NOT exact match)
+    // 3_tod / 3_tod_single (same digits, any order)
     if ((bt === '3_tod' || bt === '3_tod_single') && num.length === 3 && w3top) {
         const numSorted = num.split('').sort().join('')
-        if (numSorted === w3topSorted && num !== w3top) return { wins: true, payout: amount * payoutRate }
+        if (numSorted === w3topSorted) return { wins: true, payout: amount * payoutRate }
     }
 
     // 3_bottom (for Thai lottery - matches w2bottom area, but actually uses separate 3-digit bottom result)

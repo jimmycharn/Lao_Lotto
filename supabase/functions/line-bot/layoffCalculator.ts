@@ -244,7 +244,7 @@ export function checkBetWin(
 
   if ((bt === '3_tod' || bt === '3_tod_single') && num.length === 3 && w3top) {
     const numSorted = num.split('').sort().join('');
-    if (numSorted === w3topSorted && num !== w3top) return { wins: true, payout: amount * payoutRate };
+    if (numSorted === w3topSorted) return { wins: true, payout: amount * payoutRate };
   }
 
   if (bt === '2_top' && num.length === 2 && w2top) {

@@ -124,7 +124,7 @@ function checkBetWins(bet: BetItem, w4set: string, lotteryType: string): boolean
   if ((bt === '2_center' || bt === '2_spread') && num.length === 2 && w3top.length === 3) return num === (w3top[0] + w3top[2])
   if (bt === '2_run' && num.length === 2 && w3top.length === 3) return w3top.includes(num[0]) && w3top.includes(num[1])
   if ((bt === '3_top' || bt === '3_straight') && num.length === 3) return num === w3top
-  if ((bt === '3_tod' || bt === '3_tod_single') && num.length === 3) return num.split('').sort().join('') === w3topSorted && num !== w3top
+  if ((bt === '3_tod' || bt === '3_tod_single') && num.length === 3) return num.split('').sort().join('') === w3topSorted
   if (bt === '4_float' && num.length === 4 && w3top.length === 3) return floatCheck(w3top, num)
   if (bt === '5_float' && num.length === 5 && w3top.length === 3) return floatCheck(w3top, num)
   if (bt === '6_top' && num.length === 6) return false // 6-digit needs 6-digit result, skip for 4-digit scenarios
