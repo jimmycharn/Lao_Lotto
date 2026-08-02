@@ -1440,7 +1440,8 @@ function findRoundByDate(rounds: any[], dateStr: string): any | null {
 
 // Helper: Parse a month-year param (e.g. 6-69, 6-2569, 6-26, 6-2026, 6/69, 6/2026).
 // Returns { month: number, year: number } or null.
-function parseMonthYearParam(param: string): { month: number; year: number } | null {
+function parseMonthYearParam(param: string | null | undefined): { month: number; year: number } | null {
+  if (!param || typeof param !== 'string') return null;
   const clean = param.replace(/\s+/g, '');
   const match = clean.match(/^(\d{1,2})[-/](\d{2,4})$/);
   if (!match) return null;
@@ -8708,7 +8709,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               // Filter combined history by closing time (close_time || open_time || round_date) matching Web App logic
               let historyList = combinedHistory;
-              if (filterTime === 'm' || filterTime === 'w' || parseMonthYearParam(filterTime) !== null) {
+              if (filterTime && (filterTime === 'm' || filterTime === 'w' || parseMonthYearParam(filterTime) !== null)) {
                 let targetYear: number | null = null;
                 let targetMonth: number | null = null;
 
