@@ -1698,7 +1698,18 @@ export default function DealerLineBotTab({ user, profile }) {
                                         /ตั้งอั้นเฉพาะ [เลข] [วงเงิน] [จ่าย%] [ก]
                                     </code>
                                 </td>
-                                <td style={{ padding: '0.75rem' }}>ตั้งค่าอั้นเฉพาะตัวเลข (เช่น /ตั้งอั้นเฉพาะ 12 5000 50% ก หรือ /ตั้งอั้นเฉพาะ 99 บน ปิด หรือ /ตั้งอั้นเฉพาะ 12 ลบ) รองรับหลายบรรทัด</td>
+                                <td style={{ padding: '0.75rem' }}>
+                                    ตั้งค่าอั้นเฉพาะตัวเลข (เช่น /ตั้งอั้นเฉพาะ 123 400 บตก หรือ 12 5000 บลก หรือ 1 500 วปบ) รองรับหลายบรรทัด
+                                    <div style={{ fontSize: '0.75rem', color: '#a0aec0', marginTop: '0.25rem' }}>
+                                        * เลข 3 ตัว: บ=ตรง/3บน, ต=3โต๊ด, ล=3ล่าง, ก=ตัวกลับ
+                                        <br />
+                                        * เลข 2 ตัว: บ=บน, ล=ล่าง, ห=หน้า, ถ=ถ่าง, ว=ลอย, ก=ตัวกลับ
+                                        <br />
+                                        * เลข 1 ตัว: ว=ลอย (วบ=ลอยบน, วล=ลอยล่าง), ป=ปัก (ปบ=ปักบน, ปล=ปักล่าง)
+                                        <br />
+                                        (ถ้าไม่มีอักษรกำกับ = ทุกประเภท)
+                                    </div>
+                                </td>
                                 <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
                                 <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
                                 <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>

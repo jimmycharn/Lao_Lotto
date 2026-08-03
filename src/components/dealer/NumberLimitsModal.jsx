@@ -19,6 +19,7 @@ export default function NumberLimitsModal({ round, onClose }) {
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
+    const [digitFilter, setDigitFilter] = useState('all')
     const [editingId, setEditingId] = useState(null)
     const [editForm, setEditForm] = useState({})
     const numberInputRef = useRef(null)
@@ -281,15 +282,64 @@ export default function NumberLimitsModal({ round, onClose }) {
         }
     }
 
-    // Filtered limits based on search
+    async function handleDeleteBulkFilteredLimits() {
+        if (filteredLimits.length === 0) return
+
+        let filterLabel = ''
+        if (digitFilter !== 'all') {
+            filterLabel = `เลข ${digitFilter} ตัว`
+        }
+        if (searchQuery) {
+            filterLabel += (filterLabel ? ' ' : '') + `ที่ค้นหา "${searchQuery}"`
+        }
+        if (!filterLabel) {
+            filterLabel = 'ทั้งหมด'
+        }
+
+        const uniqueNumbersCount = new Set(filteredLimits.map(l => l.numbers)).size
+        const totalItems = filteredLimits.length
+
+        const confirmMsg = `คุณต้องการลบเลขอั้น/ปิด (${filterLabel}) จำนวน ${uniqueNumbersCount} เลข (รวม ${totalItems} รายการ) ใช่หรือไม่?`
+
+        if (!(await confirmDialog({
+            title: 'ยืนยันการลบเลขอั้นแบบกลุ่ม',
+            message: confirmMsg,
+            confirmText: 'ลบทั้งหมด',
+            confirmButtonClass: 'danger'
+        }))) return
+
+        try {
+            const idsToDelete = filteredLimits.map(l => l.id)
+            const { error } = await supabase
+                .from('number_limits')
+                .delete()
+                .in('id', idsToDelete)
+
+            if (error) throw error
+
+            toast.success(`ลบเลขอั้น/ปิด (${filterLabel}) เรียบร้อยแล้ว`)
+            fetchLimits()
+        } catch (error) {
+            console.error('Error bulk deleting limits:', error)
+            toast.error('เกิดข้อผิดพลาดในการลบ: ' + error.message)
+        }
+    }
+
+    // Filtered limits based on search and digit filter
     const filteredLimits = useMemo(() => {
-        if (!searchQuery) return limits
-        const q = searchQuery.toLowerCase()
-        return limits.filter(l =>
-            l.numbers.includes(q) ||
-            (BET_TYPES[l.bet_type] || '').toLowerCase().includes(q)
-        )
-    }, [limits, searchQuery])
+        return limits.filter(l => {
+            if (searchQuery) {
+                const q = searchQuery.toLowerCase()
+                const matchSearch = l.numbers.includes(q) || (BET_TYPES[l.bet_type] || '').toLowerCase().includes(q)
+                if (!matchSearch) return false
+            }
+            if (digitFilter !== 'all') {
+                const reqLen = parseInt(digitFilter, 10)
+                if (l.numbers.length !== reqLen) return false
+            }
+            return true
+        })
+    }, [limits, searchQuery, digitFilter])
 
     // Group limits by number for display
     const groupedLimits = useMemo(() => {
@@ -511,19 +561,57 @@ export default function NumberLimitsModal({ round, onClose }) {
 
                     {/* === Current Limits List === */}
                     <div style={sectionStyle}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', gap: '0.5rem', flexWrap: 'wrap' }}>
-                            <h4 style={{ margin: 0, fontSize: '0.95rem' }}>
-                                รายการเลขอั้น/ปิด ({limits.length})
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', gap: '0.4rem', flexWrap: 'wrap' }}>
+                            <h4 style={{ margin: 0, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                รายการเลขอั้น/ปิด ({filteredLimits.length === limits.length ? limits.length : `${filteredLimits.length}/${limits.length}`})
                             </h4>
-                            <div style={{ position: 'relative', flex: '1 1 180px', maxWidth: '250px' }}>
-                                <FiSearch style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} size={14} />
-                                <input
-                                    type="text"
-                                    style={{ ...inputStyle, paddingLeft: '1.8rem' }}
-                                    placeholder="ค้นหาเลข..."
-                                    value={searchQuery}
-                                    onChange={e => setSearchQuery(e.target.value)}
-                                />
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                {/* Dropdown filter by digit count */}
+                                <select
+                                    style={{ ...inputStyle, width: 'auto', minWidth: '105px', padding: '0.35rem 0.5rem', fontSize: '0.8rem' }}
+                                    value={digitFilter}
+                                    onChange={e => setDigitFilter(e.target.value)}
+                                >
+                                    <option value="all">ทุกประเภทหลัก</option>
+                                    <option value="1">เลข 1 ตัว</option>
+                                    <option value="2">เลข 2 ตัว</option>
+                                    <option value="3">เลข 3 ตัว</option>
+                                    <option value="4">เลข 4 ตัว</option>
+                                    <option value="5">เลข 5 ตัว</option>
+                                </select>
+
+                                {/* Search input */}
+                                <div style={{ position: 'relative', width: '120px' }}>
+                                    <FiSearch style={{ position: 'absolute', left: '0.4rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} size={13} />
+                                    <input
+                                        type="text"
+                                        style={{ ...inputStyle, paddingLeft: '1.6rem', paddingRight: searchQuery ? '1.4rem' : '0.4rem', padding: '0.35rem 0.4rem 0.35rem 1.6rem', fontSize: '0.8rem' }}
+                                        placeholder="ค้นหา..."
+                                        value={searchQuery}
+                                        onChange={e => setSearchQuery(e.target.value)}
+                                    />
+                                    {searchQuery && (
+                                        <button
+                                            onClick={() => setSearchQuery('')}
+                                            style={{ position: 'absolute', right: '0.3rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', padding: 0 }}
+                                        >
+                                            <FiX size={12} />
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Bulk Delete Button */}
+                                {filteredLimits.length > 0 && (
+                                    <button
+                                        className="icon-btn danger"
+                                        onClick={handleDeleteBulkFilteredLimits}
+                                        title={digitFilter !== 'all' || searchQuery ? `ลบทั้งหมดที่กรองอยู่ (${filteredLimits.length} รายการ)` : `ลบรายการเลขอั้นทั้งหมด (${limits.length} รายการ)`}
+                                        style={{ padding: '0.35rem 0.55rem', height: '30px', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.78rem', borderRadius: '6px' }}
+                                    >
+                                        <FiTrash2 size={13} /> ลบทั้งหมด
+                                    </button>
+                                )}
                             </div>
                         </div>
 
@@ -533,7 +621,7 @@ export default function NumberLimitsModal({ round, onClose }) {
                             </div>
                         ) : groupedLimits.length === 0 ? (
                             <p style={{ textAlign: 'center', opacity: 0.5, padding: '1.5rem' }}>
-                                {searchQuery ? 'ไม่พบเลขที่ค้นหา' : 'ยังไม่มีการตั้งค่าเลขอั้น/ปิด'}
+                                {searchQuery || digitFilter !== 'all' ? 'ไม่พบเลขตามเงื่อนไขที่กรอง/ค้นหา' : 'ยังไม่มีการตั้งค่าเลขอั้น/ปิด'}
                             </p>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>

@@ -2813,6 +2813,7 @@ function getCombinationsOf3(numbers: string): string[] {
 interface ParsedLimit {
   numbers: string;
   betTypes: string[];
+  specifiedBetTypes?: string[];
   maxAmount: number;
   payoutPercent: number;
   limitType: 'limited' | 'blocked';
@@ -2820,6 +2821,89 @@ interface ParsedLimit {
   isDelete: boolean;
   isSetLimit: boolean;
   combinations3?: string[];
+}
+
+function parse1DigitShorthand(tok: string): string[] {
+  const betTypes: string[] = [];
+  const hasWoBo = tok.includes('วบ');
+  const hasWoLo = tok.includes('วล');
+  const hasPoBo = tok.includes('ปบ');
+  const hasPoLo = tok.includes('ปล');
+  
+  if (hasWoBo) betTypes.push('run_top');
+  if (hasWoLo) betTypes.push('run_bottom');
+  if (hasPoBo) betTypes.push('pak_top');
+  if (hasPoLo) betTypes.push('pak_bottom');
+  
+  let handledWo = hasWoBo || hasWoLo;
+  let handledPo = hasPoBo || hasPoLo;
+  
+  if (tok.includes('ว') && !handledWo) {
+    if (tok.includes('ล') && !hasPoLo) {
+      betTypes.push('run_bottom');
+    } else if (tok.includes('บ') || hasPoLo) {
+      betTypes.push('run_top');
+    } else {
+      betTypes.push('run_top', 'run_bottom');
+    }
+  }
+  
+  if (tok.includes('ป') && !handledPo) {
+    if (tok.includes('ล')) {
+      betTypes.push('pak_bottom');
+    } else if (tok.includes('บ')) {
+      betTypes.push('pak_top');
+    } else {
+      betTypes.push('pak_top', 'pak_bottom');
+    }
+  }
+  
+  if (!tok.includes('ว') && !tok.includes('ป')) {
+    if (tok.includes('บ')) {
+      betTypes.push('run_top', 'pak_top');
+    }
+    if (tok.includes('ล')) {
+      betTypes.push('run_bottom', 'pak_bottom');
+    }
+  }
+
+  return Array.from(new Set(betTypes));
+}
+
+function parseShorthandToken(tok: string, numLen: number, specifiedBetTypes: string[]): boolean {
+  let hasReverse = false;
+  if (tok.includes('ก')) {
+    hasReverse = true;
+  }
+  
+  if (numLen === 1) {
+    const bts = parse1DigitShorthand(tok);
+    specifiedBetTypes.push(...bts);
+  } else if (numLen === 2) {
+    for (const char of tok) {
+      if (char === 'บ') specifiedBetTypes.push('2_top');
+      else if (char === 'ล') specifiedBetTypes.push('2_bottom');
+      else if (char === 'ห') specifiedBetTypes.push('2_front');
+      else if (char === 'ถ') specifiedBetTypes.push('2_center');
+      else if (char === 'ว') specifiedBetTypes.push('2_run');
+    }
+  } else if (numLen === 3) {
+    for (const char of tok) {
+      if (char === 'บ') specifiedBetTypes.push('3_top');
+      else if (char === 'ต') specifiedBetTypes.push('3_tod');
+      else if (char === 'ล') specifiedBetTypes.push('3_bottom');
+    }
+  } else {
+    for (const char of tok) {
+      if (char === 'บ') specifiedBetTypes.push('2_top');
+      else if (char === 'ล') specifiedBetTypes.push('2_bottom');
+      else if (char === 'ต') specifiedBetTypes.push('3_tod');
+      else if (char === 'ห') specifiedBetTypes.push('2_front');
+      else if (char === 'ถ') specifiedBetTypes.push('2_center');
+      else if (char === 'ว') specifiedBetTypes.push('2_run');
+    }
+  }
+  return hasReverse;
 }
 
 function parseSpecificLimitLine(line: string, lotteryType: string, setPrice: number): ParsedLimit | null {
@@ -2903,6 +2987,10 @@ function parseSpecificLimitLine(line: string, lotteryType: string, setPrice: num
         const bt = parseTokenToBetType(p, isLaoOrHanoi);
         if (bt) {
           specifiedBetTypes.push(bt);
+        } else if (/^[บลตหถวปกล]+$/i.test(p)) {
+          if (parseShorthandToken(p, numbers.length, specifiedBetTypes)) {
+            includeReversed = true;
+          }
         }
       }
       continue;
@@ -2915,6 +3003,20 @@ function parseSpecificLimitLine(line: string, lotteryType: string, setPrice: num
       } else if (payoutPercent === 100 && val <= 100) {
         payoutPercent = val;
       }
+      continue;
+    }
+
+    const bt = parseTokenToBetType(tok, isLaoOrHanoi);
+    if (bt) {
+      specifiedBetTypes.push(bt);
+      continue;
+    }
+
+    if (/^[บลตหถวปกล]+$/i.test(tok)) {
+      if (parseShorthandToken(tok, numbers.length, specifiedBetTypes)) {
+        includeReversed = true;
+      }
+      continue;
     }
   }
 
@@ -2930,6 +3032,7 @@ function parseSpecificLimitLine(line: string, lotteryType: string, setPrice: num
     }
   }
 
+  specifiedBetTypes = Array.from(new Set(specifiedBetTypes));
   let finalBetTypes = [...specifiedBetTypes];
   let combinations3: string[] = [];
 
@@ -2971,6 +3074,7 @@ function parseSpecificLimitLine(line: string, lotteryType: string, setPrice: num
         return {
           numbers: last3,
           betTypes: finalBetTypes,
+          specifiedBetTypes,
           maxAmount,
           payoutPercent,
           limitType,
@@ -2985,6 +3089,7 @@ function parseSpecificLimitLine(line: string, lotteryType: string, setPrice: num
   return {
     numbers,
     betTypes: finalBetTypes,
+    specifiedBetTypes,
     maxAmount,
     payoutPercent,
     limitType,
@@ -13293,7 +13398,12 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 }
                 const label = limitType === 'blocked' ? 'ปิดรับ' : `อั้น ${parsed.isSetLimit ? (maxAmount/setPrice) + ' ชุด' : '฿' + maxAmount.toLocaleString()} จ่าย ${payoutPercent}%`;
                 const revLabel = includeReversed ? ' (กลับ)' : '';
-                successDetails.push(`${numbers}: ${label}${revLabel}`);
+                let typeLabel = '';
+                if (parsed.specifiedBetTypes && parsed.specifiedBetTypes.length > 0) {
+                  const labels = parsed.specifiedBetTypes.map(bt => getThaiBetTypeLabel(bt, listLotteryType));
+                  typeLabel = ` (${labels.join(', ')})`;
+                }
+                successDetails.push(`${numbers}${typeLabel}: ${label}${revLabel}`);
               }
               successCount++;
             }
