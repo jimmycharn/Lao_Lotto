@@ -10668,16 +10668,24 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 continue;
               }
 
-              let body = '';
+              let rawBody = '';
               if (text.startsWith('/ตีออกเฉพาะเลข')) {
-                body = text.substring('/ตีออกเฉพาะเลข'.length).trim();
+                rawBody = text.substring('/ตีออกเฉพาะเลข'.length).trim();
               } else {
-                body = text.substring('/ตีออกเฉพาะ'.length).trim();
+                rawBody = text.substring('/ตีออกเฉพาะ'.length).trim();
               }
 
-              if (!body) {
+              if (!rawBody) {
                 await sendLineReply(replyToken, `❌ กรุณาระบุเลขและเงื่อนไขการตีออกเฉพาะ เช่น\n/ตีออกเฉพาะ\n12,31,95 100 บลก`);
                 continue;
+              }
+
+              let isConfirmed = false;
+              let body = rawBody;
+              const confirmSuffixMatch = rawBody.match(/\s+(ตกลง|ยืนยัน|y|yes)$/i);
+              if (confirmSuffixMatch) {
+                isConfirmed = true;
+                body = rawBody.substring(0, confirmSuffixMatch.index).trim();
               }
 
               const lines = body.split('\n').map(l => l.trim()).filter(Boolean);
@@ -10811,6 +10819,55 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               if (excessItems.length === 0) {
                 await sendLineReply(replyToken, `ℹ️ เลขที่ระบุไม่มีสัดส่วนที่เกินจากเกณฑ์ ไม่จำเป็นต้องตีออกค่ะ 🎉`);
+                continue;
+              }
+
+              if (!isConfirmed) {
+                const totalAmount = excessItems.reduce((sum, item) => sum + item.amount, 0);
+                const lotteryName = activeRound.lottery_name || activeRound.lottery_type.toUpperCase();
+                const roundDateStr = getRoundDisplayDate(activeRound, false);
+
+                let previewText = `⚡ ยืนยันการตีออกเฉพาะเลข\n`;
+                previewText += `ประเภทหวย: ${lotteryName}\n`;
+                if (roundDateStr) previewText += `งวดวันที่: ${roundDateStr}\n`;
+                previewText += `จำนวน: ${excessItems.length} รายการ\n`;
+                previewText += `💰 ยอดรวมตีออก: ฿${totalAmount.toLocaleString('th-TH')}\n`;
+                previewText += `--------------------------\n`;
+
+                const itemLines = excessItems.map(item => {
+                  const label = getThaiBetTypeLabel(item.bet_type, activeRound.lottery_type);
+                  return `• ${item.numbers} (${label}) = ฿${item.amount.toLocaleString('th-TH')}`;
+                });
+                previewText += itemLines.join('\n');
+                previewText += `\n--------------------------\n`;
+                previewText += `👉 กดปุ่ม "ตกลง" ด้านล่างเพื่อยืนยัน หรือกด "ยกเลิก" เพื่อยกเลิกรายการค่ะ`;
+
+                const confirmCmdText = `/ตีออกเฉพาะ\n${body} ตกลง`;
+
+                await sendLineReply(replyToken, {
+                  type: "text",
+                  text: previewText,
+                  quickReply: {
+                    items: [
+                      {
+                        type: "action",
+                        action: {
+                          type: "message",
+                          label: "ตกลง",
+                          text: confirmCmdText
+                        }
+                      },
+                      {
+                        type: "action",
+                        action: {
+                          type: "message",
+                          label: "ยกเลิก",
+                          text: "ยกเลิก"
+                        }
+                      }
+                    ]
+                  }
+                });
                 continue;
               }
 
@@ -11377,15 +11434,15 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
                 await sendLineReply(replyToken, {
                   type: "text",
-                  text: summaryText + `\n\n⚠️ ต้องการตีออกยอดเกินอั้นทั้งหมดนี้หรือไม่?\n👉 พิมพ์ Y หรือกดปุ่มด้านล่างเพื่อยืนยันการทำรายการค่ะ`,
+                  text: summaryText + `\n\n⚠️ ต้องการตีออกยอดเกินอั้นทั้งหมดนี้หรือไม่?\n👉 กดปุ่ม "ตกลง" ด้านล่างเพื่อยืนยัน หรือกด "ยกเลิก" เพื่อยกเลิกรายการค่ะ`,
                   quickReply: {
                     items: [
                       {
                         type: "action",
                         action: {
                           type: "message",
-                          label: "Y (ยืนยัน)",
-                          text: "Y"
+                          label: "ตกลง",
+                          text: "เกิน Y"
                         }
                       },
                       {
@@ -11404,7 +11461,11 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 commandArgLower === 'เกิน y' || 
                 commandArgLower === 'เกิน yes' || 
                 commandArgLower === 'excess y' || 
-                commandArgLower === 'excess yes'
+                commandArgLower === 'excess yes' ||
+                commandArgLower === 'เกิน ยืนยัน' ||
+                commandArgLower === 'เกิน ตกลง' ||
+                commandArgLower === 'ตกลง' ||
+                commandArgLower === 'ยืนยัน'
               ) {
                 const excessItems = await calculateRoundExcess(activeRound.id);
                 if (excessItems.length === 0) {
@@ -11420,9 +11481,17 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 }
                 continue;
               } else {
-                // Preprocess commandArg to expand 'ก' suffix for permutations
+                let isManualConfirmed = false;
+                let manualArg = commandArg;
+                const manualMatch = commandArg.match(/\s+(ตกลง|ยืนยัน|y|yes)$/i);
+                if (manualMatch) {
+                  isManualConfirmed = true;
+                  manualArg = commandArg.substring(0, manualMatch.index).trim();
+                }
+
+                // Preprocess manualArg to expand 'ก' suffix for permutations
                 const preprocessedArg = (() => {
-                  const lines = commandArg.split('\n');
+                  const lines = manualArg.split('\n');
                   const resultLines: string[] = [];
                   for (const line of lines) {
                     const trimmed = line.trim();
@@ -11449,7 +11518,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   three_digit_perm_mode: threeDigitPermMode
                 });
                 if (parsedBets.length === 0) {
-                  await sendLineReply(replyToken, `❌ รูปแบบคำสั่งตีออกไม่ถูกต้อง\n\n- ตีออกยอดเกิน:พิมพ์ /ตีออก เกิน\n- ตีออกเจาะจง: พิมพ์ /ตีออก [เลข] [ประเภท] [จำนวน]\n(เช่น /ตีออก 362 บน 200)`);
+                  await sendLineReply(replyToken, `❌ รูปแบบคำสั่งตีออกไม่ถูกต้อง\n\n- ตีออกยอดเกิน: พิมพ์ /ตีออก หรือ /ตีออก เกิน\n- ตีออกเจาะจง: พิมพ์ /ตีออก [เลข] [ประเภท] [จำนวน]\n(เช่น /ตีออก 362 บน 200)`);
                   continue;
                 }
 
@@ -11517,6 +11586,53 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                     }
                   }
                 });
+
+                if (!isManualConfirmed) {
+                  const totalAmount = itemsToTransfer.reduce((sum, item) => sum + item.amount, 0);
+                  const lotteryName = activeRound.lottery_name || activeRound.lottery_type.toUpperCase();
+                  const roundDateStr = getRoundDisplayDate(activeRound, false);
+
+                  let previewText = `⚡ ยืนยันการตีออกตัวเลข\n`;
+                  previewText += `ประเภทหวย: ${lotteryName}\n`;
+                  if (roundDateStr) previewText += `งวดวันที่: ${roundDateStr}\n`;
+                  previewText += `จำนวน: ${itemsToTransfer.length} รายการ\n`;
+                  previewText += `💰 ยอดรวมตีออก: ฿${totalAmount.toLocaleString('th-TH')}\n`;
+                  previewText += `--------------------------\n`;
+
+                  const itemLines = itemsToTransfer.map(item => {
+                    const label = getThaiBetTypeLabel(item.bet_type, activeRound.lottery_type);
+                    return `• ${item.numbers} (${label}) = ฿${item.amount.toLocaleString('th-TH')}`;
+                  });
+                  previewText += itemLines.join('\n');
+                  previewText += `\n--------------------------\n`;
+                  previewText += `👉 กดปุ่ม "ตกลง" ด้านล่างเพื่อยืนยัน หรือกด "ยกเลิก" เพื่อยกเลิกรายการค่ะ`;
+
+                  await sendLineReply(replyToken, {
+                    type: "text",
+                    text: previewText,
+                    quickReply: {
+                      items: [
+                        {
+                          type: "action",
+                          action: {
+                            type: "message",
+                            label: "ตกลง",
+                            text: `/ตีออก ${manualArg} ตกลง`
+                          }
+                        },
+                        {
+                          type: "action",
+                          action: {
+                            type: "message",
+                            label: "ยกเลิก",
+                            text: "ยกเลิก"
+                          }
+                        }
+                      ]
+                    }
+                  });
+                  continue;
+                }
 
                 const result = await performLayoff(dealerId, activeRound.id, groupLink.lottery_type, itemsToTransfer);
                 if (result.success && result.text) {
