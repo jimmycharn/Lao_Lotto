@@ -3100,6 +3100,102 @@ function parseSpecificLimitLine(line: string, lotteryType: string, setPrice: num
   };
 }
 
+interface ParsedLayoffLine {
+  numbers: string[];
+  sampleLen: number;
+  overrideLimit: number | null;
+  maxChunk: number | null;
+  includeReversed: boolean;
+  betTypes: string[];
+  specifiedBetTypes: string[];
+}
+
+function parseSpecificLayoffLine(line: string, lotteryType: string): ParsedLayoffLine | null {
+  const cleanLine = line.trim().replace(/\s+/g, ' ');
+  if (!cleanLine) return null;
+
+  const tokens = cleanLine.split(' ');
+  if (tokens.length === 0) return null;
+
+  const rawNumbers = tokens[0];
+  const numberList = rawNumbers.split(',').map(n => n.trim()).filter(n => /^\d+$/.test(n));
+  if (numberList.length === 0) return null;
+
+  const sampleLen = numberList[0].length;
+
+  let overrideLimit: number | null = null;
+  let maxChunk: number | null = null;
+  let includeReversed = false;
+  let specifiedBetTypes: string[] = [];
+
+  const isLaoOrHanoi = ['lao', 'hanoi'].includes(lotteryType);
+
+  for (let i = 1; i < tokens.length; i++) {
+    const tok = tokens[i].trim();
+    if (!tok) continue;
+
+    if (/^(ก|กลับ)$/i.test(tok)) {
+      includeReversed = true;
+      continue;
+    }
+
+    const amtMatch = tok.match(/^(\d+(?:\.\d+)?)(?:\/(\d+(?:\.\d+)?))?$/);
+    if (amtMatch) {
+      const val1 = parseFloat(amtMatch[1]);
+      if (!isNaN(val1) && overrideLimit === null) {
+        overrideLimit = val1;
+        if (amtMatch[2]) {
+          const val2 = parseFloat(amtMatch[2]);
+          if (!isNaN(val2)) {
+            maxChunk = val2;
+          }
+        }
+        continue;
+      }
+    }
+
+    const bt = parseTokenToBetType(tok, isLaoOrHanoi);
+    if (bt) {
+      specifiedBetTypes.push(bt);
+      continue;
+    }
+
+    if (/^[บลตหถวปกล]+$/i.test(tok)) {
+      if (parseShorthandToken(tok, sampleLen, specifiedBetTypes)) {
+        includeReversed = true;
+      }
+      continue;
+    }
+  }
+
+  specifiedBetTypes = Array.from(new Set(specifiedBetTypes));
+  let finalBetTypes = [...specifiedBetTypes];
+
+  if (finalBetTypes.length === 0) {
+    if (sampleLen === 1) {
+      finalBetTypes = ['run_top', 'run_bottom', 'pak_top', 'pak_bottom'];
+    } else if (sampleLen === 2) {
+      finalBetTypes = ['2_top', '2_bottom', '2_front', '2_center', '2_run'];
+    } else if (sampleLen === 3) {
+      if (lotteryType === 'thai') {
+        finalBetTypes = ['3_top', '3_tod', '3_bottom'];
+      } else {
+        finalBetTypes = ['3_top', '3_tod', '3_bottom', '3_set'];
+      }
+    }
+  }
+
+  return {
+    numbers: numberList,
+    sampleLen,
+    overrideLimit,
+    maxChunk,
+    includeReversed,
+    betTypes: finalBetTypes,
+    specifiedBetTypes
+  };
+}
+
 function getThaiBetTypeLabel(betType: string, lotteryType: string): string {
   const typeLower = lotteryType.toLowerCase();
   if (typeLower === 'thai') {
@@ -10547,6 +10643,179 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               summaryText += `--------------------------`;
 
               await sendLineReply(replyToken, splitTextByLimit(summaryText));
+              continue;
+            }
+
+            // ─── COMMAND: /ตีออกเฉพาะ หรือ /ตีออกเฉพาะเลข ───
+            if (text.startsWith('/ตีออกเฉพาะ') || text.startsWith('/ตีออกเฉพาะเลข')) {
+              if (!permissions.can_transfer) {
+                await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ในการสั่งตีออกตัวเลข`);
+                continue;
+              }
+
+              const { data: activeRound } = await supabase
+                .from('lottery_rounds')
+                .select('id, round_date, close_time, set_prices, lottery_type')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', groupLink.lottery_type)
+                .in('status', ['open', 'closed', 'announced'])
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (!activeRound) {
+                await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงสำหรับหวยประเภท ${groupLink.lottery_type.toUpperCase()}`);
+                continue;
+              }
+
+              let body = '';
+              if (text.startsWith('/ตีออกเฉพาะเลข')) {
+                body = text.substring('/ตีออกเฉพาะเลข'.length).trim();
+              } else {
+                body = text.substring('/ตีออกเฉพาะ'.length).trim();
+              }
+
+              if (!body) {
+                await sendLineReply(replyToken, `❌ กรุณาระบุเลขและเงื่อนไขการตีออกเฉพาะ เช่น\n/ตีออกเฉพาะ\n12,31,95 100 บลก`);
+                continue;
+              }
+
+              const lines = body.split('\n').map(l => l.trim()).filter(Boolean);
+              const parsedLines: ParsedLayoffLine[] = [];
+              for (const line of lines) {
+                const parsed = parseSpecificLayoffLine(line, activeRound.lottery_type);
+                if (parsed) {
+                  parsedLines.push(parsed);
+                }
+              }
+
+              if (parsedLines.length === 0) {
+                await sendLineReply(replyToken, `❌ ไม่พบข้อมูลเลขที่ถูกต้องในคำสั่ง ให้ระบุตัวเลข เช่น 1,2,3 100/200`);
+                continue;
+              }
+
+              const { data: submissions, error: subErr } = await supabase
+                .from('submissions')
+                .select('bet_type, numbers, amount')
+                .eq('round_id', activeRound.id)
+                .eq('status', 'approved');
+
+              if (subErr) {
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลโพยแทง`);
+                continue;
+              }
+
+              const betTotals: Record<string, number> = {};
+              (submissions || []).forEach((s: any) => {
+                let keyNum = s.numbers;
+                if (s.bet_type === '3_tod' || s.bet_type === '4_tod') {
+                  keyNum = keyNum.split('').sort().join('');
+                }
+                const key = `${s.bet_type}|${keyNum}`;
+                betTotals[key] = (betTotals[key] || 0) + Number(s.amount || 0);
+              });
+
+              const { data: existingTransfers } = await supabase
+                .from('bet_transfers')
+                .select('bet_type, numbers, amount')
+                .eq('round_id', activeRound.id);
+
+              const alreadyTransferredMap: Record<string, number> = {};
+              (existingTransfers || []).forEach((t: any) => {
+                let tNum = t.numbers;
+                if (t.bet_type === '3_tod' || t.bet_type === '4_tod') {
+                  tNum = tNum.split('').sort().join('');
+                }
+                const key = `${t.bet_type}|${tNum}`;
+                alreadyTransferredMap[key] = (alreadyTransferredMap[key] || 0) + Number(t.amount || 0);
+              });
+
+              const { data: numberLimits } = await supabase
+                .from('number_limits')
+                .select('*')
+                .eq('round_id', activeRound.id)
+                .eq('is_active', true);
+
+              const { data: dealerLimits } = await supabase
+                .from('dealer_type_limits')
+                .select('*')
+                .eq('dealer_id', dealerId)
+                .eq('lottery_type', activeRound.lottery_type);
+
+              const typeLimitsMap: Record<string, number> = {};
+              (dealerLimits || []).forEach((dl: any) => {
+                typeLimitsMap[dl.bet_type] = Number(dl.max_amount);
+              });
+
+              const excessItems: ExcessItem[] = [];
+              const processedKeys = new Set<string>();
+
+              for (const pl of parsedLines) {
+                const targetNumbers = new Set<string>();
+                for (const num of pl.numbers) {
+                  targetNumbers.add(num);
+                  if (pl.includeReversed && num.length >= 2) {
+                    const perms = getPermutations(num);
+                    perms.forEach((p: string) => targetNumbers.add(p));
+                  }
+                }
+
+                for (const num of targetNumbers) {
+                  for (const betType of pl.betTypes) {
+                    let lookupNum = num;
+                    if (betType === '3_tod' || betType === '4_tod') {
+                      lookupNum = lookupNum.split('').sort().join('');
+                    }
+                    const key = `${betType}|${lookupNum}`;
+                    if (processedKeys.has(key)) continue;
+                    processedKeys.add(key);
+
+                    const totalAmt = betTotals[key] || 0;
+                    const alreadyTransferred = alreadyTransferredMap[key] || 0;
+
+                    let limit = 0;
+                    if (pl.overrideLimit !== null && pl.overrideLimit !== undefined) {
+                      limit = pl.overrideLimit;
+                    } else {
+                      const nl = (numberLimits || []).find((nlItem: any) => {
+                        const nlBetType = nlItem.bet_type === '4_set' ? '4_top' : nlItem.bet_type;
+                        if (nlBetType === betType && nlItem.numbers === lookupNum) return true;
+                        if (nlItem.include_reversed && nlBetType === betType && nlItem.reversed_numbers?.includes(lookupNum)) return true;
+                        return false;
+                      });
+                      const numLimit = nl !== undefined ? Number(nl.max_amount) : undefined;
+                      const typeLimit = typeLimitsMap[betType];
+                      limit = numLimit !== undefined ? numLimit : (typeLimit !== undefined ? typeLimit : 999999999);
+                    }
+
+                    const netExcess = totalAmt - limit - alreadyTransferred;
+
+                    if (netExcess > 0) {
+                      let layoffAmt = netExcess;
+                      if (pl.maxChunk !== null && pl.maxChunk !== undefined && netExcess > pl.maxChunk) {
+                        layoffAmt = pl.maxChunk;
+                      }
+                      excessItems.push({
+                        bet_type: betType,
+                        numbers: lookupNum,
+                        amount: layoffAmt
+                      });
+                    }
+                  }
+                }
+              }
+
+              if (excessItems.length === 0) {
+                await sendLineReply(replyToken, `ℹ️ เลขที่ระบุไม่มีสัดส่วนที่เกินจากเกณฑ์ ไม่จำเป็นต้องตีออกค่ะ 🎉`);
+                continue;
+              }
+
+              const result = await performLayoff(dealerId, activeRound.id, activeRound.lottery_type, excessItems);
+              if (result.success) {
+                await sendLineReply(replyToken, result.text || `✅ ตีออกเฉพาะเลขสำเร็จเรียบร้อยแล้วค่ะ`);
+              } else {
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการตีออก:\n${result.message}`);
+              }
               continue;
             }
 

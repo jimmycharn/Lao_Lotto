@@ -1717,6 +1717,24 @@ export default function DealerLineBotTab({ user, profile }) {
                             <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)', background: 'rgba(255,255,255,0.01)' }}>
                                 <td style={{ padding: '0.75rem' }}>
                                     <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /ตีออกเฉพาะ [เลข] [วงเงิน]/[ลิมิตรอบ] [อักษรย่อ]
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>
+                                    สั่งตีออกเฉพาะตัวเลขที่กำหนด (เช่น /ตีออกเฉพาะ 12,31,95 100/200 บลก หรือ 1,3,9 100 ปวบ หรือ 123,315 100 บตก)
+                                    <div style={{ fontSize: '0.75rem', color: '#a0aec0', marginTop: '0.25rem' }}>
+                                        * กำหนด 100/200 คือเกิน 100 ให้ตีออกครั้งละไม่เกิน 200
+                                        <br />
+                                        * ใส่ ก หมายถึงรวมเลขกลับทุกชุด
+                                    </div>
+                                </td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)', background: 'rgba(255,255,255,0.01)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
                                         /แจ้งผล [เลขรางวัล]
                                     </code>
                                 </td>
