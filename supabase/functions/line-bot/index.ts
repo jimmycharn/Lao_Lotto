@@ -10694,14 +10694,18 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 continue;
               }
 
-              const { data: submissions, error: subErr } = await supabase
-                .from('submissions')
-                .select('bet_type, numbers, amount')
-                .eq('round_id', activeRound.id)
-                .eq('status', 'approved');
+              const { data: submissions, error: subErr } = await fetchAllRows((from, to) =>
+                supabase
+                  .from('submissions')
+                  .select('bet_type, numbers, amount')
+                  .eq('round_id', activeRound.id)
+                  .eq('is_deleted', false)
+                  .range(from, to)
+              );
 
               if (subErr) {
-                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลโพยแทง`);
+                console.error("Error fetching submissions for /ตีออกเฉพาะ:", subErr);
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลโพยแทง: ${subErr.message}`);
                 continue;
               }
 
