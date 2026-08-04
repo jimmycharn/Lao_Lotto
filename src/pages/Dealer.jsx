@@ -1,13 +1,11 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useTheme, DASHBOARDS } from '../contexts/ThemeContext'
-import { supabase, fetchAllRows } from '../lib/supabase'
-import { processTopup } from '../services/creditService'
-import { checkDealerCreditForBet, checkUpstreamDealerCredit, getDealerCreditSummary, updatePendingDeduction, deductAdditionalCreditForRound } from '../utils/creditCheck'
+import { supabase } from '../lib/supabase'
+import { checkDealerCreditForBet, checkUpstreamDealerCredit, getDealerCreditSummary, updatePendingDeduction } from '../utils/creditCheck'
 import QRCode from 'react-qr-code'
-import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode'
 import { jsPDF } from 'jspdf'
 import { addThaiFont } from '../utils/thaiFontLoader'
 import {
@@ -39,12 +37,7 @@ import {
     FiAlertCircle,
     FiSearch,
     FiSlash,
-    FiInfo,
-    FiLink,
-    FiCreditCard,
-    FiImage,
-    FiRefreshCw,
-    FiMessageSquare
+    FiInfo
 } from 'react-icons/fi'
 import './Dealer.css'
 import './SettingsTabs.css'
@@ -56,14 +49,11 @@ import {
     BET_TYPES_BY_LOTTERY,
     DEFAULT_COMMISSIONS,
     DEFAULT_PAYOUTS,
-    DEFAULT_4_SET_SETTINGS,
     normalizeNumber,
     generateBatchId,
     getDefaultLimitsForType,
     getDefaultSetPricesForType,
-    getLotteryTypeKey,
-    calculate4SetPrizes,
-    normalizeBetType
+    getLotteryTypeKey
 } from '../constants/lotteryTypes'
 
 // Import separated modal components
@@ -72,28 +62,15 @@ import NumberLimitsModal from '../components/dealer/NumberLimitsModal'
 import SummaryModal from '../components/dealer/SummaryModal'
 import RoundAccordionItem from '../components/dealer/RoundAccordionItem'
 import ChangePasswordModal from '../components/ChangePasswordModal'
-import SubmissionsModal from '../components/dealer/SubmissionsModal'
-import DealerProfileTab from '../components/dealer/DealerProfileTab'
-import DealerLineBotTab from '../components/dealer/DealerLineBotTab'
-import DealerAutomationTab from '../components/dealer/DealerAutomationTab'
-import QRScannerModal from '../components/dealer/QRScannerModal'
-import MemberAccordionItem from '../components/dealer/MemberAccordionItem'
-import UpstreamDealerSettingsInline from '../components/dealer/UpstreamDealerSettingsInline'
-import UpstreamDealerAccordionItem from '../components/dealer/UpstreamDealerAccordionItem'
-import UpstreamDealersTab from '../components/dealer/UpstreamDealersTab'
-import UpstreamDealerSettings from '../components/dealer/UpstreamDealerSettings'
-import MemberSettings from '../components/dealer/MemberSettings'
-import BankAccountCard from '../components/BankAccountCard'
-import CopyButton from '../components/CopyButton'
-import { confirmDialog } from '../utils/confirmDialog'
+
+// RoundAccordionItem is now imported from separate file
 
 export default function Dealer() {
-    const { user, profile, loading: authLoading, isDealer, isSuperAdmin, isAccountSuspended, skipAuthEventRef } = useAuth()
+    const { user, profile, isDealer, isSuperAdmin, isAccountSuspended } = useAuth()
     const { toast } = useToast()
     const { setActiveDashboard, getTheme } = useTheme()
     const [searchParams] = useSearchParams()
-    const hasFetchedRef = useRef(false)
-
+    
     // Set active dashboard for theme on mount
     useEffect(() => {
         setActiveDashboard(DASHBOARDS.DEALER)
@@ -108,9 +85,6 @@ export default function Dealer() {
 
     // Modal states
     const [showCreateModal, setShowCreateModal] = useState(false)
-    const [templates, setTemplates] = useState({})
-    const [loadingTemplates, setLoadingTemplates] = useState(false)
-    const [savingTemplate, setSavingTemplate] = useState(false)
     const [showEditModal, setShowEditModal] = useState(false)
     const [editingRound, setEditingRound] = useState(null)
     const [showLimitsModal, setShowLimitsModal] = useState(false)
@@ -127,46 +101,22 @@ export default function Dealer() {
     const [roundsTab, setRoundsTab] = useState('open') // 'open' | 'closed' | 'history'
     const [roundHistory, setRoundHistory] = useState([])
     const [historyLoading, setHistoryLoading] = useState(false)
-    const [expandedHistoryId, setExpandedHistoryId] = useState(null)
-    const [historyUserDetails, setHistoryUserDetails] = useState({})
     const [upstreamDealers, setUpstreamDealers] = useState([])
     const [loadingUpstream, setLoadingUpstream] = useState(false)
     const [downstreamDealers, setDownstreamDealers] = useState([]) // Dealers who send bets TO us
     const [memberTypeFilter, setMemberTypeFilter] = useState('all') // 'all' | 'member' | 'dealer'
-    const [allowedLotteryTypes, setAllowedLotteryTypes] = useState(null) // Lottery types allowed for this dealer
-    const [historyMonthFilter, setHistoryMonthFilter] = useState('all') // 'all' | 'YYYY-MM' format
-    const [historyLotteryFilter, setHistoryLotteryFilter] = useState('all') // 'all' | lottery type key
-
+    
     // Add member modal states
     const [showAddMemberModal, setShowAddMemberModal] = useState(false)
-    const [addMemberForm, setAddMemberForm] = useState({ email: '', full_name: '', phone: '', membership_years: 1 })
+    const [addMemberForm, setAddMemberForm] = useState({ email: '', full_name: '', phone: '' })
     const [addingMember, setAddingMember] = useState(false)
     const [newMemberCredentials, setNewMemberCredentials] = useState(null) // { email, password, url }
-
-    // Renew membership modal states
-    const [showRenewModal, setShowRenewModal] = useState(false)
-    const [renewMember, setRenewMember] = useState(null)
-    const [renewYears, setRenewYears] = useState(1)
-    const [renewing, setRenewing] = useState(false)
-
-    // Approve member with years (for per_user_yearly)
-    const [showApproveYearsModal, setShowApproveYearsModal] = useState(false)
-    const [approveMemberTarget, setApproveMemberTarget] = useState(null)
-    const [approveYears, setApproveYears] = useState(1)
-    const [approving, setApproving] = useState(false)
-
-    // QR Code modal state
-    const [showQRModal, setShowQRModal] = useState(false)
-    const [showScannerModal, setShowScannerModal] = useState(false)
-    const [memberSearchQuery, setMemberSearchQuery] = useState('')
-
+    
     // Credit system states
     const [dealerCredit, setDealerCredit] = useState(null)
     const [creditLoading, setCreditLoading] = useState(false)
     const [creditSummary, setCreditSummary] = useState(null)
-    const [pendingCreditRefresh, setPendingCreditRefresh] = useState(0)
-    const [roundPendingMap, setRoundPendingMap] = useState({}) // { roundId: { pending_fee, ... } }
-
+    
     // Topup Modal states
     const [showTopupModal, setShowTopupModal] = useState(false)
     const [assignedBankAccount, setAssignedBankAccount] = useState(null)
@@ -182,14 +132,18 @@ export default function Dealer() {
             setActiveTab('profile')
         } else if (tabParam === 'upstreamDealers') {
             setActiveTab('upstreamDealers')
-        } else if (tabParam === 'lineBot') {
-            setActiveTab('lineBot')
         }
     }, [searchParams])
 
-    // Helper to check if a round is still open (not yet explicitly closed by dealer)
+    // Helper to check if a round is still open (between open_time and close_time)
     const isRoundOpen = (round) => {
-        return (round.status === 'open' || round.status === 'closed') && !round.is_result_announced
+        // If status is announced, it's definitely closed
+        if (round.status === 'announced') return false
+        // Check time-based open status (ignore 'closed' status, use time instead)
+        const now = new Date()
+        const openTime = new Date(round.open_time)
+        const closeTime = new Date(round.close_time)
+        return now >= openTime && now <= closeTime
     }
 
     // Form state for creating round
@@ -197,301 +151,24 @@ export default function Dealer() {
         lottery_type: 'lao',
         lottery_name: '',
         open_date: new Date().toISOString().split('T')[0],
-        open_time: '06:00',
+        open_time: '08:00',
         close_date: new Date().toISOString().split('T')[0],
-        close_time: '20:15',
-        delete_before_minutes: 30,
-        delete_after_submit_minutes: 120,
+        close_time: '20:00',
+        delete_before_minutes: 1,
         currency_symbol: '฿',
         currency_name: 'บาท',
-        notify_close_to_groups: true,
         type_limits: getDefaultLimitsForType('lao'),
-        set_prices: getDefaultSetPricesForType('lao'),
-        type_close_times: {},
-        type_close_time_behaviors: {},
-        is_auto_round_enabled: false,
-        schedule_mode: 'weekly',
-        schedule_days: [],
-        close_day_offset: 0,
-        auto_layoff_enabled: false,
-        auto_layoff_method: 'limits',
-        auto_layoff_keep_amount: 0,
-        auto_import_result_enabled: false
+        set_prices: getDefaultSetPricesForType('lao')
     })
-
-    // Open create round modal and populate with template or defaults
-    const handleOpenCreateModal = () => {
-        const defaultType = 'lao'
-        let open_time = '06:00'
-        let close_time = '20:15'
-        let delete_after_submit_minutes = 120
-        let delete_before_minutes = 30
-        let notify_close_to_groups = true
-        let currency_symbol = '฿'
-        let currency_name = 'บาท'
-        let type_limits = getDefaultLimitsForType(defaultType)
-        let set_prices = getDefaultSetPricesForType(defaultType)
-        let type_close_times = {}
-        let type_close_time_behaviors = {}
-        let is_auto_round_enabled = false
-        let schedule_mode = 'weekly'
-        let schedule_days = []
-        let close_day_offset = 0
-        let auto_layoff_enabled = false
-        let auto_layoff_method = 'limits'
-        let auto_layoff_keep_amount = 0
-        let auto_import_result_enabled = false
-
-        const template = templates[defaultType]
-        if (template) {
-            open_time = template.open_time || open_time
-            close_time = template.close_time || close_time
-            delete_before_minutes = template.delete_before_minutes
-            delete_after_submit_minutes = template.delete_after_submit_minutes
-            currency_symbol = template.currency_symbol || currency_symbol
-            currency_name = template.currency_name || currency_name
-            notify_close_to_groups = template.notify_close_to_groups
-            if (template.type_limits) {
-                type_limits = { ...type_limits, ...template.type_limits }
-            }
-            if (template.set_prices) {
-                set_prices = { ...set_prices, ...template.set_prices }
-            }
-            if (template.type_close_times) {
-                type_close_times = { ...template.type_close_times }
-            }
-            if (template.type_close_time_behaviors) {
-                type_close_time_behaviors = { ...template.type_close_time_behaviors }
-            }
-            is_auto_round_enabled = template.is_auto_round_enabled || false
-            schedule_mode = template.schedule_mode || 'weekly'
-            schedule_days = template.schedule_days || []
-            close_day_offset = template.close_day_offset || 0
-            auto_layoff_enabled = template.auto_layoff_enabled || false
-            auto_layoff_method = template.auto_layoff_method || 'limits'
-            auto_layoff_keep_amount = template.auto_layoff_keep_amount || 0
-            auto_import_result_enabled = template.auto_import_result_enabled || false
-        }
-
-        setRoundForm({
-            lottery_type: defaultType,
-            lottery_name: '',
-            open_date: new Date().toISOString().split('T')[0],
-            open_time,
-            close_date: new Date().toISOString().split('T')[0],
-            close_time,
-            delete_before_minutes,
-            delete_after_submit_minutes,
-            currency_symbol,
-            currency_name,
-            notify_close_to_groups,
-            type_limits,
-            set_prices,
-            type_close_times,
-            type_close_time_behaviors,
-            is_auto_round_enabled,
-            schedule_mode,
-            schedule_days,
-            close_day_offset,
-            auto_layoff_enabled,
-            auto_layoff_method,
-            auto_layoff_keep_amount,
-            auto_import_result_enabled
-        })
-        setShowCreateModal(true)
-    }
-
-    // Save current form settings as template/default in DB
-    const handleSaveTemplate = async () => {
-        if (!user?.id) return
-        try {
-            setSavingTemplate(true)
-            const { error } = await supabase
-                .from('dealer_lottery_templates')
-                .upsert({
-                    dealer_id: user.id,
-                    lottery_type: roundForm.lottery_type,
-                    open_time: roundForm.open_time,
-                    close_time: roundForm.close_time,
-                    delete_before_minutes: roundForm.delete_before_minutes,
-                    delete_after_submit_minutes: roundForm.delete_after_submit_minutes,
-                    currency_symbol: roundForm.currency_symbol,
-                    currency_name: roundForm.currency_name,
-                    notify_close_to_groups: roundForm.notify_close_to_groups,
-                    set_prices: roundForm.set_prices,
-                    type_limits: roundForm.type_limits,
-                    type_close_times: roundForm.type_close_times,
-                    type_close_time_behaviors: roundForm.type_close_time_behaviors,
-                    is_auto_round_enabled: roundForm.is_auto_round_enabled,
-                    schedule_mode: roundForm.schedule_mode,
-                    schedule_days: roundForm.schedule_days,
-                    close_day_offset: roundForm.close_day_offset,
-                    auto_layoff_enabled: roundForm.auto_layoff_enabled,
-                    auto_layoff_method: roundForm.auto_layoff_method,
-                    auto_layoff_keep_amount: roundForm.auto_layoff_keep_amount,
-                    auto_import_result_enabled: roundForm.auto_import_result_enabled
-                }, {
-                    onConflict: 'dealer_id,lottery_type'
-                })
-
-            if (error) throw error
-
-            toast.success(`บันทึกค่าเริ่มต้นสำหรับ ${LOTTERY_TYPES[roundForm.lottery_type]} สำเร็จ!`)
-            await fetchTemplates()
-        } catch (e) {
-            console.error('Error saving template:', e)
-            toast.error('เกิดข้อผิดพลาดในการบันทึกค่าเริ่มต้น: ' + e.message)
-        } finally {
-            setSavingTemplate(false)
-        }
-    }
-
-    // Reset current form to system defaults (factory reset)
-    const handleResetToSystemDefaults = () => {
-        const type = roundForm.lottery_type
-        let open_time = '06:00'
-        let close_time = '20:15'
-        let delete_after_submit_minutes = 120
-        let delete_before_minutes = 30
-        let notify_close_to_groups = true
-
-        if (type === 'thai') {
-            open_time = '06:00'
-            close_time = '14:05'
-            delete_after_submit_minutes = 120
-            delete_before_minutes = 30
-            notify_close_to_groups = false
-        } else if (type === 'lao') {
-            open_time = '06:00'
-            close_time = '20:15'
-            delete_after_submit_minutes = 120
-            delete_before_minutes = 30
-            notify_close_to_groups = true
-        } else {
-            open_time = '08:00'
-            close_time = '20:00'
-            delete_after_submit_minutes = 0
-            delete_before_minutes = 1
-            notify_close_to_groups = false
-        }
-
-        setRoundForm(prev => ({
-            ...prev,
-            open_time,
-            close_time,
-            delete_after_submit_minutes,
-            delete_before_minutes,
-            notify_close_to_groups,
-            currency_symbol: type === 'lao' ? '฿' : '฿',
-            currency_name: type === 'lao' ? 'บาท' : 'บาท',
-            type_limits: getDefaultLimitsForType(type),
-            set_prices: getDefaultSetPricesForType(type),
-            type_close_times: {},
-            type_close_time_behaviors: {}
-        }))
-        toast.info('คืนค่าเริ่มต้นโรงงานของระบบเรียบร้อย (ชั่วคราว - กดบันทึกหากต้องการให้บันทึกถาวร)')
-    }
 
     // Update limits when lottery type changes
     const handleLotteryTypeChange = (newType) => {
-        setRoundForm(prev => {
-            let open_time = '06:00'
-            let close_time = '20:15'
-            let delete_after_submit_minutes = 120
-            let delete_before_minutes = 30
-            let notify_close_to_groups = true
-            let currency_symbol = '฿'
-            let currency_name = 'บาท'
-            let type_limits = getDefaultLimitsForType(newType)
-            let set_prices = getDefaultSetPricesForType(newType)
-            let type_close_times = {}
-            let type_close_time_behaviors = {}
-            let is_auto_round_enabled = false
-            let schedule_mode = 'weekly'
-            let schedule_days = []
-            let close_day_offset = 0
-            let auto_layoff_enabled = false
-            let auto_layoff_method = 'limits'
-            let auto_layoff_keep_amount = 0
-            let auto_import_result_enabled = false
-
-            // Check if we have a template for this lottery type
-            const template = templates[newType]
-            if (template) {
-                open_time = template.open_time || open_time
-                close_time = template.close_time || close_time
-                delete_before_minutes = template.delete_before_minutes
-                delete_after_submit_minutes = template.delete_after_submit_minutes
-                currency_symbol = template.currency_symbol || currency_symbol
-                currency_name = template.currency_name || currency_name
-                notify_close_to_groups = template.notify_close_to_groups
-
-                if (template.type_limits) {
-                    type_limits = { ...type_limits, ...template.type_limits }
-                }
-                if (template.set_prices) {
-                    set_prices = { ...set_prices, ...template.set_prices }
-                }
-                if (template.type_close_times) {
-                    type_close_times = { ...template.type_close_times }
-                }
-                if (template.type_close_time_behaviors) {
-                    type_close_time_behaviors = { ...template.type_close_time_behaviors }
-                }
-                is_auto_round_enabled = template.is_auto_round_enabled || false
-                schedule_mode = template.schedule_mode || 'weekly'
-                schedule_days = template.schedule_days || []
-                close_day_offset = template.close_day_offset || 0
-                auto_layoff_enabled = template.auto_layoff_enabled || false
-                auto_layoff_method = template.auto_layoff_method || 'limits'
-                auto_layoff_keep_amount = template.auto_layoff_keep_amount || 0
-                auto_import_result_enabled = template.auto_import_result_enabled || false
-            } else {
-                if (newType === 'thai') {
-                    open_time = '06:00'
-                    close_time = '14:05'
-                    delete_after_submit_minutes = 120
-                    delete_before_minutes = 30
-                    notify_close_to_groups = false
-                } else if (newType === 'lao') {
-                    open_time = '06:00'
-                    close_time = '20:15'
-                    delete_after_submit_minutes = 120
-                    delete_before_minutes = 30
-                    notify_close_to_groups = true
-                } else {
-                    open_time = '08:00'
-                    close_time = '20:00'
-                    delete_after_submit_minutes = 0
-                    delete_before_minutes = 1
-                    notify_close_to_groups = false
-                }
-            }
-
-            return {
-                ...prev,
-                lottery_type: newType,
-                open_time,
-                close_time,
-                delete_after_submit_minutes,
-                delete_before_minutes,
-                notify_close_to_groups,
-                currency_symbol,
-                currency_name,
-                type_limits,
-                set_prices,
-                type_close_times,
-                type_close_time_behaviors,
-                is_auto_round_enabled,
-                schedule_mode,
-                schedule_days,
-                close_day_offset,
-                auto_layoff_enabled,
-                auto_layoff_method,
-                auto_layoff_keep_amount,
-                auto_import_result_enabled
-            }
-        })
+        setRoundForm(prev => ({
+            ...prev,
+            lottery_type: newType,
+            type_limits: getDefaultLimitsForType(newType),
+            set_prices: getDefaultSetPricesForType(newType)
+        }))
     }
 
     // Auto-select input content on focus
@@ -501,37 +178,20 @@ export default function Dealer() {
 
     // Move to next input on Enter key
     const handleInputKeyDown = (e) => {
-        if (e.key !== 'Enter') return
+        if (e.key === 'Enter') {
+            e.preventDefault()
+            const form = e.target.closest('.modal-body')
+            if (!form) return
 
-        e.preventDefault()
-        const limitRow = e.target.closest('.round-limit-row')
-        if (limitRow) {
-            const limitRows = Array.from(limitRow.closest('.round-limits-grid')?.querySelectorAll('.round-limit-row') || [])
-            const currentRowIndex = limitRows.indexOf(limitRow)
-            const rowInputs = Array.from(limitRow.querySelectorAll('input:not([disabled])'))
-            const currentInputIndex = rowInputs.indexOf(e.target)
-            const nextInputInRow = rowInputs[currentInputIndex + 1]
+            const inputs = Array.from(form.querySelectorAll('input:not([disabled]), select:not([disabled])'))
+            const currentIndex = inputs.indexOf(e.target)
 
-            if (nextInputInRow) {
-                nextInputInRow.focus()
-                return
-            }
-
-            const nextRowInput = limitRows[currentRowIndex + 1]?.querySelector('input:not([disabled])')
-            if (nextRowInput) nextRowInput.focus()
-            return
-        }
-
-        const form = e.target.closest('.modal-body')
-        if (!form) return
-
-        const inputs = Array.from(form.querySelectorAll('input:not([disabled]), select:not([disabled])'))
-        const currentIndex = inputs.indexOf(e.target)
-        const nextInput = inputs[currentIndex + 1]
-        if (nextInput) {
-            nextInput.focus()
-            if (nextInput.type !== 'date' && nextInput.type !== 'time' && nextInput.tagName !== 'SELECT') {
-                nextInput.select()
+            if (currentIndex !== -1 && currentIndex < inputs.length - 1) {
+                const nextInput = inputs[currentIndex + 1]
+                nextInput.focus()
+                if (nextInput.type !== 'date' && nextInput.type !== 'time' && nextInput.tagName !== 'SELECT') {
+                    nextInput.select()
+                }
             }
         }
     }
@@ -540,158 +200,59 @@ export default function Dealer() {
     useEffect(() => {
         // Wait for profile to be loaded before deciding
         if (!profile?.id) return
-
+        
         if (user?.id && (isDealer || isSuperAdmin)) {
-            // Prevent duplicate fetches on token refresh / app switch
-            if (hasFetchedRef.current) return
-            hasFetchedRef.current = true
-            fetchDealerCredit() // Load credit first (parallel with fetchData)
-            fetchTemplates()
             fetchData()
         } else {
             // User is logged in but not a dealer - stop loading
             setLoading(false)
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user?.id, profile?.id, isDealer, isSuperAdmin])
-
-    async function fetchTemplates() {
-        if (!user?.id) return
-        try {
-            setLoadingTemplates(true)
-            const { data, error } = await supabase
-                .from('dealer_lottery_templates')
-                .select('*')
-                .eq('dealer_id', user.id)
-
-            if (error) throw error
-
-            const templateMap = {}
-            if (data) {
-                data.forEach(t => {
-                    templateMap[t.lottery_type] = t
-                })
-            }
-            setTemplates(templateMap)
-        } catch (e) {
-            console.error('Error fetching templates:', e)
-        } finally {
-            setLoadingTemplates(false)
-        }
-    }
-
-    async function fetchUpstreamDealers() {
-        if (!user?.id) {
-            setLoadingUpstream(false)
-            return
-        }
-        setLoadingUpstream(true)
-
-        // Set a timeout to prevent infinite loading
-        const timeoutId = setTimeout(() => {
-            console.warn('Fetch upstream dealers timeout')
-            setLoadingUpstream(false)
-        }, 10000)
-
-        try {
-            // Fetch manual upstream connections
-            const { data: manualData, error: manualError } = await supabase
-                .from('dealer_upstream_connections')
-                .select(`
-                    *,
-                    upstream_profile:upstream_dealer_id (
-                        id, full_name, email, phone
-                    )
-                `)
-                .eq('dealer_id', user.id)
-                .order('created_at', { ascending: false })
-
-            // Fetch dealers that user was a member of (excluding self)
-            const { data: membershipData, error: membershipError } = await supabase
-                .from('user_dealer_memberships')
-                .select(`
-                    dealer_id,
-                    status,
-                    created_at,
-                    profiles:dealer_id (
-                        id, full_name, email, phone, role
-                    )
-                `)
-                .eq('user_id', user.id)
-                .eq('status', 'active')
-                .neq('dealer_id', user.id) // Exclude self-membership
-
-            clearTimeout(timeoutId)
-
-            let allDealers = []
-
-            // Add manual upstream connections
-            if (!manualError && manualData) {
-                allDealers = [...manualData]
-            }
-
-            // Add dealers from memberships (convert to upstream format)
-            // Only include profiles with role = 'dealer' (not superadmin or other roles)
-            if (!membershipError && membershipData) {
-                const membershipDealers = membershipData
-                    .filter(m => m.profiles?.id && m.profiles?.role === 'dealer') // Only include dealers
-                    .map(m => ({
-                        id: `membership-${m.dealer_id}`,
-                        dealer_id: user.id,
-                        upstream_dealer_id: m.dealer_id,
-                        upstream_name: m.profiles?.full_name || m.profiles?.email || 'ไม่ระบุชื่อ',
-                        upstream_contact: m.profiles?.phone || m.profiles?.email || '',
-                        upstream_profile: m.profiles,
-                        is_linked: true,
-                        is_from_membership: true, // Mark as from membership
-                        created_at: m.created_at
-                    }))
-
-                // Merge, avoiding duplicates (by upstream_dealer_id)
-                const existingIds = allDealers.map(d => d.upstream_dealer_id).filter(Boolean)
-                const newDealers = membershipDealers.filter(d => !existingIds.includes(d.upstream_dealer_id))
-                allDealers = [...allDealers, ...newDealers]
-            }
-
-            setUpstreamDealers(allDealers)
-        } catch (error) {
-            clearTimeout(timeoutId)
-            console.error('Error fetching upstream dealers:', error)
-            setUpstreamDealers([])
-        } finally {
-            setLoadingUpstream(false)
-        }
-    }
 
     async function fetchData() {
         setLoading(true)
-
+        
         // Set a timeout to prevent infinite loading
         const timeoutId = setTimeout(() => {
             console.warn('Fetch data timeout - forcing loading to false')
             setLoading(false)
         }, 15000)
-
+        
         try {
-            // Fetch ALL rounds with type_limits in a single query (no inner join)
-            // Then count submissions separately to know which rounds have active submissions
-            const { data: allRoundsData, error: roundsError } = await supabase
+            // Fetch rounds
+            const { data: roundsData, error: roundsError } = await supabase
                 .from('lottery_rounds')
                 .select(`
                     *,
                     type_limits (*),
-                    submissions (id)
+                    submissions!inner (id)
                 `)
                 .eq('dealer_id', user.id)
                 .eq('submissions.is_deleted', false)
                 .order('round_date', { ascending: false })
                 .limit(20)
 
-            // Filter out deleted submissions from the result (LEFT JOIN returns nulls)
-            const mergedRounds = (allRoundsData || []).map(round => ({
-                ...round,
-                submissions: (round.submissions || []).filter(s => s && s.id)
-            }))
+            // For rounds without any submissions, fetch separately
+            const { data: allRoundsData } = await supabase
+                .from('lottery_rounds')
+                .select(`
+                    *,
+                    type_limits (*)
+                `)
+                .eq('dealer_id', user.id)
+                .order('round_date', { ascending: false })
+                .limit(20)
+            
+
+            // Merge the submission counts - this ensures rounds with 0 submissions are included
+            const mergedRounds = (allRoundsData || []).map(round => {
+                const roundWithSubs = roundsData?.find(r => r.id === round.id)
+                return {
+                    ...round,
+                    submissions: roundWithSubs?.submissions || []
+                }
+            })
 
             if (!roundsError) {
                 setRounds(mergedRounds)
@@ -712,62 +273,29 @@ export default function Dealer() {
                         phone,
                         created_at,
                         role,
-                        password_changed,
-                        line_user_id
+                        password_changed
                     )
                 `)
                 .eq('dealer_id', user.id)
                 .neq('user_id', user.id) // Exclude self-membership
                 .order('created_at', { ascending: false })
-
+            
             if (membershipsError) {
                 console.error('Error fetching memberships:', membershipsError)
             }
 
-            // Fetch user bank accounts for all members
-            const memberIds = (membershipsData || []).map(m => m.user_id).filter(Boolean)
-            let memberBankAccountsMap = {}
-            if (memberIds.length > 0) {
-                const { data: memberBanks } = await supabase
-                    .from('user_bank_accounts')
-                    .select('*')
-                    .in('user_id', memberIds)
-                    .order('is_default', { ascending: false })
-
-                if (memberBanks) {
-                    memberBanks.forEach(bank => {
-                        if (!memberBankAccountsMap[bank.user_id]) {
-                            memberBankAccountsMap[bank.user_id] = []
-                        }
-                        memberBankAccountsMap[bank.user_id].push(bank)
-                    })
-                }
-            }
-
             // Transform and categorize memberships
-            const allMemberships = (membershipsData || []).map(m => {
-                const userBanks = memberBankAccountsMap[m.user_id] || []
-                // Determine which bank account the member assigned for this dealer
-                const memberBank = m.member_bank_account_id
-                    ? userBanks.find(b => b.id === m.member_bank_account_id)
-                    : (userBanks.find(b => b.is_default) || userBanks[0])
-
-                return {
-                    ...m.profiles,
-                    membership_id: m.id,
-                    membership_status: m.status,
-                    membership_created_at: m.created_at,
-                    approved_at: m.approved_at,
-                    blocked_at: m.blocked_at,
-                    membership_expires_at: m.membership_expires_at || null,
-                    membership_years: m.membership_years || null,
-                    assigned_bank_account_id: m.assigned_bank_account_id,
-                    member_bank_account_id: m.member_bank_account_id,
-                    member_bank: memberBank || null,
-                    is_dealer: m.profiles?.role === 'dealer', // Mark if member is also a dealer
-                    password_changed: m.profiles?.password_changed || false // Track if user has changed password
-                }
-            })
+            const allMemberships = (membershipsData || []).map(m => ({
+                ...m.profiles,
+                membership_id: m.id,
+                membership_status: m.status,
+                membership_created_at: m.created_at,
+                approved_at: m.approved_at,
+                blocked_at: m.blocked_at,
+                assigned_bank_account_id: m.assigned_bank_account_id,
+                is_dealer: m.profiles?.role === 'dealer', // Mark if member is also a dealer
+                password_changed: m.profiles?.password_changed || false // Track if user has changed password
+            }))
 
             // Separate regular members from dealer members (เจ้ามือตีเข้า)
             const regularMembers = allMemberships.filter(m => !m.is_dealer)
@@ -776,7 +304,7 @@ export default function Dealer() {
             setMembers(regularMembers.filter(m => m.membership_status === 'active'))
             setPendingMembers(regularMembers.filter(m => m.membership_status === 'pending'))
             setBlockedMembers(regularMembers.filter(m => m.membership_status === 'blocked'))
-
+            
             // Add dealer members to downstreamDealers (will be merged with connections later)
             const dealerMembersTransformed = dealerMembers.map(m => ({
                 id: m.id,
@@ -787,18 +315,14 @@ export default function Dealer() {
                 membership_id: m.membership_id,
                 membership_status: m.membership_status,
                 membership_created_at: m.membership_created_at,
-                assigned_bank_account_id: m.assigned_bank_account_id,
-                member_bank_account_id: m.member_bank_account_id,
-                member_bank: m.member_bank,
                 is_dealer: true,
                 is_from_membership: true, // Mark as from membership table
                 connection_id: m.membership_id
             }))
 
-            // Parallelize independent queries with Promise.all()
-            const [subscriptionResult, bankAccountsResult, dealerSettingsResult, downstreamResult] = await Promise.allSettled([
-                // 1. Fetch subscription
-                supabase
+            // Fetch subscription (if table exists)
+            try {
+                const { data: subData, error: subError } = await supabase
                     .from('dealer_subscriptions')
                     .select(`
                         *,
@@ -807,9 +331,6 @@ export default function Dealer() {
                             name,
                             description,
                             billing_model,
-                            percentage_rate,
-                            profit_percentage_rate,
-                            price_per_user_per_year,
                             monthly_price,
                             yearly_price,
                             max_users,
@@ -819,24 +340,29 @@ export default function Dealer() {
                     .eq('dealer_id', user.id)
                     .order('created_at', { ascending: false })
                     .limit(1)
-                    .maybeSingle(),
+                    .maybeSingle()
 
-                // 2. Fetch dealer bank accounts
-                supabase
-                    .from('dealer_bank_accounts')
-                    .select('*')
-                    .eq('dealer_id', user.id)
-                    .order('is_default', { ascending: false }),
+                if (!subError) {
+                    setSubscription(subData)
+                }
+            } catch (subError) {
+                // Table might not exist yet
+                console.log('Subscription table not available')
+                setSubscription(null)
+            }
 
-                // 3. Fetch dealer settings
-                supabase
-                    .from('profiles')
-                    .select('allowed_lottery_types')
-                    .eq('id', user.id)
-                    .maybeSingle(),
+            // Fetch dealer bank accounts for member assignment
+            const { data: bankAccountsData } = await supabase
+                .from('dealer_bank_accounts')
+                .select('*')
+                .eq('dealer_id', user.id)
+                .order('is_default', { ascending: false })
 
-                // 4. Fetch downstream dealers
-                supabase
+            setDealerBankAccounts(bankAccountsData || [])
+
+            // Fetch downstream dealers (dealers who send bets TO us via dealer_upstream_connections)
+            try {
+                const { data: downstreamData, error: downstreamError } = await supabase
                     .from('dealer_upstream_connections')
                     .select(`
                         *,
@@ -846,96 +372,23 @@ export default function Dealer() {
                     `)
                     .eq('upstream_dealer_id', user.id)
                     .order('created_at', { ascending: false })
-            ])
 
-            // Process subscription result
-            if (subscriptionResult.status === 'fulfilled' && !subscriptionResult.value.error) {
-                setSubscription(subscriptionResult.value.data)
-            } else {
-                setSubscription(null)
-            }
+                let allDownstreamDealers = []
 
-            // Process bank accounts result
-            if (bankAccountsResult.status === 'fulfilled') {
-                setDealerBankAccounts(bankAccountsResult.value.data || [])
-            }
-
-            // Process dealer settings result
-            if (dealerSettingsResult.status === 'fulfilled' && !dealerSettingsResult.value.error && dealerSettingsResult.value.data) {
-                setAllowedLotteryTypes(dealerSettingsResult.value.data.allowed_lottery_types)
-            }
-
-            // Process downstream dealers
-            let allDownstreamDealers = []
-            try {
-                const downstreamData = downstreamResult.status === 'fulfilled' && !downstreamResult.value.error
-                    ? downstreamResult.value.data
-                    : null
-
-                if (downstreamData && downstreamData.length > 0) {
-                    // Fetch downstream dealer bank accounts & memberships in parallel
-                    const downstreamDealerIds = downstreamData.map(d => d.dealer_id).filter(Boolean)
-                    let downstreamBankMap = {}
-                    let downstreamMembershipMap = {}
-
-                    if (downstreamDealerIds.length > 0) {
-                        const [banksRes, membershipsRes] = await Promise.all([
-                            supabase
-                                .from('dealer_bank_accounts')
-                                .select('*')
-                                .in('dealer_id', downstreamDealerIds)
-                                .order('is_default', { ascending: false }),
-                            supabase
-                                .from('user_dealer_memberships')
-                                .select('id, user_id, member_bank_account_id, assigned_bank_account_id')
-                                .in('user_id', downstreamDealerIds)
-                                .eq('dealer_id', user.id)
-                                .eq('status', 'active')
-                        ])
-
-                        if (banksRes.data) {
-                            banksRes.data.forEach(bank => {
-                                if (!downstreamBankMap[bank.dealer_id]) {
-                                    downstreamBankMap[bank.dealer_id] = []
-                                }
-                                downstreamBankMap[bank.dealer_id].push(bank)
-                            })
-                        }
-
-                        if (membershipsRes.data) {
-                            membershipsRes.data.forEach(m => {
-                                downstreamMembershipMap[m.user_id] = {
-                                    real_membership_id: m.id,
-                                    member_bank_account_id: m.member_bank_account_id,
-                                    assigned_bank_account_id: m.assigned_bank_account_id
-                                }
-                            })
-                        }
-                    }
-
+                if (!downstreamError && downstreamData) {
+                    console.log('Raw downstream data:', downstreamData)
                     // Transform to match member structure
                     const transformedDownstream = downstreamData.map(d => {
-                        const membershipData = downstreamMembershipMap[d.dealer_id] || {}
-                        const dealerBanks = downstreamBankMap[d.dealer_id] || []
-                        const userBanks = memberBankAccountsMap[d.dealer_id] || []
-                        const allBanks = [...dealerBanks, ...userBanks]
-                        const memberBankAccountId = d.my_bank_account_id || membershipData.member_bank_account_id
-                        const memberBank = memberBankAccountId
-                            ? allBanks.find(b => b.id === memberBankAccountId)
-                            : (allBanks.find(b => b.is_default) || allBanks[0])
-                        const assignedBankId = d.assigned_bank_account_id || membershipData.assigned_bank_account_id || null
-
+                        console.log('Connection:', d.id, 'Status:', d.status, 'Dealer:', d.dealer_profile?.full_name)
                         return {
                             id: d.dealer_profile?.id,
                             email: d.dealer_profile?.email,
                             full_name: d.dealer_profile?.full_name || d.upstream_name,
                             phone: d.dealer_profile?.phone,
                             created_at: d.dealer_profile?.created_at,
-                            membership_id: membershipData.real_membership_id || d.id,
+                            membership_id: d.id,
                             membership_status: d.status || (d.is_blocked ? 'blocked' : 'active'),
                             membership_created_at: d.created_at,
-                            assigned_bank_account_id: assignedBankId,
-                            member_bank: memberBank || null,
                             is_dealer: true,
                             is_linked: d.is_linked,
                             lottery_settings: d.lottery_settings,
@@ -945,14 +398,16 @@ export default function Dealer() {
                     allDownstreamDealers = [...transformedDownstream]
                 }
 
-                // Merge with dealer members from memberships
+                // Merge with dealer members from memberships (users who became dealers)
+                // Avoid duplicates by checking if already exists in connections
                 const existingIds = allDownstreamDealers.map(d => d.id).filter(Boolean)
                 const newDealerMembers = dealerMembersTransformed.filter(d => !existingIds.includes(d.id))
                 allDownstreamDealers = [...allDownstreamDealers, ...newDealerMembers]
 
                 setDownstreamDealers(allDownstreamDealers)
             } catch (downstreamErr) {
-                console.log('Downstream dealers processing error:', downstreamErr)
+                console.log('Downstream dealers fetch error:', downstreamErr)
+                // Still set dealer members even if connections fetch fails
                 setDownstreamDealers(dealerMembersTransformed)
             }
 
@@ -962,11 +417,11 @@ export default function Dealer() {
             clearTimeout(timeoutId)
             setLoading(false)
         }
-
-        // Fetch bank account and topup history (credit already loaded in parallel)
+        
+        // Fetch dealer credit and bank account
+        fetchDealerCredit()
         fetchAssignedBankAccount()
         fetchTopupHistory()
-        fetchUpstreamDealers()
     }
 
     // Fetch round history for dealer
@@ -979,6 +434,7 @@ export default function Dealer() {
                 .select('*')
                 .eq('dealer_id', user.id)
                 .order('deleted_at', { ascending: false })
+                .limit(50)
 
             if (!error && data) {
                 setRoundHistory(data)
@@ -989,220 +445,44 @@ export default function Dealer() {
             setHistoryLoading(false)
         }
     }
-
-    // Fetch user details for a history round (accordion expand)
-    async function fetchHistoryUserDetails(historyItem) {
-        const roundId = historyItem.round_id
-        if (!roundId || historyUserDetails[roundId]) return // Already loaded
-        
-        try {
-            const { data: userHistories, error } = await supabase
-                .from('user_round_history')
-                .select('*')
-                .eq('round_id', roundId)
-                .eq('dealer_id', user.id)
-
-            if (error) {
-                console.error('Error fetching user history details:', error)
-                return
-            }
-
-            // Fetch user profiles for display names
-            const userIds = userHistories?.map(uh => uh.user_id) || []
-            let profilesMap = {}
-            if (userIds.length > 0) {
-                const { data: profiles } = await supabase
-                    .from('profiles')
-                    .select('id, full_name, email')
-                    .in('id', userIds)
-
-                profiles?.forEach(p => {
-                    profilesMap[p.id] = p
-                })
-            }
-
-            // Merge user names into history data
-            const enriched = (userHistories || []).map(uh => ({
-                ...uh,
-                full_name: profilesMap[uh.user_id]?.full_name || profilesMap[uh.user_id]?.email || 'ไม่ทราบชื่อ'
-            }))
-
-            setHistoryUserDetails(prev => ({ ...prev, [roundId]: enriched }))
-        } catch (err) {
-            console.error('Error:', err)
-        }
-    }
-
-    // Toggle history accordion
-    function toggleHistoryAccordion(historyItem) {
-        const id = historyItem.id
-        if (expandedHistoryId === id) {
-            setExpandedHistoryId(null)
-        } else {
-            setExpandedHistoryId(id)
-            fetchHistoryUserDetails(historyItem)
-        }
-    }
-
-    // Delete a history record
-    async function handleDeleteHistory(historyId, e) {
-        e.stopPropagation()
-        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: 'ต้องการลบประวัติงวดหวยนี้หรือไม่?', confirmText: 'ลบเลย' }))) return
-        try {
-            const { error } = await supabase
-                .from('round_history')
-                .delete()
-                .eq('id', historyId)
-                .eq('dealer_id', user.id)
-            if (error) throw error
-            setRoundHistory(prev => prev.filter(h => h.id !== historyId))
-            if (expandedHistoryId === historyId) setExpandedHistoryId(null)
-            toast('ลบประวัติงวดหวยสำเร็จ', 'success')
-        } catch (err) {
-            console.error('Error deleting history:', err)
-            toast('ลบประวัติไม่สำเร็จ: ' + (err.message || 'Unknown error'), 'error')
-        }
-    }
-
-    // Generate month options for history filter
-    const historyMonthOptions = (() => {
-        if (roundHistory.length === 0) return []
-        const now = new Date()
-        // Find the earliest date in history
-        let earliest = now
-        roundHistory.forEach(h => {
-            const d = new Date(h.close_time || h.open_time || h.round_date)
-            if (d < earliest) earliest = d
-        })
-        const options = []
-        const current = new Date(now.getFullYear(), now.getMonth(), 1)
-        const start = new Date(earliest.getFullYear(), earliest.getMonth(), 1)
-        while (current >= start) {
-            const yyyy = current.getFullYear()
-            const mm = current.getMonth()
-            const thaiYear = yyyy + 543
-            const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
-            const key = `${yyyy}-${String(mm + 1).padStart(2, '0')}`
-            // Date range: 1st of month to last day of month (or today if current month)
-            const firstDay = new Date(yyyy, mm, 1)
-            const isCurrentMonth = yyyy === now.getFullYear() && mm === now.getMonth()
-            const lastDay = isCurrentMonth ? now : new Date(yyyy, mm + 1, 0)
-            const label = `${firstDay.getDate()} ${thaiMonths[mm]} ${thaiYear} - ${lastDay.getDate()} ${thaiMonths[lastDay.getMonth()]} ${lastDay.getFullYear() + 543}`
-            options.push({ key, label })
-            current.setMonth(current.getMonth() - 1)
-        }
-        return options
-    })()
-
-    // Filter history by month and lottery type
-    const filteredHistory = roundHistory.filter(h => {
-        // Month filter
-        if (historyMonthFilter !== 'all') {
-            const [filterYear, filterMonth] = historyMonthFilter.split('-').map(Number)
-            const hDate = new Date(h.close_time || h.open_time || h.round_date)
-            if (hDate.getFullYear() !== filterYear || (hDate.getMonth() + 1) !== filterMonth) return false
-        }
-        // Lottery type filter
-        if (historyLotteryFilter !== 'all') {
-            if (h.lottery_type !== historyLotteryFilter) return false
-        }
-        return true
-    })
-
-    // Aggregate summary for filtered history
-    const historySummary = (() => {
-        let totalAmount = 0, totalCommission = 0, totalPayout = 0
-        let totalTransferred = 0, totalUpstreamComm = 0, totalUpstreamWin = 0
-        let totalEntries = 0, totalTransferredEntries = 0
-        filteredHistory.forEach(h => {
-            totalEntries += (h.total_entries || 0)
-            totalAmount += (h.total_amount || 0)
-            totalCommission += (h.total_commission || 0)
-            totalPayout += (h.total_payout || 0)
-            totalTransferred += (h.transferred_amount || 0)
-            totalTransferredEntries += (h.transferred_entries || 0)
-            totalUpstreamComm += (h.upstream_commission || 0)
-            totalUpstreamWin += (h.upstream_winnings || 0)
-        })
-        const incomingProfit = totalAmount - totalCommission - totalPayout
-        const outgoingProfit = totalUpstreamWin + totalUpstreamComm - totalTransferred
-        const totalProfit = incomingProfit + outgoingProfit
-        return {
-            totalEntries, totalAmount, totalCommission, totalPayout,
-            totalTransferred, totalTransferredEntries, totalUpstreamComm, totalUpstreamWin,
-            incomingProfit, outgoingProfit, totalProfit,
-            hasOutgoing: totalTransferred > 0
-        }
-    })()
-
-    // Get unique lottery types present in history for the filter dropdown
-    const historyLotteryOptions = (() => {
-        const types = new Set()
-        roundHistory.forEach(h => { if (h.lottery_type) types.add(h.lottery_type) })
-        // Filter to only allowed lottery types
-        const allowed = allowedLotteryTypes
-            ? [...types].filter(t => allowedLotteryTypes.includes(t))
-            : [...types]
-        return allowed.map(t => ({ key: t, label: LOTTERY_TYPES[t] || t }))
-    })()
-
+    
     // Fetch dealer credit balance
     async function fetchDealerCredit() {
         if (!user?.id) return
         setCreditLoading(true)
         try {
-            // Step 1: Fetch credit data immediately (fast - show to user ASAP)
+            // First, recalculate pending_deduction to ensure it's up-to-date
+            console.log('fetchDealerCredit: Recalculating pending_deduction...')
+            await updatePendingDeduction(user.id)
+            
+            // Then fetch the updated credit data
             const { data: creditData, error: creditError } = await supabase
                 .from('dealer_credits')
                 .select('*')
                 .eq('dealer_id', user.id)
                 .maybeSingle()
-
+            
+            console.log('fetchDealerCredit - data:', creditData, 'error:', creditError)
+            
             if (creditData) {
-                // Show balance immediately but don't show stale pending_deduction
-                // It will be updated accurately after Step 2 recalculates
+                const pendingDeduction = creditData.pending_deduction || 0
+                const availableCredit = creditData.balance - pendingDeduction
+                console.log('=== Dealer Credit Display ===')
+                console.log('balance:', creditData.balance)
+                console.log('pending_deduction:', pendingDeduction)
+                console.log('availableCredit:', availableCredit)
                 setDealerCredit({
                     balance: creditData.balance,
-                    pendingDeduction: 0,
-                    availableCredit: creditData.balance,
-                    outstanding_debt: creditData.outstanding_debt || 0,
+                    pendingDeduction: pendingDeduction,
+                    availableCredit: availableCredit,
                     is_blocked: creditData.is_blocked,
                     blocked_reason: creditData.blocked_reason,
                     warning_threshold: creditData.warning_threshold,
-                    has_sufficient_credit: creditData.balance > 0 && !creditData.is_blocked,
-                    is_low_credit: creditData.balance <= creditData.warning_threshold
+                    has_sufficient_credit: availableCredit > 0 && !creditData.is_blocked,
+                    is_low_credit: availableCredit <= creditData.warning_threshold
                 })
             }
-            setCreditLoading(false)
-
-            // Step 2: Recalculate pending_deduction (returns accurate totalPending + per-round breakdown)
-            const { totalPending, roundBreakdown } = await updatePendingDeduction(user.id)
             
-            // Build round pending map from breakdown (keyed by round_id)
-            const newMap = {}
-            if (roundBreakdown) {
-                roundBreakdown.forEach(rb => {
-                    newMap[rb.round_id] = { pending_fee: rb.pending_fee, percentage_rate: rb.percentage_rate }
-                })
-            }
-            setRoundPendingMap(newMap)
-            
-            // Signal RoundAccordionItems to re-fetch their pending credits
-            setPendingCreditRefresh(prev => prev + 1)
-
-            // Step 3: Use the returned totalPending directly (no race condition)
-            if (creditData) {
-                const balance = creditData.balance
-                const availableCredit = balance - totalPending
-                setDealerCredit(prev => ({
-                    ...prev,
-                    pendingDeduction: totalPending,
-                    availableCredit: availableCredit,
-                    has_sufficient_credit: availableCredit > 0 && !prev?.is_blocked,
-                    is_low_credit: availableCredit <= (prev?.warning_threshold || 1000)
-                }))
-            }
-
             // Also fetch credit summary with subscription info
             const summary = await getDealerCreditSummary(user.id)
             setCreditSummary(summary)
@@ -1212,7 +492,7 @@ export default function Dealer() {
             setCreditLoading(false)
         }
     }
-
+    
     // Fetch assigned bank account for topup
     async function fetchAssignedBankAccount() {
         if (!user?.id) return
@@ -1228,7 +508,7 @@ export default function Dealer() {
                 .eq('dealer_id', user.id)
                 .eq('is_active', true)
                 .maybeSingle()
-
+            
             if (!error && data?.bank_account) {
                 setAssignedBankAccount(data.bank_account)
             }
@@ -1236,7 +516,7 @@ export default function Dealer() {
             console.log('Bank assignment not available yet:', err)
         }
     }
-
+    
     // Fetch topup history
     async function fetchTopupHistory() {
         if (!user?.id) return
@@ -1247,7 +527,7 @@ export default function Dealer() {
                 .eq('dealer_id', user.id)
                 .order('created_at', { ascending: false })
                 .limit(10)
-
+            
             if (!error && data) {
                 setTopupHistory(data)
             }
@@ -1255,7 +535,7 @@ export default function Dealer() {
             console.log('Topup history not available yet:', err)
         }
     }
-
+    
     // Handle slip file selection
     const handleSlipFileChange = (e) => {
         const file = e.target.files[0]
@@ -1280,35 +560,35 @@ export default function Dealer() {
             reader.readAsDataURL(file)
         }
     }
-
+    
     // Handle topup submission - Check approval mode and process accordingly
     const handleTopupSubmit = async () => {
         if (!topupForm.amount || !topupForm.slip_file || !assignedBankAccount) {
             toast.error('กรุณากรอกจำนวนเงินและแนบสลิป')
             return
         }
-
+        
         setTopupLoading(true)
         try {
             const amount = parseFloat(topupForm.amount)
-
+            
             // Step 1: Check approval mode from system settings
             const { data: settingsData } = await supabase
                 .from('system_settings')
                 .select('value')
                 .eq('key', 'slip_approval_mode')
                 .single()
-
+            
             const approvalMode = settingsData?.value ? JSON.parse(settingsData.value) : 'manual'
-
+            
             // Step 2: Upload slip image to Supabase Storage
             const fileExt = topupForm.slip_file.name.split('.').pop()
             const fileName = `${user.id}/${Date.now()}.${fileExt}`
-
+            
             const { data: uploadData, error: uploadError } = await supabase.storage
                 .from('slips')
                 .upload(fileName, topupForm.slip_file)
-
+            
             let slipImageUrl = null
             if (!uploadError && uploadData) {
                 const { data: urlData } = supabase.storage
@@ -1316,19 +596,19 @@ export default function Dealer() {
                     .getPublicUrl(fileName)
                 slipImageUrl = urlData?.publicUrl
             }
-
+            
             // Step 3: If auto mode, verify slip with SlipOK via Edge Function
             if (approvalMode === 'auto') {
                 console.log('Auto mode enabled, calling Edge Function...')
                 const formData = new FormData()
                 formData.append('files', topupForm.slip_file)
-
+                
                 const edgeFunctionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-slip`
                 console.log('Edge Function URL:', edgeFunctionUrl)
-
+                
                 // Get current session for authorization
                 const { data: { session } } = await supabase.auth.getSession()
-
+                
                 const response = await fetch(edgeFunctionUrl, {
                     method: 'POST',
                     headers: {
@@ -1336,47 +616,113 @@ export default function Dealer() {
                     },
                     body: formData,
                 })
-
+                
                 console.log('Edge Function response status:', response.status)
                 const slipData = await response.json()
                 console.log('SlipOK response:', slipData)
-
+                
                 if (slipData.success && slipData.data) {
                     const verifiedAmount = parseFloat(slipData.data.amount) || amount
                     const transRef = slipData.data.transRef
-
+                    
                     // Check if slip already used
                     const { data: existingSlip } = await supabase
                         .from('used_slips')
                         .select('id')
                         .eq('trans_ref', transRef)
                         .single()
-
+                    
                     if (existingSlip) {
                         toast.error('สลิปนี้ถูกใช้งานแล้ว')
                         setTopupLoading(false)
                         return
                     }
-
-                    // Use creditService to process topup
-                    const { success, error, newBalance, debtRecovered } = await processTopup({
-                        dealerId: user.id,
-                        bankAccountId: assignedBankAccount.id,
-                        amount: verifiedAmount,
-                        slipUrl: slipImageUrl,
-                        slipData: slipData.data,
-                        transRef: transRef
+                    
+                    // Create approved topup request
+                    const { data: topupRequest, error: topupError } = await supabase
+                        .from('credit_topup_requests')
+                        .insert({
+                            dealer_id: user.id,
+                            bank_account_id: assignedBankAccount.id,
+                            amount: verifiedAmount,
+                            slip_image_url: slipImageUrl,
+                            slip_data: slipData.data,
+                            trans_ref: transRef,
+                            sender_name: slipData.data.sender?.displayName,
+                            receiver_name: slipData.data.receiver?.displayName,
+                            status: 'approved',
+                            verified_at: new Date().toISOString()
+                        })
+                        .select()
+                        .single()
+                    
+                    if (topupError) throw topupError
+                    
+                    // Record used slip
+                    await supabase.from('used_slips').insert({
+                        trans_ref: transRef,
+                        topup_request_id: topupRequest.id,
+                        dealer_id: user.id,
+                        amount: verifiedAmount
                     })
-
-                    if (!success) {
-                        console.error('Error processing topup:', error)
-                        throw error
+                    
+                    // Update dealer credit
+                    const { data: creditData, error: creditFetchError } = await supabase
+                        .from('dealer_credits')
+                        .select('*')
+                        .eq('dealer_id', user.id)
+                        .maybeSingle()
+                    
+                    console.log('Current credit data:', creditData, 'Error:', creditFetchError)
+                    console.log('Verified amount to add:', verifiedAmount)
+                    
+                    if (creditData) {
+                        const newBalance = (creditData.balance || 0) + verifiedAmount
+                        console.log('Updating balance from', creditData.balance, 'to', newBalance)
+                        
+                        const { error: updateError } = await supabase
+                            .from('dealer_credits')
+                            .update({ 
+                                balance: newBalance,
+                                is_blocked: false,
+                                updated_at: new Date().toISOString()
+                            })
+                            .eq('dealer_id', user.id)
+                        
+                        if (updateError) {
+                            console.error('Error updating credit:', updateError)
+                        } else {
+                            console.log('Credit updated successfully to:', newBalance)
+                        }
+                    } else {
+                        console.log('No existing credit, creating new record with balance:', verifiedAmount)
+                        const { error: insertError } = await supabase
+                            .from('dealer_credits')
+                            .insert({
+                                dealer_id: user.id,
+                                balance: verifiedAmount
+                            })
+                        
+                        if (insertError) {
+                            console.error('Error inserting credit:', insertError)
+                        }
                     }
-
-                    console.log('Credit updated successfully to:', newBalance)
-
-                    const debtMsg = debtRecovered > 0 ? ` (หักยอดค้าง ฿${debtRecovered.toLocaleString('th-TH', { minimumFractionDigits: 2 })})` : ''
-                    toast.success(`เติมเครดิต ฿${verifiedAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} สำเร็จ!${debtMsg}`)
+                    
+                    // Record transaction
+                    const newBalance = (creditData?.balance || 0) + verifiedAmount
+                    const { error: transError } = await supabase.from('credit_transactions').insert({
+                        dealer_id: user.id,
+                        transaction_type: 'topup',
+                        amount: verifiedAmount,
+                        balance_after: newBalance,
+                        description: 'เติมเครดิตจากสลิป (อัตโนมัติ)'
+                    })
+                    
+                    if (transError) {
+                        console.error('Error recording transaction:', transError)
+                    }
+                    
+                    toast.success(`เติมเครดิต ฿${verifiedAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} สำเร็จ!`)
                     fetchDealerCredit()
                 } else {
                     // SlipOK verification failed - create pending request
@@ -1389,7 +735,7 @@ export default function Dealer() {
                             slip_image_url: slipImageUrl,
                             status: 'pending'
                         })
-
+                    
                     toast.warning('ไม่สามารถตรวจสอบสลิปอัตโนมัติได้ รอ Admin ตรวจสอบ')
                 }
             } else {
@@ -1403,17 +749,17 @@ export default function Dealer() {
                         slip_image_url: slipImageUrl,
                         status: 'pending'
                     })
-
+                
                 if (topupError) throw topupError
-
+                
                 toast.success('ส่งคำขอเติมเครดิตสำเร็จ รอ Admin อนุมัติ')
             }
-
+            
             setShowTopupModal(false)
             setTopupForm({ amount: '', slip_file: null })
             setSlipPreview(null)
             fetchTopupHistory()
-
+            
         } catch (error) {
             console.error('Topup error:', error)
             toast.error(error.message || 'เกิดข้อผิดพลาดในการส่งคำขอเติมเครดิต')
@@ -1422,80 +768,8 @@ export default function Dealer() {
         }
     }
 
-    // Helper: check if current dealer uses per_user_yearly billing
-    function isPerUserYearly() {
-        return subscription?.subscription_packages?.billing_model === 'per_user_yearly'
-    }
-
-    // Helper: get price per user per year from subscription
-    function getPricePerUserPerYear() {
-        return parseFloat(subscription?.subscription_packages?.price_per_user_per_year || 0)
-    }
-
-    // Helper: deduct credit for per_user_yearly membership
-    async function deductMembershipCredit(years, memberName) {
-        const pricePerYear = getPricePerUserPerYear()
-        const totalCost = pricePerYear * years
-        if (totalCost <= 0) return { success: true }
-
-        // Check dealer credit
-        const { data: creditData } = await supabase
-            .from('dealer_credits')
-            .select('balance, pending_deduction, is_blocked')
-            .eq('dealer_id', user.id)
-            .maybeSingle()
-
-        if (creditData?.is_blocked) {
-            return { success: false, error: 'เครดิตถูกระงับ ไม่สามารถดำเนินการได้' }
-        }
-
-        const currentBalance = creditData?.balance || 0
-        const pendingDeduction = creditData?.pending_deduction || 0
-        const availableCredit = currentBalance - pendingDeduction
-
-        if (availableCredit < totalCost) {
-            return { success: false, error: `เครดิตไม่เพียงพอ! ต้องการ ฿${totalCost.toLocaleString()} แต่เครดิตคงเหลือ ฿${availableCredit.toLocaleString()}` }
-        }
-
-        // Deduct credit
-        const newBalance = currentBalance - totalCost
-        const { error: updateError } = await supabase
-            .from('dealer_credits')
-            .update({ balance: newBalance })
-            .eq('dealer_id', user.id)
-
-        if (updateError) {
-            return { success: false, error: 'ไม่สามารถตัดเครดิตได้: ' + updateError.message }
-        }
-
-        // Record transaction
-        await supabase.from('credit_transactions').insert({
-            dealer_id: user.id,
-            amount: -totalCost,
-            balance_after: newBalance,
-            reference_type: 'membership_fee',
-            description: `ค่าสมาชิกรายปี "${memberName}" (${years} ปี x ฿${pricePerYear.toLocaleString()})`,
-            metadata: {
-                member_name: memberName,
-                years: years,
-                price_per_year: pricePerYear,
-                total_cost: totalCost
-            }
-        })
-
-        return { success: true, totalCost, newBalance }
-    }
-
     // Membership Management Functions
     async function handleApproveMember(member) {
-        // If per_user_yearly, show years selection modal first
-        if (isPerUserYearly() && !member.is_dealer) {
-            setApproveMemberTarget(member)
-            setApproveYears(1)
-            setShowApproveYearsModal(true)
-            return
-        }
-
         try {
             const { error } = await supabase
                 .from('user_dealer_memberships')
@@ -1510,88 +784,8 @@ export default function Dealer() {
         }
     }
 
-    // Approve member with years (per_user_yearly)
-    async function handleApproveWithYears() {
-        if (!approveMemberTarget) return
-        setApproving(true)
-        try {
-            const memberName = approveMemberTarget.full_name || approveMemberTarget.email
-            const result = await deductMembershipCredit(approveYears, memberName)
-            if (!result.success) {
-                toast.error(result.error)
-                return
-            }
-
-            const expiresAt = new Date()
-            expiresAt.setFullYear(expiresAt.getFullYear() + approveYears)
-
-            const { error } = await supabase
-                .from('user_dealer_memberships')
-                .update({
-                    status: 'active',
-                    membership_expires_at: expiresAt.toISOString(),
-                    membership_years: approveYears
-                })
-                .eq('id', approveMemberTarget.membership_id)
-
-            if (error) throw error
-
-            toast.success(`อนุมัติ "${memberName}" สำเร็จ (${approveYears} ปี) ตัดเครดิต ฿${result.totalCost.toLocaleString()}`)
-            setShowApproveYearsModal(false)
-            setApproveMemberTarget(null)
-            fetchData()
-            fetchDealerCredit()
-        } catch (error) {
-            console.error('Error approving member with years:', error)
-            toast.error('เกิดข้อผิดพลาดในการอนุมัติสมาชิก')
-        } finally {
-            setApproving(false)
-        }
-    }
-
-    // Renew membership (per_user_yearly)
-    async function handleRenewMembership() {
-        if (!renewMember) return
-        setRenewing(true)
-        try {
-            const memberName = renewMember.full_name || renewMember.email
-            const result = await deductMembershipCredit(renewYears, memberName)
-            if (!result.success) {
-                toast.error(result.error)
-                return
-            }
-
-            // Calculate new expiry: if not yet expired, extend from current expiry; otherwise from now
-            const currentExpiry = renewMember.membership_expires_at ? new Date(renewMember.membership_expires_at) : null
-            const baseDate = (currentExpiry && currentExpiry > new Date()) ? currentExpiry : new Date()
-            const newExpiry = new Date(baseDate)
-            newExpiry.setFullYear(newExpiry.getFullYear() + renewYears)
-
-            const { error } = await supabase
-                .from('user_dealer_memberships')
-                .update({
-                    membership_expires_at: newExpiry.toISOString(),
-                    membership_years: renewYears
-                })
-                .eq('id', renewMember.membership_id)
-
-            if (error) throw error
-
-            toast.success(`ต่ออายุ "${memberName}" สำเร็จ (${renewYears} ปี) ตัดเครดิต ฿${result.totalCost.toLocaleString()}`)
-            setShowRenewModal(false)
-            setRenewMember(null)
-            fetchData()
-            fetchDealerCredit()
-        } catch (error) {
-            console.error('Error renewing membership:', error)
-            toast.error('เกิดข้อผิดพลาดในการต่ออายุสมาชิก')
-        } finally {
-            setRenewing(false)
-        }
-    }
-
     async function handleRejectMember(member) {
-        if (!(await confirmDialog({ title: 'ยืนยันการปฏิเสธ', message: `ต้องการปฏิเสธ "${member.full_name || member.email}" หรือไม่?`, confirmText: 'ปฏิเสธ' }))) return
+        if (!confirm(`ต้องการปฏิเสธ "${member.full_name || member.email}" หรือไม่?`)) return
 
         try {
             const { error } = await supabase
@@ -1608,7 +802,7 @@ export default function Dealer() {
     }
 
     async function handleBlockMember(member) {
-        if (!(await confirmDialog({ title: 'ยืนยันการบล็อค', message: `ต้องการบล็อค "${member.full_name || member.email}" หรือไม่?\nสมาชิกจะไม่สามารถส่งเลขให้คุณได้`, confirmText: 'บล็อค' }))) return
+        if (!confirm(`ต้องการบล็อค "${member.full_name || member.email}" หรือไม่?\nสมาชิกจะไม่สามารถส่งเลขให้คุณได้`)) return
 
         try {
             const { error } = await supabase
@@ -1631,31 +825,6 @@ export default function Dealer() {
             return
         }
 
-        // For per_user_yearly: check credit before creating user
-        const perUserYearly = isPerUserYearly()
-        const years = parseInt(addMemberForm.membership_years) || 1
-        if (perUserYearly) {
-            const pricePerYear = getPricePerUserPerYear()
-            const totalCost = pricePerYear * years
-            if (totalCost > 0) {
-                const { data: creditData } = await supabase
-                    .from('dealer_credits')
-                    .select('balance, pending_deduction, is_blocked')
-                    .eq('dealer_id', user.id)
-                    .maybeSingle()
-
-                if (creditData?.is_blocked) {
-                    toast.error('เครดิตถูกระงับ ไม่สามารถสร้างสมาชิกได้')
-                    return
-                }
-                const availableCredit = (creditData?.balance || 0) - (creditData?.pending_deduction || 0)
-                if (availableCredit < totalCost) {
-                    toast.error(`เครดิตไม่เพียงพอ! ต้องการ ฿${totalCost.toLocaleString()} แต่เครดิตคงเหลือ ฿${availableCredit.toLocaleString()}`)
-                    return
-                }
-            }
-        }
-
         setAddingMember(true)
         try {
             const defaultPassword = '123456'
@@ -1665,75 +834,41 @@ export default function Dealer() {
             const { data: currentSession } = await supabase.auth.getSession()
             const dealerSession = currentSession?.session
 
-            // Suppress onAuthStateChange during signUp + session restore
-            // signUp auto-logs in as new user, triggering SIGNED_IN for the new user
-            // which would switch the dealer's UI to the new member's dashboard
-            skipAuthEventRef.current = true
-
-            let authData, authError
-            try {
-                const result = await supabase.auth.signUp({
-                    email: addMemberForm.email,
-                    password: defaultPassword,
-                    options: {
-                        data: {
-                            full_name: addMemberForm.full_name || '',
-                            phone: addMemberForm.phone || '',
-                            role: 'user'
-                        }
+            // Create new user with signUp
+            const { data: authData, error: authError } = await supabase.auth.signUp({
+                email: addMemberForm.email,
+                password: defaultPassword,
+                options: {
+                    data: {
+                        full_name: addMemberForm.full_name || '',
+                        phone: addMemberForm.phone || '',
+                        role: 'user'
                     }
-                })
-                authData = result.data
-                authError = result.error
-
-                if (authError) throw authError
-
-                // Immediately restore dealer session
-                if (dealerSession) {
-                    await supabase.auth.setSession({
-                        access_token: dealerSession.access_token,
-                        refresh_token: dealerSession.refresh_token
-                    })
                 }
-            } finally {
-                skipAuthEventRef.current = false
-            }
+            })
+
+            if (authError) throw authError
 
             const newUserId = authData.user?.id
 
+            // Immediately restore dealer session FIRST
+            // signUp auto-logs in as new user, we need to switch back to dealer
+            if (dealerSession) {
+                await supabase.auth.setSession({
+                    access_token: dealerSession.access_token,
+                    refresh_token: dealerSession.refresh_token
+                })
+            }
+
             if (newUserId) {
-                // For per_user_yearly: deduct credit
-                let creditDeducted = false
-                if (perUserYearly) {
-                    const memberName = addMemberForm.full_name || addMemberForm.email
-                    const result = await deductMembershipCredit(years, memberName)
-                    if (!result.success) {
-                        toast.error(result.error)
-                        setAddingMember(false)
-                        return
-                    }
-                    creditDeducted = true
-                }
-
-                // Build membership data
-                const membershipData = {
-                    user_id: newUserId,
-                    dealer_id: user.id,
-                    status: 'active' // Auto-approve since dealer created them
-                }
-
-                // Add expiry for per_user_yearly
-                if (perUserYearly) {
-                    const expiresAt = new Date()
-                    expiresAt.setFullYear(expiresAt.getFullYear() + years)
-                    membershipData.membership_expires_at = expiresAt.toISOString()
-                    membershipData.membership_years = years
-                }
-
                 // Now create membership as dealer (RLS policy: dealer_id = auth.uid())
                 const { error: membershipError } = await supabase
                     .from('user_dealer_memberships')
-                    .insert(membershipData)
+                    .insert({
+                        user_id: newUserId,
+                        dealer_id: user.id,
+                        status: 'active' // Auto-approve since dealer created them
+                    })
 
                 if (membershipError) {
                     console.error('Membership error:', membershipError)
@@ -1748,13 +883,9 @@ export default function Dealer() {
                     full_name: addMemberForm.full_name
                 })
 
-                const successMsg = perUserYearly && creditDeducted
-                    ? `สร้างสมาชิกใหม่สำเร็จ! (${years} ปี)`
-                    : 'สร้างสมาชิกใหม่สำเร็จ!'
-                toast.success(successMsg)
-                setAddMemberForm({ email: '', full_name: '', phone: '', membership_years: 1 })
+                toast.success('สร้างสมาชิกใหม่สำเร็จ!')
+                setAddMemberForm({ email: '', full_name: '', phone: '' })
                 fetchData()
-                if (creditDeducted) fetchDealerCredit()
             }
         } catch (error) {
             console.error('Error adding member:', error)
@@ -1772,7 +903,7 @@ export default function Dealer() {
     function copyMemberCredentials(member) {
         const loginUrl = window.location.origin + '/login'
         const text = `🎰 ข้อมูลเข้าสู่ระบบ\n\n📧 อีเมล: ${member.email}\n🔑 รหัสผ่าน: 123456\n🔗 ลิงก์: ${loginUrl}\n\n⚠️ กรุณาเปลี่ยนรหัสผ่านหลังเข้าสู่ระบบ`
-
+        
         // Try modern clipboard API first, fallback to execCommand
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(text).then(() => {
@@ -1822,13 +953,13 @@ export default function Dealer() {
     async function handleDeleteMember(member) {
         console.log('handleDeleteMember called:', member)
         console.log('membership_id:', member.membership_id)
-
+        
         if (!member.membership_id) {
             toast.error('ไม่พบ membership_id')
             return
         }
-
-        if (!(await confirmDialog({ title: 'ยืนยันการลบสมาชิก', message: `ต้องการลบ "${member.full_name || member.email}" ออกจากรายชื่อสมาชิกหรือไม่?\nการลบจะยกเลิกการเป็นสมาชิกของเจ้ามือนี้`, confirmText: 'ลบเลย' }))) return
+        
+        if (!confirm(`ต้องการลบ "${member.full_name || member.email}" ออกจากรายชื่อสมาชิกหรือไม่?\n\nการลบจะยกเลิกการเป็นสมาชิกของเจ้ามือนี้`)) return
 
         try {
             const { data, error, count } = await supabase
@@ -1840,12 +971,12 @@ export default function Dealer() {
             console.log('Delete response:', { data, error, count })
 
             if (error) throw error
-
+            
             if (!data || data.length === 0) {
                 toast.error('ไม่สามารถลบได้ - อาจไม่มีสิทธิ์หรือไม่พบข้อมูล')
                 return
             }
-
+            
             toast.success('ลบสมาชิกสำเร็จ')
             fetchData()
         } catch (error) {
@@ -1860,20 +991,20 @@ export default function Dealer() {
             console.log('Approving dealer:', dealer)
             console.log('Connection ID:', dealer.connection_id)
             console.log('Is from membership:', dealer.is_from_membership)
-
+            
             let data, error
-
+            
             if (dealer.is_from_membership) {
                 // Update in user_dealer_memberships table
                 const result = await supabase
                     .from('user_dealer_memberships')
-                    .update({
+                    .update({ 
                         status: 'active',
                         approved_at: new Date().toISOString()
                     })
                     .eq('id', dealer.connection_id)
                     .select()
-
+                
                 data = result.data
                 error = result.error
                 console.log('Membership update result:', { data, error })
@@ -1881,33 +1012,33 @@ export default function Dealer() {
                 // Update in dealer_upstream_connections table
                 const result = await supabase
                     .from('dealer_upstream_connections')
-                    .update({
+                    .update({ 
                         status: 'active',
                         updated_at: new Date().toISOString()
                     })
                     .eq('id', dealer.connection_id)
                     .select()
-
+                
                 data = result.data
                 error = result.error
                 console.log('Connection update result:', { data, error })
             }
 
             if (error) throw error
-
+            
             if (!data || data.length === 0) {
                 console.error('No rows updated - RLS policy may be blocking update')
                 toast.error('ไม่สามารถอัพเดทได้ - อาจมีปัญหา RLS policy')
                 return
             }
-
+            
             // Update local state
-            setDownstreamDealers(prev => prev.map(d =>
-                d.connection_id === dealer.connection_id
-                    ? { ...d, membership_status: 'active' }
+            setDownstreamDealers(prev => prev.map(d => 
+                d.connection_id === dealer.connection_id 
+                    ? { ...d, membership_status: 'active' } 
                     : d
             ))
-
+            
             toast.success(`ยืนยัน "${dealer.full_name || dealer.email}" เป็นเจ้ามือตีเข้าสำเร็จ`)
         } catch (error) {
             console.error('Error approving downstream dealer:', error)
@@ -1917,25 +1048,25 @@ export default function Dealer() {
 
     // Reject downstream dealer connection request
     async function handleRejectDownstreamDealer(dealer) {
-        if (!(await confirmDialog({ title: 'ยืนยันการปฏิเสธ', message: `ต้องการปฏิเสธคำขอจาก "${dealer.full_name || dealer.email}" หรือไม่?`, confirmText: 'ปฏิเสธ' }))) return
+        if (!confirm(`ต้องการปฏิเสธคำขอจาก "${dealer.full_name || dealer.email}" หรือไม่?`)) return
 
         try {
             console.log('Rejecting dealer:', dealer)
             console.log('Connection ID:', dealer.connection_id)
             console.log('Is from membership:', dealer.is_from_membership)
-
+            
             let data, error
-
+            
             if (dealer.is_from_membership) {
                 // Update in user_dealer_memberships table
                 const result = await supabase
                     .from('user_dealer_memberships')
-                    .update({
+                    .update({ 
                         status: 'rejected'
                     })
                     .eq('id', dealer.connection_id)
                     .select()
-
+                
                 data = result.data
                 error = result.error
                 console.log('Membership reject result:', { data, error })
@@ -1943,33 +1074,33 @@ export default function Dealer() {
                 // Update in dealer_upstream_connections table
                 const result = await supabase
                     .from('dealer_upstream_connections')
-                    .update({
+                    .update({ 
                         status: 'rejected',
                         updated_at: new Date().toISOString()
                     })
                     .eq('id', dealer.connection_id)
                     .select()
-
+                
                 data = result.data
                 error = result.error
                 console.log('Connection reject result:', { data, error })
             }
 
             if (error) throw error
-
+            
             if (!data || data.length === 0) {
                 console.error('No rows updated - RLS policy may be blocking update')
                 toast.error('ไม่สามารถอัพเดทได้ - อาจมีปัญหา RLS policy')
                 return
             }
-
+            
             // Update local state
-            setDownstreamDealers(prev => prev.map(d =>
-                d.connection_id === dealer.connection_id
-                    ? { ...d, membership_status: 'rejected' }
+            setDownstreamDealers(prev => prev.map(d => 
+                d.connection_id === dealer.connection_id 
+                    ? { ...d, membership_status: 'rejected' } 
                     : d
             ))
-
+            
             toast.success('ปฏิเสธคำขอสำเร็จ')
         } catch (error) {
             console.error('Error rejecting downstream dealer:', error)
@@ -1980,12 +1111,12 @@ export default function Dealer() {
     // Block/Unblock downstream dealer (dealer who sends bets to us)
     async function handleBlockDownstreamDealer(dealer) {
         const newBlockedState = dealer.membership_status !== 'blocked'
-        if (newBlockedState && !(await confirmDialog({ title: 'ยืนยันการบล็อค', message: `ต้องการบล็อค "${dealer.full_name || dealer.email}" หรือไม่?\nเจ้ามือนี้จะไม่สามารถตีเลขมาให้คุณได้`, confirmText: 'บล็อค' }))) return
+        if (newBlockedState && !confirm(`ต้องการบล็อค "${dealer.full_name || dealer.email}" หรือไม่?\nเจ้ามือนี้จะไม่สามารถตีเลขมาให้คุณได้`)) return
 
         try {
             const { error } = await supabase
                 .from('dealer_upstream_connections')
-                .update({
+                .update({ 
                     status: newBlockedState ? 'blocked' : 'active',
                     is_blocked: newBlockedState,
                     updated_at: new Date().toISOString()
@@ -1993,14 +1124,14 @@ export default function Dealer() {
                 .eq('id', dealer.connection_id)
 
             if (error) throw error
-
+            
             // Update local state
-            setDownstreamDealers(prev => prev.map(d =>
-                d.connection_id === dealer.connection_id
-                    ? { ...d, membership_status: newBlockedState ? 'blocked' : 'active' }
+            setDownstreamDealers(prev => prev.map(d => 
+                d.connection_id === dealer.connection_id 
+                    ? { ...d, membership_status: newBlockedState ? 'blocked' : 'active' } 
                     : d
             ))
-
+            
             toast.success(newBlockedState ? 'บล็อคเจ้ามือสำเร็จ' : 'ปลดบล็อคเจ้ามือสำเร็จ')
         } catch (error) {
             console.error('Error blocking downstream dealer:', error)
@@ -2010,60 +1141,16 @@ export default function Dealer() {
 
     // Disconnect dealer connection
     async function handleDisconnectDealer(dealer) {
-        if (!(await confirmDialog({ title: 'ยกเลิกการเชื่อมต่อ', message: `ยกเลิกการเชื่อมต่อกับ "${dealer.full_name || dealer.email}"?\nรายชื่อจะหายไปทั้ง 2 ฝ่าย`, confirmText: 'ยกเลิก' }))) return
+        if (!confirm(`ยกเลิกการเชื่อมต่อกับ "${dealer.full_name || dealer.email}"?\n\nรายชื่อจะหายไปทั้ง 2 ฝ่าย`)) return
 
         try {
-            console.log('Disconnecting dealer:', dealer)
-            console.log('Connection ID:', dealer.connection_id)
-            console.log('Is from membership:', dealer.is_from_membership)
-            console.log('User ID:', user?.id)
+            const { error } = await supabase
+                .from('dealer_upstream_connections')
+                .delete()
+                .eq('id', dealer.connection_id)
 
-            let error
-
-            if (dealer.is_from_membership) {
-                // Delete from user_dealer_memberships table
-                console.log('Deleting from user_dealer_memberships table')
-                const result = await supabase
-                    .from('user_dealer_memberships')
-                    .delete()
-                    .eq('id', dealer.connection_id)
-
-                error = result.error
-            } else {
-                // Delete from dealer_upstream_connections table
-                console.log('Deleting from dealer_upstream_connections table')
-
-                // Check connection details first
-                const { data: connectionData, error: checkError } = await supabase
-                    .from('dealer_upstream_connections')
-                    .select('*')
-                    .eq('id', dealer.connection_id)
-                    .single()
-
-                if (checkError) {
-                    console.error('Error checking connection:', checkError)
-                    toast.error('ไม่พบข้อมูลการเชื่อมต่อ')
-                    return
-                }
-
-                console.log('Connection data:', connectionData)
-
-                // Try to delete
-                const result = await supabase
-                    .from('dealer_upstream_connections')
-                    .delete()
-                    .eq('id', dealer.connection_id)
-
-                error = result.error
-            }
-
-            if (error) {
-                console.error('Delete error:', error)
-                toast.error('เกิดข้อผิดพลาดในการยกเลิกการเชื่อมต่อ')
-                return
-            }
-
-            console.log('Delete successful')
+            if (error) throw error
+            
             setDownstreamDealers(prev => prev.filter(d => d.connection_id !== dealer.connection_id))
             toast.success('ยกเลิกการเชื่อมต่อสำเร็จ')
         } catch (error) {
@@ -2073,121 +1160,42 @@ export default function Dealer() {
     }
 
     // Update assigned bank account for member
-    // For regular members: update user_dealer_memberships.assigned_bank_account_id
-    // For dealer members (เจ้ามือตีเข้า): update dealer_upstream_connections.assigned_bank_account_id
-    //   because dealer-to-dealer QR connections do NOT create user_dealer_memberships records
     async function handleUpdateMemberBank(member, bankAccountId) {
         try {
-            let success = false
+            const { error } = await supabase
+                .from('user_dealer_memberships')
+                .update({ assigned_bank_account_id: bankAccountId || null })
+                .eq('id', member.membership_id)
 
-            if (member.is_dealer && member.connection_id) {
-                // Dealer member (เจ้ามือตีเข้า) - update on dealer_upstream_connections
-                // The connection_id is the dealer_upstream_connections.id
-                const { data, error } = await supabase
-                    .from('dealer_upstream_connections')
-                    .update({ assigned_bank_account_id: bankAccountId || null })
-                    .eq('id', member.connection_id)
-                    .select()
+            if (error) throw error
 
-                if (error) throw error
-                success = data && data.length > 0
-
-                // If connection update failed and we have a real membership_id, try membership table
-                if (!success && member.membership_id && member.membership_id !== member.connection_id) {
-                    const { data: mData, error: mError } = await supabase
-                        .from('user_dealer_memberships')
-                        .update({ assigned_bank_account_id: bankAccountId || null })
-                        .eq('id', member.membership_id)
-                        .select()
-                    if (mError) throw mError
-                    success = mData && mData.length > 0
-                }
-            } else {
-                // Regular member - update on user_dealer_memberships
-                const { data, error } = await supabase
-                    .from('user_dealer_memberships')
-                    .update({ assigned_bank_account_id: bankAccountId || null })
-                    .eq('id', member.membership_id)
-                    .select()
-
-                if (error) throw error
-                success = data && data.length > 0
-            }
-
-            if (!success) {
-                toast.error('ไม่พบข้อมูลสมาชิกในระบบ')
-                return
-            }
-
-            // Update local state
-            const matchMember = (m) =>
-                m.id === member.id ||
-                m.membership_id === member.membership_id ||
-                m.connection_id === member.connection_id
-
+            // Update local state immediately
             setMembers(prev => prev.map(m =>
-                matchMember(m) ? { ...m, assigned_bank_account_id: bankAccountId || null } : m
+                m.membership_id === member.membership_id
+                    ? { ...m, assigned_bank_account_id: bankAccountId || null }
+                    : m
             ))
-            setDownstreamDealers(prev => prev.map(m =>
-                matchMember(m) ? { ...m, assigned_bank_account_id: bankAccountId || null } : m
-            ))
-
-            toast.success('อัปเดตบัญชีธนาคารสำเร็จ')
         } catch (error) {
             console.error('Error updating member bank:', error)
             toast.error('เกิดข้อผิดพลาดในการอัปเดตบัญชีธนาคาร')
         }
     }
 
-    async function handleUpdateMemberLineUserId(member, lineUserId) {
-        try {
-            const trimmedLineId = lineUserId ? lineUserId.trim() : null;
-            // Update in profiles table
-            const { data, error } = await supabase
-                .from('profiles')
-                .update({ line_user_id: trimmedLineId })
-                .eq('id', member.id)
-                .select()
-
-            if (error) throw error
-
-            // Update local state in all members categories
-            const matchMember = (m) => m.id === member.id
-
-            setMembers(prev => prev.map(m =>
-                matchMember(m) ? { ...m, line_user_id: trimmedLineId } : m
-            ))
-            setPendingMembers(prev => prev.map(m =>
-                matchMember(m) ? { ...m, line_user_id: trimmedLineId } : m
-            ))
-            setBlockedMembers(prev => prev.map(m =>
-                matchMember(m) ? { ...m, line_user_id: trimmedLineId } : m
-            ))
-            setDownstreamDealers(prev => prev.map(m =>
-                matchMember(m) ? { ...m, line_user_id: trimmedLineId } : m
-            ))
-
-            toast.success('อัปเดต Line User ID สำเร็จ')
-        } catch (error) {
-            console.error('Error updating member Line User ID:', error)
-            toast.error('เกิดข้อผิดพลาดในการอัปเดต Line User ID')
-            throw error
-        }
-    }
-
     // Redirect if not dealer or admin (after hooks)
     if (!profile) {
-        // Still loading auth - show spinner briefly
-        if (authLoading) {
-            return (
-                <div className="loading-screen">
-                    <div className="spinner"></div>
-                    <p>กำลังโหลด...</p>
-                </div>
-            )
-        }
-        // Auth finished but no profile = not logged in, redirect to login
-        return <Navigate to="/login" replace />
+        return (
+            <div className="loading-screen" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: '100vh',
+                width: '100%'
+            }}>
+                <div className="spinner"></div>
+                <p>กำลังโหลด...</p>
+            </div>
+        )
     }
 
     if (!isDealer && !isSuperAdmin) {
@@ -2220,7 +1228,7 @@ export default function Dealer() {
             // Combine date and time - store as ISO string with timezone
             const openDateTime = new Date(`${roundForm.open_date}T${roundForm.open_time}:00`)
             const closeDateTime = new Date(`${roundForm.close_date}T${roundForm.close_time}:00`)
-
+            
             // Format as ISO string preserving local time intent
             const formatLocalDateTime = (date) => {
                 const year = date.getFullYear()
@@ -2248,12 +1256,9 @@ export default function Dealer() {
                     open_time: formatLocalDateTime(openDateTime),
                     close_time: formatLocalDateTime(closeDateTime),
                     delete_before_minutes: roundForm.delete_before_minutes,
-                    delete_after_submit_minutes: roundForm.delete_after_submit_minutes,
                     currency_symbol: roundForm.currency_symbol,
                     currency_name: roundForm.currency_name,
-                    set_prices: roundForm.set_prices,
-                    notify_close_to_groups: roundForm.notify_close_to_groups,
-                    is_active: false
+                    set_prices: roundForm.set_prices
                 })
                 .select()
                 .single()
@@ -2261,25 +1266,14 @@ export default function Dealer() {
             if (roundError) throw roundError
 
             // Create type limits (no payout_rate - comes from user_settings)
-            // Allow 0 value for dealers who want to transfer all numbers (0 = no limit acceptance)
             const typeLimitsData = Object.entries(roundForm.type_limits)
-                .filter(([, maxAmount]) => maxAmount !== undefined && maxAmount !== null && maxAmount !== '')
-                .map(([betType, maxAmount]) => {
-                    const specificTime = roundForm.type_close_times?.[betType];
-                    let typeCloseTime = null;
-                    if (specificTime) {
-                        const specificDateTime = new Date(`${roundForm.close_date}T${specificTime}:00`);
-                        typeCloseTime = formatLocalDateTime(specificDateTime);
-                    }
-                    return {
-                        round_id: round.id,
-                        bet_type: betType,
-                        max_per_number: maxAmount,
-                        payout_rate: 0, // Placeholder - actual payout from user_settings
-                        close_time: typeCloseTime,
-                        close_time_behavior: roundForm.type_close_time_behaviors?.[betType] || 'close_immediately'
-                    };
-                })
+                .filter(([, maxAmount]) => maxAmount > 0)  // Only add limits with value > 0
+                .map(([betType, maxAmount]) => ({
+                    round_id: round.id,
+                    bet_type: betType,
+                    max_per_number: maxAmount,
+                    payout_rate: 0 // Placeholder - actual payout from user_settings
+                }))
 
             const { error: limitsError } = await supabase
                 .from('type_limits')
@@ -2288,23 +1282,6 @@ export default function Dealer() {
             if (limitsError) throw limitsError
 
             setShowCreateModal(false)
-            setRoundForm({
-                lottery_type: 'lao',
-                lottery_name: '',
-                open_date: new Date().toISOString().split('T')[0],
-                open_time: '06:00',
-                close_date: new Date().toISOString().split('T')[0],
-                close_time: '20:15',
-                delete_before_minutes: 30,
-                delete_after_submit_minutes: 120,
-                currency_symbol: '฿',
-                currency_name: 'บาท',
-                notify_close_to_groups: true,
-                type_limits: getDefaultLimitsForType('lao'),
-                set_prices: getDefaultSetPricesForType('lao'),
-                type_close_times: {},
-                type_close_time_behaviors: {}
-            })
             fetchData()
             toast.success('สร้างงวดสำเร็จ!')
 
@@ -2314,27 +1291,9 @@ export default function Dealer() {
         }
     }
 
-    // Toggle round active/inactive
-    async function handleToggleActive(roundId, currentIsActive) {
-        try {
-            const newActive = !currentIsActive
-            const { error } = await supabase
-                .from('lottery_rounds')
-                .update({ is_active: newActive })
-                .eq('id', roundId)
-
-            if (error) throw error
-            toast.success(newActive ? 'เปิดใช้งานงวดหวยแล้ว' : 'ปิดใช้งานงวดหวยแล้ว')
-            fetchData()
-        } catch (error) {
-            console.error('Error toggling active:', error)
-            toast.error('เกิดข้อผิดพลาด: ' + error.message)
-        }
-    }
-
     // Close round
     async function handleCloseRound(roundId) {
-        if (!(await confirmDialog({ title: 'ยืนยันการปิดงวด', message: 'ต้องการปิดงวดนี้?', confirmText: 'ปิดงวด' }))) return
+        if (!confirm('ต้องการปิดงวดนี้?')) return
 
         try {
             const { error } = await supabase
@@ -2343,46 +1302,34 @@ export default function Dealer() {
                 .eq('id', roundId)
 
             if (!error) {
-                // Finalize credit deduction - but SKIP for profit_percentage billing
-                // For profit_percentage: 1% pending is just a guarantee, real deduction happens at announce (5% of profit)
-                // The 1% is only finalized if dealer deletes round without announcing
+                // Finalize credit deduction - try immediate first, then regular
+                // Only ONE of these will actually deduct (based on billing_cycle)
                 try {
-                    const { data: dealerSubs } = await supabase
-                        .from('dealer_subscriptions')
-                        .select('billing_model, subscription_packages(billing_model)')
-                        .eq('dealer_id', user.id)
-                        .in('status', ['active', 'trial'])
-                        .order('created_at', { ascending: false })
-                        .limit(1)
+                    // Try immediate billing first (for immediate billing cycle)
+                    const { data: immediateBillingResult, error: immediateBillingError } = await supabase
+                        .rpc('create_immediate_billing_record', { 
+                            p_round_id: roundId,
+                            p_dealer_id: user.id
+                        })
                     
-                    const billingModel = dealerSubs?.[0]?.subscription_packages?.billing_model || dealerSubs?.[0]?.billing_model
-
-                    if (billingModel !== 'profit_percentage') {
-                        // Regular percentage: deduct immediately on close
-                        const { data: immediateBillingResult, error: immediateBillingError } = await supabase
-                            .rpc('create_immediate_billing_record', {
-                                p_round_id: roundId,
-                                p_dealer_id: user.id
-                            })
-
-                        if (!immediateBillingError && immediateBillingResult?.success && immediateBillingResult?.amount_deducted > 0) {
-                            console.log('Immediate billing success:', immediateBillingResult)
-                            toast.info(`ตัดเครดิต ฿${immediateBillingResult.amount_deducted.toLocaleString()} สำเร็จ`)
-                        } else {
-                            const { data: result, error: creditError } = await supabase
-                                .rpc('finalize_round_credit', { p_round_id: roundId })
-
-                            if (!creditError && result?.total_deducted > 0) {
-                                console.log('Regular finalization success:', result)
-                                toast.info(`ตัดเครดิต ฿${result.total_deducted.toLocaleString()} สำเร็จ`)
-                            }
+                    if (!immediateBillingError && immediateBillingResult?.success && immediateBillingResult?.amount_deducted > 0) {
+                        // Immediate billing succeeded - don't call finalize_round_credit
+                        console.log('Immediate billing success:', immediateBillingResult)
+                        toast.info(`ตัดเครดิต ฿${immediateBillingResult.amount_deducted.toLocaleString()} สำเร็จ`)
+                    } else {
+                        // Immediate billing not applicable - try regular finalization
+                        const { data: result, error: creditError } = await supabase
+                            .rpc('finalize_round_credit', { p_round_id: roundId })
+                        
+                        if (!creditError && result?.total_deducted > 0) {
+                            console.log('Regular finalization success:', result)
+                            toast.info(`ตัดเครดิต ฿${result.total_deducted.toLocaleString()} สำเร็จ`)
                         }
                     }
-                    // profit_percentage: keep pending deduction as guarantee only, don't deduct from balance yet
                 } catch (billingErr) {
                     console.log('Credit system not configured:', billingErr)
                 }
-
+                
                 fetchData()
                 fetchDealerCredit() // Refresh credit balance
             }
@@ -2393,7 +1340,7 @@ export default function Dealer() {
 
     // Delete round - with history preservation (only for closed + announced + has submissions)
     async function handleDeleteRound(roundId, roundStatus) {
-        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: 'ต้องการลบงวดนี้?', confirmText: 'ลบเลย' }))) return
+        if (!confirm('ต้องการลบงวดนี้?')) return
 
         try {
             // Get round details first
@@ -2409,22 +1356,19 @@ export default function Dealer() {
             }
 
             // Get all submissions for this round
-            const { data: submissions } = await fetchAllRows(
-                (from, to) => supabase
-                    .from('submissions')
-                    .select('*')
-                    .eq('round_id', roundId)
-                    .eq('is_deleted', false)
-                    .range(from, to)
-            )
+            const { data: submissions } = await supabase
+                .from('submissions')
+                .select('*')
+                .eq('round_id', roundId)
+                .eq('is_deleted', false)
 
             // Calculate total amount
             const totalAmount = submissions?.reduce((sum, s) => sum + (s.amount || 0), 0) || 0
 
             // Only save history if: round is closed/announced + result announced + has submissions (totalAmount > 0)
-            const shouldSaveHistory = (roundData.status === 'closed' || roundData.status === 'announced') &&
-                roundData.is_result_announced === true &&
-                totalAmount > 0
+            const shouldSaveHistory = (roundData.status === 'closed' || roundData.status === 'announced') && 
+                                      roundData.is_result_announced === true && 
+                                      totalAmount > 0
 
             console.log('Delete round debug:', {
                 roundId,
@@ -2435,257 +1379,36 @@ export default function Dealer() {
             })
 
             if (shouldSaveHistory) {
-                const lotteryKey = getLotteryTypeKey(roundData.lottery_type)
-                const getSettingsKey = (betType, lKey) => {
-                    const normalized = normalizeBetType(betType)
-                    const POSITION_MAP = {
-                        'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
-                        'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
-                    }
-                    const mapped = POSITION_MAP[normalized] || normalized
-                    if (lKey === 'lao' || lKey === 'hanoi') {
-                        const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
-                        return LAO_MAP[mapped] || mapped
-                    }
-                    return mapped
-                }
-
-                // Fetch user_settings for all users in this round (for accurate commission/payout)
-                const uniqueUserIds = [...new Set((submissions || []).map(s => s.user_id))]
-                let allUserSettings = {}
-                if (uniqueUserIds.length > 0) {
-                    const { data: settingsData } = await supabase
-                        .from('user_settings')
-                        .select('*')
-                        .in('user_id', uniqueUserIds)
-                        .eq('dealer_id', user.id)
-                    ;(settingsData || []).forEach(s => { allUserSettings[s.user_id] = s })
-                }
-
-                // Helper: calculate commission for a submission
-                // Always recalculate from current user_settings so that updated rates
-                // apply to all entries (old and new) — matching user dashboard behaviour.
-                const calcCommission = (sub) => {
-                    const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
-                    const settings = allUserSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
-                    if (sub.bet_type === '4_set' || sub.bet_type === '4_top') {
-                        if (settings?.isSet && settings?.commission !== undefined) {
-                            const setPrice = settings.setPrice || roundData?.set_prices?.['4_top'] || 120
-                            return Math.floor((sub.amount || 0) / setPrice) * settings.commission
-                        }
-                        const defaultSetPrice = roundData?.set_prices?.['4_top'] || 120
-                        return Math.floor((sub.amount || 0) / defaultSetPrice) * 25
-                    }
-                    if (settings?.commission !== undefined) {
-                        return settings.isFixed ? settings.commission : (sub.amount || 0) * (settings.commission / 100)
-                    }
-                    let defaultRate = DEFAULT_COMMISSIONS[normalizeBetType(sub.bet_type)] || DEFAULT_COMMISSIONS[sub.bet_type] || 15
-                    if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
-                        const LAO_DEFAULTS = {
-                            'run_top': 10, 'run_bottom': 10,
-                            'pak_top': 20, 'pak_bottom': 20,
-                            '2_top': 20, '2_bottom': 20, '2_front': 20, '2_center': 20, '2_spread': 20, '2_run': 20,
-                            '3_top': 20, '3_tod': 20, '3_bottom': 20,
-                            '4_float': 20, '5_float': 20
-                        }
-                        defaultRate = LAO_DEFAULTS[normalizeBetType(sub.bet_type)] !== undefined ? LAO_DEFAULTS[normalizeBetType(sub.bet_type)] : (LAO_DEFAULTS[sub.bet_type] !== undefined ? LAO_DEFAULTS[sub.bet_type] : 20)
-                    }
-                    return (sub.amount || 0) * (defaultRate / 100)
-                }
-
-                // Helper: calculate payout for a submission (matches dealer dashboard getExpectedPayout)
-                const calcPayout = (sub) => {
-                    if (!sub.is_winner) return 0
-                    if (sub.bet_type === '4_set') {
-                        // DB stores single-set prize — multiply by numSets
-                        const setPrice = roundData?.set_prices?.['4_top'] || 120
-                        const numSets = Math.max(1, Math.floor((sub.amount || 0) / setPrice))
-                        return (sub.prize_amount || 0) * numSets
-                    }
-                    const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
-                    const settings = allUserSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
-                    if (settings?.payout !== undefined) return (sub.amount || 0) * settings.payout
-                    let defaultRate = DEFAULT_PAYOUTS[normalizeBetType(sub.bet_type)] || DEFAULT_PAYOUTS[sub.bet_type] || 1
-                    if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
-                        if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(normalizeBetType(sub.bet_type))) {
-                            defaultRate = 70
-                        }
-                    }
-                    return (sub.amount || 0) * defaultRate
-                }
-
-                // Calculate incoming totals
-                const totalEntries = submissions?.length || 0
-                let totalCommission = 0
-                let totalPayout = 0
-                const userSubmissions = {}
-
-                for (const s of (submissions || [])) {
-                    const comm = calcCommission(s)
-                    const payout = calcPayout(s)
-                    totalCommission += comm
-                    totalPayout += payout
-
-                    if (!userSubmissions[s.user_id]) {
-                        userSubmissions[s.user_id] = { entries: 0, amount: 0, commission: 0, winnings: 0 }
-                    }
-                    userSubmissions[s.user_id].entries += 1
-                    userSubmissions[s.user_id].amount += s.amount || 0
-                    userSubmissions[s.user_id].commission += comm
-                    userSubmissions[s.user_id].winnings += payout
-                }
-
-                // === Calculate outgoing (ตีออก) from bet_transfers ===
+                // Get transfers for this round
                 const { data: transfers } = await supabase
                     .from('bet_transfers')
                     .select('*')
                     .eq('round_id', roundId)
 
-                const transferredAmount = (transfers || []).reduce((sum, t) => sum + (t.amount || 0), 0)
-                let upstreamCommission = 0
-                let upstreamWinnings = 0
-
-                if (transfers && transfers.length > 0) {
-                    // Group transfers by upstream dealer
-                    const dealerGroups = {}
-                    for (const t of transfers) {
-                        const key = t.upstream_dealer_id || `ext_${t.target_dealer_name || 'unknown'}`
-                        if (!dealerGroups[key]) {
-                            dealerGroups[key] = {
-                                dealerId: t.upstream_dealer_id,
-                                isLinked: t.is_linked || false,
-                                targetRoundId: t.target_round_id,
-                                transfers: []
-                            }
-                        }
-                        dealerGroups[key].transfers.push(t)
-                    }
-
-                    for (const group of Object.values(dealerGroups)) {
-                        if (group.isLinked && group.dealerId) {
-                            // Linked: fetch user_settings for commission with upstream dealer
-                            const { data: upSettings } = await supabase
-                                .from('user_settings')
-                                .select('*')
-                                .eq('user_id', user.id)
-                                .eq('dealer_id', group.dealerId)
-                                .maybeSingle()
-
-                            for (const t of group.transfers) {
-                                const settingsKey = getSettingsKey(t.bet_type, lotteryKey)
-                                const betSettings = upSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
-                                // 4_set: commission is fixed amount per set (บาท/ชุด), not percentage
-                                if (t.bet_type === '4_set') {
-                                    const setPrice = betSettings?.setPrice || roundData?.set_prices?.['4_top'] || 120
-                                    const numSets = Math.floor((t.amount || 0) / setPrice)
-                                    const commRate = betSettings?.commission !== undefined ? betSettings.commission : (DEFAULT_4_SET_SETTINGS.commission || 25)
-                                    upstreamCommission += numSets * commRate
-                                } else {
-                                    const commRate = betSettings?.commission !== undefined
-                                        ? betSettings.commission
-                                        : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
-                                    upstreamCommission += (t.amount || 0) * (commRate / 100)
-                                }
-                            }
-
-                            // Linked: fetch upstream submissions for winnings
-                            const targetSubIds = group.transfers.map(t => t.target_submission_id).filter(Boolean)
-                            if (targetSubIds.length > 0) {
-                                const { data: upSubs } = await supabase
-                                    .from('submissions')
-                                    .select('id, is_winner, prize_amount')
-                                    .in('id', targetSubIds)
-                                    .eq('is_deleted', false)
-                                for (const sub of (upSubs || [])) {
-                                    if (sub.is_winner) upstreamWinnings += sub.prize_amount || 0
-                                }
-                            }
-                        } else {
-                            // External: fetch lottery_settings from dealer_upstream_connections
-                            let extSettings = null
-                            const extDealerName = group.transfers[0]?.target_dealer_name
-                            if (extDealerName) {
-                                const { data: connData } = await supabase
-                                    .from('dealer_upstream_connections')
-                                    .select('lottery_settings')
-                                    .eq('dealer_id', user.id)
-                                    .eq('upstream_name', extDealerName)
-                                    .maybeSingle()
-                                extSettings = connData?.lottery_settings
-                            }
-                            
-                            for (const t of group.transfers) {
-                                const settingsKey = getSettingsKey(t.bet_type, lotteryKey)
-                                const betSettings = extSettings?.[lotteryKey]?.[settingsKey]
-                                // 4_set: commission is fixed amount per set (บาท/ชุด), not percentage
-                                if (t.bet_type === '4_set') {
-                                    const setPrice = betSettings?.setPrice || roundData?.set_prices?.['4_top'] || 120
-                                    const numSets = Math.floor((t.amount || 0) / setPrice)
-                                    const commRate = betSettings?.commission !== undefined ? betSettings.commission : (DEFAULT_4_SET_SETTINGS.commission || 25)
-                                    upstreamCommission += numSets * commRate
-                                } else {
-                                    const commRate = betSettings?.commission !== undefined
-                                        ? betSettings.commission
-                                        : (DEFAULT_COMMISSIONS[t.bet_type] || 15)
-                                    upstreamCommission += (t.amount || 0) * (commRate / 100)
-                                }
-                            }
-
-                            // External: check winners against our own winning_numbers
-                            const wn = roundData.winning_numbers
-                            if (wn && roundData.is_result_announced) {
-                                const lt = roundData.lottery_type
-                                const w4set = wn['4_set'] || ''
-                                const w3top = wn['3_top'] || (lt !== 'thai' && w4set.length >= 3 ? w4set.slice(1) : '') || ''
-                                const w2top = wn['2_top'] || (lt !== 'thai' && w4set.length >= 2 ? w4set.slice(2) : '') || ''
-                                const w2bottom = wn['2_bottom'] || (lt === 'lao' && w4set.length >= 2 ? w4set.slice(0, 2) : '') || ''
-                                const w3topSorted = w3top.split('').sort().join('')
-                                const floatCheck = (src, target) => {
-                                    let temp = target
-                                    for (const ch of src) { const idx = temp.indexOf(ch); if (idx === -1) return false; temp = temp.slice(0, idx) + temp.slice(idx + 1) }
-                                    return true
-                                }
-
-                                for (const t of group.transfers) {
-                                    const num = t.numbers || '', bt = t.bet_type
-                                    let isWinner = false, prize = 0
-                                    const payoutRate = DEFAULT_PAYOUTS[bt] || 1
-                                    if (bt === 'run_top' && w3top && num.length === 1) isWinner = w3top.includes(num)
-                                    else if (bt === 'run_bottom' && w2bottom && num.length === 1) isWinner = w2bottom.includes(num)
-                                    else if (bt === 'front_top_1' && w3top && w3top.length === 3 && num.length === 1) isWinner = num === w3top[0]
-                                    else if (bt === 'middle_top_1' && w3top && w3top.length === 3 && num.length === 1) isWinner = num === w3top[1]
-                                    else if (bt === 'back_top_1' && w3top && w3top.length === 3 && num.length === 1) isWinner = num === w3top[2]
-                                    else if (bt === 'front_bottom_1' && w2bottom && w2bottom.length === 2 && num.length === 1) isWinner = num === w2bottom[0]
-                                    else if (bt === 'back_bottom_1' && w2bottom && w2bottom.length === 2 && num.length === 1) isWinner = num === w2bottom[1]
-                                    else if (bt === 'pak_top' && w3top && w3top.length === 3 && num.length === 1) isWinner = w3top.includes(num)
-                                    else if (bt === 'pak_bottom' && w2bottom && w2bottom.length === 2 && num.length === 1) isWinner = w2bottom.includes(num)
-                                    else if (bt === '2_bottom' && w2bottom && num.length === 2) isWinner = num === w2bottom
-                                    else if (bt === '2_top' && w2top && num.length === 2) isWinner = num === w2top
-                                    else if ((bt === '3_top' || bt === '3_straight') && w3top && num.length === 3) isWinner = num === w3top
-                                    else if ((bt === '3_tod' || bt === '3_tod_single') && w3top && num.length === 3) isWinner = num.split('').sort().join('') === w3topSorted
-                                    else if (bt === '4_set' && w4set && num.length === 4) {
-                                        const r = calculate4SetPrizes(num, w4set)
-                                        if (r.totalPrize > 0) { isWinner = true; prize = r.totalPrize }
-                                    }
-                                    if (isWinner) upstreamWinnings += bt === '4_set' ? prize : (t.amount || 0) * payoutRate
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Calculate profit: dealer perspective
-                // กำไรฝั่งรับ = ยอดรับ - ค่าคอม - จ่ายถูก
-                // กำไรฝั่งส่ง = ค่าคอมที่ได้ + รับถูก - ยอดส่ง
-                const incomingProfit = totalAmount - totalCommission - totalPayout
-                const outgoingProfit = upstreamCommission + upstreamWinnings - transferredAmount
-                const profit = incomingProfit + outgoingProfit
+                // Calculate dealer summary
+                // Note: submissions table uses commission_amount and prize_amount fields
+                const totalEntries = submissions?.length || 0
+                const totalCommission = submissions?.reduce((sum, s) => sum + (s.commission_amount || 0), 0) || 0
+                const totalPayout = submissions?.reduce((sum, s) => sum + (s.prize_amount || 0), 0) || 0
 
                 console.log('History save debug:', {
-                    totalEntries, totalAmount, totalCommission, totalPayout, incomingProfit,
-                    transferredAmount, upstreamCommission, upstreamWinnings, outgoingProfit,
-                    profit
+                    totalEntries,
+                    totalAmount,
+                    totalCommission,
+                    totalPayout,
+                    sampleSubmission: submissions?.[0]
                 })
+
+                // Calculate upstream transfers
+                const transferredAmount = transfers?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0
+                const upstreamCommission = transfers?.reduce((sum, t) => sum + (t.commission_earned || 0), 0) || 0
+                const upstreamWinnings = transfers?.reduce((sum, t) => sum + (t.winnings || 0), 0) || 0
+
+                // Calculate profit
+                // กำไร = (ยอดรับ - ค่าคอม - จ่ายถูก) + (ยอดส่ง - (ค่าคอมที่ได้ + รับถูก))
+                const memberProfit = totalAmount - totalCommission - totalPayout
+                const upstreamProfit = transferredAmount - upstreamCommission - upstreamWinnings
+                const profit = memberProfit + upstreamProfit
 
                 // Save dealer round history
                 const { error: historyError } = await supabase
@@ -2694,7 +1417,6 @@ export default function Dealer() {
                         dealer_id: user.id,
                         round_id: roundId,
                         lottery_type: roundData.lottery_type,
-                        lottery_name: roundData.lottery_name || LOTTERY_TYPES[roundData.lottery_type],
                         round_date: roundData.draw_date || roundData.open_time?.split('T')[0],
                         open_time: roundData.open_time,
                         close_time: roundData.close_time,
@@ -2703,7 +1425,6 @@ export default function Dealer() {
                         total_commission: totalCommission,
                         total_payout: totalPayout,
                         transferred_amount: transferredAmount,
-                        transferred_entries: (transfers || []).length,
                         upstream_commission: upstreamCommission,
                         upstream_winnings: upstreamWinnings,
                         profit: profit
@@ -2713,16 +1434,30 @@ export default function Dealer() {
                     console.error('Error saving dealer history:', historyError)
                 }
 
-                // Insert user histories (using calculated commission/payout, not raw DB values)
+                // Save user round history for each user
+                const userSubmissions = {}
+                submissions?.forEach(s => {
+                    if (!userSubmissions[s.user_id]) {
+                        userSubmissions[s.user_id] = {
+                            entries: 0,
+                            amount: 0,
+                            commission: 0,
+                            winnings: 0
+                        }
+                    }
+                    userSubmissions[s.user_id].entries += 1
+                    userSubmissions[s.user_id].amount += s.amount || 0
+                    userSubmissions[s.user_id].commission += s.commission_amount || 0
+                    userSubmissions[s.user_id].winnings += s.prize_amount || 0
+                })
+
+                // Insert user histories
                 const userHistories = Object.entries(userSubmissions).map(([userId, data]) => ({
                     user_id: userId,
                     dealer_id: user.id,
                     round_id: roundId,
                     lottery_type: roundData.lottery_type,
-                    lottery_name: roundData.lottery_name || LOTTERY_TYPES[roundData.lottery_type],
                     round_date: roundData.draw_date || roundData.open_time?.split('T')[0],
-                    open_time: roundData.open_time,
-                    close_time: roundData.close_time,
                     total_entries: data.entries,
                     total_amount: data.amount,
                     total_commission: data.commission,
@@ -2741,62 +1476,35 @@ export default function Dealer() {
                 }
             }
 
-            // Credit deduction before delete depends on billing model and round state
-            try {
-                const { data: dealerSubs } = await supabase
-                    .from('dealer_subscriptions')
-                    .select('billing_model, subscription_packages(billing_model)')
-                    .eq('dealer_id', user.id)
-                    .in('status', ['active', 'trial'])
-                    .order('created_at', { ascending: false })
-                    .limit(1)
-                
-                const billingModel = dealerSubs?.[0]?.subscription_packages?.billing_model || dealerSubs?.[0]?.billing_model
-                const isAnnounced = roundData.is_result_announced === true
-
-                if (billingModel === 'profit_percentage') {
-                    // profit_percentage:
-                    // - If NOT announced: finalize 1% pending as real charge (penalty for deleting without announcing)
-                    // - If announced: profit-based 5% was already deducted by ResultsModal, no action needed
-                    if (!isAnnounced) {
-                        const previouslyCharged = roundData.charged_credit_amount || 0
-                        const creditResult = await deductAdditionalCreditForRound(user.id, roundId, previouslyCharged)
-                        if (creditResult.amountDeducted > 0) {
-                            console.log('Pending 1% finalized before delete (profit_percentage):', creditResult)
-                            toast.info(`หักค่าธรรมเนียม ฿${creditResult.amountDeducted.toLocaleString()} ก่อนลบงวด`)
-                        }
-                    }
-                } else if (roundStatus === 'open') {
-                    // Regular percentage + open round: deduct immediately
+            // Only deduct credit if round is still OPEN (not closed or announced)
+            // If round is closed/announced, credit was already deducted when closing
+            if (roundStatus === 'open') {
+                try {
+                    // Try immediate billing first
                     const { data: immediateBillingResult, error: immediateBillingError } = await supabase
-                        .rpc('create_immediate_billing_record', {
+                        .rpc('create_immediate_billing_record', { 
                             p_round_id: roundId,
                             p_dealer_id: user.id
                         })
-
+                    
                     if (!immediateBillingError && immediateBillingResult?.success && immediateBillingResult?.amount_deducted > 0) {
                         console.log('Immediate billing before delete:', immediateBillingResult)
                         toast.info(`หักค่าธรรมเนียม ฿${immediateBillingResult.amount_deducted.toLocaleString()} ก่อนลบงวด`)
                     } else {
+                        // Immediate billing not applicable - try regular finalization
                         const { data: creditResult, error: creditError } = await supabase
                             .rpc('finalize_round_credit', { p_round_id: roundId })
-
+                        
                         if (!creditError && creditResult?.total_deducted > 0) {
                             console.log('Credit finalized before delete:', creditResult)
                             toast.info(`หักค่าธรรมเนียม ฿${creditResult.total_deducted.toLocaleString()} ก่อนลบงวด`)
                         }
                     }
-                } else {
-                    // Regular percentage + closed/announced: deduct additional if submissions were modified
-                    const previouslyCharged = roundData.charged_credit_amount || 0
-                    const creditResult = await deductAdditionalCreditForRound(user.id, roundId, previouslyCharged)
-                    if (creditResult.amountDeducted > 0) {
-                        console.log('Additional credit deducted before delete:', creditResult)
-                        toast.info(`หักค่าธรรมเนียมเพิ่มเติม ฿${creditResult.amountDeducted.toLocaleString()} ก่อนลบงวด`)
-                    }
+                } catch (billingErr) {
+                    console.log('Billing before delete not configured:', billingErr)
                 }
-            } catch (billingErr) {
-                console.log('Billing before delete not configured:', billingErr)
+            } else {
+                console.log('Round already closed/announced, credit already deducted - skipping billing')
             }
 
             // Now delete the round
@@ -2828,19 +1536,10 @@ export default function Dealer() {
 
         // Build type_limits object from fetched data
         const limitsObj = {}
-        const typeCloseTimesObj = {}
-        const typeCloseTimeBehaviorsObj = {}
         const setPricesObj = round.set_prices || {}
         if (typeLimits) {
             typeLimits.forEach(limit => {
                 limitsObj[limit.bet_type] = limit.max_per_number || 0
-                typeCloseTimeBehaviorsObj[limit.bet_type] = limit.close_time_behavior || 'close_immediately'
-                if (limit.close_time) {
-                    const dt = new Date(limit.close_time)
-                    typeCloseTimesObj[limit.bet_type] = `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`
-                } else {
-                    typeCloseTimesObj[limit.bet_type] = ''
-                }
             })
         }
 
@@ -2867,14 +1566,10 @@ export default function Dealer() {
             close_date: formatDateForInput(closeTime),
             close_time: formatTimeForInput(closeTime),
             delete_before_minutes: round.delete_before_minutes || 1,
-            delete_after_submit_minutes: round.delete_after_submit_minutes || 0,
             currency_symbol: round.currency_symbol || '฿',
             currency_name: round.currency_name || 'บาท',
             type_limits: { ...getDefaultLimitsForType(round.lottery_type), ...limitsObj },
-            set_prices: { ...getDefaultSetPricesForType(round.lottery_type), ...setPricesObj },
-            type_close_times: typeCloseTimesObj,
-            type_close_time_behaviors: typeCloseTimeBehaviorsObj,
-            notify_close_to_groups: round.notify_close_to_groups ?? false
+            set_prices: { ...getDefaultSetPricesForType(round.lottery_type), ...setPricesObj }
         })
 
         setEditingRound(round)
@@ -2890,7 +1585,7 @@ export default function Dealer() {
             // Combine date and time
             const openDateTime = new Date(`${roundForm.open_date}T${roundForm.open_time}:00`)
             const closeDateTime = new Date(`${roundForm.close_date}T${roundForm.close_time}:00`)
-
+            
             // Format as ISO string preserving local time intent
             const formatLocalDateTime = (date) => {
                 const year = date.getFullYear()
@@ -2917,11 +1612,9 @@ export default function Dealer() {
                     open_time: formatLocalDateTime(openDateTime),
                     close_time: formatLocalDateTime(closeDateTime),
                     delete_before_minutes: roundForm.delete_before_minutes,
-                    delete_after_submit_minutes: roundForm.delete_after_submit_minutes,
                     currency_symbol: roundForm.currency_symbol,
                     currency_name: roundForm.currency_name,
-                    set_prices: roundForm.set_prices,
-                    notify_close_to_groups: roundForm.notify_close_to_groups
+                    set_prices: roundForm.set_prices
                 })
                 .eq('id', editingRound.id)
 
@@ -2938,26 +1631,15 @@ export default function Dealer() {
             }
 
             // Filter only limits that are part of the current lottery type
-            // Allow 0 value for dealers who want to transfer all numbers (0 = no limit acceptance)
-             const validBetTypes = Object.keys(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {})
+            const validBetTypes = Object.keys(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {})
             const typeLimitsData = Object.entries(roundForm.type_limits)
-                .filter(([betType, maxAmount]) => maxAmount !== undefined && maxAmount !== null && maxAmount !== '' && validBetTypes.includes(betType))
-                .map(([betType, maxAmount]) => {
-                    const specificTime = roundForm.type_close_times?.[betType];
-                    let typeCloseTime = null;
-                    if (specificTime) {
-                        const specificDateTime = new Date(`${roundForm.close_date}T${specificTime}:00`);
-                        typeCloseTime = formatLocalDateTime(specificDateTime);
-                    }
-                    return {
-                        round_id: editingRound.id,
-                        bet_type: betType,
-                        max_per_number: maxAmount,
-                        payout_rate: 0,
-                        close_time: typeCloseTime,
-                        close_time_behavior: roundForm.type_close_time_behaviors?.[betType] || 'close_immediately'
-                    };
-                })
+                .filter(([betType, maxAmount]) => maxAmount > 0 && validBetTypes.includes(betType))
+                .map(([betType, maxAmount]) => ({
+                    round_id: editingRound.id,
+                    bet_type: betType,
+                    max_per_number: maxAmount,
+                    payout_rate: 0
+                }))
 
             if (typeLimitsData.length > 0) {
                 const { error: limitsError } = await supabase
@@ -2990,7 +1672,7 @@ export default function Dealer() {
             // Extend close_time to end of today (23:59)
             const now = new Date()
             const newCloseTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
-
+            
             // Format as ISO string with timezone
             const formatLocalDateTime = (date) => {
                 const year = date.getFullYear()
@@ -3008,16 +1690,16 @@ export default function Dealer() {
 
             const { error } = await supabase
                 .from('lottery_rounds')
-                .update({
+                .update({ 
                     close_time: formatLocalDateTime(newCloseTime),
                     status: 'open'
                 })
                 .eq('id', round.id)
 
             if (error) throw error
-
+            
             toast.success('เปิดรับงวดหวยใหม่แล้ว (ถึง 23:59 วันนี้)')
-            fetchData()
+            fetchRounds()
         } catch (error) {
             console.error('Error reopening round:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
@@ -3030,7 +1712,7 @@ export default function Dealer() {
         const openTime = new Date(round.open_time)
         const closeTime = new Date(round.close_time)
 
-        if (round.status === 'announced' || round.is_result_announced) {
+        if (round.status === 'announced') {
             return <span className="status-badge announced"><FiCheck /> ประกาศผลแล้ว</span>
         }
         // Check if round is closed by dealer (status = 'closed') OR by time
@@ -3039,7 +1721,7 @@ export default function Dealer() {
                 <span className="status-badge closed" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
                     <FiLock /> ปิดรับแล้ว
                     {showReopenButton && (
-                        <button
+                        <button 
                             className="btn-reopen"
                             onClick={(e) => handleReopenRound(round, e)}
                             title="เปิดรับใหม่"
@@ -3063,9 +1745,6 @@ export default function Dealer() {
         if (now < openTime) {
             return <span className="status-badge pending"><FiClock /> รอเปิดรับ</span>
         }
-        if (!round.is_active) {
-            return <span className="status-badge pending" style={{ opacity: 0.7 }}><FiClock /> รอเปิดใช้งาน</span>
-        }
         return <span className="status-badge open"><FiClock /> เปิดรับอยู่</span>
     }
 
@@ -3088,168 +1767,115 @@ export default function Dealer() {
     return (
         <div className="dealer-page">
             <div className="container">
-                <div className="page-header">
-                    <h1><FiFileText /> แดชบอร์ดเจ้ามือ</h1>
-                    <p>จัดการงวดหวยและดูรายการที่ส่งเข้ามา</p>
-                </div>
-
-                {/* Quick Action Buttons - Split half on mobile */}
-                <div style={{
-                    display: 'flex',
-                    gap: '0.5rem',
-                    width: '100%',
-                    marginBottom: '1rem'
-                }}>
-                    <button
-                        type="button"
-                        style={{
-                            flex: 1,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '0.5rem',
-                            padding: '0.75rem 1rem',
-                            border: '2px solid var(--color-primary)',
-                            borderRadius: '8px',
-                            background: 'transparent',
-                            color: 'var(--color-primary)',
-                            fontWeight: 600,
-                            fontSize: '1rem',
-                            cursor: 'pointer'
-                        }}
-                        onClick={() => setShowScannerModal(true)}
-                    >
-                        <FiGrid size={18} /> สแกน
-                    </button>
-                    <button
-                        type="button"
-                        style={{
-                            flex: 1,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '0.5rem',
-                            padding: '0.75rem 1rem',
-                            border: '2px solid var(--color-primary)',
-                            borderRadius: '8px',
-                            background: 'transparent',
-                            color: 'var(--color-primary)',
-                            fontWeight: 600,
-                            fontSize: '1rem',
-                            cursor: 'pointer'
-                        }}
-                        onClick={() => setShowQRModal(true)}
-                    >
-                        <FiShare2 size={18} /> QR ของฉัน
-                    </button>
-                </div>
-
-                {/* Credit Display - Full width, clickable to open topup modal */}
-                {(() => {
-                    // Calculate credit level for color coding
-                    const availableCredit = dealerCredit?.availableCredit || dealerCredit?.balance || 0
-                    const warningThreshold = dealerCredit?.warning_threshold || 1000
-                    const isBlocked = dealerCredit?.is_blocked
-                    const isCritical = availableCredit <= 0 || isBlocked
-                    const isLow = availableCredit > 0 && availableCredit <= warningThreshold
-                    const isMedium = availableCredit > warningThreshold && availableCredit <= warningThreshold * 3
-
-                    const bgColor = isCritical ? 'rgba(239, 68, 68, 0.15)' :
-                        isLow ? 'rgba(245, 158, 11, 0.15)' :
-                            isMedium ? 'rgba(251, 191, 36, 0.1)' :
-                                'rgba(16, 185, 129, 0.15)'
-                    const borderColor = isCritical ? 'var(--color-danger)' :
-                        isLow ? 'var(--color-warning)' :
-                            isMedium ? '#f59e0b' :
-                                'var(--color-success)'
-                    const textColor = isCritical ? 'var(--color-danger)' :
-                        isLow ? 'var(--color-warning)' :
-                            isMedium ? '#f59e0b' :
-                                'var(--color-success)'
-
-                    return (
-                        <div
-                            className="credit-display card"
-                            onClick={() => setShowTopupModal(true)}
-                            style={{
-                                padding: '0.75rem 1rem',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: '0.5rem',
-                                width: '100%',
-                                background: bgColor,
-                                border: `1px solid ${borderColor}`,
-                                borderRadius: '8px',
-                                cursor: 'pointer',
-                                transition: 'transform 0.2s, box-shadow 0.2s',
-                                marginBottom: '1rem'
-                            }}
-                            onMouseEnter={(e) => {
-                                e.currentTarget.style.transform = 'scale(1.01)'
-                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.transform = 'scale(1)'
-                                e.currentTarget.style.boxShadow = 'none'
-                            }}
-                        >
-                            <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginBottom: '0.15rem' }}>
-                                    เครดิตคงเหลือ
-                                </div>
-                                <div style={{
-                                    fontSize: '1.35rem',
-                                    fontWeight: 'bold',
-                                    color: creditLoading ? 'var(--color-text-muted)' : textColor
-                                }}>
-                                    {creditLoading ? '...' : `฿${availableCredit.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`}
-                                </div>
-                                {dealerCredit?.pendingDeduction > 0 && (
-                                    <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginTop: '0.1rem' }}>
-                                        รอตัด: ฿{dealerCredit.pendingDeduction.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-                                    </div>
-                                )}
-                                {dealerCredit?.outstanding_debt > 0 && (
-                                    <div style={{ fontSize: '0.65rem', color: 'var(--color-danger)', marginTop: '0.1rem' }}>
-                                        ยอดค้าง: ฿{dealerCredit.outstanding_debt.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-                                    </div>
-                                )}
-                            </div>
-                            {isBlocked && (
-                                <div style={{
-                                    background: 'var(--color-danger)',
-                                    color: 'white',
-                                    padding: '0.25rem 0.5rem',
-                                    borderRadius: '4px',
-                                    fontSize: '0.65rem',
-                                    fontWeight: 'bold'
-                                }}>
-                                    <FiAlertTriangle style={{ marginRight: '0.25rem' }} />
-                                    บล็อค
-                                </div>
-                            )}
-                            <div style={{
-                                background: 'var(--color-primary)',
-                                color: 'black',
-                                padding: '0.4rem 0.75rem',
-                                borderRadius: '6px',
-                                fontSize: '0.75rem',
-                                fontWeight: 'bold',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.25rem',
-                                whiteSpace: 'nowrap'
-                            }}>
-                                <FiDollarSign /> เติมเครดิต
-                            </div>
+                <div className="page-header" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                        <div>
+                            <h1><FiFileText /> แดชบอร์ดเจ้ามือ</h1>
+                            <p>จัดการงวดหวยและดูรายการที่ส่งเข้ามา</p>
                         </div>
-                    )
-                })()}
+                    </div>
+                    
+                    {/* Credit Display - Full width, clickable to open topup modal */}
+                    {(() => {
+                        // Calculate credit level for color coding
+                        const availableCredit = dealerCredit?.availableCredit || dealerCredit?.balance || 0
+                        const warningThreshold = dealerCredit?.warning_threshold || 1000
+                        const isBlocked = dealerCredit?.is_blocked
+                        const isCritical = availableCredit <= 0 || isBlocked
+                        const isLow = availableCredit > 0 && availableCredit <= warningThreshold
+                        const isMedium = availableCredit > warningThreshold && availableCredit <= warningThreshold * 3
+                        
+                        const bgColor = isCritical ? 'rgba(239, 68, 68, 0.15)' : 
+                                       isLow ? 'rgba(245, 158, 11, 0.15)' : 
+                                       isMedium ? 'rgba(251, 191, 36, 0.1)' :
+                                       'rgba(16, 185, 129, 0.15)'
+                        const borderColor = isCritical ? 'var(--color-danger)' : 
+                                           isLow ? 'var(--color-warning)' : 
+                                           isMedium ? '#f59e0b' :
+                                           'var(--color-success)'
+                        const textColor = isCritical ? 'var(--color-danger)' : 
+                                         isLow ? 'var(--color-warning)' : 
+                                         isMedium ? '#f59e0b' :
+                                         'var(--color-success)'
+                        
+                        return (
+                            <div 
+                                className="credit-display card" 
+                                onClick={() => setShowTopupModal(true)}
+                                style={{
+                                    padding: '0.75rem 1rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: '0.5rem',
+                                    width: '100%',
+                                    background: bgColor,
+                                    border: `1px solid ${borderColor}`,
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    transition: 'transform 0.2s, box-shadow 0.2s'
+                                }}
+                                onMouseEnter={(e) => {
+                                    e.currentTarget.style.transform = 'scale(1.01)'
+                                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.currentTarget.style.transform = 'scale(1)'
+                                    e.currentTarget.style.boxShadow = 'none'
+                                }}
+                            >
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginBottom: '0.15rem' }}>
+                                        เครดิตคงเหลือ
+                                    </div>
+                                    <div style={{ 
+                                        fontSize: '1.35rem', 
+                                        fontWeight: 'bold',
+                                        color: textColor
+                                    }}>
+                                        ฿{availableCredit.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                    </div>
+                                    {dealerCredit?.pendingDeduction > 0 && (
+                                        <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginTop: '0.1rem' }}>
+                                            รอตัด: ฿{dealerCredit.pendingDeduction.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                        </div>
+                                    )}
+                                </div>
+                                {isBlocked && (
+                                    <div style={{ 
+                                        background: 'var(--color-danger)', 
+                                        color: 'white', 
+                                        padding: '0.25rem 0.5rem', 
+                                        borderRadius: '4px',
+                                        fontSize: '0.65rem',
+                                        fontWeight: 'bold'
+                                    }}>
+                                        <FiAlertTriangle style={{ marginRight: '0.25rem' }} />
+                                        บล็อค
+                                    </div>
+                                )}
+                                <div style={{ 
+                                    background: 'var(--color-primary)', 
+                                    color: 'black', 
+                                    padding: '0.4rem 0.75rem', 
+                                    borderRadius: '6px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 'bold',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.25rem',
+                                    whiteSpace: 'nowrap'
+                                }}>
+                                    <FiDollarSign /> เติมเครดิต
+                                </div>
+                            </div>
+                        )
+                    })()}
+                </div>
 
                 {/* Credit Blocked Warning */}
                 {dealerCredit?.is_blocked && (
-                    <div className="alert alert-danger" style={{
+                    <div className="alert alert-danger" style={{ 
                         marginBottom: '1rem',
                         display: 'flex',
                         alignItems: 'center',
@@ -3268,54 +1894,6 @@ export default function Dealer() {
                         </div>
                     </div>
                 )}
-
-                {/* Subscription Expiry Warning */}
-                {subscription?.expires_at && (() => {
-                    const now = new Date()
-                    const expiry = new Date(subscription.expires_at)
-                    const daysLeft = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24))
-                    const isExpired = daysLeft <= 0
-                    const isExpiringSoon = daysLeft > 0 && daysLeft <= 7
-                    const bm = subscription.subscription_packages?.billing_model || subscription.billing_model
-                    const isFixedPrice = bm !== 'percentage' && bm !== 'profit_percentage' && bm !== 'per_user_yearly'
-
-                    if (!isExpired && !isExpiringSoon) return null
-                    if (!isFixedPrice) return null
-
-                    // Check if dealer has enough credit for renewal
-                    const renewalPrice = subscription.billing_cycle === 'yearly'
-                        ? parseFloat(subscription.subscription_packages?.yearly_price || 0)
-                        : parseFloat(subscription.subscription_packages?.monthly_price || 0)
-                    const availableCredit = (dealerCredit?.availableCredit || 0)
-                    const canRenew = availableCredit >= renewalPrice && renewalPrice > 0
-
-                    return (
-                        <div style={{
-                            marginBottom: '1rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.75rem',
-                            padding: '1rem',
-                            background: isExpired ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                            border: `1px solid ${isExpired ? 'var(--color-danger)' : '#f59e0b'}`,
-                            borderRadius: '8px'
-                        }}>
-                            <FiAlertTriangle style={{ fontSize: '1.5rem', color: isExpired ? 'var(--color-danger)' : '#f59e0b', flexShrink: 0 }} />
-                            <div style={{ flex: 1 }}>
-                                <strong style={{ color: isExpired ? 'var(--color-danger)' : '#f59e0b' }}>
-                                    {isExpired ? 'แพ็คเกจหมดอายุแล้ว!' : `แพ็คเกจจะหมดอายุใน ${daysLeft} วัน`}
-                                </strong>
-                                <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-                                    {renewalPrice > 0 ? (
-                                        canRenew
-                                            ? `ระบบจะต่ออายุอัตโนมัติ (฿${renewalPrice.toLocaleString()}/${subscription.billing_cycle === 'yearly' ? 'ปี' : 'เดือน'})`
-                                            : `เครดิตไม่เพียงพอสำหรับต่ออายุ (ต้องการ ฿${renewalPrice.toLocaleString()} คงเหลือ ฿${availableCredit.toLocaleString()}) กรุณาเติมเครดิต`
-                                    ) : 'กรุณาติดต่อผู้ดูแลระบบ'}
-                                </p>
-                            </div>
-                        </div>
-                    )
-                })()}
 
                 {/* Tabs */}
                 <div className="dealer-tabs">
@@ -3338,18 +1916,6 @@ export default function Dealer() {
                         <FiSend /> เจ้ามือตีออก ({upstreamDealers.length})
                     </button>
                     <button
-                        className={`tab-btn ${activeTab === 'lineBot' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('lineBot')}
-                    >
-                        <FiMessageSquare /> จัดการ LINE Bot
-                    </button>
-                    <button
-                        className={`tab-btn ${activeTab === 'automation' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('automation')}
-                    >
-                        <FiSettings /> ตั้งค่าออโตเมชัน
-                    </button>
-                    <button
                         className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
                         onClick={() => setActiveTab('profile')}
                     >
@@ -3362,12 +1928,7 @@ export default function Dealer() {
                     {activeTab === 'rounds' && (() => {
                         // Filter rounds based on selected tab
                         const openRounds = rounds.filter(r => isRoundOpen(r))
-                        const closedRounds = rounds.filter(r => !isRoundOpen(r)).sort((a, b) => {
-                            const closeA = new Date(a.close_time).getTime()
-                            const closeB = new Date(b.close_time).getTime()
-                            if (closeB !== closeA) return closeB - closeA
-                            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                        })
+                        const closedRounds = rounds.filter(r => !isRoundOpen(r))
                         const displayedRounds = roundsTab === 'open' ? openRounds : closedRounds
 
                         return (
@@ -3377,7 +1938,7 @@ export default function Dealer() {
                                     <h2>งวดหวยทั้งหมด</h2>
                                     <button
                                         className="btn btn-primary"
-                                        onClick={handleOpenCreateModal}
+                                        onClick={() => setShowCreateModal(true)}
                                         style={{ width: '100%', justifyContent: 'center' }}
                                     >
                                         <FiPlus /> สร้างงวดใหม่
@@ -3420,299 +1981,47 @@ export default function Dealer() {
                                             <p>ประวัติจะแสดงเมื่อคุณลบงวดหวยที่ปิดแล้ว</p>
                                         </div>
                                     ) : (
-                                        <>
-                                        {/* History Filters */}
-                                        <div className="history-filter-bar">
-                                            <div className="history-filter-item">
-                                                <label className="history-filter-label"><FiCalendar /> ช่วงเวลา</label>
-                                                <select
-                                                    className="history-filter-select"
-                                                    value={historyMonthFilter}
-                                                    onChange={e => setHistoryMonthFilter(e.target.value)}
-                                                >
-                                                    <option value="all">ทั้งหมด</option>
-                                                    {historyMonthOptions.map(opt => (
-                                                        <option key={opt.key} value={opt.key}>{opt.label}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                            <div className="history-filter-item">
-                                                <label className="history-filter-label"><FiGrid /> ประเภทหวย</label>
-                                                <select
-                                                    className="history-filter-select"
-                                                    value={historyLotteryFilter}
-                                                    onChange={e => setHistoryLotteryFilter(e.target.value)}
-                                                >
-                                                    <option value="all">ทั้งหมด</option>
-                                                    {historyLotteryOptions.map(opt => (
-                                                        <option key={opt.key} value={opt.key}>{opt.label}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        {/* History Aggregate Summary */}
-                                        {filteredHistory.length > 0 && (
-                                            <div className="history-summary-card">
-                                                <h4 className="history-summary-title">
-                                                    <FiFileText /> สรุปรวม ({filteredHistory.length} งวด)
-                                                </h4>
-                                                <div className="history-summary-body">
-                                                    <div className="history-summary-section">
-                                                        <div className="history-summary-section-title">ยอดรับ ({historySummary.totalEntries.toLocaleString()})</div>
-                                                        <div className="history-summary-stats">
-                                                            <div className="history-summary-stat">
-                                                                <span className="stat-label">ยอดรวม</span>
-                                                                <span className="stat-value success">+฿{historySummary.totalAmount.toLocaleString()}</span>
-                                                            </div>
-                                                            <div className="history-summary-stat">
-                                                                <span className="stat-label">ค่าคอม</span>
-                                                                <span className="stat-value danger">-฿{Math.round(historySummary.totalCommission).toLocaleString()}</span>
-                                                            </div>
-                                                            <div className="history-summary-stat">
-                                                                <span className="stat-label">จ่าย</span>
-                                                                <span className={`stat-value ${historySummary.totalPayout > 0 ? 'danger' : ''}`}>
-                                                                    {historySummary.totalPayout > 0 ? '-' : ''}฿{historySummary.totalPayout.toLocaleString()}
-                                                                </span>
-                                                            </div>
-                                                            <div className="history-summary-stat">
-                                                                <span className="stat-label">กำไร</span>
-                                                                <span className={`stat-value ${historySummary.incomingProfit >= 0 ? 'success' : 'danger'}`}>
-                                                                    {historySummary.incomingProfit >= 0 ? '+' : ''}฿{Math.round(historySummary.incomingProfit).toLocaleString()}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    {historySummary.hasOutgoing && (
-                                                        <div className="history-summary-section">
-                                                            <div className="history-summary-section-title">ยอดส่ง ({historySummary.totalTransferredEntries.toLocaleString()})</div>
-                                                            <div className="history-summary-stats">
-                                                                <div className="history-summary-stat">
-                                                                    <span className="stat-label">ยอดรวม</span>
-                                                                    <span className="stat-value danger">-฿{historySummary.totalTransferred.toLocaleString()}</span>
-                                                                </div>
-                                                                <div className="history-summary-stat">
-                                                                    <span className="stat-label">ค่าคอม</span>
-                                                                    <span className="stat-value success">+฿{Math.round(historySummary.totalUpstreamComm).toLocaleString()}</span>
-                                                                </div>
-                                                                <div className="history-summary-stat">
-                                                                    <span className="stat-label">รับ</span>
-                                                                    <span className={`stat-value ${historySummary.totalUpstreamWin > 0 ? 'success' : ''}`}>
-                                                                        ฿{historySummary.totalUpstreamWin.toLocaleString()}
-                                                                    </span>
-                                                                </div>
-                                                                <div className="history-summary-stat">
-                                                                    <span className="stat-label">กำไร</span>
-                                                                    <span className={`stat-value ${historySummary.outgoingProfit >= 0 ? 'success' : 'danger'}`}>
-                                                                        {historySummary.outgoingProfit >= 0 ? '+' : ''}฿{Math.round(historySummary.outgoingProfit).toLocaleString()}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                    <div className="history-summary-total">
-                                                        <span>กำไรรวม</span>
-                                                        <span className={`stat-value ${historySummary.totalProfit >= 0 ? 'success' : 'danger'}`}>
-                                                            {historySummary.totalProfit >= 0 ? '+' : ''}฿{Math.round(historySummary.totalProfit).toLocaleString()}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* History List */}
-                                        {filteredHistory.length === 0 ? (
-                                            <div className="empty-state card">
-                                                <FiCalendar className="empty-icon" />
-                                                <h3>ไม่พบประวัติที่ตรงกับตัวกรอง</h3>
-                                                <p>ลองเปลี่ยนช่วงเวลาหรือประเภทหวย</p>
-                                            </div>
-                                        ) : (
                                         <div className="history-list">
-                                            {filteredHistory.map(history => {
-                                                const isExpanded = expandedHistoryId === history.id
-                                                const userDetails = historyUserDetails[history.round_id] || []
-                                                return (
-                                                <div key={history.id} className={`round-accordion-item ${history.lottery_type} ${isExpanded ? 'expanded' : ''}`}>
-                                                    <div 
-                                                        className="round-accordion-header card" 
-                                                        style={{ cursor: 'pointer' }}
-                                                        onClick={() => toggleHistoryAccordion(history)}
-                                                    >
-                                                        <div className="open-round-layout">
-                                                            {/* Row 1: Logo, Name, Chevron */}
-                                                            <div className="open-round-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                    <span className={`lottery-badge ${history.lottery_type}`}>
-                                                                        {LOTTERY_TYPES[history.lottery_type] || history.lottery_type}
-                                                                    </span>
-                                                                    <span className="round-name">{history.lottery_name || LOTTERY_TYPES[history.lottery_type]}</span>
-                                                                    <button
-                                                                        className="history-delete-btn"
-                                                                        title="ลบประวัติงวดนี้"
-                                                                        onClick={(e) => handleDeleteHistory(history.id, e)}
-                                                                    >
-                                                                        <FiTrash2 />
-                                                                    </button>
-                                                                </div>
-                                                                <FiChevronDown style={{ 
-                                                                    transition: 'transform 0.2s', 
-                                                                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                                                                    fontSize: '1.2rem',
-                                                                    color: 'var(--color-text-muted)'
-                                                                }} />
+                                            {roundHistory.map(history => (
+                                                <div key={history.id} className={`round-accordion-item ${history.lottery_type}`}>
+                                                    <div className="round-accordion-header" style={{ cursor: 'default' }}>
+                                                        <div className="round-info">
+                                                            <span className={`lottery-badge ${history.lottery_type}`}>
+                                                                {LOTTERY_TYPES[history.lottery_type] || history.lottery_type}
+                                                            </span>
+                                                            <div className="round-details">
+                                                                <span className="round-name">
+                                                                    {LOTTERY_TYPES[history.lottery_type] || history.lottery_type}
+                                                                </span>
+                                                                <span className="round-date">
+                                                                    <FiCalendar /> {formatDate(history.round_date)}
+                                                                </span>
                                                             </div>
-                                                            
-                                                            {/* Row 2: Date/Time */}
-                                                            <div className="open-round-datetime">
-                                                                <FiCalendar /> {formatDate(history.open_time || history.round_date)} {formatTime(history.open_time || history.round_date)} - {formatDate(history.close_time || history.round_date)} {formatTime(history.close_time || history.round_date)}
+                                                        </div>
+                                                        <div className="history-stats" style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+                                                            <div style={{ textAlign: 'center' }}>
+                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ยอดรวม</div>
+                                                                <div style={{ fontWeight: '600' }}>฿{history.total_amount?.toLocaleString()}</div>
                                                             </div>
-                                                            
-                                                            {/* Row 3: Summary Stats — matching dealer dashboard layout */}
-                                                            {(() => {
-                                                                const incomingProfit = (history.total_amount || 0) - (history.total_commission || 0) - (history.total_payout || 0)
-                                                                const outgoingBet = history.transferred_amount || 0
-                                                                const outgoingComm = history.upstream_commission || 0
-                                                                const outgoingWin = history.upstream_winnings || 0
-                                                                const outgoingProfit = outgoingWin + outgoingComm - outgoingBet
-                                                                const hasOutgoing = outgoingBet > 0
-                                                                return (
-                                                            <div className="open-round-stats">
-                                                                {/* ยอดรับ */}
-                                                                <div className="stats-block incoming">
-                                                                    <div className="stats-block-header">ยอดรับ ({history.total_entries || 0})</div>
-                                                                    <div className="stats-block-items">
-                                                                        <div className="stat-item">
-                                                                            <span className="stat-label">ยอดรวม</span>
-                                                                            <span className="stat-value success">+฿{(history.total_amount || 0).toLocaleString()}</span>
-                                                                        </div>
-                                                                        <div className="stat-item">
-                                                                            <span className="stat-label">ค่าคอม</span>
-                                                                            <span className="stat-value danger">-฿{(history.total_commission || 0).toLocaleString()}</span>
-                                                                        </div>
-                                                                        <div className="stat-item">
-                                                                            <span className="stat-label">จ่าย</span>
-                                                                            <span className="stat-value danger">-฿{(history.total_payout || 0).toLocaleString()}</span>
-                                                                        </div>
-                                                                        <div className="stat-item">
-                                                                            <span className="stat-label">กำไร</span>
-                                                                            <span className={`stat-value ${incomingProfit >= 0 ? 'success' : 'danger'}`}>
-                                                                                {incomingProfit >= 0 ? '+' : ''}฿{Math.round(incomingProfit).toLocaleString()}
-                                                                            </span>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-
-                                                                {/* ยอดส่ง (ตีออก) — only show if there are outgoing transfers */}
-                                                                {hasOutgoing && (
-                                                                <div className="stats-block outgoing">
-                                                                    <div className="stats-block-header">ยอดส่ง ({history.transferred_entries || 0})</div>
-                                                                    <div className="stats-block-items">
-                                                                        <div className="stat-item">
-                                                                            <span className="stat-label">ยอดรวม</span>
-                                                                            <span className="stat-value danger">-฿{outgoingBet.toLocaleString()}</span>
-                                                                        </div>
-                                                                        <div className="stat-item">
-                                                                            <span className="stat-label">ค่าคอม</span>
-                                                                            <span className="stat-value success">+฿{Math.round(outgoingComm).toLocaleString()}</span>
-                                                                        </div>
-                                                                        <div className="stat-item">
-                                                                            <span className="stat-label">รับ</span>
-                                                                            <span className={`stat-value ${outgoingWin > 0 ? 'success' : ''}`}>
-                                                                                {outgoingWin > 0 ? '+' : ''}฿{outgoingWin.toLocaleString()}
-                                                                            </span>
-                                                                        </div>
-                                                                        <div className="stat-item">
-                                                                            <span className="stat-label">กำไร</span>
-                                                                            <span className={`stat-value ${outgoingProfit >= 0 ? 'success' : 'danger'}`}>
-                                                                                {outgoingProfit >= 0 ? '+' : ''}฿{Math.round(outgoingProfit).toLocaleString()}
-                                                                            </span>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                                )}
-
-                                                                {/* กำไรรวม */}
-                                                                {(() => {
-                                                                    const totalProfit = incomingProfit + outgoingProfit
-                                                                    return (
-                                                                <div className="stats-block" style={{ background: 'transparent', padding: '0.25rem 0.5rem' }}>
-                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                                        <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>กำไรรวม</span>
-                                                                        <span className={`stat-value ${totalProfit >= 0 ? 'success' : 'danger'}`} style={{ fontWeight: 700, fontSize: '1rem' }}>
-                                                                            {totalProfit >= 0 ? '+' : ''}฿{Math.round(totalProfit).toLocaleString()}
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-                                                                    )
-                                                                })()}
+                                                            <div style={{ textAlign: 'center' }}>
+                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ค่าคอม</div>
+                                                                <div style={{ fontWeight: '600' }}>฿{history.total_commission?.toLocaleString()}</div>
                                                             </div>
-                                                                )
-                                                            })()}
+                                                            <div style={{ textAlign: 'center' }}>
+                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>จ่าย</div>
+                                                                <div style={{ fontWeight: '600', color: 'var(--color-danger)' }}>฿{history.total_payout?.toLocaleString()}</div>
+                                                            </div>
+                                                            <div style={{ textAlign: 'center' }}>
+                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>กำไร</div>
+                                                                <div style={{ fontWeight: '600', color: history.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                                                    {history.profit >= 0 ? '+' : ''}฿{history.profit?.toLocaleString()}
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                    
-                                                    {/* Accordion Body - User Details */}
-                                                    {isExpanded && (
-                                                        <div className="history-accordion-body">
-                                                            <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 600 }}>
-                                                                <FiUsers style={{ marginRight: '0.3rem', verticalAlign: 'middle' }} />
-                                                                สรุปยอดสมาชิก ({userDetails.length} คน)
-                                                            </h4>
-                                                            {userDetails.length === 0 ? (
-                                                                <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                                                                    <div className="spinner" style={{ width: '20px', height: '20px', margin: '0 auto 0.5rem' }}></div>
-                                                                    กำลังโหลด...
-                                                                </div>
-                                                            ) : (
-                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                                                    {userDetails.map((ud, idx) => {
-                                                                        const dealerProfit = (ud.total_amount || 0) - (ud.total_commission || 0) - (ud.total_winnings || 0)
-                                                                        return (
-                                                                        <div key={ud.id || idx} className="history-user-card">
-                                                                            <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-primary)' }}>
-                                                                                <FiUser style={{ color: 'var(--color-primary)' }} />
-                                                                                {ud.full_name}
-                                                                            </div>
-                                                                            <div className="open-round-stats">
-                                                                                <div className="stats-block incoming">
-                                                                                    <div className="stats-block-items">
-                                                                                        <div className="stat-item">
-                                                                                            <span className="stat-label">ยอดรับ</span>
-                                                                                            <span className="stat-value success">+฿{(ud.total_amount || 0).toLocaleString()}</span>
-                                                                                        </div>
-                                                                                        <div className="stat-item">
-                                                                                            <span className="stat-label">ค่าคอม</span>
-                                                                                            <span className="stat-value danger">-฿{(ud.total_commission || 0).toLocaleString()}</span>
-                                                                                        </div>
-                                                                                        <div className="stat-item">
-                                                                                            <span className="stat-label">จ่าย</span>
-                                                                                            <span className={`stat-value ${(ud.total_winnings || 0) > 0 ? 'danger' : ''}`}>
-                                                                                                {(ud.total_winnings || 0) > 0 ? '-' : ''}฿{(ud.total_winnings || 0).toLocaleString()}
-                                                                                            </span>
-                                                                                        </div>
-                                                                                        <div className="stat-item">
-                                                                                            <span className="stat-label">กำไร/ขาดทุน</span>
-                                                                                            <span className={`stat-value ${dealerProfit >= 0 ? 'success' : 'danger'}`}>
-                                                                                                {dealerProfit >= 0 ? '+' : ''}฿{dealerProfit.toLocaleString()}
-                                                                                            </span>
-                                                                                        </div>
-                                                                                    </div>
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                        )
-                                                                    })}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    )}
                                                 </div>
-                                                )
-                                            })}
+                                            ))}
                                         </div>
-                                        )}
-                                        </>
                                     )
                                 ) : (
                                     // Open/Closed Rounds Content
@@ -3736,7 +2045,6 @@ export default function Dealer() {
                                                     onSelect={setSelectedRound}
                                                     onShowSubmissions={() => { setSelectedRound(round); setShowSubmissionsModal(true); }}
                                                     onCloseRound={() => handleCloseRound(round.id)}
-                                                    onToggleActive={() => handleToggleActive(round.id, round.is_active)}
                                                     onEditRound={() => handleOpenEditModal(round)}
                                                     onShowNumberLimits={() => { setSelectedRound(round); setShowNumberLimitsModal(true); }}
                                                     onDeleteRound={() => handleDeleteRound(round.id, round.status)}
@@ -3747,8 +2055,6 @@ export default function Dealer() {
                                                     user={user}
                                                     allMembers={members}
                                                     onCreditUpdate={fetchDealerCredit}
-                                                    pendingCreditRefresh={pendingCreditRefresh}
-                                                    roundPendingData={roundPendingMap[round.id]}
                                                     isExpanded={expandedRoundId === round.id}
                                                     onToggle={() => setExpandedRoundId(expandedRoundId === round.id ? null : round.id)}
                                                 />
@@ -3763,9 +2069,9 @@ export default function Dealer() {
                     {activeTab === 'members' && (
                         <div className="members-section">
                             {/* Section Title */}
-                            <h2 style={{
-                                fontSize: '1.25rem',
-                                fontWeight: '600',
+                            <h2 style={{ 
+                                fontSize: '1.25rem', 
+                                fontWeight: '600', 
                                 marginBottom: '1rem',
                                 color: 'var(--color-text)'
                             }}>
@@ -3774,73 +2080,106 @@ export default function Dealer() {
                             </h2>
 
                             {/* Add Member Button - Full width on mobile */}
-                            <button
+                            <button 
                                 className="btn btn-primary"
                                 onClick={() => setShowAddMemberModal(true)}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
+                                style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
                                     justifyContent: 'center',
                                     gap: '0.5rem',
                                     width: '100%',
-                                    marginBottom: '1rem',
+                                    marginBottom: '1.5rem',
                                     padding: '0.75rem 1rem'
                                 }}
                             >
                                 <FiPlus /> เพิ่มสมาชิก
                             </button>
 
-                            {/* Search Member Input */}
-                            <div style={{
-                                position: 'relative',
-                                marginBottom: '1.5rem'
-                            }}>
-                                <FiSearch style={{
-                                    position: 'absolute',
-                                    left: '1rem',
-                                    top: '50%',
-                                    transform: 'translateY(-50%)',
-                                    color: 'var(--color-text-muted)'
-                                }} />
-                                <input
-                                    type="text"
-                                    placeholder="ค้นหาสมาชิก..."
-                                    value={memberSearchQuery}
-                                    onChange={(e) => setMemberSearchQuery(e.target.value)}
-                                    style={{
-                                        width: '100%',
-                                        padding: '0.75rem 1rem 0.75rem 2.5rem',
-                                        border: '1px solid var(--color-border)',
-                                        borderRadius: '8px',
-                                        background: 'var(--color-surface)',
-                                        color: 'var(--color-text)',
-                                        fontSize: '0.95rem'
-                                    }}
-                                />
-                                {memberSearchQuery && (
-                                    <button
-                                        onClick={() => setMemberSearchQuery('')}
-                                        style={{
-                                            position: 'absolute',
-                                            right: '0.75rem',
-                                            top: '50%',
-                                            transform: 'translateY(-50%)',
-                                            background: 'transparent',
-                                            border: 'none',
-                                            color: 'var(--color-text-muted)',
-                                            cursor: 'pointer',
-                                            padding: '0.25rem'
-                                        }}
-                                    >
-                                        <FiX size={16} />
-                                    </button>
-                                )}
+                            {/* Referral Section - Moved to top */}
+                            <div className="referral-card card" style={{ marginBottom: '1.5rem' }}>
+                                <div className="referral-header">
+                                    <h3><FiShare2 /> ลิงก์รับสมัครสมาชิก</h3>
+                                    <p>ส่งลิงก์หรือ QR Code นี้ให้สมาชิกเพื่อเข้ากลุ่มของคุณ</p>
+                                </div>
+                                <div className="referral-content">
+                                    <div className="qr-wrapper">
+                                        <div className="qr-code-bg">
+                                            <QRCode
+                                                value={`${window.location.origin}/register?ref=${user?.id}`}
+                                                size={120}
+                                                style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="link-wrapper">
+                                        <div className="referral-link">
+                                            {`${window.location.origin}/register?ref=${user?.id}`}
+                                        </div>
+                                        <button
+                                            className="btn btn-outline btn-sm"
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(`${window.location.origin}/register?ref=${user?.id}`)
+                                                toast.success('คัดลอกลิงก์แล้ว!')
+                                            }}
+                                        >
+                                            <FiCopy /> คัดลอก
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
 
+                            {/* Pending Members Section */}
+                            {pendingMembers.length > 0 && (
+                                <div className="pending-members-section" style={{ marginBottom: '1.5rem' }}>
+                                    <div className="section-header" style={{ marginBottom: '0.75rem' }}>
+                                        <h3 style={{ fontSize: '1rem', color: 'var(--color-warning)' }}>
+                                            <FiClock /> รอการอนุมัติ
+                                        </h3>
+                                        <span className="badge" style={{ background: 'var(--color-warning)', color: '#000' }}>
+                                            {pendingMembers.length} คน
+                                        </span>
+                                    </div>
+                                    <div className="pending-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                        {pendingMembers.map(member => (
+                                            <div key={member.id} className="pending-member-item card" style={{
+                                                padding: '0.75rem 1rem',
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                flexWrap: 'wrap',
+                                                gap: '0.5rem'
+                                            }}>
+                                                <div className="member-info">
+                                                    <div style={{ fontWeight: 500 }}>{member.full_name || 'ไม่มีชื่อ'}</div>
+                                                    <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{member.email}</div>
+                                                </div>
+                                                <div className="member-actions" style={{ display: 'flex', gap: '0.5rem' }}>
+                                                    <button
+                                                        className="btn btn-success btn-sm"
+                                                        onClick={() => handleApproveMember(member)}
+                                                        style={{ padding: '0.35rem 0.75rem' }}
+                                                    >
+                                                        <FiCheck /> อนุมัติ
+                                                    </button>
+                                                    <button
+                                                        className="btn btn-danger btn-sm"
+                                                        onClick={() => handleRejectMember(member)}
+                                                        style={{ padding: '0.35rem 0.75rem' }}
+                                                    >
+                                                        <FiX /> ปฏิเสธ
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Member Type Filter */}
-                            <div className="member-type-filter" style={{
-                                marginBottom: '1rem',
-                                display: 'flex',
+                            <div className="member-type-filter" style={{ 
+                                marginBottom: '1rem', 
+                                display: 'flex', 
                                 flexDirection: 'column',
                                 gap: '0.5rem'
                             }}>
@@ -3871,88 +2210,72 @@ export default function Dealer() {
                                 </div>
                             </div>
 
-                            {/* Pending Members Section - Always visible at top */}
+                            {/* Members List - Accordion Style */}
+                            <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                    <h2>
+                                        {memberTypeFilter === 'all' ? 'สมาชิกทั้งหมด' : 
+                                         memberTypeFilter === 'member' ? 'สมาชิกทั่วไป' : 'เจ้ามือที่ตีเลขเข้ามา'}
+                                    </h2>
+                                    <span className="badge">
+                                        {memberTypeFilter === 'all' 
+                                            ? members.length + downstreamDealers.filter(d => d.membership_status === 'active').length
+                                            : memberTypeFilter === 'member' 
+                                                ? members.length 
+                                                : downstreamDealers.filter(d => d.membership_status === 'active').length} คน
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Pending Downstream Dealers Section */}
                             {(() => {
                                 const pendingDownstreamDealers = downstreamDealers.filter(d => d.membership_status === 'pending')
-                                const allPending = [
-                                    ...pendingMembers.map(m => ({ ...m, is_dealer: false })),
-                                    ...pendingDownstreamDealers.map(d => ({ ...d, is_dealer: true }))
-                                ]
-
-                                if (allPending.length === 0) return null
-
+                                if (pendingDownstreamDealers.length === 0) return null
+                                
                                 return (
-                                    <div className="pending-members-section" style={{
-                                        marginBottom: '1.5rem',
-                                        padding: '1rem',
-                                        background: 'var(--color-surface)',
-                                        borderRadius: '12px',
-                                        border: '2px solid var(--color-warning)'
-                                    }}>
-                                        <div className="section-header" style={{ marginBottom: '1rem' }}>
-                                            <h3 style={{ fontSize: '1.1rem', color: 'var(--color-warning)', fontWeight: '600' }}>
-                                                <FiClock /> สมาชิกที่รอการอนุมัติ
+                                    <div className="pending-dealers-section" style={{ marginBottom: '1.5rem' }}>
+                                        <div className="section-header" style={{ marginBottom: '0.75rem' }}>
+                                            <h3 style={{ fontSize: '1rem', color: 'var(--color-warning)' }}>
+                                                <FiSend /> คำขอเชื่อมต่อจากเจ้ามือ
                                             </h3>
-                                            <span className="badge" style={{
-                                                background: 'var(--color-warning)',
-                                                color: '#000',
-                                                fontWeight: '600'
-                                            }}>
-                                                {allPending.length} คน
+                                            <span className="badge" style={{ background: 'var(--color-warning)', color: 'black' }}>
+                                                {pendingDownstreamDealers.length} รายการ
                                             </span>
                                         </div>
-                                        <div className="pending-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                            {allPending.map(member => (
-                                                <div key={member.is_dealer ? `dealer-${member.id}` : member.id} className="pending-member-item card" style={{
+                                        <div className="pending-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                            {pendingDownstreamDealers.map(dealer => (
+                                                <div key={`pending-dealer-${dealer.id}`} className="pending-dealer-item card" style={{
                                                     padding: '1rem',
-                                                    display: 'flex',
-                                                    justifyContent: 'space-between',
-                                                    alignItems: 'center',
-                                                    flexWrap: 'wrap',
-                                                    gap: '0.75rem',
-                                                    background: 'var(--color-surface-alt)',
-                                                    border: member.is_dealer ? '1px solid var(--color-info)' : '1px solid var(--color-border)',
-                                                    borderRadius: '8px'
+                                                    border: '1px solid var(--color-warning)',
+                                                    background: 'rgba(245, 158, 11, 0.1)'
                                                 }}>
-                                                    <div className="member-info">
-                                                        <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                            {member.full_name || 'ไม่มีชื่อ'}
-                                                            {member.is_dealer && (
-                                                                <span style={{
-                                                                    background: 'var(--color-info)',
-                                                                    color: '#fff',
-                                                                    padding: '0.1rem 0.4rem',
-                                                                    borderRadius: '4px',
-                                                                    fontSize: '0.65rem',
-                                                                    fontWeight: '600'
-                                                                }}>
-                                                                    เจ้ามือ
-                                                                </span>
-                                                            )}
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                                                        <div>
+                                                            <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                <FiSend style={{ color: 'var(--color-info)' }} />
+                                                                {dealer.full_name || 'ไม่มีชื่อ'}
+                                                            </div>
+                                                            <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{dealer.email}</div>
+                                                            <div style={{ fontSize: '0.75rem', opacity: 0.5, marginTop: '0.25rem' }}>
+                                                                ขอเชื่อมต่อเพื่อตีออกยอดมาให้คุณ
+                                                            </div>
                                                         </div>
-                                                        <div style={{ fontSize: '0.85rem', opacity: 0.7 }}>{member.email}</div>
-                                                    </div>
-                                                    <div className="member-actions" style={{ display: 'flex', gap: '0.5rem' }}>
-                                                        <button
-                                                            className="btn btn-success btn-sm"
-                                                            onClick={() => member.is_dealer ? handleApproveDownstreamDealer(member) : handleApproveMember(member)}
-                                                            style={{
-                                                                padding: '0.5rem 1rem',
-                                                                fontWeight: '500'
-                                                            }}
-                                                        >
-                                                            <FiCheck /> อนุมัติ
-                                                        </button>
-                                                        <button
-                                                            className="btn btn-danger btn-sm"
-                                                            onClick={() => member.is_dealer ? handleRejectDownstreamDealer(member) : handleRejectMember(member)}
-                                                            style={{
-                                                                padding: '0.5rem 1rem',
-                                                                fontWeight: '500'
-                                                            }}
-                                                        >
-                                                            <FiX /> ปฏิเสธ
-                                                        </button>
+                                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                            <button
+                                                                className="btn btn-success btn-sm"
+                                                                onClick={() => handleApproveDownstreamDealer(dealer)}
+                                                                style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                                                            >
+                                                                <FiCheck /> ยืนยัน
+                                                            </button>
+                                                            <button
+                                                                className="btn btn-danger btn-sm"
+                                                                onClick={() => handleRejectDownstreamDealer(dealer)}
+                                                                style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                                                            >
+                                                                <FiX /> ปฏิเสธ
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             ))}
@@ -3961,43 +2284,16 @@ export default function Dealer() {
                                 )
                             })()}
 
-                            {/* Members List - Accordion Style */}
-                            <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                    <h2>
-                                        {memberTypeFilter === 'all' ? 'สมาชิกทั้งหมด' :
-                                            memberTypeFilter === 'member' ? 'สมาชิกทั่วไป' : 'เจ้ามือที่ตีเลขเข้ามา'}
-                                    </h2>
-                                    <span className="badge">
-                                        {memberTypeFilter === 'all'
-                                            ? members.length + downstreamDealers.filter(d => d.membership_status === 'active').length
-                                            : memberTypeFilter === 'member'
-                                                ? members.length
-                                                : downstreamDealers.filter(d => d.membership_status === 'active').length} คน
-                                    </span>
-                                </div>
-                            </div>
-
                             {(() => {
                                 const activeDownstreamDealers = downstreamDealers.filter(d => d.membership_status === 'active')
-                                let filteredMembers = memberTypeFilter === 'all'
+                                const filteredMembers = memberTypeFilter === 'all' 
                                     ? [...members.map(m => ({ ...m, is_dealer: false })), ...activeDownstreamDealers]
-                                    : memberTypeFilter === 'member'
+                                    : memberTypeFilter === 'member' 
                                         ? members.map(m => ({ ...m, is_dealer: false }))
                                         : activeDownstreamDealers
-
-                                // Apply search filter
-                                if (memberSearchQuery.trim()) {
-                                    const query = memberSearchQuery.toLowerCase().trim()
-                                    filteredMembers = filteredMembers.filter(m =>
-                                        (m.full_name && m.full_name.toLowerCase().includes(query)) ||
-                                        (m.email && m.email.toLowerCase().includes(query)) ||
-                                        (m.phone && m.phone.includes(query))
-                                    )
-                                }
-
+                                
                                 const pendingDownstreamDealers = downstreamDealers.filter(d => d.membership_status === 'pending')
-
+                                
                                 if (filteredMembers.length === 0 && pendingMembers.length === 0 && pendingDownstreamDealers.length === 0) {
                                     return (
                                         <div className="empty-state card">
@@ -4007,19 +2303,19 @@ export default function Dealer() {
                                         </div>
                                     )
                                 }
-
+                                
                                 if (filteredMembers.length === 0) {
                                     return (
                                         <div className="empty-state card" style={{ padding: '1.5rem' }}>
                                             <p style={{ opacity: 0.7 }}>
-                                                {memberTypeFilter === 'dealer'
-                                                    ? 'ยังไม่มีเจ้ามือที่ตีเลขเข้ามา'
+                                                {memberTypeFilter === 'dealer' 
+                                                    ? 'ยังไม่มีเจ้ามือที่ตีเลขเข้ามา' 
                                                     : 'ยังไม่มีสมาชิกที่อนุมัติแล้ว'}
                                             </p>
                                         </div>
                                     )
                                 }
-
+                                
                                 return (
                                     <div className="members-accordion-list">
                                         {filteredMembers.map(member => (
@@ -4029,8 +2325,8 @@ export default function Dealer() {
                                                 formatDate={formatDate}
                                                 isExpanded={expandedMemberId === (member.is_dealer ? `dealer-${member.id}` : member.id)}
                                                 onToggle={() => setExpandedMemberId(
-                                                    expandedMemberId === (member.is_dealer ? `dealer-${member.id}` : member.id)
-                                                        ? null
+                                                    expandedMemberId === (member.is_dealer ? `dealer-${member.id}` : member.id) 
+                                                        ? null 
                                                         : (member.is_dealer ? `dealer-${member.id}` : member.id)
                                                 )}
                                                 onBlock={() => member.is_dealer ? handleBlockDownstreamDealer(member) : handleBlockMember(member)}
@@ -4038,15 +2334,8 @@ export default function Dealer() {
                                                 onDisconnect={member.is_dealer ? () => handleDisconnectDealer(member) : null}
                                                 dealerBankAccounts={dealerBankAccounts}
                                                 onUpdateBank={(bankAccountId) => handleUpdateMemberBank(member, bankAccountId)}
-                                                onUpdateLineUserId={(lineUserId) => handleUpdateMemberLineUserId(member, lineUserId)}
                                                 isDealer={member.is_dealer}
                                                 onCopyCredentials={copyMemberCredentials}
-                                                isPerUserYearly={isPerUserYearly()}
-                                                onRenew={(m) => {
-                                                    setRenewMember(m)
-                                                    setRenewYears(1)
-                                                    setShowRenewModal(true)
-                                                }}
                                             />
                                         ))}
                                     </div>
@@ -4060,9 +2349,9 @@ export default function Dealer() {
                                     ...blockedMembers.map(m => ({ ...m, is_dealer: false })),
                                     ...blockedDownstreamDealers
                                 ]
-
+                                
                                 if (allBlocked.length === 0) return null
-
+                                
                                 return (
                                     <div className="blocked-members-section" style={{ marginTop: '1.5rem' }}>
                                         <div className="section-header" style={{ marginBottom: '0.75rem' }}>
@@ -4129,14 +2418,6 @@ export default function Dealer() {
                         />
                     )}
 
-                    {activeTab === 'lineBot' && (
-                        <DealerLineBotTab user={user} profile={profile} />
-                    )}
-
-                    {activeTab === 'automation' && (
-                        <DealerAutomationTab user={user} profile={profile} allowedLotteryTypes={allowedLotteryTypes} />
-                    )}
-
                     {activeTab === 'profile' && (
                         <DealerProfileTab user={user} profile={profile} subscription={subscription} formatDate={formatDate} />
                     )}
@@ -4146,7 +2427,7 @@ export default function Dealer() {
             {/* Create Round Modal */}
             {showCreateModal && (
                 <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
-                    <div className="modal modal-lg round-form-modal" onClick={e => e.stopPropagation()}>
+                    <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
                             <h3><FiPlus /> สร้างงวดหวยใหม่</h3>
                             <button className="modal-close" onClick={() => setShowCreateModal(false)}>
@@ -4159,9 +2440,7 @@ export default function Dealer() {
                             <div className="form-group">
                                 <label className="form-label">ประเภทหวย</label>
                                 <div className="lottery-type-grid">
-                                    {Object.entries(LOTTERY_TYPES)
-                                        .filter(([key]) => !allowedLotteryTypes || allowedLotteryTypes.includes(key))
-                                        .map(([key, label]) => (
+                                    {Object.entries(LOTTERY_TYPES).map(([key, label]) => (
                                         <button
                                             key={key}
                                             type="button"
@@ -4236,42 +2515,6 @@ export default function Dealer() {
                                 </div>
                             </div>
 
-                            {/* Notify close to groups */}
-                            <div className="form-group">
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={roundForm.notify_close_to_groups}
-                                        onChange={e => setRoundForm({ ...roundForm, notify_close_to_groups: e.target.checked })}
-                                        style={{ width: '1.1rem', height: '1.1rem', cursor: 'pointer' }}
-                                    />
-                                    <span>ส่งการแจ้งปิดไปยังกลุ่ม</span>
-                                </label>
-                                <p className="form-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
-                                    เมื่อถึงเวลาปิด ระบบจะส่งข้อความแจ้งปิดรับไปยังกลุ่ม LINE ที่ผูกไว้โดยอัตโนมัติ
-                                </p>
-                            </div>
-
-                            {/* Delete After Submit */}
-                            <div className="form-row">
-                                <div className="form-group" style={{ flex: 1 }}>
-                                    <label className="form-label">ลบเลขหลังป้อน (นาที)</label>
-                                    <input
-                                        type="number"
-                                        className="form-input"
-                                        value={roundForm.delete_after_submit_minutes}
-                                        onChange={e => setRoundForm({ ...roundForm, delete_after_submit_minutes: parseInt(e.target.value) || 0 })}
-                                        onFocus={handleInputFocus}
-                                        onKeyDown={handleInputKeyDown}
-                                        min="0"
-                                        placeholder="0 = ไม่จำกัด"
-                                    />
-                                    <p className="form-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
-                                        0 = ลบได้จนกว่าจะถึงเวลาก่อนปิดรับ
-                                    </p>
-                                </div>
-                            </div>
-
                             {/* Delete Before */}
                             <div className="form-row">
                                 <div className="form-group">
@@ -4302,8 +2545,6 @@ export default function Dealer() {
                                 </div>
                             </div>
 
-
-
                             {/* Limits by Bet Type - Based on selected lottery type */}
                             <div className="form-section">
                                 <h4>ค่าอั้นตามประเภทเลข ({LOTTERY_TYPES[roundForm.lottery_type]})</h4>
@@ -4311,13 +2552,13 @@ export default function Dealer() {
                                     อัตราจ่ายจะใช้ตามที่ตั้งค่าให้แต่ละลูกค้า
                                 </p>
 
-                                <div className="round-limits-grid" style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))',
-                                    gap: '0.5rem'
+                                <div style={{ 
+                                    display: 'grid', 
+                                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
+                                    gap: '0.5rem' 
                                 }}>
                                     {Object.entries(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {}).map(([key, config]) => (
-                                        <div key={key} className="round-limit-row" style={{
+                                        <div key={key} style={{
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'space-between',
@@ -4332,12 +2573,12 @@ export default function Dealer() {
                                                 </span>
                                                 {config.isSet && <span className="set-badge" style={{ fontSize: '0.65rem', padding: '0.1rem 0.25rem' }}>ชุด</span>}
                                             </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                                                 <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>อั้น</span>
                                                 <input
                                                     type="number"
                                                     className="form-input small"
-                                                    style={{ width: '80px', textAlign: 'center', padding: '0.35rem 0.5rem', fontSize: '0.9rem' }}
+                                                    style={{ width: '90px', textAlign: 'center', padding: '0.35rem 0.5rem', fontSize: '0.95rem' }}
                                                     value={roundForm.type_limits[key] || 0}
                                                     onChange={e => setRoundForm({
                                                         ...roundForm,
@@ -4350,35 +2591,6 @@ export default function Dealer() {
                                                     onKeyDown={handleInputKeyDown}
                                                 />
                                                 <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', minWidth: '25px' }}>{config.isSet ? 'ชุด' : roundForm.currency_name}</span>
-                                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>ปิด</span>
-                                                <input
-                                                    type="time"
-                                                    className="form-input small"
-                                                    style={{ width: '85px', padding: '0.35rem 0.3rem', fontSize: '0.85rem' }}
-                                                    value={roundForm.type_close_times?.[key] || ''}
-                                                    onChange={e => setRoundForm({
-                                                        ...roundForm,
-                                                        type_close_times: {
-                                                            ...roundForm.type_close_times,
-                                                            [key]: e.target.value
-                                                        }
-                                                    })}
-                                                />
-                                                <select
-                                                    className="form-input small"
-                                                    style={{ width: '100px', padding: '0.35rem 0.3rem', fontSize: '0.85rem', marginLeft: '0.25rem' }}
-                                                    value={roundForm.type_close_time_behaviors?.[key] || 'close_immediately'}
-                                                    onChange={e => setRoundForm({
-                                                        ...roundForm,
-                                                        type_close_time_behaviors: {
-                                                            ...roundForm.type_close_time_behaviors,
-                                                            [key]: e.target.value
-                                                        }
-                                                    })}
-                                                >
-                                                    <option value="close_immediately">ปิดรับทันที</option>
-                                                    <option value="return_excess">คืนเลขเกิน</option>
-                                                </select>
                                             </div>
                                         </div>
                                     ))}
@@ -4386,31 +2598,13 @@ export default function Dealer() {
                             </div>
                         </div>
 
-                        <div className="modal-footer round-modal-footer">
-                            <div className="round-footer-presets">
-                                <button className="btn btn-secondary" onClick={handleResetToSystemDefaults} title="คืนค่าข้อมูลเป็นค่าที่ระบบกำหนดจากโรงงาน">
-                                    <FiRotateCcw /> ใช้ค่าเริ่มต้นระบบ
-                                </button>
-                                <button
-                                    className="btn round-save-template-btn"
-                                    onClick={handleSaveTemplate}
-                                    disabled={savingTemplate}
-                                >
-                                    {savingTemplate ? 'กำลังบันทึก...' : (
-                                        <>
-                                            <FiSave /> บันทึกเป็นค่าเริ่มต้น
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                            <div className="round-footer-actions">
-                                <button className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
-                                    ยกเลิก
-                                </button>
-                                <button className="btn btn-primary" onClick={handleCreateRound}>
-                                    <FiCheck /> สร้างงวด
-                                </button>
-                            </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
+                                ยกเลิก
+                            </button>
+                            <button className="btn btn-primary" onClick={handleCreateRound}>
+                                <FiCheck /> สร้างงวด
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -4419,7 +2613,7 @@ export default function Dealer() {
             {/* Edit Round Modal */}
             {showEditModal && editingRound && (
                 <div className="modal-overlay" onClick={() => { setShowEditModal(false); setEditingRound(null); }}>
-                    <div className="modal modal-lg round-form-modal" onClick={e => e.stopPropagation()}>
+                    <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
                             <h3><FiEdit2 /> แก้ไขงวดหวย</h3>
                             <button className="modal-close" onClick={() => { setShowEditModal(false); setEditingRound(null); }}>
@@ -4432,9 +2626,7 @@ export default function Dealer() {
                             <div className="form-group">
                                 <label className="form-label">ประเภทหวย</label>
                                 <div className="lottery-type-grid">
-                                    {Object.entries(LOTTERY_TYPES)
-                                        .filter(([key]) => !allowedLotteryTypes || allowedLotteryTypes.includes(key))
-                                        .map(([key, label]) => (
+                                    {Object.entries(LOTTERY_TYPES).map(([key, label]) => (
                                         <button
                                             key={key}
                                             type="button"
@@ -4511,42 +2703,6 @@ export default function Dealer() {
                                 </div>
                             </div>
 
-                            {/* Notify close to groups */}
-                            <div className="form-group">
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={roundForm.notify_close_to_groups}
-                                        onChange={e => setRoundForm({ ...roundForm, notify_close_to_groups: e.target.checked })}
-                                        style={{ width: '1.1rem', height: '1.1rem', cursor: 'pointer' }}
-                                    />
-                                    <span>ส่งการแจ้งปิดไปยังกลุ่ม</span>
-                                </label>
-                                <p className="form-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
-                                    เมื่อถึงเวลาปิด ระบบจะส่งข้อความแจ้งปิดรับไปยังกลุ่ม LINE ที่ผูกไว้โดยอัตโนมัติ
-                                </p>
-                            </div>
-
-                            {/* Delete After Submit */}
-                            <div className="form-row">
-                                <div className="form-group" style={{ flex: 1 }}>
-                                    <label className="form-label">ลบเลขหลังป้อน (นาที)</label>
-                                    <input
-                                        type="number"
-                                        className="form-input"
-                                        value={roundForm.delete_after_submit_minutes}
-                                        onChange={e => setRoundForm({ ...roundForm, delete_after_submit_minutes: parseInt(e.target.value) || 0 })}
-                                        onFocus={handleInputFocus}
-                                        onKeyDown={handleInputKeyDown}
-                                        min="0"
-                                        placeholder="0 = ไม่จำกัด"
-                                    />
-                                    <p className="form-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
-                                        0 = ลบได้จนกว่าจะถึงเวลาก่อนปิดรับ
-                                    </p>
-                                </div>
-                            </div>
-
                             {/* Delete Before */}
                             <div className="form-row">
                                 <div className="form-group">
@@ -4585,13 +2741,13 @@ export default function Dealer() {
                                 </p>
 
                                 {/* Compact limits display */}
-                                <div className="round-limits-grid" style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))',
-                                    gap: '0.5rem'
+                                <div style={{ 
+                                    display: 'grid', 
+                                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
+                                    gap: '0.5rem' 
                                 }}>
                                     {Object.entries(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {}).map(([key, config]) => (
-                                        <div key={key} className="round-limit-row" style={{
+                                        <div key={key} style={{
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'space-between',
@@ -4606,12 +2762,12 @@ export default function Dealer() {
                                                 </span>
                                                 {config.isSet && <span className="set-badge" style={{ fontSize: '0.65rem', padding: '0.1rem 0.25rem' }}>ชุด</span>}
                                             </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                                                 <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>อั้น</span>
                                                 <input
                                                     type="number"
                                                     className="form-input small"
-                                                    style={{ width: '80px', textAlign: 'center', padding: '0.35rem 0.5rem', fontSize: '0.9rem' }}
+                                                    style={{ width: '90px', textAlign: 'center', padding: '0.35rem 0.5rem', fontSize: '0.95rem' }}
                                                     value={roundForm.type_limits[key] || 0}
                                                     onChange={e => setRoundForm({
                                                         ...roundForm,
@@ -4624,35 +2780,6 @@ export default function Dealer() {
                                                     onKeyDown={handleInputKeyDown}
                                                 />
                                                 <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', minWidth: '25px' }}>{config.isSet ? 'ชุด' : roundForm.currency_name}</span>
-                                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>ปิด</span>
-                                                <input
-                                                    type="time"
-                                                    className="form-input small"
-                                                    style={{ width: '85px', padding: '0.35rem 0.3rem', fontSize: '0.85rem' }}
-                                                    value={roundForm.type_close_times?.[key] || ''}
-                                                    onChange={e => setRoundForm({
-                                                        ...roundForm,
-                                                        type_close_times: {
-                                                            ...roundForm.type_close_times,
-                                                            [key]: e.target.value
-                                                        }
-                                                    })}
-                                                />
-                                                <select
-                                                    className="form-input small"
-                                                    style={{ width: '100px', padding: '0.35rem 0.3rem', fontSize: '0.85rem', marginLeft: '0.25rem' }}
-                                                    value={roundForm.type_close_time_behaviors?.[key] || 'close_immediately'}
-                                                    onChange={e => setRoundForm({
-                                                        ...roundForm,
-                                                        type_close_time_behaviors: {
-                                                            ...roundForm.type_close_time_behaviors,
-                                                            [key]: e.target.value
-                                                        }
-                                                    })}
-                                                >
-                                                    <option value="close_immediately">ปิดรับทันที</option>
-                                                    <option value="return_excess">คืนเลขเกิน</option>
-                                                </select>
                                             </div>
                                         </div>
                                     ))}
@@ -4660,15 +2787,13 @@ export default function Dealer() {
                             </div>
                         </div>
 
-                        <div className="modal-footer round-modal-footer">
-                            <div className="round-footer-actions">
-                                <button className="btn btn-secondary" onClick={() => { setShowEditModal(false); setEditingRound(null); }}>
-                                    ยกเลิก
-                                </button>
-                                <button className="btn btn-primary" onClick={handleUpdateRound}>
-                                    <FiCheck /> บันทึกการแก้ไข
-                                </button>
-                            </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => { setShowEditModal(false); setEditingRound(null); }}>
+                                ยกเลิก
+                            </button>
+                            <button className="btn btn-primary" onClick={handleUpdateRound}>
+                                <FiCheck /> บันทึกการแก้ไข
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -4679,7 +2804,6 @@ export default function Dealer() {
                 <SubmissionsModal
                     round={selectedRound}
                     onClose={() => setShowSubmissionsModal(false)}
-                    fetchDealerCredit={fetchDealerCredit}
                 />
             )}
 
@@ -4687,56 +2811,9 @@ export default function Dealer() {
             {showResultsModal && selectedRound && (
                 <ResultsModal
                     round={selectedRound}
-                    onClose={async (updatedRound) => {
+                    onClose={() => {
                         setShowResultsModal(false)
-                        if (updatedRound) {
-                            setRounds(prev => prev.map(r => r.id === updatedRound.id ? { ...r, ...updatedRound } : r))
-
-                            // If the round was still 'open' before announcing, deduct credit now
-                            // (closed rounds already had credit deducted in handleCloseRound)
-                            // For profit_percentage: ResultsModal.handleAnnounce already handles everything
-                            const wasOpen = selectedRound.status === 'open' || 
-                                (!selectedRound.status && new Date() <= new Date(selectedRound.close_time))
-                            if (wasOpen) {
-                                try {
-                                    // Check billing model - skip RPC deduction for profit_percentage
-                                    // (profit-based deduction is already done in ResultsModal)
-                                    const { data: dealerSubs } = await supabase
-                                        .from('dealer_subscriptions')
-                                        .select('billing_model, subscription_packages(billing_model)')
-                                        .eq('dealer_id', user.id)
-                                        .in('status', ['active', 'trial'])
-                                        .order('created_at', { ascending: false })
-                                        .limit(1)
-                                    
-                                    const billingModel = dealerSubs?.[0]?.subscription_packages?.billing_model || dealerSubs?.[0]?.billing_model
-
-                                    if (billingModel !== 'profit_percentage') {
-                                        const { data: immediateBillingResult, error: immediateBillingError } = await supabase
-                                            .rpc('create_immediate_billing_record', {
-                                                p_round_id: updatedRound.id,
-                                                p_dealer_id: user.id
-                                            })
-
-                                        if (!immediateBillingError && immediateBillingResult?.success && immediateBillingResult?.amount_deducted > 0) {
-                                            console.log('Immediate billing on announce:', immediateBillingResult)
-                                            toast.info(`ตัดเครดิต ฿${immediateBillingResult.amount_deducted.toLocaleString()} สำเร็จ`)
-                                        } else {
-                                            const { data: result, error: creditError } = await supabase
-                                                .rpc('finalize_round_credit', { p_round_id: updatedRound.id })
-
-                                            if (!creditError && result?.total_deducted > 0) {
-                                                console.log('Regular finalization on announce:', result)
-                                                toast.info(`ตัดเครดิต ฿${result.total_deducted.toLocaleString()} สำเร็จ`)
-                                            }
-                                        }
-                                    }
-                                } catch (billingErr) {
-                                    console.log('Credit system not configured:', billingErr)
-                                }
-                                fetchDealerCredit()
-                            }
-                        }
+                        fetchData()
                     }}
                 />
             )}
@@ -4761,10 +2838,10 @@ export default function Dealer() {
                         </div>
                         <div className="modal-body">
                             {/* Current Balance */}
-                            <div style={{
-                                background: 'var(--color-bg-secondary)',
-                                padding: '1rem',
-                                borderRadius: '8px',
+                            <div style={{ 
+                                background: 'var(--color-bg-secondary)', 
+                                padding: '1rem', 
+                                borderRadius: '8px', 
                                 marginBottom: '1rem',
                                 textAlign: 'center'
                             }}>
@@ -4776,24 +2853,31 @@ export default function Dealer() {
 
                             {/* Bank Account Info */}
                             {assignedBankAccount ? (
-                                <div style={{
-                                    background: 'var(--color-surface)',
-                                    padding: '1.25rem',
-                                    borderRadius: '12px',
-                                    marginBottom: '1.5rem',
-                                    border: '2px solid var(--color-primary)',
-                                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+                                <div style={{ 
+                                    background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)', 
+                                    padding: '1rem', 
+                                    borderRadius: '8px', 
+                                    marginBottom: '1rem',
+                                    border: '1px solid var(--color-primary)'
                                 }}>
-                                    <BankAccountCard
-                                        bank={assignedBankAccount}
-                                        title="โอนเงินเข้าบัญชีนี้"
-                                    />
+                                    <div style={{ fontSize: '0.85rem', color: 'var(--color-primary)', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+                                        โอนเงินเข้าบัญชีนี้
+                                    </div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: 'white' }}>
+                                        {assignedBankAccount.bank_name}
+                                    </div>
+                                    <div style={{ fontSize: '1.25rem', fontFamily: 'monospace', color: 'var(--color-primary)', margin: '0.5rem 0' }}>
+                                        {assignedBankAccount.account_number}
+                                    </div>
+                                    <div style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+                                        {assignedBankAccount.account_name}
+                                    </div>
                                 </div>
                             ) : (
-                                <div style={{
-                                    background: 'rgba(239, 68, 68, 0.15)',
-                                    padding: '1rem',
-                                    borderRadius: '8px',
+                                <div style={{ 
+                                    background: 'rgba(239, 68, 68, 0.15)', 
+                                    padding: '1rem', 
+                                    borderRadius: '8px', 
                                     marginBottom: '1rem',
                                     border: '1px solid var(--color-danger)',
                                     textAlign: 'center'
@@ -4811,75 +2895,37 @@ export default function Dealer() {
                             {assignedBankAccount && (
                                 <>
                                     {/* Amount Input */}
-                                    <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                                        <label style={{
-                                            display: 'block',
-                                            marginBottom: '0.5rem',
-                                            fontWeight: '600',
-                                            color: 'var(--color-text)'
-                                        }}>
-                                            จำนวนเงินที่โอน (บาท)
-                                        </label>
-                                        <div style={{ position: 'relative' }}>
-                                            <span style={{
-                                                position: 'absolute',
-                                                left: '1rem',
-                                                top: '50%',
-                                                transform: 'translateY(-50%)',
-                                                fontSize: '1.25rem',
-                                                fontWeight: 'bold',
-                                                color: 'var(--color-primary)'
-                                            }}>
-                                                ฿
-                                            </span>
-                                            <input
-                                                type="number"
-                                                value={topupForm.amount}
-                                                onChange={(e) => setTopupForm({ ...topupForm, amount: e.target.value })}
-                                                placeholder="0.00"
-                                                min="1"
-                                                step="0.01"
-                                                style={{
-                                                    fontSize: '1.5rem',
-                                                    textAlign: 'center',
-                                                    padding: '1rem 2.5rem',
-                                                    borderRadius: '12px',
-                                                    border: '2px solid var(--color-border)',
-                                                    background: 'var(--color-surface)',
-                                                    fontWeight: 'bold',
-                                                    width: '100%',
-                                                    transition: 'border-color 0.2s, box-shadow 0.2s'
-                                                }}
-                                                onFocus={(e) => {
-                                                    e.target.style.borderColor = 'var(--color-primary)'
-                                                    e.target.style.boxShadow = '0 0 0 3px rgba(234, 179, 8, 0.2)'
-                                                }}
-                                                onBlur={(e) => {
-                                                    e.target.style.borderColor = 'var(--color-border)'
-                                                    e.target.style.boxShadow = 'none'
-                                                }}
-                                            />
-                                        </div>
+                                    <div className="form-group">
+                                        <label>จำนวนเงินที่โอน (บาท)</label>
+                                        <input
+                                            type="number"
+                                            value={topupForm.amount}
+                                            onChange={(e) => setTopupForm({ ...topupForm, amount: e.target.value })}
+                                            placeholder="0.00"
+                                            min="1"
+                                            step="0.01"
+                                            style={{ fontSize: '1.25rem', textAlign: 'center' }}
+                                        />
                                     </div>
 
                                     {/* Slip Upload */}
                                     <div className="form-group">
                                         <label>แนบสลิปการโอนเงิน</label>
-                                        <div style={{
-                                            border: '2px dashed var(--color-border)',
-                                            borderRadius: '8px',
+                                        <div style={{ 
+                                            border: '2px dashed var(--color-border)', 
+                                            borderRadius: '8px', 
                                             padding: '1rem',
                                             textAlign: 'center',
                                             cursor: 'pointer',
                                             background: slipPreview ? 'transparent' : 'var(--color-bg-secondary)'
                                         }}
-                                            onClick={() => document.getElementById('slip-file-input').click()}
+                                        onClick={() => document.getElementById('slip-file-input').click()}
                                         >
                                             {slipPreview ? (
                                                 <div>
-                                                    <img
-                                                        src={slipPreview}
-                                                        alt="Slip Preview"
+                                                    <img 
+                                                        src={slipPreview} 
+                                                        alt="Slip Preview" 
                                                         style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '4px' }}
                                                     />
                                                     <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
@@ -4888,20 +2934,8 @@ export default function Dealer() {
                                                 </div>
                                             ) : (
                                                 <div>
-                                                    <div style={{
-                                                        width: '48px',
-                                                        height: '64px',
-                                                        margin: '0 auto 0.75rem',
-                                                        background: 'linear-gradient(180deg, var(--color-primary) 0%, #d4a106 100%)',
-                                                        borderRadius: '6px',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        boxShadow: '0 2px 8px rgba(234, 179, 8, 0.3)'
-                                                    }}>
-                                                        <FiFileText style={{ fontSize: '1.5rem', color: 'white' }} />
-                                                    </div>
-                                                    <div style={{ color: 'var(--color-text)', fontWeight: '500', marginBottom: '0.25rem' }}>คลิกเพื่อเลือกไฟล์สลิป</div>
+                                                    <FiPackage style={{ fontSize: '2rem', color: 'var(--color-text-muted)', marginBottom: '0.5rem' }} />
+                                                    <div style={{ color: 'var(--color-text-muted)' }}>คลิกเพื่อเลือกไฟล์สลิป</div>
                                                     <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                                                         รองรับ JPG, PNG, WEBP (ไม่เกิน 5MB)
                                                     </div>
@@ -4918,9 +2952,9 @@ export default function Dealer() {
                                     </div>
 
                                     {/* Info */}
-                                    <div style={{
-                                        background: 'rgba(59, 130, 246, 0.1)',
-                                        padding: '0.75rem',
+                                    <div style={{ 
+                                        background: 'rgba(59, 130, 246, 0.1)', 
+                                        padding: '0.75rem', 
                                         borderRadius: '8px',
                                         fontSize: '0.8rem',
                                         color: 'var(--color-text-muted)'
@@ -4939,9 +2973,9 @@ export default function Dealer() {
                                     </div>
                                     <div style={{ maxHeight: '150px', overflowY: 'auto' }}>
                                         {topupHistory.slice(0, 5).map(item => (
-                                            <div key={item.id} style={{
-                                                display: 'flex',
-                                                justifyContent: 'space-between',
+                                            <div key={item.id} style={{ 
+                                                display: 'flex', 
+                                                justifyContent: 'space-between', 
                                                 padding: '0.5rem',
                                                 borderBottom: '1px solid var(--color-border)',
                                                 fontSize: '0.85rem'
@@ -4949,10 +2983,10 @@ export default function Dealer() {
                                                 <span style={{ color: 'var(--color-text-muted)' }}>
                                                     {new Date(item.created_at).toLocaleDateString('th-TH')}
                                                 </span>
-                                                <span style={{
-                                                    color: item.status === 'approved' ? 'var(--color-success)' :
-                                                        item.status === 'rejected' ? 'var(--color-danger)' :
-                                                            'var(--color-warning)',
+                                                <span style={{ 
+                                                    color: item.status === 'approved' ? 'var(--color-success)' : 
+                                                           item.status === 'rejected' ? 'var(--color-danger)' : 
+                                                           'var(--color-warning)',
                                                     fontWeight: 'bold'
                                                 }}>
                                                     +{item.amount?.toLocaleString()} ฿
@@ -4964,15 +2998,15 @@ export default function Dealer() {
                             )}
                         </div>
                         <div className="modal-footer">
-                            <button
-                                className="btn btn-secondary"
+                            <button 
+                                className="btn btn-secondary" 
                                 onClick={() => { setShowTopupModal(false); setSlipPreview(null); setTopupForm({ amount: '', slip_file: null }); }}
                             >
                                 ยกเลิก
                             </button>
                             {assignedBankAccount && (
-                                <button
-                                    className="btn btn-primary"
+                                <button 
+                                    className="btn btn-primary" 
                                     onClick={handleTopupSubmit}
                                     disabled={topupLoading || !topupForm.amount || !topupForm.slip_file}
                                 >
@@ -4997,8 +3031,8 @@ export default function Dealer() {
                         <div className="modal-body">
                             {newMemberCredentials ? (
                                 <div className="credentials-result">
-                                    <div style={{
-                                        textAlign: 'center',
+                                    <div style={{ 
+                                        textAlign: 'center', 
                                         padding: '1rem',
                                         background: 'rgba(34, 197, 94, 0.1)',
                                         borderRadius: 'var(--radius-md)',
@@ -5007,10 +3041,10 @@ export default function Dealer() {
                                         <FiCheck style={{ fontSize: '2rem', color: 'var(--color-success)' }} />
                                         <h4 style={{ margin: '0.5rem 0', color: 'var(--color-success)' }}>สร้างสมาชิกสำเร็จ!</h4>
                                     </div>
-
-                                    <div style={{
-                                        background: 'var(--color-surface-light)',
-                                        padding: '1rem',
+                                    
+                                    <div style={{ 
+                                        background: 'var(--color-surface-light)', 
+                                        padding: '1rem', 
                                         borderRadius: 'var(--radius-md)',
                                         marginBottom: '1rem'
                                     }}>
@@ -5045,9 +3079,9 @@ export default function Dealer() {
                                         <FiCopy /> คัดลอกข้อมูลทั้งหมด
                                     </button>
 
-                                    <p style={{
-                                        marginTop: '1rem',
-                                        fontSize: '0.85rem',
+                                    <p style={{ 
+                                        marginTop: '1rem', 
+                                        fontSize: '0.85rem', 
                                         color: 'var(--color-warning)',
                                         textAlign: 'center'
                                     }}>
@@ -5087,26 +3121,9 @@ export default function Dealer() {
                                         />
                                     </div>
 
-                                    {isPerUserYearly() && (
-                                        <div className="form-group" style={{ marginBottom: '1rem' }}>
-                                            <label className="form-label">จำนวนปีที่ใช้งาน</label>
-                                            <input
-                                                type="number"
-                                                className="form-input"
-                                                min="1"
-                                                max="10"
-                                                value={addMemberForm.membership_years}
-                                                onChange={e => setAddMemberForm({ ...addMemberForm, membership_years: parseInt(e.target.value) || 1 })}
-                                            />
-                                            <small style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
-                                                ค่าใช้จ่าย: ฿{((getPricePerUserPerYear() * (parseInt(addMemberForm.membership_years) || 1))).toLocaleString()} ({parseInt(addMemberForm.membership_years) || 1} ปี x ฿{getPricePerUserPerYear().toLocaleString()}/ปี)
-                                            </small>
-                                        </div>
-                                    )}
-
-                                    <div style={{
-                                        padding: '0.75rem',
-                                        background: 'rgba(212, 175, 55, 0.1)',
+                                    <div style={{ 
+                                        padding: '0.75rem', 
+                                        background: 'rgba(212, 175, 55, 0.1)', 
                                         borderRadius: 'var(--radius-md)',
                                         border: '1px solid rgba(212, 175, 55, 0.3)',
                                         fontSize: '0.85rem'
@@ -5126,8 +3143,8 @@ export default function Dealer() {
                                     <button className="btn btn-secondary" onClick={() => setShowAddMemberModal(false)}>
                                         ยกเลิก
                                     </button>
-                                    <button
-                                        className="btn btn-primary"
+                                    <button 
+                                        className="btn btn-primary" 
                                         onClick={handleAddMember}
                                         disabled={addingMember}
                                     >
@@ -5147,224 +3164,4375 @@ export default function Dealer() {
                     onClose={() => setShowSummaryModal(false)}
                 />
             )}
+        </div>
+    )
+}
 
-            {/* QR Code Modal */}
-            {showQRModal && (
-                <div className="modal-overlay" onClick={() => setShowQRModal(false)} style={{ zIndex: 9999 }}>
-                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+// Submissions Modal Component - With 3 Tabs
+function SubmissionsModal({ round, onClose }) {
+    const { user } = useAuth()
+    const [activeTab, setActiveTab] = useState('total') // 'total' | 'excess' | 'transferred'
+    const [submissions, setSubmissions] = useState([])
+    const [typeLimits, setTypeLimits] = useState({})
+    const [numberLimits, setNumberLimits] = useState([])
+    const [transfers, setTransfers] = useState([])
+    const [loading, setLoading] = useState(true)
+    const [selectedUser, setSelectedUser] = useState('all')
+    const [betTypeFilter, setBetTypeFilter] = useState('all')
+    const [selectedBatch, setSelectedBatch] = useState('all')
+
+    // Upstream dealers for transfer selection
+    const [upstreamDealers, setUpstreamDealers] = useState([])
+    const [selectedUpstreamDealer, setSelectedUpstreamDealer] = useState(null) // null = manual, object = linked
+    const [upstreamRoundStatus, setUpstreamRoundStatus] = useState(null) // null = not checked, 'checking', 'available', 'unavailable'
+
+    // Transfer modal state
+    const [showTransferModal, setShowTransferModal] = useState(false)
+    const [transferTarget, setTransferTarget] = useState(null)
+    const [transferForm, setTransferForm] = useState({
+        amount: 0,
+        target_dealer_name: '',
+        target_dealer_contact: '',
+        notes: ''
+    })
+    const [savingTransfer, setSavingTransfer] = useState(false)
+
+    // Bulk transfer state
+    const [selectedExcessItems, setSelectedExcessItems] = useState({}) // { 'betType|numbers': true/false }
+    const [showBulkTransferModal, setShowBulkTransferModal] = useState(false)
+    const [bulkTransferForm, setBulkTransferForm] = useState({
+        target_dealer_name: '',
+        target_dealer_contact: '',
+        notes: ''
+    })
+
+    useEffect(() => {
+        fetchAllData()
+        fetchUpstreamDealers()
+    }, [])
+
+    // Fetch upstream dealers for transfer selection
+    async function fetchUpstreamDealers() {
+        if (!user?.id) return
+        try {
+            // Fetch from dealer_upstream_connections (เจ้ามือตีออก tab)
+            const { data: manualData, error: manualError } = await supabase
+                .from('dealer_upstream_connections')
+                .select(`
+                    *,
+                    upstream_profile:upstream_dealer_id (id, full_name, email, phone)
+                `)
+                .eq('dealer_id', user.id)
+                .eq('is_blocked', false)
+                .order('is_linked', { ascending: false })
+                .order('upstream_name', { ascending: true })
+
+            // Also fetch dealers that user was a member of (for users who became dealers before the fix)
+            // Only include dealers with role='dealer' (not superadmin)
+            const { data: membershipData, error: membershipError } = await supabase
+                .from('user_dealer_memberships')
+                .select(`
+                    dealer_id,
+                    status,
+                    profiles:dealer_id (id, full_name, email, phone, role)
+                `)
+                .eq('user_id', user.id)
+                .eq('status', 'active')
+                .neq('dealer_id', user.id)
+
+            let allDealers = []
+            
+            if (!manualError && manualData) {
+                allDealers = [...manualData]
+            }
+            
+            // Add dealers from memberships (only role='dealer')
+            if (!membershipError && membershipData) {
+                const membershipDealers = membershipData
+                    .filter(m => m.profiles?.id && m.profiles?.role === 'dealer')
+                    .map(m => ({
+                        id: `membership-${m.dealer_id}`,
+                        dealer_id: user.id,
+                        upstream_dealer_id: m.dealer_id,
+                        upstream_name: m.profiles?.full_name || m.profiles?.email || 'ไม่ระบุชื่อ',
+                        upstream_contact: m.profiles?.phone || m.profiles?.email || '',
+                        upstream_profile: m.profiles,
+                        is_linked: true,
+                        is_from_membership: true
+                    }))
+                
+                // Merge, avoiding duplicates
+                const existingIds = allDealers.map(d => d.upstream_dealer_id).filter(Boolean)
+                const newDealers = membershipDealers.filter(d => !existingIds.includes(d.upstream_dealer_id))
+                allDealers = [...allDealers, ...newDealers]
+            }
+            
+            setUpstreamDealers(allDealers)
+        } catch (error) {
+            console.error('Error fetching upstream dealers:', error)
+        }
+    }
+
+    async function fetchAllData() {
+        setLoading(true)
+        try {
+            // Fetch submissions
+            const { data: subsData } = await supabase
+                .from('submissions')
+                .select(`*, profiles (full_name, email)`)
+                .eq('round_id', round.id)
+                .eq('is_deleted', false)
+                .order('created_at', { ascending: false })
+
+            setSubmissions(subsData || [])
+
+            // Fetch type limits
+            const { data: typeLimitsData } = await supabase
+                .from('type_limits')
+                .select('*')
+                .eq('round_id', round.id)
+
+            const limitsObj = {}
+            typeLimitsData?.forEach(l => {
+                limitsObj[l.bet_type] = l.max_per_number
+            })
+            setTypeLimits(limitsObj)
+
+            // Fetch number-specific limits
+            const { data: numberLimitsData } = await supabase
+                .from('number_limits')
+                .select('*')
+                .eq('round_id', round.id)
+
+            setNumberLimits(numberLimitsData || [])
+
+            // Fetch transfers
+            const { data: transfersData } = await supabase
+                .from('bet_transfers')
+                .select('*')
+                .eq('round_id', round.id)
+                .order('created_at', { ascending: false })
+
+            setTransfers(transfersData || [])
+
+        } catch (error) {
+            console.error('Error fetching data:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    // Calculate excess items
+    const calculateExcessItems = () => {
+        // Determine if this is a Lao/Hanoi lottery (set-based betting)
+        const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
+        // Get set price for 4_top from round settings
+        const setPrice = round?.set_prices?.['4_top'] || 120
+
+        // Group submissions by bet_type + numbers
+        const grouped = {}
+        submissions.forEach(sub => {
+            const key = `${sub.bet_type}|${sub.numbers}`
+            if (!grouped[key]) {
+                grouped[key] = {
+                    bet_type: sub.bet_type,
+                    numbers: sub.numbers,
+                    total: 0,
+                    setCount: 0, // Track number of sets for set-based bets
+                    submissions: []
+                }
+            }
+            grouped[key].total += sub.amount
+            grouped[key].submissions.push(sub)
+
+            // For set-based bets (4_set, 4_top in Lao/Hanoi), count number of sets
+            if (isSetBasedLottery && (sub.bet_type === '4_set' || sub.bet_type === '4_top')) {
+                grouped[key].setCount += Math.ceil(sub.amount / setPrice)
+            }
+        })
+
+        // Calculate excess for each group
+        const excessItems = []
+        
+        // For Lao/Hanoi: Calculate 3_set excess (3 ตัวตรงชุด - last 3 digits match)
+        if (isSetBasedLottery) {
+            // Get 3_set limit
+            const limit3Set = typeLimits['3_set'] || 999999999
+            const limit4Set = typeLimits['4_set'] || typeLimits['4_top'] || 999999999
+            
+            // Group 4-digit submissions by their last 3 digits
+            const groupedByLast3 = {}
+            Object.values(grouped).forEach(group => {
+                if ((group.bet_type === '4_set' || group.bet_type === '4_top') && group.numbers?.length === 4) {
+                    const last3 = group.numbers.slice(-3) // Get last 3 digits
+                    if (!groupedByLast3[last3]) {
+                        groupedByLast3[last3] = {
+                            last3Digits: last3,
+                            exactMatches: {}, // Groups with exact 4-digit match
+                            totalSets: 0,
+                            submissions: []
+                        }
+                    }
+                    
+                    // Add to exact matches by full 4-digit number
+                    if (!groupedByLast3[last3].exactMatches[group.numbers]) {
+                        groupedByLast3[last3].exactMatches[group.numbers] = {
+                            numbers: group.numbers,
+                            setCount: 0,
+                            submissions: []
+                        }
+                    }
+                    groupedByLast3[last3].exactMatches[group.numbers].setCount += group.setCount
+                    groupedByLast3[last3].exactMatches[group.numbers].submissions.push(...group.submissions)
+                    groupedByLast3[last3].totalSets += group.setCount
+                    groupedByLast3[last3].submissions.push(...group.submissions)
+                }
+            })
+            
+            // Process each last-3-digit group
+            Object.values(groupedByLast3).forEach(group3 => {
+                const exactMatchGroups = Object.values(group3.exactMatches)
+                
+                // Sort by earliest submission (FIFO - first in, first out)
+                exactMatchGroups.sort((a, b) => {
+                    const aTime = Math.min(...a.submissions.map(s => new Date(s.created_at).getTime()))
+                    const bTime = Math.min(...b.submissions.map(s => new Date(s.created_at).getTime()))
+                    return aTime - bTime
+                })
+                
+                // Calculate transferred sets for 4_set
+                const transferred4Set = transfers
+                    .filter(t => (t.bet_type === '4_set' || t.bet_type === '4_top'))
+                    .reduce((sum, t) => {
+                        // Count transfers for any 4-digit number with matching last 3 digits
+                        if (t.numbers?.slice(-3) === group3.last3Digits) {
+                            return sum + Math.floor((t.amount || 0) / setPrice)
+                        }
+                        return sum
+                    }, 0)
+                
+                // Calculate transferred sets for 3_set
+                const transferred3Set = transfers
+                    .filter(t => t.bet_type === '3_set' && t.numbers === group3.last3Digits)
+                    .reduce((sum, t) => sum + Math.floor((t.amount || 0) / setPrice), 0)
+                
+                // Process 4_set excess first (exact 4-digit match)
+                let remaining4SetLimit = limit4Set + transferred4Set
+                let setsUsedFor4Set = 0
+                
+                exactMatchGroups.forEach(exactGroup => {
+                    // Sort submissions within group by created_at (FIFO)
+                    exactGroup.submissions.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+                    
+                    // Check if this exact 4-digit number exceeds 4_set limit
+                    const exactTransferred = transfers
+                        .filter(t => (t.bet_type === '4_set' || t.bet_type === '4_top') && t.numbers === exactGroup.numbers)
+                        .reduce((sum, t) => sum + Math.floor((t.amount || 0) / setPrice), 0)
+                    
+                    const effectiveLimit = limit4Set + exactTransferred
+                    
+                    if (exactGroup.setCount > effectiveLimit) {
+                        const excess4 = exactGroup.setCount - effectiveLimit
+                        excessItems.push({
+                            bet_type: '4_set',
+                            numbers: exactGroup.numbers,
+                            total: exactGroup.setCount * setPrice,
+                            setCount: exactGroup.setCount,
+                            submissions: exactGroup.submissions,
+                            limit: limit4Set,
+                            excess: excess4,
+                            transferredAmount: exactTransferred,
+                            isSetBased: true,
+                            excessType: '4_set'
+                        })
+                        setsUsedFor4Set += effectiveLimit // Only count sets within limit
+                    } else {
+                        setsUsedFor4Set += exactGroup.setCount
+                    }
+                })
+                
+                // Now calculate 3_set excess (different 4-digit numbers with same last 3 digits)
+                // Count unique 4-digit numbers with same last 3 digits
+                const uniqueNumbers = Object.keys(group3.exactMatches)
+                
+                if (uniqueNumbers.length > 1) {
+                    // There are multiple different 4-digit numbers with same last 3 digits
+                    // These count toward 3_set limit (excluding the first one that matches 4_set)
+                    
+                    // Sort unique numbers by their earliest submission time
+                    const sortedNumbers = uniqueNumbers.sort((a, b) => {
+                        const aTime = Math.min(...group3.exactMatches[a].submissions.map(s => new Date(s.created_at).getTime()))
+                        const bTime = Math.min(...group3.exactMatches[b].submissions.map(s => new Date(s.created_at).getTime()))
+                        return aTime - bTime
+                    })
+                    
+                    // The first number's sets (up to 4_set limit) don't count toward 3_set
+                    // Remaining different numbers count toward 3_set limit
+                    let remaining3SetLimit = limit3Set + transferred3Set
+                    
+                    sortedNumbers.forEach((num, idx) => {
+                        const exactGroup = group3.exactMatches[num]
+                        
+                        if (idx === 0) {
+                            // First number - already handled by 4_set limit
+                            return
+                        }
+                        
+                        // This is a different 4-digit number with same last 3 digits
+                        // It counts toward 3_set limit
+                        if (remaining3SetLimit > 0) {
+                            const setsToKeep = Math.min(exactGroup.setCount, remaining3SetLimit)
+                            remaining3SetLimit -= setsToKeep
+                            
+                            const excess3 = exactGroup.setCount - setsToKeep
+                            if (excess3 > 0) {
+                                excessItems.push({
+                                    bet_type: '3_set',
+                                    numbers: num,
+                                    displayNumbers: `${num} (3ตัวหลัง: ${group3.last3Digits})`,
+                                    total: excess3 * setPrice,
+                                    setCount: exactGroup.setCount,
+                                    submissions: exactGroup.submissions.slice(-excess3),
+                                    limit: limit3Set,
+                                    excess: excess3,
+                                    transferredAmount: transferred3Set,
+                                    isSetBased: true,
+                                    excessType: '3_set',
+                                    last3Digits: group3.last3Digits
+                                })
+                            }
+                        } else {
+                            // All remaining sets are excess
+                            excessItems.push({
+                                bet_type: '3_set',
+                                numbers: num,
+                                displayNumbers: `${num} (3ตัวหลัง: ${group3.last3Digits})`,
+                                total: exactGroup.setCount * setPrice,
+                                setCount: exactGroup.setCount,
+                                submissions: exactGroup.submissions,
+                                limit: limit3Set,
+                                excess: exactGroup.setCount,
+                                transferredAmount: transferred3Set,
+                                isSetBased: true,
+                                excessType: '3_set',
+                                last3Digits: group3.last3Digits
+                            })
+                        }
+                    })
+                }
+            })
+        }
+        
+        // Process non-4_set bets normally
+        Object.values(grouped).forEach(group => {
+            // Skip 4_set for Lao/Hanoi - already handled above
+            if (isSetBasedLottery && (group.bet_type === '4_set' || group.bet_type === '4_top')) {
+                return
+            }
+            
+            // For 4_set, map to 4_top for limit lookup (the underlying limit type)
+            const limitLookupBetType = group.bet_type === '4_set' ? '4_top' : group.bet_type
+
+            // Get limit: first check number_limits, then type_limits
+            const numberLimit = numberLimits.find(nl => {
+                // Also handle 4_set -> 4_top mapping for number limits
+                const nlBetType = nl.bet_type === '4_set' ? '4_top' : nl.bet_type
+                return nlBetType === limitLookupBetType && nl.numbers === group.numbers
+            })
+            const typeLimit = typeLimits[limitLookupBetType]
+            const limit = numberLimit ? numberLimit.max_amount : (typeLimit || 999999999)
+
+            // Calculate already transferred amount for this number
+            const transferredAmount = transfers
+                .filter(t => {
+                    // Handle 4_set -> 4_top mapping for transfers
+                    const tBetType = t.bet_type === '4_set' ? '4_top' : t.bet_type
+                    return tBetType === limitLookupBetType && t.numbers === group.numbers
+                })
+                .reduce((sum, t) => sum + (t.amount || 0), 0)
+
+            // For set-based bets in Lao/Hanoi, compare by number of sets, not money amount
+            const isSetBased = isSetBasedLottery && (group.bet_type === '4_set' || group.bet_type === '4_top')
+
+            // For set-based bets, transferred amount is also in sets
+            const transferredSets = isSetBased ? Math.floor(transferredAmount / setPrice) : 0
+
+            if (isSetBased) {
+                // For set-based: limit is in "sets", compare setCount vs limit
+                const effectiveExcess = group.setCount - limit - transferredSets
+                if (effectiveExcess > 0) {
+                    excessItems.push({
+                        ...group,
+                        limit,
+                        excess: effectiveExcess, // Excess in number of sets
+                        transferredAmount: transferredSets,
+                        isSetBased: true
+                    })
+                }
+            } else {
+                // For normal bets: compare total amount vs limit
+                const effectiveExcess = group.total - limit - transferredAmount
+                if (effectiveExcess > 0) {
+                    excessItems.push({
+                        ...group,
+                        limit,
+                        excess: effectiveExcess,
+                        transferredAmount
+                    })
+                }
+            }
+        })
+
+        return excessItems
+    }
+
+    const excessItems = calculateExcessItems()
+
+    // Get unique transfer batches (sorted by earliest created_at - oldest first)
+    const uniqueBatches = [...new Set(transfers.map(t => t.transfer_batch_id))]
+        .map(batchId => ({
+            batchId,
+            createdAt: transfers.find(t => t.transfer_batch_id === batchId)?.created_at
+        }))
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+        .map(item => item.batchId)
+
+    // Filter transfers by batch
+    const filteredTransfers = selectedBatch === 'all'
+        ? transfers
+        : transfers.filter(t => t.transfer_batch_id === selectedBatch)
+
+    // Handle transfer creation
+    const handleOpenTransfer = (item) => {
+        setTransferTarget(item)
+        setSelectedUpstreamDealer(null)
+        setTransferForm({
+            amount: item.excess,
+            target_dealer_name: '',
+            target_dealer_contact: '',
+            notes: ''
+        })
+        setShowTransferModal(true)
+    }
+
+    // Handle upstream dealer selection
+    const handleSelectUpstreamDealer = async (dealer) => {
+        setSelectedUpstreamDealer(dealer)
+        setUpstreamRoundStatus(null)
+        
+        if (dealer) {
+            setTransferForm({
+                ...transferForm,
+                target_dealer_name: dealer.upstream_name,
+                target_dealer_contact: dealer.upstream_contact || ''
+            })
+            
+            // Check if linked dealer has an active round for same lottery type
+            if (dealer.is_linked && dealer.upstream_dealer_id) {
+                setUpstreamRoundStatus('checking')
+                try {
+                    const { data: upstreamRounds, error } = await supabase
+                        .from('lottery_rounds')
+                        .select('id, round_date, close_time, status, lottery_type')
+                        .eq('dealer_id', dealer.upstream_dealer_id)
+                        .eq('lottery_type', round.lottery_type)
+                        .in('status', ['open', 'active'])
+                    
+                    // Filter for rounds that haven't closed yet
+                    const openRounds = upstreamRounds?.filter(r => 
+                        new Date(r.close_time) >= new Date()
+                    )
+                    
+                    if (!error && openRounds && openRounds.length > 0) {
+                        setUpstreamRoundStatus('available')
+                    } else {
+                        setUpstreamRoundStatus('unavailable')
+                    }
+                } catch (err) {
+                    console.error('Error checking upstream round:', err)
+                    setUpstreamRoundStatus('unavailable')
+                }
+            }
+        } else {
+            setTransferForm({
+                ...transferForm,
+                target_dealer_name: '',
+                target_dealer_contact: ''
+            })
+        }
+    }
+
+    // Find matching round from upstream dealer for linked transfers
+    const findUpstreamRound = async (upstreamDealerId) => {
+        if (!upstreamDealerId) return null
+
+        try {
+            // Find an open round from the upstream dealer with matching lottery_type and date
+            const { data: rounds, error } = await supabase
+                .from('lottery_rounds')
+                .select('id, lottery_name, lottery_type, round_date, status, close_time')
+                .eq('dealer_id', upstreamDealerId)
+                .eq('lottery_type', round.lottery_type)
+                .eq('round_date', round.round_date)
+                .in('status', ['open'])
+                .gte('close_time', new Date().toISOString())
+                .order('created_at', { ascending: false })
+                .limit(1)
+
+            if (error || !rounds || rounds.length === 0) {
+                return null
+            }
+
+            return rounds[0]
+        } catch (error) {
+            console.error('Error finding upstream round:', error)
+            return null
+        }
+    }
+
+    const handleSaveTransfer = async () => {
+        if (!transferTarget || !transferForm.amount || !transferForm.target_dealer_name) {
+            toast.warning('กรุณากรอกข้อมูลให้ครบถ้วน')
+            return
+        }
+
+        setSavingTransfer(true)
+        try {
+            // Check upstream dealer's credit if linked
+            if (selectedUpstreamDealer?.is_linked && selectedUpstreamDealer?.upstream_dealer_id) {
+                const upstreamRound = await findUpstreamRound(selectedUpstreamDealer.upstream_dealer_id)
+                if (upstreamRound) {
+                    const creditCheck = await checkUpstreamDealerCredit(
+                        selectedUpstreamDealer.upstream_dealer_id,
+                        upstreamRound.id,
+                        transferForm.amount
+                    )
+                    if (!creditCheck.allowed) {
+                        toast.error(`ไม่สามารถตีออกได้: ${creditCheck.message}`)
+                        setSavingTransfer(false)
+                        return
+                    }
+                }
+            }
+
+            const batchId = generateBatchId()
+            let targetRoundId = null
+            let targetSubmissionId = null
+
+            // If linked dealer, try to create submission in their round
+            if (selectedUpstreamDealer?.is_linked && selectedUpstreamDealer?.upstream_dealer_id) {
+                const upstreamRound = await findUpstreamRound(selectedUpstreamDealer.upstream_dealer_id)
+                
+                if (upstreamRound) {
+                    // Create submission in upstream dealer's round
+                    const { data: newSubmission, error: subError } = await supabase
+                        .from('submissions')
+                        .insert({
+                            round_id: upstreamRound.id,
+                            user_id: user.id, // The transferring dealer becomes the "user" in upstream round
+                            bet_type: transferTarget.bet_type,
+                            numbers: transferTarget.numbers,
+                            amount: transferForm.amount,
+                            commission_rate: 0,
+                            commission_amount: 0
+                        })
+                        .select('id')
+                        .single()
+
+                    if (!subError && newSubmission) {
+                        targetRoundId = upstreamRound.id
+                        targetSubmissionId = newSubmission.id
+                    } else {
+                        console.warn('Could not create submission in upstream round:', subError)
+                    }
+                }
+            }
+
+            // Create transfer record
+            const { error } = await supabase
+                .from('bet_transfers')
+                .insert({
+                    round_id: round.id,
+                    bet_type: transferTarget.bet_type,
+                    numbers: transferTarget.numbers,
+                    amount: transferForm.amount,
+                    target_dealer_name: transferForm.target_dealer_name,
+                    target_dealer_contact: transferForm.target_dealer_contact,
+                    notes: transferForm.notes,
+                    transfer_batch_id: batchId,
+                    upstream_dealer_id: selectedUpstreamDealer?.upstream_dealer_id || null,
+                    is_linked: selectedUpstreamDealer?.is_linked || false,
+                    target_round_id: targetRoundId,
+                    target_submission_id: targetSubmissionId
+                })
+
+            if (error) throw error
+
+            // Update pending deduction for upstream dealer's credit (if linked)
+            if (targetSubmissionId && selectedUpstreamDealer?.upstream_dealer_id) {
+                try {
+                    await updatePendingDeduction(selectedUpstreamDealer.upstream_dealer_id)
+                    console.log('Upstream dealer pending deduction updated')
+                } catch (err) {
+                    console.log('Error updating upstream pending deduction:', err)
+                }
+            }
+            
+            // NOTE: Do NOT update current dealer's pending deduction when transferring OUT
+            // The dealer who transfers OUT does not get charged - only the RECEIVING dealer does
+            // Just refresh the credit display
+            await fetchDealerCredit()
+
+            // Show success message
+            if (targetSubmissionId) {
+                toast.success(`ตีออกสำเร็จ! เลขถูกส่งไปยังงวดของ ${transferForm.target_dealer_name} แล้ว`)
+            }
+
+            // Refresh data
+            await fetchAllData()
+            setShowTransferModal(false)
+            setTransferTarget(null)
+            setSelectedUpstreamDealer(null)
+        } catch (error) {
+            console.error('Error saving transfer:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setSavingTransfer(false)
+        }
+    }
+
+    // Handle undo transfer (bulk delete)
+    const handleUndoTransfer = async () => {
+        const itemsToUndo = filteredTransfers
+        if (itemsToUndo.length === 0) return
+
+        const undoLabel = selectedBatch === 'all'
+            ? `ทั้งหมด ${itemsToUndo.length} รายการ`
+            : `ครั้งนี้ ${itemsToUndo.length} รายการ`
+        const totalAmount = itemsToUndo.reduce((sum, t) => sum + (t.amount || 0), 0)
+
+        if (!confirm(`ต้องการเอาคืน${undoLabel} ยอดรวม ${round.currency_symbol}${totalAmount.toLocaleString()} หรือไม่?`)) {
+            return
+        }
+
+        try {
+            const ids = itemsToUndo.map(t => t.id)
+            const { error } = await supabase
+                .from('bet_transfers')
+                .delete()
+                .in('id', ids)
+
+            if (error) throw error
+
+            // Reset batch filter if the batch no longer exists
+            setSelectedBatch('all')
+            // Refresh data
+            await fetchAllData()
+        } catch (error) {
+            console.error('Error undoing transfer:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+
+    // Generate transfer text for copy/share
+    const generateTransferText = () => {
+        const items = filteredTransfers
+        if (items.length === 0) return ''
+
+        const batchLabel = selectedBatch === 'all'
+            ? 'ทั้งหมด'
+            : `ครั้งที่ ${uniqueBatches.indexOf(selectedBatch) + 1}`
+        const totalAmount = items.reduce((sum, t) => sum + (t.amount || 0), 0)
+        const targetDealer = items[0]?.target_dealer_name || '-'
+
+        let text = `📤 ยอดตีออก - ${round.lottery_name}\n`
+        text += `📅 ${batchLabel} (${items.length} รายการ)\n`
+        text += `👤 ตีออกให้: ${targetDealer}\n`
+        text += `💰 ยอดรวม: ${round.currency_symbol}${totalAmount.toLocaleString()}\n`
+        text += `━━━━━━━━━━━━━━━━\n`
+
+        // Group by bet type
+        const groupedByType = {}
+        items.forEach(t => {
+            if (!groupedByType[t.bet_type]) {
+                groupedByType[t.bet_type] = []
+            }
+            groupedByType[t.bet_type].push(t)
+        })
+
+        // Output each group
+        Object.entries(groupedByType).forEach(([betType, typeItems]) => {
+            text += `${BET_TYPES[betType]}\n`
+            typeItems.forEach(t => {
+                text += `${t.numbers}=${t.amount?.toLocaleString()}\n`
+            })
+            text += `━━━━━━━━━━━━━━━━\n`
+        })
+
+        text += `รวม: ${round.currency_symbol}${totalAmount.toLocaleString()}`
+
+        return text
+    }
+
+    // Copy transfers to clipboard
+    const handleCopyTransfers = async () => {
+        const text = generateTransferText()
+        if (!text) return
+
+        try {
+            await navigator.clipboard.writeText(text)
+            toast.success('คัดลอกสำเร็จ!')
+        } catch (error) {
+            console.error('Error copying:', error)
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea')
+            textArea.value = text
+            document.body.appendChild(textArea)
+            textArea.select()
+            document.execCommand('copy')
+            document.body.removeChild(textArea)
+            toast.success('คัดลอกสำเร็จ!')
+        }
+    }
+
+    // Generate and share PDF with Thai font support
+    const handleShareTransfers = async () => {
+        const items = filteredTransfers
+        if (items.length === 0) return
+
+        const batchLabel = selectedBatch === 'all'
+            ? 'ทั้งหมด'
+            : `ครั้งที่ ${uniqueBatches.indexOf(selectedBatch) + 1}`
+        const totalAmount = items.reduce((sum, t) => sum + (t.amount || 0), 0)
+        const targetDealer = items[0]?.target_dealer_name || '-'
+
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+
+        // Try to load Thai font
+        const hasThaiFon = await addThaiFont(doc)
+        if (!hasThaiFon) {
+            doc.setFont('helvetica')
+        }
+
+        let y = 20
+        const lineHeight = 7
+        const pageWidth = doc.internal.pageSize.getWidth()
+
+        // Title
+        doc.setFontSize(16)
+        if (hasThaiFon) {
+            doc.text(`ยอดตีออก - ${round.lottery_name}`, pageWidth / 2, y, { align: 'center' })
+        } else {
+            doc.text('Transfer Report', pageWidth / 2, y, { align: 'center' })
+        }
+        y += lineHeight * 2
+
+        // Header info
+        doc.setFontSize(11)
+        doc.text(`${hasThaiFon ? 'ครั้งที่' : 'Batch'}: ${batchLabel} (${items.length} ${hasThaiFon ? 'รายการ' : 'items'})`, 20, y)
+        y += lineHeight
+        doc.text(`${hasThaiFon ? 'ตีออกให้' : 'To'}: ${targetDealer}`, 20, y)
+        y += lineHeight
+        doc.text(`${hasThaiFon ? 'ยอดรวม' : 'Total'}: ${round.currency_symbol}${totalAmount.toLocaleString()}`, 20, y)
+        y += lineHeight
+        doc.text(`${hasThaiFon ? 'วันที่' : 'Date'}: ${new Date().toLocaleDateString('th-TH')}`, 20, y)
+        y += lineHeight * 1.5
+
+        doc.setLineWidth(0.5)
+        doc.line(20, y, pageWidth - 20, y)
+        y += lineHeight
+
+        // Group by bet type
+        const groupedByType = {}
+        items.forEach(t => {
+            if (!groupedByType[t.bet_type]) groupedByType[t.bet_type] = []
+            groupedByType[t.bet_type].push(t)
+        })
+
+        // Output each group
+        Object.entries(groupedByType).forEach(([betType, typeItems]) => {
+            if (y > 260) { doc.addPage(); y = 20 }
+
+            // Just the type label without count/subtotal
+            doc.setFontSize(11)
+            const typeLabel = BET_TYPES[betType] || betType
+            doc.text(typeLabel, 20, y)
+            y += lineHeight * 0.8
+            doc.setFontSize(10)
+
+            // Items in columns
+            const colWidth = 40, startX = 20, itemsPerRow = 4
+            let col = 0
+            typeItems.forEach(t => {
+                if (y > 280) { doc.addPage(); y = 20; col = 0 }
+                doc.text(`${t.numbers}=${t.amount?.toLocaleString()}`, startX + (col * colWidth), y)
+                col++
+                if (col >= itemsPerRow) { col = 0; y += lineHeight * 0.7 }
+            })
+            if (col > 0) y += lineHeight * 0.7
+            y += lineHeight * 0.8
+        })
+
+        // Total line
+        y += lineHeight * 0.5
+        doc.setLineWidth(0.5)
+        doc.line(20, y, pageWidth - 20, y)
+        y += lineHeight
+        doc.setFontSize(12)
+        doc.text(`${hasThaiFon ? 'รวมทั้งหมด' : 'TOTAL'}: ${round.currency_symbol}${totalAmount.toLocaleString()}`, 20, y)
+
+        // Generate and share/download
+        const dateStr = new Date().toISOString().split('T')[0]
+        const filename = `transfer_${dateStr}.pdf`
+        const pdfBlob = doc.output('blob')
+        const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' })
+
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+            try {
+                await navigator.share({ title: hasThaiFon ? 'ยอดตีออก' : 'Transfer Report', files: [pdfFile] })
+            } catch (error) {
+                if (error.name !== 'AbortError') doc.save(filename)
+            }
+        } else {
+            doc.save(filename)
+        }
+    }
+
+    const toggleExcessItem = (item) => {
+        const key = `${item.bet_type}|${item.numbers}`
+        setSelectedExcessItems(prev => ({
+            ...prev,
+            [key]: !prev[key]
+        }))
+    }
+
+    // Select/Deselect all excess items
+    const toggleSelectAll = () => {
+        const allSelected = excessItems.every(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+        if (allSelected) {
+            setSelectedExcessItems({})
+        } else {
+            const newSelected = {}
+            excessItems.forEach(item => {
+                newSelected[`${item.bet_type}|${item.numbers}`] = true
+            })
+            setSelectedExcessItems(newSelected)
+        }
+    }
+
+    // Get selected excess items count
+    const selectedCount = excessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`]).length
+    const selectedTotalExcess = excessItems
+        .filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+        .reduce((sum, item) => sum + item.excess, 0)
+
+    // Handle bulk transfer
+    const handleOpenBulkTransfer = () => {
+        if (selectedCount === 0) {
+            toast.warning('กรุณาเลือกรายการที่ต้องการตีออก')
+            return
+        }
+        setSelectedUpstreamDealer(null)
+        setBulkTransferForm({
+            target_dealer_name: '',
+            target_dealer_contact: '',
+            notes: ''
+        })
+        setShowBulkTransferModal(true)
+    }
+
+    const handleSaveBulkTransfer = async () => {
+        if (!bulkTransferForm.target_dealer_name) {
+            toast.warning('กรุณากรอกชื่อเจ้ามือที่ต้องการตีออก')
+            return
+        }
+
+        setSavingTransfer(true)
+        try {
+            // Get all selected items
+            const selectedItems = excessItems.filter(item =>
+                selectedExcessItems[`${item.bet_type}|${item.numbers}`]
+            )
+
+            // Generate a batch ID for this transfer session
+            const batchId = generateBatchId()
+
+            let targetRoundId = null
+            let createdSubmissionIds = []
+
+            // If linked dealer, try to create submissions in their round
+            if (selectedUpstreamDealer?.is_linked && selectedUpstreamDealer?.upstream_dealer_id) {
+                const upstreamRound = await findUpstreamRound(selectedUpstreamDealer.upstream_dealer_id)
+                
+                if (upstreamRound) {
+                    targetRoundId = upstreamRound.id
+                    
+                    // Create submissions in upstream dealer's round
+                    const submissionRecords = selectedItems.map(item => ({
+                        round_id: upstreamRound.id,
+                        user_id: user.id,
+                        bet_type: item.bet_type,
+                        numbers: item.numbers,
+                        amount: item.excess,
+                        commission_rate: 0,
+                        commission_amount: 0
+                    }))
+
+                    const { data: newSubmissions, error: subError } = await supabase
+                        .from('submissions')
+                        .insert(submissionRecords)
+                        .select('id')
+
+                    if (!subError && newSubmissions) {
+                        createdSubmissionIds = newSubmissions.map(s => s.id)
+                    } else {
+                        console.warn('Could not create submissions in upstream round:', subError)
+                    }
+                }
+            }
+
+            // Create batch transfer records with same batch ID
+            const transferRecords = selectedItems.map((item, index) => ({
+                round_id: round.id,
+                bet_type: item.bet_type,
+                numbers: item.numbers,
+                amount: item.excess,
+                target_dealer_name: bulkTransferForm.target_dealer_name,
+                target_dealer_contact: bulkTransferForm.target_dealer_contact,
+                notes: bulkTransferForm.notes,
+                transfer_batch_id: batchId,
+                upstream_dealer_id: selectedUpstreamDealer?.upstream_dealer_id || null,
+                is_linked: selectedUpstreamDealer?.is_linked || false,
+                target_round_id: targetRoundId,
+                target_submission_id: createdSubmissionIds[index] || null
+            }))
+
+            const { error } = await supabase
+                .from('bet_transfers')
+                .insert(transferRecords)
+
+            if (error) throw error
+
+            // Update pending deduction for upstream dealer's credit (if linked)
+            // Only the RECEIVING dealer (upstream) should have their credit affected
+            if (createdSubmissionIds.length > 0 && selectedUpstreamDealer?.upstream_dealer_id) {
+                try {
+                    await updatePendingDeduction(selectedUpstreamDealer.upstream_dealer_id)
+                    console.log('Upstream dealer pending deduction updated')
+                } catch (err) {
+                    console.log('Error updating upstream pending deduction:', err)
+                }
+            }
+            
+            // NOTE: Do NOT update current dealer's pending deduction when transferring OUT
+            // The dealer who transfers OUT does not get charged - only the RECEIVING dealer does
+            // Just refresh the credit display
+            await fetchDealerCredit()
+
+            // Refresh data and reset selection
+            await fetchAllData()
+            setSelectedExcessItems({})
+            setShowBulkTransferModal(false)
+            setSelectedUpstreamDealer(null)
+
+            // Show success message
+            if (createdSubmissionIds.length > 0) {
+                toast.success(`ตีออกสำเร็จ ${selectedItems.length} รายการ! เลขถูกส่งไปยังงวดของ ${bulkTransferForm.target_dealer_name} แล้ว`)
+            } else {
+                toast.success(`ตีออกสำเร็จ ${selectedItems.length} รายการ!`)
+            }
+        } catch (error) {
+            console.error('Error saving bulk transfer:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setSavingTransfer(false)
+        }
+    }
+
+    // Extract unique users from submissions
+    const uniqueUsers = [...new Map(
+        submissions.map(s => [s.user_id, {
+            id: s.user_id,
+            name: s.profiles?.full_name || 'ไม่ระบุ',
+            email: s.profiles?.email || ''
+        }])
+    ).values()]
+
+    // Filter by user first
+    const userFilteredSubmissions = selectedUser === 'all'
+        ? submissions
+        : submissions.filter(s => s.user_id === selectedUser)
+
+    // Then filter by bet type
+    const filteredSubmissions = betTypeFilter === 'all'
+        ? userFilteredSubmissions
+        : userFilteredSubmissions.filter(s => s.bet_type === betTypeFilter)
+
+    // Group by bet type for summary (based on user-filtered submissions)
+    const summaryByType = userFilteredSubmissions.reduce((acc, sub) => {
+        if (!acc[sub.bet_type]) {
+            acc[sub.bet_type] = { count: 0, amount: 0 }
+        }
+        acc[sub.bet_type].count++
+        acc[sub.bet_type].amount += sub.amount
+        return acc
+    }, {})
+
+    const totalAmount = userFilteredSubmissions.reduce((sum, s) => sum + (s.amount || 0), 0)
+    const totalExcess = excessItems.reduce((sum, item) => sum + item.excess, 0)
+    const totalTransferred = transfers.reduce((sum, t) => sum + (t.amount || 0), 0)
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal modal-xl" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                    <h3><FiEye /> รายการที่ส่งเข้ามา - {round.lottery_name}</h3>
+                    <button className="modal-close" onClick={onClose}>
+                        <FiX />
+                    </button>
+                </div>
+
+                {/* Tabs */}
+                <div className="modal-tabs">
+                    <button
+                        className={`modal-tab-btn ${activeTab === 'total' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('total')}
+                    >
+                        ยอดรวม
+                    </button>
+                    <button
+                        className={`modal-tab-btn ${activeTab === 'excess' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('excess')}
+                    >
+                        ยอดเกิน {excessItems.length > 0 && <span className="tab-badge">{excessItems.length}</span>}
+                    </button>
+                    <button
+                        className={`modal-tab-btn ${activeTab === 'transferred' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('transferred')}
+                    >
+                        ยอดตีออก {transfers.length > 0 && <span className="tab-badge">{transfers.length}</span>}
+                    </button>
+                </div>
+
+                <div className="modal-body">
+                    {loading ? (
+                        <div className="loading-state">
+                            <div className="spinner"></div>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Tab: ยอดรวม (Total) */}
+                            {activeTab === 'total' && (
+                                <>
+                                    {/* Summary - Only Total Amount */}
+                                    <div className="summary-grid">
+                                        <div className="summary-card highlight">
+                                            <span className="summary-value">
+                                                {round.currency_symbol}{totalAmount.toLocaleString()}
+                                            </span>
+                                            <span className="summary-label">ยอดรวม</span>
+                                        </div>
+                                    </div>
+
+                                    {/* User Filter */}
+                                    <div className="filter-section">
+                                        <label className="filter-label"><FiUser /> เลือกผู้ส่ง:</label>
+                                        <div className="filter-row">
+                                            <button
+                                                className={`filter-btn ${selectedUser === 'all' ? 'active' : ''}`}
+                                                onClick={() => setSelectedUser('all')}
+                                            >
+                                                ทั้งหมด ({submissions.length})
+                                            </button>
+                                            {uniqueUsers.map(user => {
+                                                const userCount = submissions.filter(s => s.user_id === user.id).length
+                                                return (
+                                                    <button
+                                                        key={user.id}
+                                                        className={`filter-btn ${selectedUser === user.id ? 'active' : ''}`}
+                                                        onClick={() => setSelectedUser(user.id)}
+                                                        title={user.email}
+                                                    >
+                                                        {user.name} ({userCount})
+                                                    </button>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {/* Bet Type Filter */}
+                                    <div className="filter-section">
+                                        <label className="filter-label"><FiGrid /> ประเภท:</label>
+                                        <div className="filter-row">
+                                            <button
+                                                className={`filter-btn ${betTypeFilter === 'all' ? 'active' : ''}`}
+                                                onClick={() => setBetTypeFilter('all')}
+                                            >
+                                                ทั้งหมด
+                                            </button>
+                                            {Object.entries(summaryByType).map(([key, data]) => (
+                                                <button
+                                                    key={key}
+                                                    className={`filter-btn ${betTypeFilter === key ? 'active' : ''}`}
+                                                    onClick={() => setBetTypeFilter(key)}
+                                                >
+                                                    {BET_TYPES[key]} ({data.count})
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Table */}
+                                    {filteredSubmissions.length === 0 ? (
+                                        <div className="empty-state">
+                                            <p>ไม่มีรายการ</p>
+                                        </div>
+                                    ) : (
+                                        <div className="table-wrap">
+                                            <table className="data-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>ประเภท</th>
+                                                        <th>เลข</th>
+                                                        <th>จำนวน</th>
+                                                        <th>เวลา</th>
+                                                        <th>สถานะ</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {filteredSubmissions.map(sub => (
+                                                        <tr key={sub.id} className={sub.is_winner ? 'winner-row' : ''}>
+                                                            <td>
+                                                                <span className="type-badge">{BET_TYPES[sub.bet_type]}</span>
+                                                            </td>
+                                                            <td className="number-cell">{sub.numbers}</td>
+                                                            <td>{round.currency_symbol}{sub.amount?.toLocaleString()}</td>
+                                                            <td className="time-cell">
+                                                                {new Date(sub.created_at).toLocaleTimeString('th-TH', {
+                                                                    hour: '2-digit',
+                                                                    minute: '2-digit'
+                                                                })}
+                                                            </td>
+                                                            <td>
+                                                                {round.is_result_announced ? (
+                                                                    sub.is_winner ? (
+                                                                        <span className="status-badge won"><FiCheck /> ถูกรางวัล</span>
+                                                                    ) : (
+                                                                        <span className="status-badge lost">ไม่ถูก</span>
+                                                                    )
+                                                                ) : (
+                                                                    <span className="status-badge pending">รอผล</span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+
+                            {/* Tab: ยอดเกิน (Excess) */}
+                            {activeTab === 'excess' && (
+                                <>
+                                    {/* Summary */}
+                                    <div className="summary-grid">
+                                        <div className="summary-card warning">
+                                            <span className="summary-value">
+                                                {round.currency_symbol}{totalExcess.toLocaleString()}
+                                            </span>
+                                            <span className="summary-label">ยอดเกินรวม</span>
+                                        </div>
+                                        {selectedCount > 0 && (
+                                            <div className="summary-card">
+                                                <span className="summary-value">
+                                                    {round.currency_symbol}{selectedTotalExcess.toLocaleString()}
+                                                </span>
+                                                <span className="summary-label">เลือกแล้ว ({selectedCount})</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {excessItems.length === 0 ? (
+                                        <div className="empty-state">
+                                            <FiCheck style={{ fontSize: '2rem', color: 'var(--color-success)', marginBottom: '0.5rem' }} />
+                                            <p>ไม่มีเลขที่เกินค่าอั้น</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {/* Bulk Actions */}
+                                            <div className="bulk-actions">
+                                                <label className="checkbox-container">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={excessItems.length > 0 && excessItems.every(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])}
+                                                        onChange={toggleSelectAll}
+                                                    />
+                                                    <span className="checkmark"></span>
+                                                    เลือกทั้งหมด ({excessItems.length})
+                                                </label>
+                                                <button
+                                                    className="btn btn-warning"
+                                                    onClick={handleOpenBulkTransfer}
+                                                    disabled={selectedCount === 0}
+                                                >
+                                                    <FiSend /> ตีออกที่เลือก ({selectedCount})
+                                                </button>
+                                            </div>
+
+                                            <div className="excess-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                                {excessItems.map((item, idx) => {
+                                                    const isSelected = selectedExcessItems[`${item.bet_type}|${item.numbers}`]
+                                                    return (
+                                                        <div 
+                                                            key={idx} 
+                                                            className={`excess-card ${isSelected ? 'selected' : ''}`}
+                                                            onClick={() => toggleExcessItem(item)}
+                                                            style={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '0.75rem',
+                                                                padding: '0.75rem 1rem',
+                                                                background: isSelected ? 'rgba(255, 193, 7, 0.15)' : 'var(--color-surface)',
+                                                                border: isSelected ? '2px solid var(--color-warning)' : '1px solid var(--color-border)',
+                                                                borderRadius: '8px',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                        >
+                                                            <input 
+                                                                type="checkbox" 
+                                                                checked={isSelected || false} 
+                                                                onChange={() => {}} 
+                                                                style={{ width: '18px', height: '18px', accentColor: 'var(--color-warning)', flexShrink: 0 }} 
+                                                            />
+                                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                                                                    <span className="type-badge">{BET_TYPES[item.bet_type]}</span>
+                                                                    <span style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: '1.1rem' }}>{item.numbers}</span>
+                                                                </div>
+                                                                <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', color: 'var(--color-text-muted)', flexWrap: 'wrap' }}>
+                                                                    <span>ยอด: {item.isSetBased ? `${item.setCount} ชุด` : `${round.currency_symbol}${item.total.toLocaleString()}`}</span>
+                                                                    <span>อั้น: {item.isSetBased ? `${item.limit} ชุด` : `${round.currency_symbol}${item.limit.toLocaleString()}`}</span>
+                                                                </div>
+                                                            </div>
+                                                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                                                <div style={{ color: 'var(--color-warning)', fontWeight: 600, fontSize: '1rem' }}>
+                                                                    {item.isSetBased ? `${item.excess} ชุด` : `${round.currency_symbol}${item.excess.toLocaleString()}`}
+                                                                </div>
+                                                                <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>เกิน</div>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        </>
+                                    )}
+                                </>
+                            )}
+
+                            {/* Tab: ยอดตีออก (Transferred) */}
+                            {activeTab === 'transferred' && (
+                                <>
+                                    {/* Summary */}
+                                    <div className="summary-grid">
+                                        <div className="summary-card">
+                                            <span className="summary-value">
+                                                {round.currency_symbol}{totalTransferred.toLocaleString()}
+                                            </span>
+                                            <span className="summary-label">ตีออกรวม</span>
+                                        </div>
+                                        {selectedBatch !== 'all' && (
+                                            <div className="summary-card highlight">
+                                                <span className="summary-value">
+                                                    {round.currency_symbol}{filteredTransfers.reduce((sum, t) => sum + (t.amount || 0), 0).toLocaleString()}
+                                                </span>
+                                                <span className="summary-label">
+                                                    ครั้งที่ {uniqueBatches.indexOf(selectedBatch) + 1} ({filteredTransfers.length} รายการ)
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Batch Filter */}
+                                    {uniqueBatches.length >= 1 && (
+                                        <div className="filter-section">
+                                            <label className="filter-label"><FiClock /> ดูตาม:</label>
+                                            <div className="filter-row">
+                                                <button
+                                                    className={`filter-btn ${selectedBatch === 'all' ? 'active' : ''}`}
+                                                    onClick={() => setSelectedBatch('all')}
+                                                >
+                                                    ทั้งหมด ({transfers.length})
+                                                </button>
+                                                {uniqueBatches.map((batchId, idx) => {
+                                                    const batchCount = transfers.filter(t => t.transfer_batch_id === batchId).length
+                                                    const batchTime = transfers.find(t => t.transfer_batch_id === batchId)?.created_at
+                                                    return (
+                                                        <button
+                                                            key={batchId}
+                                                            className={`filter-btn ${selectedBatch === batchId ? 'active' : ''}`}
+                                                            onClick={() => setSelectedBatch(batchId)}
+                                                        >
+                                                            ครั้งที่ {idx + 1} ({batchCount})
+                                                        </button>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Action Buttons */}
+                                    {filteredTransfers.length > 0 && (
+                                        <div className="transfer-actions">
+                                            <div className="action-group">
+                                                <button
+                                                    className="btn btn-outline"
+                                                    onClick={handleCopyTransfers}
+                                                >
+                                                    <FiCopy /> คัดลอก
+                                                </button>
+                                                <button
+                                                    className="btn btn-outline"
+                                                    onClick={handleShareTransfers}
+                                                >
+                                                    <FiShare2 /> แชร์ PDF
+                                                </button>
+                                            </div>
+                                            <button
+                                                className="btn btn-danger"
+                                                onClick={handleUndoTransfer}
+                                            >
+                                                <FiRotateCcw /> เอาคืน{selectedBatch === 'all' ? 'ทั้งหมด' : 'ครั้งนี้'} ({filteredTransfers.length})
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {filteredTransfers.length === 0 ? (
+                                        <div className="empty-state">
+                                            <p>ยังไม่มีรายการตีออก</p>
+                                        </div>
+                                    ) : (
+                                        <div className="table-wrap">
+                                            <table className="data-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>ประเภท</th>
+                                                        <th>เลข</th>
+                                                        <th>จำนวน</th>
+                                                        <th>ตีออกให้</th>
+                                                        <th>เวลา</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {filteredTransfers.map(transfer => (
+                                                        <tr key={transfer.id}>
+                                                            <td>
+                                                                <span className="type-badge">{BET_TYPES[transfer.bet_type]}</span>
+                                                            </td>
+                                                            <td className="number-cell">{transfer.numbers}</td>
+                                                            <td>{round.currency_symbol}{transfer.amount?.toLocaleString()}</td>
+                                                            <td>
+                                                                <div className="dealer-info">
+                                                                    <span>{transfer.target_dealer_name}</span>
+                                                                    {transfer.target_dealer_contact && (
+                                                                        <small>{transfer.target_dealer_contact}</small>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                            <td className="time-cell">
+                                                                {new Date(transfer.created_at).toLocaleTimeString('th-TH', {
+                                                                    hour: '2-digit',
+                                                                    minute: '2-digit'
+                                                                })}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </>
+                    )}
+                </div>
+            </div>
+
+            {/* Transfer Modal */}
+            {showTransferModal && transferTarget && (
+                <div className="modal-overlay nested" onClick={() => setShowTransferModal(false)}>
+                    <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h3><FiShare2 /> QR Code ของฉัน</h3>
-                            <button className="modal-close" onClick={() => setShowQRModal(false)}>
+                            <h3><FiSend /> ตีออกเลข</h3>
+                            <button className="modal-close" onClick={() => setShowTransferModal(false)}>
                                 <FiX />
                             </button>
                         </div>
-                        <div className="modal-body" style={{ textAlign: 'center', padding: '2rem' }}>
-                            <div style={{
-                                background: '#fff',
-                                padding: '1.5rem',
-                                borderRadius: '12px',
-                                display: 'inline-block',
-                                marginBottom: '1.5rem'
-                            }}>
-                                <QRCode
-                                    value={`${window.location.origin}/register?ref=${user?.id}`}
-                                    size={200}
-                                    style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                        <div className="modal-body">
+                            <div className="transfer-info">
+                                <span className="type-badge">{BET_TYPES[transferTarget.bet_type]}</span>
+                                <span className="transfer-number">{transferTarget.numbers}</span>
+                                <span className="transfer-excess">
+                                    ยอดเกิน: {round.currency_symbol}{transferTarget.excess.toLocaleString()}
+                                </span>
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">จำนวนที่ต้องการตีออก</label>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    value={transferForm.amount}
+                                    onChange={e => setTransferForm({ ...transferForm, amount: parseFloat(e.target.value) || 0 })}
+                                    max={transferTarget.excess}
                                 />
                             </div>
-                            <p style={{ marginBottom: '1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
-                                ส่ง QR Code หรือลิงก์นี้ให้สมาชิกเพื่อเข้ากลุ่มของคุณ
-                            </p>
-                            <div style={{
-                                background: 'var(--color-surface-alt)',
-                                padding: '0.75rem 1rem',
-                                borderRadius: '8px',
-                                fontSize: '0.85rem',
-                                wordBreak: 'break-all',
-                                marginBottom: '1rem',
-                                border: '1px solid var(--color-border)'
-                            }}>
-                                {`${window.location.origin}/register?ref=${user?.id}`}
+
+                            {/* Upstream Dealer Selection */}
+                            {upstreamDealers.length > 0 && (
+                                <div className="form-group">
+                                    <label className="form-label">เลือกเจ้ามือตีออก</label>
+                                    <div className="upstream-dealer-select">
+                                        <button
+                                            type="button"
+                                            className={`dealer-select-btn ${!selectedUpstreamDealer ? 'active' : ''}`}
+                                            onClick={() => handleSelectUpstreamDealer(null)}
+                                        >
+                                            <FiEdit2 /> กรอกเอง
+                                        </button>
+                                        {upstreamDealers.map(dealer => (
+                                            <button
+                                                key={dealer.id}
+                                                type="button"
+                                                className={`dealer-select-btn ${selectedUpstreamDealer?.id === dealer.id ? 'active' : ''} ${dealer.is_linked ? 'linked' : ''}`}
+                                                onClick={() => handleSelectUpstreamDealer(dealer)}
+                                            >
+                                                {dealer.is_linked && <FiCheck style={{ color: 'var(--color-success)' }} />}
+                                                {dealer.upstream_name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {selectedUpstreamDealer?.is_linked && (
+                                        <>
+                                            {upstreamRoundStatus === 'checking' && (
+                                                <p className="form-hint" style={{ color: 'var(--color-text-muted)' }}>
+                                                    กำลังตรวจสอบงวดหวย...
+                                                </p>
+                                            )}
+                                            {upstreamRoundStatus === 'available' && (
+                                                <p className="form-hint success">
+                                                    <FiCheck /> เจ้ามือมีงวดหวยเปิดรับอยู่ - เลขจะถูกส่งไปโดยอัตโนมัติ
+                                                </p>
+                                            )}
+                                            {upstreamRoundStatus === 'unavailable' && (
+                                                <p className="form-hint" style={{ color: 'var(--color-danger)' }}>
+                                                    <FiX /> เจ้ามือไม่มีงวดหวยประเภทนี้เปิดรับอยู่
+                                                </p>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="form-group">
+                                <label className="form-label">ตีออกไปให้ (ชื่อเจ้ามือ/ร้าน) *</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    placeholder="เช่น ร้านโชคดี"
+                                    value={transferForm.target_dealer_name}
+                                    onChange={e => setTransferForm({ ...transferForm, target_dealer_name: e.target.value })}
+                                    disabled={selectedUpstreamDealer !== null}
+                                />
                             </div>
+
+                            <div className="form-group">
+                                <label className="form-label">เบอร์โทร / Line ID (ไม่บังคับ)</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    placeholder="เช่น 08x-xxx-xxxx"
+                                    value={transferForm.target_dealer_contact}
+                                    onChange={e => setTransferForm({ ...transferForm, target_dealer_contact: e.target.value })}
+                                    disabled={selectedUpstreamDealer !== null}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">หมายเหตุ</label>
+                                <textarea
+                                    className="form-input"
+                                    rows="2"
+                                    placeholder="หมายเหตุเพิ่มเติม (ไม่บังคับ)"
+                                    value={transferForm.notes}
+                                    onChange={e => setTransferForm({ ...transferForm, notes: e.target.value })}
+                                />
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => setShowTransferModal(false)}
+                                disabled={savingTransfer}
+                            >
+                                ยกเลิก
+                            </button>
                             <button
                                 className="btn btn-primary"
-                                onClick={() => {
-                                    navigator.clipboard.writeText(`${window.location.origin}/register?ref=${user?.id}`)
-                                    toast.success('คัดลอกลิงก์แล้ว!')
-                                }}
-                                style={{ width: '100%' }}
+                                onClick={handleSaveTransfer}
+                                disabled={savingTransfer || !transferForm.amount || !transferForm.target_dealer_name || (selectedUpstreamDealer?.is_linked && upstreamRoundStatus === 'unavailable') || upstreamRoundStatus === 'checking'}
                             >
-                                <FiCopy /> คัดลอกลิงก์
+                                {savingTransfer ? 'กำลังบันทึก...' : (selectedUpstreamDealer?.is_linked && upstreamRoundStatus === 'unavailable') ? 'ไม่มีงวดหวยตรงกัน' : '✓ บันทึก'}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* QR Scanner Modal */}
-            {showScannerModal && (
-                <QRScannerModal
-                    onClose={() => setShowScannerModal(false)}
-                    onScanSuccess={(result) => {
-                        setShowScannerModal(false)
-                        if (result.includes('/register?ref=') || result.includes('/dealer-connect?ref=')) {
-                            window.location.href = result
-                        } else {
-                            toast.error('QR Code ไม่ถูกต้อง')
-                        }
-                    }}
-                />
-            )}
-
-            {/* Renew Membership Modal */}
-            {showRenewModal && renewMember && (
-                <div className="modal-overlay" onClick={() => setShowRenewModal(false)} style={{ zIndex: 9999 }}>
-                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+            {/* Bulk Transfer Modal */}
+            {showBulkTransferModal && (
+                <div className="modal-overlay nested" onClick={() => setShowBulkTransferModal(false)}>
+                    <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h3><FiRefreshCw /> ต่ออายุสมาชิก</h3>
-                            <button className="modal-close" onClick={() => setShowRenewModal(false)}>
+                            <h3><FiSend /> ตีออกหลายรายการ</h3>
+                            <button className="modal-close" onClick={() => setShowBulkTransferModal(false)}>
                                 <FiX />
                             </button>
                         </div>
                         <div className="modal-body">
-                            <div style={{
-                                padding: '1rem',
-                                background: 'var(--color-surface-light)',
-                                borderRadius: 'var(--radius-md)',
-                                marginBottom: '1rem'
-                            }}>
-                                <div style={{ fontWeight: 600, fontSize: '1.1rem', marginBottom: '0.5rem' }}>
-                                    {renewMember.full_name || renewMember.email}
+                            <div className="bulk-transfer-summary">
+                                <div className="bulk-summary-item">
+                                    <span className="bulk-summary-label">จำนวนรายการ:</span>
+                                    <span className="bulk-summary-value">{selectedCount} รายการ</span>
                                 </div>
-                                <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-                                    {renewMember.email}
+                                <div className="bulk-summary-item">
+                                    <span className="bulk-summary-label">ยอดรวม:</span>
+                                    <span className="bulk-summary-value text-warning">
+                                        {round.currency_symbol}{selectedTotalExcess.toLocaleString()}
+                                    </span>
                                 </div>
-                                {renewMember.membership_expires_at && (
-                                    <div style={{
-                                        marginTop: '0.5rem',
-                                        fontSize: '0.85rem',
-                                        color: new Date(renewMember.membership_expires_at) < new Date() ? 'var(--color-error)' : 'var(--color-text-muted)'
+                            </div>
+
+                            {/* Upstream Dealer Selection */}
+                            {upstreamDealers.length > 0 && (
+                                <div className="form-group">
+                                    <label className="form-label">เลือกเจ้ามือตีออก</label>
+                                    <div className="upstream-dealer-select">
+                                        <button
+                                            type="button"
+                                            className={`dealer-select-btn ${!selectedUpstreamDealer ? 'active' : ''}`}
+                                            onClick={() => {
+                                                setSelectedUpstreamDealer(null)
+                                                setBulkTransferForm({ ...bulkTransferForm, target_dealer_name: '', target_dealer_contact: '' })
+                                            }}
+                                        >
+                                            <FiEdit2 /> กรอกเอง
+                                        </button>
+                                        {upstreamDealers.map(dealer => (
+                                            <button
+                                                key={dealer.id}
+                                                type="button"
+                                                className={`dealer-select-btn ${selectedUpstreamDealer?.id === dealer.id ? 'active' : ''} ${dealer.is_linked ? 'linked' : ''}`}
+                                                onClick={() => {
+                                                    handleSelectUpstreamDealer(dealer)
+                                                    setBulkTransferForm({
+                                                        ...bulkTransferForm,
+                                                        target_dealer_name: dealer.upstream_name,
+                                                        target_dealer_contact: dealer.upstream_contact || ''
+                                                    })
+                                                }}
+                                            >
+                                                {dealer.is_linked && <FiCheck style={{ color: 'var(--color-success)' }} />}
+                                                {dealer.upstream_name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {selectedUpstreamDealer?.is_linked && (
+                                        <>
+                                            {upstreamRoundStatus === 'checking' && (
+                                                <p className="form-hint" style={{ color: 'var(--color-text-muted)' }}>
+                                                    กำลังตรวจสอบงวดหวย...
+                                                </p>
+                                            )}
+                                            {upstreamRoundStatus === 'available' && (
+                                                <p className="form-hint success">
+                                                    <FiCheck /> เจ้ามือมีงวดหวยเปิดรับอยู่ - เลขจะถูกส่งไปโดยอัตโนมัติ
+                                                </p>
+                                            )}
+                                            {upstreamRoundStatus === 'unavailable' && (
+                                                <p className="form-hint" style={{ color: 'var(--color-danger)' }}>
+                                                    <FiX /> เจ้ามือไม่มีงวดหวยประเภทนี้เปิดรับอยู่
+                                                </p>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="form-group">
+                                <label className="form-label">ชื่อเจ้ามือที่ตีออก *</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    placeholder="ชื่อเจ้ามือรับ"
+                                    value={bulkTransferForm.target_dealer_name}
+                                    onChange={e => setBulkTransferForm({ ...bulkTransferForm, target_dealer_name: e.target.value })}
+                                    disabled={selectedUpstreamDealer !== null}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">เบอร์ติดต่อ</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    placeholder="เบอร์โทร/Line ID (ไม่บังคับ)"
+                                    value={bulkTransferForm.target_dealer_contact}
+                                    onChange={e => setBulkTransferForm({ ...bulkTransferForm, target_dealer_contact: e.target.value })}
+                                    disabled={selectedUpstreamDealer !== null}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">หมายเหตุ</label>
+                                <textarea
+                                    className="form-input"
+                                    rows="2"
+                                    placeholder="หมายเหตุเพิ่มเติม (ไม่บังคับ)"
+                                    value={bulkTransferForm.notes}
+                                    onChange={e => setBulkTransferForm({ ...bulkTransferForm, notes: e.target.value })}
+                                />
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => setShowBulkTransferModal(false)}
+                                disabled={savingTransfer}
+                            >
+                                ยกเลิก
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleSaveBulkTransfer}
+                                disabled={savingTransfer || !bulkTransferForm.target_dealer_name || (selectedUpstreamDealer?.is_linked && upstreamRoundStatus === 'unavailable') || upstreamRoundStatus === 'checking'}
+                            >
+                                {savingTransfer ? 'กำลังบันทึก...' : (selectedUpstreamDealer?.is_linked && upstreamRoundStatus === 'unavailable') ? 'ไม่มีงวดหวยตรงกัน' : `✓ ตีออก ${selectedCount} รายการ`}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// Dealer Profile Tab Component
+function DealerProfileTab({ user, profile, subscription, formatDate }) {
+    const [isEditing, setIsEditing] = useState(false)
+    const [saving, setSaving] = useState(false)
+    const [bankAccounts, setBankAccounts] = useState([])
+    const [loadingBanks, setLoadingBanks] = useState(true)
+    const [showAddBankModal, setShowAddBankModal] = useState(false)
+    const [editingBank, setEditingBank] = useState(null)
+    const [toast, setToast] = useState(null)
+    const [showPasswordModal, setShowPasswordModal] = useState(false)
+
+    // Local profile data
+    const [profileData, setProfileData] = useState({
+        full_name: profile?.full_name || '',
+        phone: profile?.phone || '',
+        role: profile?.role || 'dealer'
+    })
+    const [formData, setFormData] = useState({
+        full_name: profile?.full_name || '',
+        phone: profile?.phone || ''
+    })
+
+    // Bank form data
+    const [bankFormData, setBankFormData] = useState({
+        bank_name: '',
+        bank_account: '',
+        account_name: '',
+        is_default: false
+    })
+
+    const bankOptions = [
+        'ธนาคารกรุงเทพ',
+        'ธนาคารกสิกรไทย',
+        'ธนาคารกรุงไทย',
+        'ธนาคารไทยพาณิชย์',
+        'ธนาคารกรุงศรีอยุธยา',
+        'ธนาคารทหารไทยธนชาต',
+        'ธนาคารออมสิน',
+        'ธนาคารเพื่อการเกษตรฯ (ธกส.)',
+        'ธนาคารอาคารสงเคราะห์',
+        'ธนาคารซีไอเอ็มบี',
+        'ธนาคารยูโอบี',
+        'ธนาคารแลนด์ แอนด์ เฮ้าส์',
+        'ธนาคารเกียรตินาคินภัทร',
+        'อื่นๆ'
+    ]
+
+    // Update local state when profile prop changes
+    useEffect(() => {
+        if (profile) {
+            setProfileData({
+                full_name: profile.full_name || '',
+                phone: profile.phone || '',
+                role: profile.role || 'dealer'
+            })
+            setFormData({
+                full_name: profile.full_name || '',
+                phone: profile.phone || ''
+            })
+        }
+    }, [profile])
+
+    // Fetch bank accounts on mount
+    useEffect(() => {
+        fetchBankAccounts()
+    }, [user?.id])
+
+    // Auto-hide toast
+    useEffect(() => {
+        if (toast) {
+            const timer = setTimeout(() => setToast(null), 3000)
+            return () => clearTimeout(timer)
+        }
+    }, [toast])
+
+    async function fetchBankAccounts() {
+        if (!user?.id) return
+        setLoadingBanks(true)
+        try {
+            const { data, error } = await supabase
+                .from('dealer_bank_accounts')
+                .select('*')
+                .eq('dealer_id', user.id)
+                .order('is_default', { ascending: false })
+                .order('created_at', { ascending: true })
+
+            if (!error) {
+                setBankAccounts(data || [])
+            }
+        } catch (error) {
+            console.error('Error fetching bank accounts:', error)
+        } finally {
+            setLoadingBanks(false)
+        }
+    }
+
+    // Save profile changes
+    async function handleSaveProfile() {
+        setSaving(true)
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .update({
+                    full_name: formData.full_name,
+                    phone: formData.phone
+                })
+                .eq('id', user.id)
+
+            if (error) throw error
+
+            setProfileData({
+                ...profileData,
+                full_name: formData.full_name,
+                phone: formData.phone
+            })
+
+            setIsEditing(false)
+            setToast({ type: 'success', message: 'บันทึกข้อมูลสำเร็จ!' })
+        } catch (error) {
+            console.error('Error saving profile:', error)
+            setToast({ type: 'error', message: 'เกิดข้อผิดพลาด: ' + error.message })
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    // Add or update bank account
+    async function handleSaveBank() {
+        setSaving(true)
+        try {
+            if (editingBank) {
+                // Update existing
+                const { error } = await supabase
+                    .from('dealer_bank_accounts')
+                    .update({
+                        bank_name: bankFormData.bank_name,
+                        bank_account: bankFormData.bank_account,
+                        account_name: bankFormData.account_name,
+                        is_default: bankFormData.is_default
+                    })
+                    .eq('id', editingBank.id)
+
+                if (error) throw error
+                setToast({ type: 'success', message: 'แก้ไขบัญชีสำเร็จ!' })
+            } else {
+                // Insert new - set as default if first account
+                const isFirst = bankAccounts.length === 0
+                const { error } = await supabase
+                    .from('dealer_bank_accounts')
+                    .insert({
+                        dealer_id: user.id,
+                        bank_name: bankFormData.bank_name,
+                        bank_account: bankFormData.bank_account,
+                        account_name: bankFormData.account_name,
+                        is_default: isFirst ? true : bankFormData.is_default
+                    })
+
+                if (error) throw error
+                setToast({ type: 'success', message: 'เพิ่มบัญชีสำเร็จ!' })
+            }
+
+            setShowAddBankModal(false)
+            setEditingBank(null)
+            setBankFormData({ bank_name: '', bank_account: '', account_name: '', is_default: false })
+            fetchBankAccounts()
+        } catch (error) {
+            console.error('Error saving bank:', error)
+            setToast({ type: 'error', message: 'เกิดข้อผิดพลาด: ' + error.message })
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    // Delete bank account
+    async function handleDeleteBank(bankId) {
+        if (!confirm('ต้องการลบบัญชีนี้?')) return
+
+        try {
+            const { error } = await supabase
+                .from('dealer_bank_accounts')
+                .delete()
+                .eq('id', bankId)
+
+            if (error) throw error
+            setToast({ type: 'success', message: 'ลบบัญชีสำเร็จ!' })
+            fetchBankAccounts()
+        } catch (error) {
+            console.error('Error deleting bank:', error)
+            setToast({ type: 'error', message: 'เกิดข้อผิดพลาด: ' + error.message })
+        }
+    }
+
+    // Set as default
+    async function handleSetDefault(bankId) {
+        try {
+            const { error } = await supabase
+                .from('dealer_bank_accounts')
+                .update({ is_default: true })
+                .eq('id', bankId)
+
+            if (error) throw error
+            setToast({ type: 'success', message: 'ตั้งเป็นค่าเริ่มต้นสำเร็จ!' })
+            fetchBankAccounts()
+        } catch (error) {
+            console.error('Error setting default:', error)
+            setToast({ type: 'error', message: 'เกิดข้อผิดพลาด: ' + error.message })
+        }
+    }
+
+    // Open edit modal
+    function openEditBank(bank) {
+        setEditingBank(bank)
+        setBankFormData({
+            bank_name: bank.bank_name,
+            bank_account: bank.bank_account,
+            account_name: bank.account_name || '',
+            is_default: bank.is_default
+        })
+        setShowAddBankModal(true)
+    }
+
+    // Open add modal
+    function openAddBank() {
+        setEditingBank(null)
+        setBankFormData({ bank_name: '', bank_account: '', account_name: '', is_default: false })
+        setShowAddBankModal(true)
+    }
+
+    return (
+        <div className="profile-section">
+            {/* Profile Header Card */}
+            <div className="profile-card card">
+                <div className="profile-header">
+                    <div className="profile-avatar">
+                        <FiUser />
+                    </div>
+                    <div className="profile-info">
+                        <h2>{profileData.full_name || 'ไม่ระบุชื่อ'}</h2>
+                        <p className="email">{user?.email}</p>
+                        <div className="profile-badges">
+                            <span className={`role-badge role-${profileData.role}`}>
+                                {profileData.role === 'dealer' ? 'เจ้ามือ' :
+                                    profileData.role === 'superadmin' ? 'Admin' : 'สมาชิก'}
+                            </span>
+                        </div>
+                    </div>
+                    {!isEditing && (
+                        <button
+                            className="btn btn-outline edit-btn"
+                            onClick={() => setIsEditing(true)}
+                        >
+                            <FiEdit2 /> แก้ไข
+                        </button>
+                    )}
+                </div>
+
+                {/* Subscription/Package Info */}
+                <div className="subscription-status-inline">
+                    <div className="sub-icon">
+                        <FiPackage />
+                    </div>
+                    <div className="sub-info">
+                        {subscription?.subscription_packages ? (
+                            <>
+                                <div className="sub-name">
+                                    {subscription.subscription_packages.name}
+                                    {subscription.is_trial && (
+                                        <span className="trial-badge">ทดลองใช้</span>
+                                    )}
+                                </div>
+                                <div className="sub-details">
+                                    <span className={`sub-status status-${subscription.status}`}>
+                                        {subscription.status === 'active' ? 'ใช้งานอยู่' :
+                                            subscription.status === 'trial' ? 'ทดลองใช้' :
+                                                subscription.status === 'expired' ? 'หมดอายุ' : subscription.status}
+                                    </span>
+                                    {subscription.end_date && (
+                                        <span className="sub-expiry">
+                                            หมดอายุ: {formatDate(subscription.end_date)}
+                                        </span>
+                                    )}
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="sub-name no-package">
+                                    <FiAlertCircle /> ยังไม่มีแพ็คเกจ
+                                </div>
+                                <div className="sub-details">
+                                    กรุณาติดต่อผู้ดูแลระบบเพื่อเลือกแพ็คเกจ
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Personal Info Card */}
+            <div className="profile-details card">
+                <h3>ข้อมูลส่วนตัว</h3>
+
+                {isEditing ? (
+                    <div className="profile-form">
+                        <div className="form-group">
+                            <label className="form-label">ชื่อ-นามสกุล</label>
+                            <input
+                                type="text"
+                                className="form-input"
+                                value={formData.full_name}
+                                onChange={e => setFormData({ ...formData, full_name: e.target.value })}
+                                placeholder="ชื่อ-นามสกุล"
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">เบอร์โทรศัพท์</label>
+                            <input
+                                type="tel"
+                                className="form-input"
+                                value={formData.phone}
+                                onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                                placeholder="0xx-xxx-xxxx"
+                            />
+                        </div>
+                        <div className="form-actions">
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => {
+                                    setIsEditing(false)
+                                    setFormData({
+                                        full_name: profileData.full_name || '',
+                                        phone: profileData.phone || ''
+                                    })
+                                }}
+                            >
+                                ยกเลิก
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleSaveProfile}
+                                disabled={saving}
+                            >
+                                {saving ? 'กำลังบันทึก...' : <><FiSave /> บันทึก</>}
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="profile-info-list">
+                        <div className="info-row">
+                            <span className="info-label">ชื่อ-นามสกุล</span>
+                            <span className="info-value">{profileData.full_name || '-'}</span>
+                        </div>
+                        <div className="info-row">
+                            <span className="info-label">อีเมล</span>
+                            <span className="info-value">{user?.email || '-'}</span>
+                        </div>
+                        <div className="info-row">
+                            <span className="info-label">เบอร์โทรศัพท์</span>
+                            <span className="info-value">{profileData.phone || '-'}</span>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Security Settings Card */}
+            <div className="profile-details card">
+                <h3>ความปลอดภัย</h3>
+                <div className="security-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1.5rem', background: 'var(--color-bg)', borderRadius: '0.5rem' }}>
+                    <div style={{ fontSize: '2rem', color: 'var(--color-gold)', marginBottom: '0.75rem' }}>
+                        <FiLock />
+                    </div>
+                    <h4 style={{ margin: '0 0 0.25rem', fontSize: '1rem', color: 'var(--color-text)' }}>รหัสผ่าน</h4>
+                    <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>เปลี่ยนรหัสผ่านเพื่อความปลอดภัย</p>
+                    <button
+                        className="btn btn-outline"
+                        onClick={() => setShowPasswordModal(true)}
+                    >
+                        เปลี่ยนรหัสผ่าน
+                    </button>
+                </div>
+            </div>
+
+            {/* Bank Accounts Card */}
+            <div className="profile-details card">
+                <div className="section-header" style={{ marginBottom: '1rem' }}>
+                    <h3 style={{ margin: 0 }}>บัญชีธนาคาร</h3>
+                    <button className="btn btn-primary btn-sm" onClick={openAddBank}>
+                        <FiPlus /> เพิ่มบัญชี
+                    </button>
+                </div>
+
+                {loadingBanks ? (
+                    <div className="loading-state">
+                        <div className="spinner"></div>
+                    </div>
+                ) : bankAccounts.length === 0 ? (
+                    <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
+                        <p className="text-muted">ยังไม่มีบัญชีธนาคาร</p>
+                        <button className="btn btn-outline" onClick={openAddBank} style={{ marginTop: '1rem' }}>
+                            <FiPlus /> เพิ่มบัญชีแรก
+                        </button>
+                    </div>
+                ) : (
+                    <div className="bank-accounts-list">
+                        {bankAccounts.map(bank => (
+                            <div key={bank.id} className={`bank-account-item ${bank.is_default ? 'default' : ''}`}>
+                                <div className="bank-info">
+                                    <div className="bank-header">
+                                        <span className="bank-name">{bank.bank_name}</span>
+                                        {bank.is_default && (
+                                            <span className="default-badge">
+                                                <FiStar /> ค่าเริ่มต้น
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="bank-account-number">{bank.bank_account}</div>
+                                    {bank.account_name && (
+                                        <div className="account-name">ชื่อบัญชี: {bank.account_name}</div>
+                                    )}
+                                </div>
+                                <div className="bank-actions">
+                                    {!bank.is_default && (
+                                        <button
+                                            className="btn btn-outline btn-sm"
+                                            onClick={() => handleSetDefault(bank.id)}
+                                            title="ตั้งเป็นค่าเริ่มต้น"
+                                        >
+                                            <FiStar />
+                                        </button>
+                                    )}
+                                    <button
+                                        className="btn btn-outline btn-sm"
+                                        onClick={() => openEditBank(bank)}
+                                        title="แก้ไข"
+                                    >
+                                        <FiEdit2 />
+                                    </button>
+                                    <button
+                                        className="btn btn-outline btn-sm danger"
+                                        onClick={() => handleDeleteBank(bank.id)}
+                                        title="ลบ"
+                                    >
+                                        <FiTrash2 />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {/* Add/Edit Bank Modal */}
+            {showAddBankModal && (
+                <div className="modal-overlay" onClick={() => setShowAddBankModal(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3>{editingBank ? <><FiEdit2 /> แก้ไขบัญชี</> : <><FiPlus /> เพิ่มบัญชีใหม่</>}</h3>
+                            <button className="modal-close" onClick={() => setShowAddBankModal(false)}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="form-group">
+                                <label className="form-label">ธนาคาร</label>
+                                <select
+                                    className="form-input"
+                                    value={bankFormData.bank_name}
+                                    onChange={e => setBankFormData({ ...bankFormData, bank_name: e.target.value })}
+                                >
+                                    <option value="">เลือกธนาคาร</option>
+                                    {bankOptions.map(bank => (
+                                        <option key={bank} value={bank}>{bank}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">เลขบัญชี</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    value={bankFormData.bank_account}
+                                    onChange={e => setBankFormData({ ...bankFormData, bank_account: e.target.value })}
+                                    placeholder="xxx-x-xxxxx-x"
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">ชื่อบัญชี (ไม่บังคับ)</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    value={bankFormData.account_name}
+                                    onChange={e => setBankFormData({ ...bankFormData, account_name: e.target.value })}
+                                    placeholder="ชื่อเจ้าของบัญชี"
+                                />
+                            </div>
+                            {bankAccounts.length > 0 && !editingBank && (
+                                <div className="form-group">
+                                    <label className="checkbox-label">
+                                        <input
+                                            type="checkbox"
+                                            checked={bankFormData.is_default}
+                                            onChange={e => setBankFormData({ ...bankFormData, is_default: e.target.checked })}
+                                        />
+                                        <span>ตั้งเป็นบัญชีค่าเริ่มต้น</span>
+                                    </label>
+                                </div>
+                            )}
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowAddBankModal(false)}>
+                                ยกเลิก
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleSaveBank}
+                                disabled={saving || !bankFormData.bank_name || !bankFormData.bank_account}
+                            >
+                                {saving ? 'กำลังบันทึก...' : <><FiCheck /> บันทึก</>}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Toast Notification */}
+            {toast && (
+                <div className={`toast-notification ${toast.type}`}>
+                    <FiCheck /> {toast.message}
+                </div>
+            )}
+
+            {/* Change Password Modal */}
+            <ChangePasswordModal
+                isOpen={showPasswordModal}
+                onClose={() => setShowPasswordModal(false)}
+            />
+        </div>
+    )
+}
+
+// Member Accordion Item Component
+function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock, onDelete, onDisconnect, dealerBankAccounts = [], onUpdateBank, isDealer = false, onCopyCredentials }) {
+    const { user } = useAuth()
+    const [activeTab, setActiveTab] = useState('info') // 'info' | 'settings'
+
+    return (
+        <div className={`member-accordion-item ${isExpanded ? 'expanded' : ''}`} style={{
+            background: 'var(--color-surface)',
+            borderRadius: 'var(--radius-lg)',
+            marginBottom: '1rem',
+            border: isDealer ? '2px solid var(--color-info)' : '1px solid var(--color-border)',
+            overflow: 'hidden',
+            transition: 'all 0.3s ease'
+        }}>
+            {/* Header - Click to toggle */}
+            <div
+                className="member-accordion-header"
+                onClick={onToggle}
+                style={{
+                    padding: '1rem 1.25rem',
+                    cursor: 'pointer',
+                    background: isExpanded ? 'var(--color-surface-light)' : 'transparent',
+                    borderBottom: isExpanded ? '1px solid var(--color-border)' : 'none'
+                }}
+            >
+                {/* Top row: Avatar, Name/Email, Chevron */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div className="member-info-summary" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <div className="member-avatar" style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '50%',
+                            background: isDealer ? 'var(--color-info)' : 'var(--color-primary)',
+                            color: '#fff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '1.2rem',
+                            fontWeight: 'bold'
+                        }}>
+                            {isDealer ? <FiSend /> : (member.full_name ? member.full_name.charAt(0).toUpperCase() : <FiUsers />)}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <span className="member-name" style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '1.1rem' }}>
+                                    {member.full_name || 'ไม่ระบุชื่อ'}
+                                </span>
+                                {isDealer && (
+                                    <span style={{
+                                        background: member.id === user?.id ? 'var(--color-warning)' : 'var(--color-info)',
+                                        color: '#fff',
+                                        padding: '0.15rem 0.5rem',
+                                        borderRadius: '4px',
+                                        fontSize: '0.7rem',
+                                        fontWeight: '600'
                                     }}>
-                                        {new Date(renewMember.membership_expires_at) < new Date()
-                                            ? `หมดอายุแล้ว: ${new Date(renewMember.membership_expires_at).toLocaleDateString('th-TH')}`
-                                            : `หมดอายุ: ${new Date(renewMember.membership_expires_at).toLocaleDateString('th-TH')}`
-                                        }
+                                        {member.id === user?.id ? 'เจ้ามือส่งออก' : 'เจ้ามือ'}
+                                    </span>
+                                )}
+                            </div>
+                            <span className="member-email" style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+                                {member.email}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="accordion-icon" style={{
+                        color: isExpanded ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                        transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.3s ease'
+                    }}>
+                        <FiChevronDown size={24} />
+                    </div>
+                </div>
+
+                {/* Bottom row: Action buttons - icon only for mobile friendly */}
+                <div style={{ 
+                    display: 'flex', 
+                    gap: '0.5rem', 
+                    marginTop: '0.75rem',
+                    paddingTop: '0.75rem',
+                    borderTop: '1px solid var(--color-border)',
+                    marginLeft: '56px'
+                }}>
+                    {/* Copy button - only for non-dealer and password not changed */}
+                    {!isDealer && onCopyCredentials && !member.password_changed && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onCopyCredentials(member); }}
+                            style={{ 
+                                padding: '0.5rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'transparent',
+                                border: '1px solid var(--color-border)',
+                                borderRadius: '50%',
+                                color: 'var(--color-text-muted)',
+                                cursor: 'pointer',
+                                width: '32px',
+                                height: '32px'
+                            }}
+                            title="คัดลอกข้อมูลเข้าสู่ระบบ"
+                        >
+                            <FiCopy size={14} />
+                        </button>
+                    )}
+                    {/* Block button - for all members */}
+                    {onBlock && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onBlock(); }}
+                            style={{ 
+                                padding: '0.5rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'transparent',
+                                border: '1px solid var(--color-warning)',
+                                borderRadius: '50%',
+                                color: 'var(--color-warning)',
+                                cursor: 'pointer',
+                                width: '32px',
+                                height: '32px'
+                            }}
+                            title="บล็อคสมาชิก"
+                        >
+                            <FiLock size={14} />
+                        </button>
+                    )}
+                    {/* Delete button - only for non-dealer */}
+                    {!isDealer && onDelete && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                            style={{ 
+                                padding: '0.5rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'transparent',
+                                border: '1px solid var(--color-error)',
+                                borderRadius: '50%',
+                                color: 'var(--color-error)',
+                                cursor: 'pointer',
+                                width: '32px',
+                                height: '32px'
+                            }}
+                            title="ลบสมาชิก"
+                        >
+                            <FiTrash2 size={14} />
+                        </button>
+                    )}
+                    {/* Disconnect button - only for dealer */}
+                    {isDealer && onDisconnect && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onDisconnect(); }}
+                            style={{ 
+                                padding: '0.5rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'transparent',
+                                border: '1px solid var(--color-error)',
+                                borderRadius: '50%',
+                                color: 'var(--color-error)',
+                                cursor: 'pointer',
+                                width: '32px',
+                                height: '32px'
+                            }}
+                            title="ยกเลิกการเชื่อมต่อ"
+                        >
+                            <FiLink size={14} />
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Body - Only visible if expanded */}
+            {isExpanded && (
+                <div className="member-accordion-body" style={{ padding: '1.5rem' }}>
+                    {/* Internal Tabs */}
+                    <div className="member-internal-tabs" style={{
+                        display: 'flex',
+                        gap: '1rem',
+                        marginBottom: '1.5rem',
+                        borderBottom: '1px solid var(--color-border)'
+                    }}>
+                        <button
+                            onClick={() => setActiveTab('info')}
+                            style={{
+                                padding: '0.75rem 1rem',
+                                background: 'transparent',
+                                border: 'none',
+                                borderBottom: activeTab === 'info' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                                color: activeTab === 'info' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                fontWeight: '500',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <FiUsers style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                            ข้อมูลทั่วไป
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('settings')}
+                            style={{
+                                padding: '0.75rem 1rem',
+                                background: 'transparent',
+                                border: 'none',
+                                borderBottom: activeTab === 'settings' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                                color: activeTab === 'settings' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                fontWeight: '500',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <FiSettings style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                            ตั้งค่า
+                        </button>
+                    </div>
+
+                    {/* Tab Content */}
+                    <div className="member-tab-content">
+                        {activeTab === 'info' && (
+                            <div className="member-info-view" style={{ animation: 'fadeIn 0.3s ease' }}>
+                                <div className="info-grid" style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                                    gap: '1.5rem'
+                                }}>
+                                    <div className="info-item">
+                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>เบอร์โทรศัพท์</label>
+                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{member.phone || '-'}</div>
+                                    </div>
+                                    <div className="info-item">
+                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>ธนาคาร</label>
+                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{member.bank_name || '-'}</div>
+                                    </div>
+                                    <div className="info-item">
+                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>เลขบัญชี</label>
+                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{member.bank_account || '-'}</div>
+                                    </div>
+                                    <div className="info-item">
+                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>วันที่สมัคร</label>
+                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{formatDate(member.created_at)}</div>
+                                    </div>
+                                    <div className="info-item">
+                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>สถานะ</label>
+                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-success)' }}>
+                                            <span className="status-badge open" style={{ fontSize: '0.9rem' }}>ปกติ</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Bank Account Assignment for this member */}
+                                {dealerBankAccounts.length > 0 && onUpdateBank && (
+                                    <div className="bank-assignment-section" style={{
+                                        marginTop: '1.5rem',
+                                        padding: '1rem',
+                                        background: 'rgba(212, 175, 55, 0.1)',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: '1px solid rgba(212, 175, 55, 0.3)'
+                                    }}>
+                                        <label style={{
+                                            display: 'block',
+                                            color: 'var(--color-primary)',
+                                            fontSize: '0.9rem',
+                                            marginBottom: '0.5rem',
+                                            fontWeight: '500'
+                                        }}>
+                                            <FiStar style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                                            บัญชีธนาคารสำหรับโอนเงิน
+                                        </label>
+                                        <select
+                                            className="form-input"
+                                            value={member.assigned_bank_account_id || ''}
+                                            onChange={(e) => onUpdateBank(e.target.value || null)}
+                                            onClick={(e) => e.stopPropagation()}
+                                            style={{
+                                                background: 'var(--color-surface)',
+                                                border: '1px solid var(--color-border)',
+                                                borderRadius: 'var(--radius-md)',
+                                                padding: '0.75rem 1rem',
+                                                color: 'var(--color-text)',
+                                                width: '100%',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            <option value="">ใช้บัญชีหลัก (Default)</option>
+                                            {dealerBankAccounts.map(bank => (
+                                                <option key={bank.id} value={bank.id}>
+                                                    {bank.bank_name} - {bank.bank_account}
+                                                    {bank.is_default ? ' (หลัก)' : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <p style={{
+                                            fontSize: '0.8rem',
+                                            color: 'var(--color-text-muted)',
+                                            marginTop: '0.5rem',
+                                            opacity: 0.8
+                                        }}>
+                                            ลูกค้าจะเห็นบัญชีนี้ในหน้าข้อมูลเจ้ามือ
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === 'settings' && (
+                            <div className="member-settings-wrapper" style={{ animation: 'fadeIn 0.3s ease' }}>
+                                <MemberSettings
+                                    member={member}
+                                    isInline={true}
+                                    onClose={() => { }}
+                                />
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// Upstream Dealer Settings Inline Component - For displaying commission and payout rates inline
+function UpstreamDealerSettingsInline({ dealer, isLinked, onSaved }) {
+    const [loading, setLoading] = useState(true)
+    const [saving, setSaving] = useState(false)
+    const [activeTab, setActiveTab] = useState('lao')
+
+    const getDefaultSettings = () => ({
+        thai: {
+            'run_top': { commission: 15, payout: 3 },
+            'run_bottom': { commission: 15, payout: 4 },
+            'pak_top': { commission: 15, payout: 8 },
+            'pak_bottom': { commission: 15, payout: 6 },
+            '2_top': { commission: 15, payout: 65 },
+            '2_front': { commission: 15, payout: 65 },
+            '2_center': { commission: 15, payout: 65 },
+            '2_run': { commission: 15, payout: 10 },
+            '2_bottom': { commission: 15, payout: 65 },
+            '3_top': { commission: 30, payout: 550 },
+            '3_tod': { commission: 15, payout: 100 },
+            '3_bottom': { commission: 15, payout: 135 },
+            '4_run': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 }
+        },
+        lao: {
+            '4_set': { 
+                commission: 25, 
+                setPrice: 120,
+                isSet: true,
+                prizes: {
+                    '4_straight_set': 100000,
+                    '4_tod_set': 4000,
+                    '3_straight_set': 30000,
+                    '3_tod_set': 3000,
+                    '2_front_set': 1000,
+                    '2_back_set': 1000
+                }
+            },
+            'run_top': { commission: 15, payout: 3 },
+            'run_bottom': { commission: 15, payout: 4 },
+            'pak_top': { commission: 15, payout: 8 },
+            'pak_bottom': { commission: 15, payout: 6 },
+            '2_top': { commission: 15, payout: 65 },
+            '2_front': { commission: 15, payout: 65 },
+            '2_center': { commission: 15, payout: 65 },
+            '2_run': { commission: 15, payout: 10 },
+            '2_bottom': { commission: 15, payout: 65 },
+            '3_straight': { commission: 30, payout: 550 },
+            '3_tod_single': { commission: 15, payout: 100 },
+            '4_run': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 }
+        },
+        hanoi: {
+            '4_set': { 
+                commission: 25, 
+                setPrice: 120,
+                isSet: true,
+                prizes: {
+                    '4_straight_set': 100000,
+                    '4_tod_set': 4000,
+                    '3_straight_set': 30000,
+                    '3_tod_set': 3000,
+                    '2_front_set': 1000,
+                    '2_back_set': 1000
+                }
+            },
+            'run_top': { commission: 15, payout: 3 },
+            'run_bottom': { commission: 15, payout: 4 },
+            'pak_top': { commission: 15, payout: 8 },
+            'pak_bottom': { commission: 15, payout: 6 },
+            '2_top': { commission: 15, payout: 65 },
+            '2_front': { commission: 15, payout: 65 },
+            '2_center': { commission: 15, payout: 65 },
+            '2_run': { commission: 15, payout: 10 },
+            '2_bottom': { commission: 15, payout: 65 },
+            '3_straight': { commission: 30, payout: 550 },
+            '3_tod_single': { commission: 15, payout: 100 },
+            '4_run': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 }
+        },
+        stock: {
+            '2_top': { commission: 15, payout: 65 },
+            '2_bottom': { commission: 15, payout: 65 }
+        }
+    })
+
+    const [settings, setSettings] = useState(getDefaultSettings())
+
+    const BET_LABELS = {
+        thai: {
+            'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
+            'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
+            '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
+            '3_top': '3 ตัวบน', '3_tod': '3 ตัวโต๊ด', '3_bottom': '3 ตัวล่าง',
+            '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
+        },
+        lao: {
+            '4_set': '4 ตัวชุด',
+            'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
+            'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
+            '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
+            '3_top': '3 ตัวตรง', '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
+            '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
+        },
+        hanoi: {
+            '4_set': '4 ตัวชุด',
+            'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
+            'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
+            '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
+            '3_top': '3 ตัวตรง', '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
+            '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
+        },
+        stock: { '2_top': '2 ตัวบน', '2_bottom': '2 ตัวล่าง' }
+    }
+
+    const SET_PRIZE_LABELS = {
+        '4_straight_set': '4 ตัวตรงชุด',
+        '4_tod_set': '4 ตัวโต๊ดชุด',
+        '3_straight_set': '3 ตัวตรงชุด',
+        '3_tod_set': '3 ตัวโต๊ดชุด',
+        '2_front_set': '2 ตัวหน้าชุด',
+        '2_back_set': '2 ตัวหลังชุด'
+    }
+
+    const LOTTERY_TABS = [
+        { key: 'lao', label: 'หวยลาว' },
+        { key: 'hanoi', label: 'หวยฮานอย' },
+        { key: 'thai', label: 'หวยไทย' },
+        { key: 'stock', label: 'หวยหุ้น' }
+    ]
+
+    useEffect(() => {
+        fetchSettings()
+    }, [dealer.id])
+
+    async function fetchSettings() {
+        setLoading(true)
+        try {
+            if (dealer.lottery_settings) {
+                const merged = { ...getDefaultSettings() }
+                Object.keys(dealer.lottery_settings).forEach(tab => {
+                    if (merged[tab]) {
+                        Object.keys(dealer.lottery_settings[tab]).forEach(key => {
+                            if (merged[tab][key]) {
+                                merged[tab][key] = { ...merged[tab][key], ...dealer.lottery_settings[tab][key] }
+                            }
+                        })
+                    }
+                })
+                setSettings(merged)
+            }
+        } catch (error) {
+            console.error('Error loading settings:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    async function handleSave() {
+        setSaving(true)
+        try {
+            const { error } = await supabase
+                .from('dealer_upstream_connections')
+                .update({
+                    lottery_settings: settings,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', dealer.id)
+
+            if (error) throw error
+            toast.success('บันทึกการตั้งค่าสำเร็จ')
+            onSaved?.()
+        } catch (error) {
+            console.error('Error saving settings:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    const updateSetting = (tab, key, field, value) => {
+        setSettings(prev => ({
+            ...prev,
+            [tab]: {
+                ...prev[tab],
+                [key]: { ...prev[tab][key], [field]: parseFloat(value) || 0 }
+            }
+        }))
+    }
+
+    const updateSetPrize = (tab, prizeKey, value) => {
+        setSettings(prev => ({
+            ...prev,
+            [tab]: {
+                ...prev[tab],
+                '4_set': {
+                    ...prev[tab]['4_set'],
+                    prizes: {
+                        ...prev[tab]['4_set'].prizes,
+                        [prizeKey]: parseFloat(value) || 0
+                    }
+                }
+            }
+        }))
+    }
+
+    // Handle Enter key to jump to next input and select all
+    const handleSettingsInputKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault()
+            const form = e.target.closest('.upstream-dealer-settings-inline')
+            if (!form) return
+
+            const inputs = Array.from(form.querySelectorAll('input[type="number"]:not([disabled])'))
+            const currentIndex = inputs.indexOf(e.target)
+            
+            if (currentIndex >= 0 && currentIndex < inputs.length - 1) {
+                const nextInput = inputs[currentIndex + 1]
+                nextInput.focus()
+                nextInput.select()
+            }
+        }
+    }
+
+    // Handle focus to select all text
+    const handleSettingsInputFocus = (e) => {
+        e.target.select()
+    }
+
+    if (loading) {
+        return <div className="loading-state"><div className="spinner"></div></div>
+    }
+
+    // For linked dealers, show read-only view
+    const readOnly = isLinked
+
+    return (
+        <div className="upstream-dealer-settings-inline">
+            {readOnly && (
+                <div style={{ 
+                    background: 'rgba(212, 175, 55, 0.1)', 
+                    border: '1px solid rgba(212, 175, 55, 0.3)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '0.75rem 1rem',
+                    marginBottom: '1rem',
+                    fontSize: '0.9rem',
+                    color: 'var(--color-warning)'
+                }}>
+                    <FiInfo style={{ marginRight: '0.5rem' }} />
+                    ค่าคอมและอัตราจ่ายถูกกำหนดโดยเจ้ามือที่รับเลขจากคุณ (แก้ไขไม่ได้)
+                </div>
+            )}
+            {!readOnly && (
+                <div style={{ 
+                    background: 'rgba(76, 175, 80, 0.1)', 
+                    border: '1px solid rgba(76, 175, 80, 0.3)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '0.75rem 1rem',
+                    marginBottom: '1rem',
+                    fontSize: '0.9rem',
+                    color: 'var(--color-success)'
+                }}>
+                    <FiEdit2 style={{ marginRight: '0.5rem' }} />
+                    กรอกค่าคอมและอัตราจ่ายที่เจ้ามือนอกระบบให้คุณ เพื่อใช้คำนวณรายได้
+                </div>
+            )}
+
+            {/* Lottery Type Tabs */}
+            <div className="settings-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                {LOTTERY_TABS.map(tab => (
+                    <button
+                        key={tab.key}
+                        className={`btn btn-sm ${activeTab === tab.key ? 'btn-primary' : 'btn-outline'}`}
+                        onClick={() => setActiveTab(tab.key)}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
+
+            {/* 4 ตัวชุด Section for Lao or Hanoi */}
+            {(activeTab === 'lao' || activeTab === 'hanoi') && settings[activeTab]?.['4_set'] && (
+                <div className="set-settings-section" style={{ 
+                    marginBottom: '1.5rem', 
+                    padding: '1rem',
+                    background: 'rgba(212, 175, 55, 0.05)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid rgba(212, 175, 55, 0.2)'
+                }}>
+                    <h4 style={{ marginBottom: '1rem', color: 'var(--color-primary)', fontSize: '1rem' }}>
+                        <FiPackage style={{ marginRight: '0.5rem' }} />
+                        4 ตัวชุด
+                    </h4>
+                    
+                    {/* Set Price and Commission */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>ราคาชุดละ</label>
+                            <input
+                                type="number"
+                                className="form-input"
+                                value={settings[activeTab]['4_set'].setPrice || 0}
+                                onChange={e => updateSetting(activeTab, '4_set', 'setPrice', e.target.value)}
+                                onKeyDown={handleSettingsInputKeyDown}
+                                onFocus={handleSettingsInputFocus}
+                                disabled={readOnly}
+                                style={{ width: '100%' }}
+                            />
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>ค่าคอม (%)</label>
+                            <input
+                                type="number"
+                                className="form-input"
+                                value={settings[activeTab]['4_set'].commission || 0}
+                                onChange={e => updateSetting(activeTab, '4_set', 'commission', e.target.value)}
+                                onKeyDown={handleSettingsInputKeyDown}
+                                onFocus={handleSettingsInputFocus}
+                                disabled={readOnly}
+                                style={{ width: '100%' }}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Prize Settings */}
+                    <div style={{ fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem', color: 'var(--color-text)' }}>อัตราจ่ายรางวัล</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
+                        {Object.entries(settings[activeTab]['4_set'].prizes || {}).map(([prizeKey, prizeValue]) => (
+                            <div key={prizeKey}>
+                                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>
+                                    {SET_PRIZE_LABELS[prizeKey] || prizeKey}
+                                </label>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    value={prizeValue}
+                                    onChange={e => updateSetPrize(activeTab, prizeKey, e.target.value)}
+                                    onKeyDown={handleSettingsInputKeyDown}
+                                    onFocus={handleSettingsInputFocus}
+                                    disabled={readOnly}
+                                    style={{ width: '100%', fontSize: '0.9rem' }}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Regular Bet Types */}
+            <div className="bet-settings-grid" style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
+                gap: '0.75rem' 
+            }}>
+                {Object.entries(BET_LABELS[activeTab] || {}).filter(([key]) => key !== '4_set').map(([key, label]) => (
+                    <div key={key} className="bet-setting-row" style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        padding: '0.5rem 0.75rem',
+                        background: 'var(--color-surface-light)',
+                        borderRadius: 'var(--radius-sm)'
+                    }}>
+                        <span style={{ flex: '1', fontSize: '0.9rem', color: 'var(--color-text)' }}>{label}</span>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>คอม%</span>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    value={settings[activeTab]?.[key]?.commission || 0}
+                                    onChange={e => updateSetting(activeTab, key, 'commission', e.target.value)}
+                                    onKeyDown={handleSettingsInputKeyDown}
+                                    onFocus={handleSettingsInputFocus}
+                                    disabled={readOnly}
+                                    style={{ width: '60px', textAlign: 'center', fontSize: '0.85rem', padding: '0.3rem' }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>จ่าย</span>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    value={settings[activeTab]?.[key]?.payout || 0}
+                                    onChange={e => updateSetting(activeTab, key, 'payout', e.target.value)}
+                                    onKeyDown={handleSettingsInputKeyDown}
+                                    onFocus={handleSettingsInputFocus}
+                                    disabled={readOnly}
+                                    style={{ width: '70px', textAlign: 'center', fontSize: '0.85rem', padding: '0.3rem' }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Save Button - Only for non-linked dealers */}
+            {!readOnly && (
+                <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
+                    <button 
+                        className="btn btn-primary" 
+                        onClick={handleSave}
+                        disabled={saving}
+                    >
+                        {saving ? 'กำลังบันทึก...' : <><FiCheck /> บันทึกการตั้งค่า</>}
+                    </button>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// Upstream Dealer Accordion Item Component
+function UpstreamDealerAccordionItem({ dealer, isExpanded, onToggle, onEdit, onDelete, onToggleBlock, onSaveSettings }) {
+    const [activeTab, setActiveTab] = useState('info') // 'info' | 'settings'
+    const isLinked = dealer.is_linked
+    const isBlocked = dealer.is_blocked
+
+    return (
+        <div className={`upstream-dealer-accordion-item ${isExpanded ? 'expanded' : ''}`} style={{
+            background: 'var(--color-surface)',
+            borderRadius: 'var(--radius-lg)',
+            marginBottom: '1rem',
+            border: isLinked ? '2px solid var(--color-success)' : '1px solid var(--color-border)',
+            overflow: 'hidden',
+            transition: 'all 0.3s ease',
+            opacity: isBlocked ? 0.7 : 1
+        }}>
+            {/* Header - Click to toggle */}
+            <div
+                className="upstream-dealer-accordion-header"
+                onClick={onToggle}
+                style={{
+                    padding: '1.25rem 1.5rem',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    background: isExpanded ? 'var(--color-surface-light)' : 'transparent',
+                    borderBottom: isExpanded ? '1px solid var(--color-border)' : 'none'
+                }}
+            >
+                <div className="dealer-info-summary" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <div className="dealer-avatar" style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '50%',
+                        background: isLinked ? 'var(--color-success)' : 'var(--color-warning)',
+                        color: '#fff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '1.2rem',
+                        fontWeight: 'bold'
+                    }}>
+                        {isLinked ? <FiCheck /> : <FiUser />}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span className="dealer-name" style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '1.1rem' }}>
+                                {dealer.upstream_name || 'ไม่ระบุชื่อ'}
+                            </span>
+                            {isLinked && (
+                                <span style={{
+                                    background: 'var(--color-success)',
+                                    color: '#fff',
+                                    padding: '0.15rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: '600'
+                                }}>
+                                    ในระบบ
+                                </span>
+                            )}
+                            {isBlocked && (
+                                <span style={{
+                                    background: 'var(--color-danger)',
+                                    color: '#fff',
+                                    padding: '0.15rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: '600'
+                                }}>
+                                    <FiSlash size={10} /> บล็อก
+                                </span>
+                            )}
+                        </div>
+                        <span className="dealer-contact" style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+                            {isLinked && dealer.upstream_profile ? dealer.upstream_profile.email : (dealer.upstream_contact || 'ไม่มีข้อมูลติดต่อ')}
+                        </span>
+                    </div>
+                </div>
+                <div className="accordion-icon" style={{
+                    color: isExpanded ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.3s ease'
+                }}>
+                    <FiChevronDown size={24} />
+                </div>
+            </div>
+
+            {/* Body - Only visible if expanded */}
+            {isExpanded && (
+                <div className="upstream-dealer-accordion-body" style={{ padding: '1.5rem' }}>
+                    {/* Internal Tabs */}
+                    <div className="dealer-internal-tabs" style={{
+                        display: 'flex',
+                        gap: '1rem',
+                        marginBottom: '1.5rem',
+                        borderBottom: '1px solid var(--color-border)'
+                    }}>
+                        <button
+                            onClick={() => setActiveTab('info')}
+                            style={{
+                                padding: '0.75rem 1rem',
+                                background: 'transparent',
+                                border: 'none',
+                                borderBottom: activeTab === 'info' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                                color: activeTab === 'info' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                fontWeight: '500',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem'
+                            }}
+                        >
+                            <FiUser /> โปรไฟล์
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('settings')}
+                            style={{
+                                padding: '0.75rem 1rem',
+                                background: 'transparent',
+                                border: 'none',
+                                borderBottom: activeTab === 'settings' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                                color: activeTab === 'settings' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                fontWeight: '500',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem'
+                            }}
+                        >
+                            <FiSettings /> ค่าคอม/อัตราจ่าย
+                        </button>
+                    </div>
+
+                    {/* Tab Content */}
+                    {activeTab === 'info' && (
+                        <div className="dealer-info-content" style={{ animation: 'fadeIn 0.3s ease' }}>
+                            <div className="info-grid" style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                                gap: '1.5rem'
+                            }}>
+                                <div className="info-item">
+                                    <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>ชื่อเจ้ามือ</label>
+                                    <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{dealer.upstream_name || '-'}</div>
+                                </div>
+                                {isLinked && dealer.upstream_profile && (
+                                    <>
+                                        <div className="info-item">
+                                            <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>อีเมล</label>
+                                            <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{dealer.upstream_profile.email || '-'}</div>
+                                        </div>
+                                        <div className="info-item">
+                                            <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>เบอร์โทร</label>
+                                            <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{dealer.upstream_profile.phone || '-'}</div>
+                                        </div>
+                                    </>
+                                )}
+                                {!isLinked && (
+                                    <div className="info-item">
+                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>ข้อมูลติดต่อ</label>
+                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{dealer.upstream_contact || '-'}</div>
+                                    </div>
+                                )}
+                                <div className="info-item">
+                                    <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>ประเภท</label>
+                                    <div style={{ fontSize: '1.1rem', color: isLinked ? 'var(--color-success)' : 'var(--color-warning)' }}>
+                                        {isLinked ? 'เจ้ามือในระบบ' : 'เจ้ามือนอกระบบ'}
+                                    </div>
+                                </div>
+                                <div className="info-item">
+                                    <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>สถานะ</label>
+                                    <div style={{ fontSize: '1.1rem', color: isBlocked ? 'var(--color-danger)' : 'var(--color-success)' }}>
+                                        {isBlocked ? 'ถูกบล็อก' : 'ปกติ'}
+                                    </div>
+                                </div>
+                                {dealer.notes && (
+                                    <div className="info-item" style={{ gridColumn: '1 / -1' }}>
+                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>หมายเหตุ</label>
+                                        <div style={{ fontSize: '1rem', color: 'var(--color-text)' }}>{dealer.notes}</div>
                                     </div>
                                 )}
                             </div>
 
-                            <div className="form-group" style={{ marginBottom: '1rem' }}>
-                                <label className="form-label">จำนวนปีที่ต่ออายุ</label>
-                                <input
-                                    type="number"
-                                    className="form-input"
-                                    min="1"
-                                    max="10"
-                                    value={renewYears}
-                                    onChange={e => setRenewYears(parseInt(e.target.value) || 1)}
-                                />
+                            {/* Action Buttons */}
+                            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <button
+                                    className="btn btn-outline btn-sm"
+                                    onClick={(e) => { e.stopPropagation(); onToggleBlock(); }}
+                                    style={{ color: isBlocked ? 'var(--color-success)' : 'var(--color-warning)', borderColor: isBlocked ? 'var(--color-success)' : 'var(--color-warning)' }}
+                                >
+                                    {isBlocked ? <><FiCheck /> ปลดบล็อก</> : <><FiSlash /> บล็อก</>}
+                                </button>
+                                {!isLinked && (
+                                    <button
+                                        className="btn btn-outline btn-sm"
+                                        onClick={(e) => { e.stopPropagation(); onEdit(); }}
+                                    >
+                                        <FiEdit2 /> แก้ไข
+                                    </button>
+                                )}
+                                <button
+                                    className="btn btn-outline btn-sm"
+                                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                                    style={{ color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
+                                >
+                                    <FiTrash2 /> {isLinked ? 'ยกเลิกการเชื่อมต่อ' : 'ลบ'}
+                                </button>
                             </div>
+                        </div>
+                    )}
 
-                            <div style={{
-                                padding: '0.75rem',
-                                background: 'rgba(212, 175, 55, 0.1)',
-                                borderRadius: 'var(--radius-md)',
-                                border: '1px solid rgba(212, 175, 55, 0.3)',
-                                fontSize: '0.9rem',
-                                textAlign: 'center'
-                            }}>
-                                ค่าใช้จ่าย: <strong style={{ color: 'var(--color-primary)', fontSize: '1.1rem' }}>
-                                    ฿{(getPricePerUserPerYear() * renewYears).toLocaleString()}
-                                </strong>
-                                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
-                                    ({renewYears} ปี x ฿{getPricePerUserPerYear().toLocaleString()}/ปี)
-                                </div>
-                            </div>
+                    {activeTab === 'settings' && (
+                        <div className="dealer-settings-content" style={{ animation: 'fadeIn 0.3s ease' }}>
+                            <UpstreamDealerSettingsInline
+                                dealer={dealer}
+                                isLinked={isLinked}
+                                onSaved={onSaveSettings}
+                            />
                         </div>
-                        <div className="modal-footer">
-                            <button className="btn btn-secondary" onClick={() => setShowRenewModal(false)}>
-                                ยกเลิก
-                            </button>
-                            <button
-                                className="btn btn-primary"
-                                onClick={handleRenewMembership}
-                                disabled={renewing}
-                            >
-                                {renewing ? 'กำลังดำเนินการ...' : <><FiRefreshCw /> ต่ออายุ</>}
-                            </button>
-                        </div>
-                    </div>
+                    )}
                 </div>
             )}
+        </div>
+    )
+}
 
-            {/* Approve Member with Years Modal (per_user_yearly) */}
-            {showApproveYearsModal && approveMemberTarget && (
-                <div className="modal-overlay" onClick={() => setShowApproveYearsModal(false)} style={{ zIndex: 9999 }}>
-                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+// Upstream Dealers Tab - For managing dealers to transfer bets to
+function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loadingUpstream, setLoadingUpstream }) {
+    const [showAddModal, setShowAddModal] = useState(false)
+    const [saving, setSaving] = useState(false)
+    const [editingDealer, setEditingDealer] = useState(null)
+    const [formData, setFormData] = useState({
+        upstream_name: '',
+        upstream_contact: '',
+        notes: ''
+    })
+    const [showSettingsModal, setShowSettingsModal] = useState(false)
+    const [settingsDealer, setSettingsDealer] = useState(null)
+    const [expandedDealerId, setExpandedDealerId] = useState(null)
+
+    // Fetch upstream dealers on mount - only if not already loaded
+    useEffect(() => {
+        if (upstreamDealers.length === 0 && !loadingUpstream) {
+            fetchUpstreamDealers()
+        }
+    }, [user?.id])
+
+    async function fetchUpstreamDealers() {
+        if (!user?.id) {
+            setLoadingUpstream(false)
+            return
+        }
+        setLoadingUpstream(true)
+        
+        // Set a timeout to prevent infinite loading
+        const timeoutId = setTimeout(() => {
+            console.warn('Fetch upstream dealers timeout')
+            setLoadingUpstream(false)
+        }, 10000)
+        
+        try {
+            // Fetch manual upstream connections
+            const { data: manualData, error: manualError } = await supabase
+                .from('dealer_upstream_connections')
+                .select(`
+                    *,
+                    upstream_profile:upstream_dealer_id (
+                        id, full_name, email, phone
+                    )
+                `)
+                .eq('dealer_id', user.id)
+                .order('created_at', { ascending: false })
+
+            // Fetch dealers that user was a member of (excluding self)
+            const { data: membershipData, error: membershipError } = await supabase
+                .from('user_dealer_memberships')
+                .select(`
+                    dealer_id,
+                    status,
+                    created_at,
+                    profiles:dealer_id (
+                        id, full_name, email, phone, role
+                    )
+                `)
+                .eq('user_id', user.id)
+                .eq('status', 'active')
+                .neq('dealer_id', user.id) // Exclude self-membership
+
+            clearTimeout(timeoutId)
+            
+            let allDealers = []
+            
+            // Add manual upstream connections
+            if (!manualError && manualData) {
+                allDealers = [...manualData]
+            }
+            
+            // Add dealers from memberships (convert to upstream format)
+            // Only include profiles with role = 'dealer' (not superadmin or other roles)
+            if (!membershipError && membershipData) {
+                const membershipDealers = membershipData
+                    .filter(m => m.profiles?.id && m.profiles?.role === 'dealer') // Only include dealers
+                    .map(m => ({
+                        id: `membership-${m.dealer_id}`,
+                        dealer_id: user.id,
+                        upstream_dealer_id: m.dealer_id,
+                        upstream_name: m.profiles?.full_name || m.profiles?.email || 'ไม่ระบุชื่อ',
+                        upstream_contact: m.profiles?.phone || m.profiles?.email || '',
+                        upstream_profile: m.profiles,
+                        is_linked: true,
+                        is_from_membership: true, // Mark as from membership
+                        created_at: m.created_at
+                    }))
+                
+                // Merge, avoiding duplicates (by upstream_dealer_id)
+                const existingIds = allDealers.map(d => d.upstream_dealer_id).filter(Boolean)
+                const newDealers = membershipDealers.filter(d => !existingIds.includes(d.upstream_dealer_id))
+                allDealers = [...allDealers, ...newDealers]
+            }
+            
+            setUpstreamDealers(allDealers)
+        } catch (error) {
+            clearTimeout(timeoutId)
+            console.error('Error fetching upstream dealers:', error)
+            setUpstreamDealers([])
+        } finally {
+            setLoadingUpstream(false)
+        }
+    }
+
+    // Open modal for adding new manual dealer
+    function handleOpenAddModal() {
+        setEditingDealer(null)
+        setFormData({ upstream_name: '', upstream_contact: '', notes: '' })
+        setShowAddModal(true)
+    }
+
+    // Open modal for editing
+    function handleEditDealer(dealer) {
+        setEditingDealer(dealer)
+        setFormData({
+            upstream_name: dealer.upstream_name || '',
+            upstream_contact: dealer.upstream_contact || '',
+            notes: dealer.notes || ''
+        })
+        setShowAddModal(true)
+    }
+
+    // Save (add or update)
+    async function handleSave() {
+        if (!formData.upstream_name.trim()) {
+            toast.warning('กรุณากรอกชื่อเจ้ามือ')
+            return
+        }
+
+        setSaving(true)
+        try {
+            if (editingDealer) {
+                // Update
+                const { error } = await supabase
+                    .from('dealer_upstream_connections')
+                    .update({
+                        upstream_name: formData.upstream_name,
+                        upstream_contact: formData.upstream_contact,
+                        notes: formData.notes,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', editingDealer.id)
+
+                if (error) throw error
+                toast.success('แก้ไขข้อมูลสำเร็จ!')
+            } else {
+                // Insert new manual dealer
+                const { error } = await supabase
+                    .from('dealer_upstream_connections')
+                    .insert({
+                        dealer_id: user.id,
+                        upstream_name: formData.upstream_name,
+                        upstream_contact: formData.upstream_contact,
+                        notes: formData.notes,
+                        is_linked: false
+                    })
+
+                if (error) throw error
+                toast.success('เพิ่มเจ้ามือสำเร็จ!')
+            }
+
+            setShowAddModal(false)
+            fetchUpstreamDealers()
+        } catch (error) {
+            console.error('Error saving upstream dealer:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    // Delete
+    async function handleDelete(dealer) {
+        if (!confirm(`ต้องการลบ "${dealer.upstream_name}" หรือไม่?`)) return
+
+        try {
+            const { error } = await supabase
+                .from('dealer_upstream_connections')
+                .delete()
+                .eq('id', dealer.id)
+
+            if (error) throw error
+            toast.success('ลบสำเร็จ!')
+            fetchUpstreamDealers()
+        } catch (error) {
+            console.error('Error deleting upstream dealer:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+
+    // Toggle block/unblock
+    async function handleToggleBlock(dealer) {
+        const newBlockedState = !dealer.is_blocked
+        try {
+            const { error } = await supabase
+                .from('dealer_upstream_connections')
+                .update({ 
+                    is_blocked: newBlockedState,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', dealer.id)
+
+            if (error) throw error
+            
+            // Update state immediately for instant UI feedback
+            setUpstreamDealers(prev => prev.map(d => 
+                d.id === dealer.id ? { ...d, is_blocked: newBlockedState } : d
+            ))
+            
+            toast.success(newBlockedState ? 'บล็อกเจ้ามือแล้ว' : 'ยกเลิกการบล็อกแล้ว')
+        } catch (error) {
+            console.error('Error toggling block:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+
+    // Open settings modal
+    function handleOpenSettings(dealer) {
+        setSettingsDealer(dealer)
+        setShowSettingsModal(true)
+    }
+
+    return (
+        <div className="upstream-dealers-section">
+            {/* Header */}
+            <div className="section-header">
+                <h2><FiSend /> เจ้ามือตีออก</h2>
+                <button className="btn btn-primary" onClick={handleOpenAddModal}>
+                    <FiPlus /> เพิ่มเจ้ามือ
+                </button>
+            </div>
+
+            <p className="section-description" style={{ marginBottom: '1.5rem', color: 'var(--color-text-muted)' }}>
+                จัดการรายชื่อเจ้ามือที่คุณสามารถตีเลขออกไปได้ สามารถเพิ่มเจ้ามือด้วยตนเอง หรือเชื่อมต่อกับเจ้ามือในระบบ
+            </p>
+
+            {loadingUpstream ? (
+                <div className="loading-state">
+                    <div className="spinner"></div>
+                    <p>กำลังโหลด...</p>
+                </div>
+            ) : upstreamDealers.length === 0 ? (
+                <div className="empty-state card" style={{ padding: '3rem', textAlign: 'center' }}>
+                    <FiSend style={{ fontSize: '3rem', color: 'var(--color-text-muted)', marginBottom: '1rem' }} />
+                    <h3>ยังไม่มีเจ้ามือตีออก</h3>
+                    <p style={{ color: 'var(--color-text-muted)', marginBottom: '1.5rem' }}>
+                        เพิ่มเจ้ามือที่คุณต้องการตีเลขออกไป
+                    </p>
+                    <button className="btn btn-primary" onClick={handleOpenAddModal}>
+                        <FiPlus /> เพิ่มเจ้ามือคนแรก
+                    </button>
+                </div>
+            ) : (
+                <>
+                    {/* Linked Dealers Section */}
+                    {upstreamDealers.filter(d => d.is_linked).length > 0 && (
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <FiCheck style={{ color: 'var(--color-success)' }} /> เจ้ามือในระบบ ({upstreamDealers.filter(d => d.is_linked).length})
+                            </h4>
+                            <div className="upstream-dealers-accordion-list">
+                                {upstreamDealers.filter(d => d.is_linked).map(dealer => (
+                                    <UpstreamDealerAccordionItem
+                                        key={dealer.id}
+                                        dealer={dealer}
+                                        isExpanded={expandedDealerId === dealer.id}
+                                        onToggle={() => setExpandedDealerId(expandedDealerId === dealer.id ? null : dealer.id)}
+                                        onEdit={() => handleEditDealer(dealer)}
+                                        onDelete={() => handleDelete(dealer)}
+                                        onToggleBlock={() => handleToggleBlock(dealer)}
+                                        onSaveSettings={fetchUpstreamDealers}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Manual Dealers Section */}
+                    {upstreamDealers.filter(d => !d.is_linked).length > 0 && (
+                        <div>
+                            <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <FiUser style={{ color: 'var(--color-text-muted)' }} /> เจ้ามือนอกระบบ ({upstreamDealers.filter(d => !d.is_linked).length})
+                            </h4>
+                            <div className="upstream-dealers-accordion-list">
+                                {upstreamDealers.filter(d => !d.is_linked).map(dealer => (
+                                    <UpstreamDealerAccordionItem
+                                        key={dealer.id}
+                                        dealer={dealer}
+                                        isExpanded={expandedDealerId === dealer.id}
+                                        onToggle={() => setExpandedDealerId(expandedDealerId === dealer.id ? null : dealer.id)}
+                                        onEdit={() => handleEditDealer(dealer)}
+                                        onDelete={() => handleDelete(dealer)}
+                                        onToggleBlock={() => handleToggleBlock(dealer)}
+                                        onSaveSettings={fetchUpstreamDealers}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </>
+            )}
+
+            {/* Add/Edit Modal */}
+            {showAddModal && (
+                <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h3><FiCheck /> อนุมัติสมาชิก</h3>
-                            <button className="modal-close" onClick={() => setShowApproveYearsModal(false)}>
+                            <h3>{editingDealer ? <><FiEdit2 /> แก้ไขเจ้ามือ</> : <><FiPlus /> เพิ่มเจ้ามือใหม่</>}</h3>
+                            <button className="modal-close" onClick={() => setShowAddModal(false)}>
                                 <FiX />
                             </button>
                         </div>
-                        <div className="modal-body">
-                            <div style={{
-                                padding: '1rem',
-                                background: 'var(--color-surface-light)',
-                                borderRadius: 'var(--radius-md)',
-                                marginBottom: '1rem'
-                            }}>
-                                <div style={{ fontWeight: 600, fontSize: '1.1rem', marginBottom: '0.5rem' }}>
-                                    {approveMemberTarget.full_name || approveMemberTarget.email}
-                                </div>
-                                <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-                                    {approveMemberTarget.email}
-                                </div>
-                            </div>
 
-                            <div className="form-group" style={{ marginBottom: '1rem' }}>
-                                <label className="form-label">จำนวนปีที่ใช้งาน</label>
+                        <div className="modal-body">
+                            <div className="form-group">
+                                <label className="form-label">ชื่อเจ้ามือ *</label>
                                 <input
-                                    type="number"
+                                    type="text"
                                     className="form-input"
-                                    min="1"
-                                    max="10"
-                                    value={approveYears}
-                                    onChange={e => setApproveYears(parseInt(e.target.value) || 1)}
+                                    placeholder="เช่น พี่หนึ่ง, เจ้ใหญ่"
+                                    value={formData.upstream_name}
+                                    onChange={e => setFormData({ ...formData, upstream_name: e.target.value })}
                                 />
                             </div>
 
-                            <div style={{
-                                padding: '0.75rem',
-                                background: 'rgba(212, 175, 55, 0.1)',
-                                borderRadius: 'var(--radius-md)',
-                                border: '1px solid rgba(212, 175, 55, 0.3)',
-                                fontSize: '0.9rem',
-                                textAlign: 'center'
-                            }}>
-                                ค่าใช้จ่าย: <strong style={{ color: 'var(--color-primary)', fontSize: '1.1rem' }}>
-                                    ฿{(getPricePerUserPerYear() * approveYears).toLocaleString()}
-                                </strong>
-                                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
-                                    ({approveYears} ปี x ฿{getPricePerUserPerYear().toLocaleString()}/ปี)
-                                </div>
+                            <div className="form-group">
+                                <label className="form-label">เบอร์ติดต่อ / Line ID</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    placeholder="เช่น 08x-xxx-xxxx หรือ line_id"
+                                    value={formData.upstream_contact}
+                                    onChange={e => setFormData({ ...formData, upstream_contact: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">หมายเหตุ</label>
+                                <textarea
+                                    className="form-input"
+                                    rows="2"
+                                    placeholder="เช่น รับได้แค่ 2 ตัว, หลัง 5 โมง"
+                                    value={formData.notes}
+                                    onChange={e => setFormData({ ...formData, notes: e.target.value })}
+                                ></textarea>
                             </div>
                         </div>
+
                         <div className="modal-footer">
-                            <button className="btn btn-secondary" onClick={() => setShowApproveYearsModal(false)}>
+                            <button className="btn btn-secondary" onClick={() => setShowAddModal(false)}>
                                 ยกเลิก
                             </button>
-                            <button
-                                className="btn btn-primary"
-                                onClick={handleApproveWithYears}
-                                disabled={approving}
-                            >
-                                {approving ? 'กำลังดำเนินการ...' : <><FiCheck /> อนุมัติ</>}
+                            <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                                {saving ? 'กำลังบันทึก...' : <><FiCheck /> บันทึก</>}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
+
+            {/* Upstream Dealer Settings Modal */}
+            {showSettingsModal && settingsDealer && (
+                <UpstreamDealerSettings 
+                    dealer={settingsDealer} 
+                    onClose={() => { setShowSettingsModal(false); setSettingsDealer(null); }}
+                    onSaved={fetchUpstreamDealers}
+                />
+            )}
+        </div>
+    )
+}
+
+// Upstream Dealer Settings Component - For setting commission and payout rates
+function UpstreamDealerSettings({ dealer, onClose, onSaved }) {
+    const { user } = useAuth()
+    const [loading, setLoading] = useState(true)
+    const [saving, setSaving] = useState(false)
+    const [activeTab, setActiveTab] = useState('thai')
+
+    const getDefaultSettings = () => ({
+        thai: {
+            'run_top': { commission: 15, payout: 3 },
+            'run_bottom': { commission: 15, payout: 4 },
+            'pak_top': { commission: 15, payout: 8 },
+            'pak_bottom': { commission: 15, payout: 6 },
+            '2_top': { commission: 15, payout: 65 },
+            '2_front': { commission: 15, payout: 65 },
+            '2_center': { commission: 15, payout: 65 },
+            '2_run': { commission: 15, payout: 10 },
+            '2_bottom': { commission: 15, payout: 65 },
+            '3_top': { commission: 30, payout: 550 },
+            '3_tod': { commission: 15, payout: 100 },
+            '3_bottom': { commission: 15, payout: 135 },
+            '4_run': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 }
+        },
+        lao: {
+            '4_set': { 
+                commission: 25, 
+                setPrice: 120,
+                isSet: true,
+                prizes: {
+                    '4_straight_set': 100000,
+                    '4_tod_set': 4000,
+                    '3_straight_set': 30000,
+                    '3_tod_set': 3000,
+                    '2_front_set': 1000,
+                    '2_back_set': 1000
+                }
+            },
+            'run_top': { commission: 15, payout: 3 },
+            'run_bottom': { commission: 15, payout: 4 },
+            'pak_top': { commission: 15, payout: 8 },
+            'pak_bottom': { commission: 15, payout: 6 },
+            '2_top': { commission: 15, payout: 65 },
+            '2_front': { commission: 15, payout: 65 },
+            '2_center': { commission: 15, payout: 65 },
+            '2_run': { commission: 15, payout: 10 },
+            '2_bottom': { commission: 15, payout: 65 },
+            '3_straight': { commission: 30, payout: 550 },
+            '3_tod_single': { commission: 15, payout: 100 },
+            '4_run': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 }
+        },
+        hanoi: {
+            '4_set': { 
+                commission: 25, 
+                setPrice: 120,
+                isSet: true,
+                prizes: {
+                    '4_straight_set': 100000,
+                    '4_tod_set': 4000,
+                    '3_straight_set': 30000,
+                    '3_tod_set': 3000,
+                    '2_front_set': 1000,
+                    '2_back_set': 1000
+                }
+            },
+            'run_top': { commission: 15, payout: 3 },
+            'run_bottom': { commission: 15, payout: 4 },
+            'pak_top': { commission: 15, payout: 8 },
+            'pak_bottom': { commission: 15, payout: 6 },
+            '2_top': { commission: 15, payout: 65 },
+            '2_front': { commission: 15, payout: 65 },
+            '2_center': { commission: 15, payout: 65 },
+            '2_run': { commission: 15, payout: 10 },
+            '2_bottom': { commission: 15, payout: 65 },
+            '3_straight': { commission: 30, payout: 550 },
+            '3_tod_single': { commission: 15, payout: 100 },
+            '4_run': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 }
+        },
+        stock: {
+            '2_top': { commission: 15, payout: 65 },
+            '2_bottom': { commission: 15, payout: 65 }
+        }
+    })
+
+    const [settings, setSettings] = useState(getDefaultSettings())
+
+    const BET_LABELS = {
+        thai: {
+            'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
+            'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
+            '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
+            '3_top': '3 ตัวบน', '3_tod': '3 ตัวโต๊ด', '3_bottom': '3 ตัวล่าง',
+            '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
+        },
+        lao: {
+            '4_set': '4 ตัวชุด',
+            'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
+            'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
+            '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
+            '3_top': '3 ตัวตรง', '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
+            '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
+        },
+        hanoi: {
+            '4_set': '4 ตัวชุด',
+            'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
+            'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
+            '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
+            '3_top': '3 ตัวตรง', '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
+            '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
+        },
+        stock: { '2_top': '2 ตัวบน', '2_bottom': '2 ตัวล่าง' }
+    }
+
+    const SET_PRIZE_LABELS = {
+        '4_straight_set': '4 ตัวตรงชุด',
+        '4_tod_set': '4 ตัวโต๊ดชุด',
+        '3_straight_set': '3 ตัวตรงชุด',
+        '3_tod_set': '3 ตัวโต๊ดชุด',
+        '2_front_set': '2 ตัวหน้าชุด',
+        '2_back_set': '2 ตัวหลังชุด'
+    }
+
+    useEffect(() => {
+        fetchSettings()
+    }, [dealer.id])
+
+    async function fetchSettings() {
+        setLoading(true)
+        try {
+            if (dealer.lottery_settings) {
+                const merged = { ...getDefaultSettings() }
+                Object.keys(dealer.lottery_settings).forEach(tab => {
+                    if (merged[tab]) {
+                        Object.keys(dealer.lottery_settings[tab]).forEach(key => {
+                            if (merged[tab][key]) {
+                                merged[tab][key] = { ...merged[tab][key], ...dealer.lottery_settings[tab][key] }
+                            }
+                        })
+                    }
+                })
+                setSettings(merged)
+            }
+        } catch (error) {
+            console.error('Error loading settings:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    async function handleSave() {
+        setSaving(true)
+        try {
+            const { error } = await supabase
+                .from('dealer_upstream_connections')
+                .update({
+                    lottery_settings: settings,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', dealer.id)
+
+            if (error) throw error
+            toast.success('บันทึกการตั้งค่าสำเร็จ')
+            onSaved?.()
+            onClose()
+        } catch (error) {
+            console.error('Error saving settings:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    const updateSetting = (tab, key, field, value) => {
+        setSettings(prev => ({
+            ...prev,
+            [tab]: {
+                ...prev[tab],
+                [key]: { ...prev[tab][key], [field]: parseFloat(value) || 0 }
+            }
+        }))
+    }
+
+    const LOTTERY_TABS = [
+        { key: 'thai', label: 'หวยไทย' },
+        { key: 'lao', label: 'หวยลาว' },
+        { key: 'hanoi', label: 'หวยฮานอย' },
+        { key: 'stock', label: 'หวยหุ้น' }
+    ]
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal modal-xl" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                    <h3><FiSettings /> ตั้งค่าเจ้ามือ: {dealer.upstream_name}</h3>
+                    <button className="modal-close" onClick={onClose}><FiX /></button>
+                </div>
+
+                <div className="modal-body">
+                    {loading ? (
+                        <div className="loading-state"><div className="spinner"></div></div>
+                    ) : (
+                        <div className="settings-form">
+                            <p style={{ marginBottom: '1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+                                ตั้งค่าคอมมิชชั่นและอัตราจ่ายสำหรับเลขที่รับจากเจ้ามือนี้
+                            </p>
+                            <div className="settings-tabs">
+                                {LOTTERY_TABS.map(tab => (
+                                    <button
+                                        key={tab.key}
+                                        className={`settings-tab ${activeTab === tab.key ? 'active' : ''}`}
+                                        onClick={() => setActiveTab(tab.key)}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* 4 ตัวชุด Section for Lao or Hanoi */}
+                            {(activeTab === 'lao' || activeTab === 'hanoi') && settings[activeTab]?.['4_set'] && (
+                                <div className="set-settings-section" style={{ marginBottom: '1.5rem' }}>
+                                    <h4 style={{ marginBottom: '1rem', color: 'var(--color-primary)' }}>
+                                        <FiPackage style={{ marginRight: '0.5rem' }} />
+                                        4 ตัวชุด
+                                    </h4>
+                                    
+                                    {/* Set Price and Commission Row */}
+                                    <div className="set-config-row">
+                                        <div className="set-config-item">
+                                            <span className="info-label">ราคาชุดละ:</span>
+                                            <div className="input-group input-group-wide">
+                                                <input
+                                                    type="number"
+                                                    className="form-input"
+                                                    value={settings[activeTab]['4_set'].setPrice || 120}
+                                                    onChange={e => {
+                                                        const newSettings = { ...settings }
+                                                        newSettings[activeTab]['4_set'].setPrice = Number(e.target.value)
+                                                        setSettings(newSettings)
+                                                    }}
+                                                />
+                                                <span className="input-suffix">บาท</span>
+                                            </div>
+                                        </div>
+                                        <div className="set-config-item">
+                                            <span className="info-label">ค่าคอม:</span>
+                                            <div className="input-group input-group-wide">
+                                                <input
+                                                    type="number"
+                                                    className="form-input"
+                                                    value={settings[activeTab]['4_set'].commission}
+                                                    onChange={e => {
+                                                        const newSettings = { ...settings }
+                                                        newSettings[activeTab]['4_set'].commission = Number(e.target.value)
+                                                        setSettings(newSettings)
+                                                    }}
+                                                />
+                                                <span className="input-suffix">฿/ชุด</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Prize Table */}
+                                    <table className="settings-table settings-table-wide">
+                                        <thead>
+                                            <tr>
+                                                <th>ประเภทรางวัล</th>
+                                                <th>เงินรางวัล (บาท/ชุด)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {Object.entries(settings[activeTab]['4_set'].prizes || {}).map(([prizeKey, prizeAmount]) => (
+                                                <tr key={prizeKey}>
+                                                    <td className="type-cell">{SET_PRIZE_LABELS[prizeKey] || prizeKey}</td>
+                                                    <td>
+                                                        <div className="input-group input-group-wide">
+                                                            <input
+                                                                type="number"
+                                                                className="form-input"
+                                                                value={prizeAmount}
+                                                                onChange={e => {
+                                                                    const newSettings = { ...settings }
+                                                                    newSettings[activeTab]['4_set'].prizes[prizeKey] = Number(e.target.value)
+                                                                    setSettings(newSettings)
+                                                                }}
+                                                            />
+                                                            <span className="input-suffix">บาท</span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+
+                            {/* Regular Bet Types Table */}
+                            <div className="settings-table-wrap">
+                                <table className="settings-table settings-table-wide">
+                                    <thead>
+                                        <tr>
+                                            <th>ประเภท</th>
+                                            <th>ค่าคอม</th>
+                                            <th>อัตราจ่าย</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {Object.entries(settings[activeTab] || {})
+                                            .filter(([key]) => key !== '4_set')
+                                            .map(([key, value]) => (
+                                            <tr key={key}>
+                                                <td className="type-cell">{BET_LABELS[activeTab]?.[key] || key}</td>
+                                                <td>
+                                                    <div className="input-group input-group-wide">
+                                                        <input
+                                                            type="number"
+                                                            className="form-input"
+                                                            value={value.commission}
+                                                            onChange={e => updateSetting(activeTab, key, 'commission', e.target.value)}
+                                                        />
+                                                        <span className="input-suffix">%</span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div className="input-group input-group-wide">
+                                                        <input
+                                                            type="number"
+                                                            className="form-input"
+                                                            value={value.payout}
+                                                            onChange={e => updateSetting(activeTab, key, 'payout', e.target.value)}
+                                                        />
+                                                        <span className="input-suffix">เท่า</span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="modal-footer">
+                    <button className="btn btn-secondary" onClick={onClose}>ยกเลิก</button>
+                    <button className="btn btn-primary" onClick={handleSave} disabled={saving || loading}>
+                        {saving ? 'กำลังบันทึก...' : <><FiCheck /> บันทึก</>}
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// Member Settings Component - With Lottery Type Tabs
+// Refactored from UserSettingsModal to support inline rendering
+function MemberSettings({ member, onClose, isInline = false }) {
+    const { user } = useAuth()
+    const [loading, setLoading] = useState(true)
+    const [saving, setSaving] = useState(false)
+    const [activeTab, setActiveTab] = useState('thai')
+
+    // Default settings structure with commission and payout rates
+    const getDefaultSettings = () => ({
+        thai: {
+            'run_top': { commission: 15, payout: 3 },
+            'run_bottom': { commission: 15, payout: 4 },
+            'pak_top': { commission: 15, payout: 8 },
+            'pak_bottom': { commission: 15, payout: 6 },
+            '2_top': { commission: 15, payout: 65 },
+            '2_front': { commission: 15, payout: 65 },
+            '2_center': { commission: 15, payout: 65 },
+            '2_run': { commission: 15, payout: 10 },
+            '2_bottom': { commission: 15, payout: 65 },
+            '3_top': { commission: 30, payout: 550 },
+            '3_tod': { commission: 15, payout: 100 },
+            '3_bottom': { commission: 15, payout: 135 },
+            '4_run': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 }
+        },
+        lao: {
+            '4_set': { 
+                commission: 25, 
+                setPrice: 120,
+                isSet: true,
+                prizes: {
+                    '4_straight_set': 100000,
+                    '4_tod_set': 4000,
+                    '3_straight_set': 30000,
+                    '3_tod_set': 3000,
+                    '2_front_set': 1000,
+                    '2_back_set': 1000
+                }
+            },
+            'run_top': { commission: 15, payout: 3 },
+            'run_bottom': { commission: 15, payout: 4 },
+            'pak_top': { commission: 15, payout: 8 },
+            'pak_bottom': { commission: 15, payout: 6 },
+            '2_top': { commission: 15, payout: 65 },
+            '2_front': { commission: 15, payout: 65 },
+            '2_center': { commission: 15, payout: 65 },
+            '2_run': { commission: 15, payout: 10 },
+            '2_bottom': { commission: 15, payout: 65 },
+            '3_straight': { commission: 30, payout: 550 },
+            '3_tod_single': { commission: 15, payout: 100 },
+            '4_run': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 }
+        },
+        hanoi: {
+            '4_set': { 
+                commission: 25, 
+                setPrice: 120,
+                isSet: true,
+                prizes: {
+                    '4_straight_set': 100000,
+                    '4_tod_set': 4000,
+                    '3_straight_set': 30000,
+                    '3_tod_set': 3000,
+                    '2_front_set': 1000,
+                    '2_back_set': 1000
+                }
+            },
+            'run_top': { commission: 15, payout: 3 },
+            'run_bottom': { commission: 15, payout: 4 },
+            'pak_top': { commission: 15, payout: 8 },
+            'pak_bottom': { commission: 15, payout: 6 },
+            '2_top': { commission: 15, payout: 65 },
+            '2_front': { commission: 15, payout: 65 },
+            '2_center': { commission: 15, payout: 65 },
+            '2_run': { commission: 15, payout: 10 },
+            '2_bottom': { commission: 15, payout: 65 },
+            '3_straight': { commission: 30, payout: 550 },
+            '3_tod_single': { commission: 15, payout: 100 },
+            '4_run': { commission: 15, payout: 20 },
+            '5_run': { commission: 15, payout: 10 }
+        },
+        stock: {
+            '2_top': { commission: 15, payout: 65 },
+            '2_bottom': { commission: 15, payout: 65 }
+        }
+    })
+
+    const [settings, setSettings] = useState(getDefaultSettings())
+
+    // Labels for each bet type
+    const BET_LABELS = {
+        thai: {
+            'run_top': 'ลอยบน',
+            'run_bottom': 'ลอยล่าง',
+            'pak_top': 'ปักบน',
+            'pak_bottom': 'ปักล่าง',
+            '2_top': '2 ตัวบน',
+            '2_front': '2 ตัวหน้า',
+            '2_center': '2 ตัวถ่าง',
+            '2_run': '2 ตัวลอย',
+            '2_bottom': '2 ตัวล่าง',
+            '3_top': '3 ตัวบน',
+            '3_tod': '3 ตัวโต๊ด',
+            '3_bottom': '3 ตัวล่าง',
+            '4_run': '4 ตัวลอย',
+            '5_run': '5 ตัวลอย'
+        },
+        lao: {
+            '4_set': '4 ตัวชุด',
+            'run_top': 'ลอยบน',
+            'run_bottom': 'ลอยล่าง',
+            'pak_top': 'ปักบน',
+            'pak_bottom': 'ปักล่าง',
+            '2_top': '2 ตัวบน',
+            '2_front': '2 ตัวหน้า',
+            '2_center': '2 ตัวถ่าง',
+            '2_run': '2 ตัวลอย',
+            '2_bottom': '2 ตัวล่าง',
+            '3_top': '3 ตัวตรง',
+            '3_straight': '3 ตัวตรง',
+            '3_tod_single': '3 ตัวโต๊ด',
+            '4_run': '4 ตัวลอย',
+            '5_run': '5 ตัวลอย'
+        },
+        hanoi: {
+            '4_set': '4 ตัวชุด',
+            'run_top': 'ลอยบน',
+            'run_bottom': 'ลอยล่าง',
+            'pak_top': 'ปักบน',
+            'pak_bottom': 'ปักล่าง',
+            '2_top': '2 ตัวบน',
+            '2_front': '2 ตัวหน้า',
+            '2_center': '2 ตัวถ่าง',
+            '2_run': '2 ตัวลอย',
+            '2_bottom': '2 ตัวล่าง',
+            '3_top': '3 ตัวตรง',
+            '3_straight': '3 ตัวตรง',
+            '3_tod_single': '3 ตัวโต๊ด',
+            '4_run': '4 ตัวลอย',
+            '5_run': '5 ตัวลอย'
+        },
+        stock: {
+            '2_top': '2 ตัวบน',
+            '2_bottom': '2 ตัวล่าง'
+        }
+    }
+
+    const SET_PRIZE_LABELS = {
+        '4_straight_set': '4 ตัวตรงชุด',
+        '4_tod_set': '4 ตัวโต๊ดชุด',
+        '3_straight_set': '3 ตัวตรงชุด',
+        '3_tod_set': '3 ตัวโต๊ดชุด',
+        '2_front_set': '2 ตัวหน้าชุด',
+        '2_back_set': '2 ตัวหลังชุด'
+    }
+
+    useEffect(() => {
+        fetchSettings()
+    }, [member.id])
+
+    async function fetchSettings() {
+        setLoading(true)
+        try {
+            const { data, error } = await supabase
+                .from('user_settings')
+                .select('*')
+                .eq('user_id', member.id)
+                .eq('dealer_id', user.id)
+                .single()
+
+            if (data && data.lottery_settings) {
+                const merged = { ...getDefaultSettings() }
+                Object.keys(data.lottery_settings).forEach(tab => {
+                    if (merged[tab]) {
+                        Object.keys(data.lottery_settings[tab]).forEach(key => {
+                            if (merged[tab][key]) {
+                                // Handle 4_set with nested prizes structure
+                                if (key === '4_set' && data.lottery_settings[tab][key].prizes) {
+                                    merged[tab][key] = {
+                                        ...merged[tab][key],
+                                        ...data.lottery_settings[tab][key],
+                                        prizes: {
+                                            ...merged[tab][key].prizes,
+                                            ...data.lottery_settings[tab][key].prizes
+                                        }
+                                    }
+                                } else {
+                                    merged[tab][key] = { ...merged[tab][key], ...data.lottery_settings[tab][key] }
+                                }
+                            }
+                        })
+                    }
+                })
+                setSettings(merged)
+            }
+        } catch (error) {
+            console.error('Error fetching user settings:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    async function handleSave() {
+        setSaving(true)
+        try {
+            const { error } = await supabase
+                .from('user_settings')
+                .upsert({
+                    user_id: member.id,
+                    dealer_id: user.id,
+                    lottery_settings: settings,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'user_id, dealer_id' })
+
+            if (error) throw error
+            toast.success('บันทึกการตั้งค่าสำเร็จ')
+            if (!isInline) onClose()
+        } catch (error) {
+            console.error('Error saving user settings:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    const updateSetting = (tab, key, field, value) => {
+        setSettings(prev => ({
+            ...prev,
+            [tab]: {
+                ...prev[tab],
+                [key]: {
+                    ...prev[tab][key],
+                    [field]: parseFloat(value) || 0
+                }
+            }
+        }))
+    }
+
+    // Handle Enter key to jump to next input and select all
+    const handleSettingsInputKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault()
+            const form = e.target.closest('.settings-form, .member-settings-inline')
+            if (!form) return
+
+            const inputs = Array.from(form.querySelectorAll('input[type="number"]:not([disabled])'))
+            const currentIndex = inputs.indexOf(e.target)
+            
+            if (currentIndex >= 0 && currentIndex < inputs.length - 1) {
+                const nextInput = inputs[currentIndex + 1]
+                nextInput.focus()
+                nextInput.select() // Select all text in next input
+            }
+        }
+    }
+
+    // Handle focus to select all text
+    const handleSettingsInputFocus = (e) => {
+        e.target.select()
+    }
+
+    const LOTTERY_TABS = [
+        { key: 'thai', label: 'หวยไทย' },
+        { key: 'lao', label: 'หวยลาว' },
+        { key: 'hanoi', label: 'หวยฮานอย' },
+        { key: 'stock', label: 'หวยหุ้น' }
+    ]
+
+    const content = (
+        <div className={isInline ? "member-settings-inline" : "modal modal-xl"} onClick={e => !isInline && e.stopPropagation()}>
+            {!isInline && (
+                <div className="modal-header">
+                    <h3><FiSettings /> ตั้งค่าสมาชิก: {member.full_name}</h3>
+                    <button className="modal-close" onClick={onClose}>
+                        <FiX />
+                    </button>
+                </div>
+            )}
+
+            {isInline && (
+                <div className="settings-header-inline" style={{ marginBottom: '1rem' }}>
+                    <h3 style={{ margin: 0 }}>ตั้งค่า: {member.full_name}</h3>
+                </div>
+            )}
+
+            <div className={isInline ? "settings-body" : "modal-body"}>
+                {loading ? (
+                    <div className="loading-state">
+                        <div className="spinner"></div>
+                    </div>
+                ) : (
+                    <div className="settings-form">
+                        <div className="settings-tabs">
+                            {LOTTERY_TABS.map(tab => (
+                                <button
+                                    key={tab.key}
+                                    className={`settings-tab ${activeTab === tab.key ? 'active' : ''}`}
+                                    onClick={() => setActiveTab(tab.key)}
+                                >
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* 4 ตัวชุด Section for Lao or Hanoi */}
+                        {(activeTab === 'lao' || activeTab === 'hanoi') && settings[activeTab]?.['4_set'] && (
+                            <div className="set-settings-section" style={{ marginBottom: '1.5rem' }}>
+                                <h4 style={{ marginBottom: '1rem', color: 'var(--color-primary)' }}>
+                                    <FiPackage style={{ marginRight: '0.5rem' }} />
+                                    4 ตัวชุด
+                                </h4>
+                                
+                                {/* Set Price and Commission Row */}
+                                <div className="set-config-row">
+                                    <div className="set-config-item">
+                                        <span className="info-label">ราคาชุดละ:</span>
+                                        <div className="input-group input-group-wide">
+                                            <input
+                                                type="number"
+                                                className="form-input"
+                                                value={settings[activeTab]['4_set'].setPrice || 120}
+                                                onChange={e => {
+                                                    const newSettings = { ...settings }
+                                                    newSettings[activeTab]['4_set'].setPrice = Number(e.target.value)
+                                                    setSettings(newSettings)
+                                                }}
+                                                onKeyDown={handleSettingsInputKeyDown}
+                                                onFocus={handleSettingsInputFocus}
+                                            />
+                                            <span className="input-suffix">บาท</span>
+                                        </div>
+                                    </div>
+                                    <div className="set-config-item">
+                                        <span className="info-label">ค่าคอม:</span>
+                                        <div className="input-group input-group-wide">
+                                            <input
+                                                type="number"
+                                                className="form-input"
+                                                value={settings[activeTab]['4_set'].commission}
+                                                onChange={e => {
+                                                    const newSettings = { ...settings }
+                                                    newSettings[activeTab]['4_set'].commission = Number(e.target.value)
+                                                    setSettings(newSettings)
+                                                }}
+                                                onKeyDown={handleSettingsInputKeyDown}
+                                                onFocus={handleSettingsInputFocus}
+                                            />
+                                            <span className="input-suffix">฿/ชุด</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Prize Table */}
+                                <table className="settings-table settings-table-wide">
+                                    <thead>
+                                        <tr>
+                                            <th>ประเภทรางวัล</th>
+                                            <th>เงินรางวัล (บาท/ชุด)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {Object.entries(settings[activeTab]['4_set'].prizes || {}).map(([prizeKey, prizeAmount]) => (
+                                            <tr key={prizeKey}>
+                                                <td className="type-cell">{SET_PRIZE_LABELS[prizeKey] || prizeKey}</td>
+                                                <td>
+                                                    <div className="input-group input-group-wide">
+                                                        <input
+                                                            type="number"
+                                                            className="form-input"
+                                                            value={prizeAmount}
+                                                            onChange={e => {
+                                                                const newSettings = { ...settings }
+                                                                newSettings[activeTab]['4_set'].prizes[prizeKey] = Number(e.target.value)
+                                                                setSettings(newSettings)
+                                                            }}
+                                                            onKeyDown={handleSettingsInputKeyDown}
+                                                            onFocus={handleSettingsInputFocus}
+                                                        />
+                                                        <span className="input-suffix">บาท</span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {/* Regular Bet Types Table */}
+                        <div className="settings-table-wrap">
+                            <table className="settings-table">
+                                <thead>
+                                    <tr>
+                                        <th>ประเภท</th>
+                                        <th>ค่าคอม</th>
+                                        <th>อัตราจ่าย</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {Object.entries(settings[activeTab] || {})
+                                        .filter(([key]) => key !== '4_set')
+                                        .map(([key, value]) => (
+                                        <tr key={key}>
+                                            <td className="type-cell">
+                                                {BET_LABELS[activeTab]?.[key] || key}
+                                            </td>
+                                            <td>
+                                                <div className="input-group">
+                                                    <input
+                                                        type="number"
+                                                        className="form-input small"
+                                                        value={value.commission}
+                                                        onChange={e => updateSetting(activeTab, key, 'commission', e.target.value)}
+                                                        onKeyDown={handleSettingsInputKeyDown}
+                                                        onFocus={handleSettingsInputFocus}
+                                                    />
+                                                    <span className="input-suffix">%</span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div className="input-group">
+                                                    <input
+                                                        type="number"
+                                                        className="form-input small"
+                                                        value={value.payout}
+                                                        onChange={e => updateSetting(activeTab, key, 'payout', e.target.value)}
+                                                        onKeyDown={handleSettingsInputKeyDown}
+                                                        onFocus={handleSettingsInputFocus}
+                                                    />
+                                                    <span className="input-suffix">เท่า</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Save Button - Inline mode only */}
+                        {isInline && (
+                            <div className="settings-footer" style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'flex-end' }}>
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={handleSave}
+                                    disabled={loading || saving}
+                                    style={{ minWidth: '180px' }}
+                                >
+                                    {saving ? 'กำลังบันทึก...' : <><FiCheck /> บันทึกการตั้งค่า</>}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {!isInline && (
+                <div className="modal-footer">
+                    <button className="btn btn-secondary" onClick={onClose}>
+                        ยกเลิก
+                    </button>
+                    <button
+                        className="btn btn-primary"
+                        onClick={handleSave}
+                        disabled={loading || saving}
+                    >
+                        {saving ? 'กำลังบันทึก...' : <><FiCheck /> บันทึกการตั้งค่า</>}
+                    </button>
+                </div>
+            )}
+        </div>
+    )
+
+    if (isInline) return content
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            {content}
         </div>
     )
 }

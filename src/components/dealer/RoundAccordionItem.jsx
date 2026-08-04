@@ -882,6 +882,11 @@ export default function RoundAccordionItem({
             const limitsObj = { ...defaultLimits }
             typeLimitsResult.data?.forEach(l => { limitsObj[l.bet_type] = l.max_per_number })
             setInlineTypeLimits(limitsObj)
+            // DEBUG: log limits difference to find 200 discrepancy
+            console.log('[ExcessDebug] round.id:', round.id, 'lottery_type:', round.lottery_type)
+            console.log('[ExcessDebug] defaultLimits:', defaultLimits)
+            console.log('[ExcessDebug] DB typeLimits raw:', typeLimitsResult.data)
+            console.log('[ExcessDebug] merged limitsObj:', limitsObj)
 
             setInlineNumberLimits(numLimitsResult.data || [])
             setInlineTransfers(transfersResult.data || [])
