@@ -1458,6 +1458,7 @@ export default function RoundAccordionItem({
             const payoutPercent = numberLimit ? getEffectivePayoutPercent(numberLimit) : 100
 
             const transferredForThis = inlineTransfers.filter(t => {
+                if (t.status === 'returned') return false
                 const tIsSet4 = t.bet_type === '4_set' || t.bet_type === '4_top'
                 const tNormalized = normalizeNumber(t.numbers, t.bet_type)
                 // Match if same bet type, or both are 4-digit sets

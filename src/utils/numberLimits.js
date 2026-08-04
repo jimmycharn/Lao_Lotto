@@ -1,5 +1,5 @@
 import { supabase, fetchAllRows } from '../lib/supabase'
-import { normalizeNumber, PERMUTATION_BET_TYPES } from '../constants/lotteryTypes'
+import { normalizeNumber, PERMUTATION_BET_TYPES, getLimitLookupBetType } from '../constants/lotteryTypes'
 
 /**
  * Fetch all active number limits for a round
@@ -55,15 +55,17 @@ export async function fetchCurrentTotals(roundId) {
  * Checks direct match first, then reversed match, then normalized match for permutation bet types
  */
 export function findMatchingLimit(numberLimits, betType, numbers) {
-    // 1. Direct match: same bet_type and same numbers
-    const directMatch = numberLimits.find(
-        nl => nl.bet_type === betType && nl.numbers === numbers
+    const targetBetType = getLimitLookupBetType(betType)
+
+    // 1. Direct match: same canonical bet_type and same numbers
+    const directMatch = (numberLimits || []).find(
+        nl => getLimitLookupBetType(nl.bet_type) === targetBetType && nl.numbers === numbers
     )
     if (directMatch) return directMatch
 
-    // 2. Reversed match: same bet_type, include_reversed=true, and numbers is in reversed_numbers
-    const reversedMatch = numberLimits.find(
-        nl => nl.bet_type === betType &&
+    // 2. Reversed match: same canonical bet_type, include_reversed=true, and numbers is in reversed_numbers
+    const reversedMatch = (numberLimits || []).find(
+        nl => getLimitLookupBetType(nl.bet_type) === targetBetType &&
             nl.include_reversed &&
             Array.isArray(nl.reversed_numbers) &&
             nl.reversed_numbers.includes(numbers)
@@ -71,11 +73,10 @@ export function findMatchingLimit(numberLimits, betType, numbers) {
     if (reversedMatch) return reversedMatch
 
     // 3. Normalized match for permutation bet types (e.g. 2_run, 3_tod, 4_float, 5_float)
-    //    For these types, digit order doesn't matter, so '84' and '48' are the same bet
-    if (PERMUTATION_BET_TYPES.includes(betType)) {
-        const normalizedNumbers = normalizeNumber(numbers, betType)
-        const normalizedMatch = numberLimits.find(
-            nl => nl.bet_type === betType &&
+    if (PERMUTATION_BET_TYPES.includes(targetBetType)) {
+        const normalizedNumbers = normalizeNumber(numbers, targetBetType)
+        const normalizedMatch = (numberLimits || []).find(
+            nl => getLimitLookupBetType(nl.bet_type) === targetBetType &&
                 normalizeNumber(nl.numbers, nl.bet_type) === normalizedNumbers
         )
         if (normalizedMatch) return normalizedMatch

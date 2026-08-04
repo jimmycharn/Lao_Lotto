@@ -512,6 +512,7 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
              // Calculate already transferred amount for this number
              const transferredAmount = transfers
                  .filter(t => {
+                     if (t.status === 'returned') return false
                      const tBetType = getLimitLookupBetType(t.bet_type)
                      let tNum = t.numbers
                      if (t.bet_type === '3_tod' || t.bet_type === '4_tod') {
