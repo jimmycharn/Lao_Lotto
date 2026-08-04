@@ -1234,10 +1234,11 @@ export default function RoundAccordionItem({
 
         inlineSubmissions.forEach(sub => {
             const normalizedNumbers = normalizeNumber(sub.numbers, sub.bet_type)
-            const key = `${sub.bet_type}|${normalizedNumbers}`
+            const lookupBetType = getLimitLookupBetType(sub.bet_type)
+            const key = `${lookupBetType}|${normalizedNumbers}`
             if (!grouped[key]) {
                 grouped[key] = {
-                    bet_type: sub.bet_type,
+                    bet_type: lookupBetType,
                     numbers: normalizedNumbers,
                     originalNumbers: [sub.numbers],
                     total: 0,
