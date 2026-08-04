@@ -255,6 +255,24 @@ export function normalizeBetType(betType) {
     return ALIAS_MAP[betType] || betType
 }
 
+export function getLimitLookupBetType(betType) {
+    const ALIAS_MAP = {
+        'front_top_1': 'pak_top',
+        'middle_top_1': 'pak_top',
+        'back_top_1': 'pak_top',
+        'front_bottom_1': 'pak_bottom',
+        'back_bottom_1': 'pak_bottom',
+        '2_spread': '2_center',
+        '2_tang': '2_center',
+        '2_teng': '2_run',
+        '2_have': '2_run',
+        '2_back': '2_top',
+        '2_front_single': '2_front',
+        '4_set': '4_top'
+    }
+    return ALIAS_MAP[betType] || betType
+}
+
 // Helper to get default limits for a lottery type
 export function getDefaultLimitsForType(lotteryType) {
     const betTypes = BET_TYPES_BY_LOTTERY[lotteryType] || {}

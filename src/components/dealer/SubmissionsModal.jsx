@@ -25,7 +25,8 @@ import {
     DEFAULT_COMMISSIONS,
     DEFAULT_4_SET_SETTINGS,
     getLotteryTypeKey,
-    normalizeBetType
+    normalizeBetType,
+    getLimitLookupBetType
 } from '../../constants/lotteryTypes'
 import { findMatchingLimit } from '../../utils/numberLimits'
 import '../../pages/Dealer.css'
@@ -305,17 +306,18 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
         // Get set price for 4_top from round settings
         const setPrice = round?.set_prices?.['4_top'] || 120
 
-        // Group submissions by bet_type + numbers
+        // Group submissions by bet_type + numbers (using canonical lookup type for aliases)
         const grouped = {}
         submissions.forEach(sub => {
             let subNum = sub.numbers
             if (sub.bet_type === '3_tod' || sub.bet_type === '4_tod') {
                 subNum = subNum.split('').sort().join('')
             }
-            const key = `${sub.bet_type}|${subNum}`
+            const lookupBetType = getLimitLookupBetType(sub.bet_type)
+            const key = `${lookupBetType}|${subNum}`
             if (!grouped[key]) {
                 grouped[key] = {
-                    bet_type: sub.bet_type,
+                    bet_type: lookupBetType,
                     numbers: subNum,
                     total: 0,
                     setCount: 0, // Track number of sets for set-based bets
@@ -498,8 +500,8 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
                 return
             }
 
-            // For 4_set, map to 4_top for limit lookup (the underlying limit type)
-            const limitLookupBetType = group.bet_type === '4_set' ? '4_top' : group.bet_type
+            // Map bet_type to canonical limit lookup type (e.g. 4_set -> 4_top, front_top_1 -> pak_top, 2_spread -> 2_center)
+            const limitLookupBetType = getLimitLookupBetType(group.bet_type)
 
             // Get limit: first check number_limits (using findMatchingLimit), then type_limits
             const numberLimit = findMatchingLimit(numberLimits, limitLookupBetType, group.numbers)
@@ -510,8 +512,7 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
              // Calculate already transferred amount for this number
              const transferredAmount = transfers
                  .filter(t => {
-                     // Handle 4_set -> 4_top mapping for transfers
-                     const tBetType = t.bet_type === '4_set' ? '4_top' : t.bet_type
+                     const tBetType = getLimitLookupBetType(t.bet_type)
                      let tNum = t.numbers
                      if (t.bet_type === '3_tod' || t.bet_type === '4_tod') {
                          tNum = tNum.split('').sort().join('')

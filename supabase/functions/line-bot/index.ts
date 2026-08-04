@@ -2026,10 +2026,11 @@ async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
     if (sub.bet_type === '3_tod' || sub.bet_type === '4_tod') {
       subNum = subNum.split('').sort().join('');
     }
-    const key = `${sub.bet_type}|${subNum}`;
+    const lookupBetType = getLimitLookupBetType(sub.bet_type);
+    const key = `${lookupBetType}|${subNum}`;
     if (!grouped[key]) {
       grouped[key] = {
-        bet_type: sub.bet_type,
+        bet_type: lookupBetType,
         numbers: subNum,
         totalAmt: 0,
         setCount: 0,
@@ -2155,18 +2156,35 @@ async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
     });
   }
 
+function getLimitLookupBetType(betType: string): string {
+  const ALIAS_MAP: Record<string, string> = {
+    'front_top_1': 'pak_top',
+    'middle_top_1': 'pak_top',
+    'back_top_1': 'pak_top',
+    'front_bottom_1': 'pak_bottom',
+    'back_bottom_1': 'pak_bottom',
+    '2_spread': '2_center',
+    '2_tang': '2_center',
+    '2_teng': '2_run',
+    '2_have': '2_run',
+    '2_back': '2_top',
+    '2_front_single': '2_front',
+    '4_set': '4_top'
+  };
+  return ALIAS_MAP[betType] || betType;
+}
+
   // Process other bet types normally
   for (const group of Object.values(grouped)) {
     if (isSetBasedLottery && (group.bet_type === '4_set' || group.bet_type === '4_top')) {
       continue;
     }
 
-    const limitLookupBetType = group.bet_type;
-    const key = `${group.bet_type}|${group.numbers}`;
+    const limitLookupBetType = getLimitLookupBetType(group.bet_type);
     
     // Find number limit (respecting reversed_numbers/include_reversed)
     const numberLimit = (numberLimits || []).find((nl: any) => {
-      const nlBetType = nl.bet_type === '4_set' ? '4_top' : nl.bet_type;
+      const nlBetType = getLimitLookupBetType(nl.bet_type);
       if (nlBetType === limitLookupBetType && nl.numbers === group.numbers) {
         return true;
       }
@@ -2186,7 +2204,8 @@ async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
         if (t.bet_type === '3_tod' || t.bet_type === '4_tod') {
           tNum = tNum.split('').sort().join('');
         }
-        return t.bet_type === limitLookupBetType && tNum === group.numbers;
+        const tBetType = getLimitLookupBetType(t.bet_type);
+        return tBetType === limitLookupBetType && tNum === group.numbers;
       })
       .reduce((sum, t) => sum + Number(t.amount || 0), 0);
 
