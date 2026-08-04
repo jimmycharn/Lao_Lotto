@@ -5033,6 +5033,22 @@ serve(async (req) => {
         }
       }
 
+      // Fallback: search for active automation job for this dealer & lottery_type if not linked by ID
+      if (!job) {
+        const { data: fallbackJob } = await supabase
+          .from('dealer_automation_jobs')
+          .select('*')
+          .eq('dealer_id', round.dealer_id)
+          .eq('lottery_type', round.lottery_type)
+          .eq('is_active', true)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (fallbackJob) {
+          job = fallbackJob;
+        }
+      }
+
       // Check if notifications or automation is enabled for this round
       const isAutomationActive = round.created_by_job_id ? isJobActive : (round.notify_close_to_groups !== false);
       if (!isAutomationActive) {
@@ -5243,36 +5259,55 @@ serve(async (req) => {
 
         // 2. Custom Number Reports (only for job automation)
         if (job && job.notify_bets_enabled && job.notify_bets_group_id) {
+          console.log(`[auto_close_notify] Custom reports enabled for job ${job.id}. Group ID=${job.notify_bets_group_id}, types=${JSON.stringify(job.notify_bets_types)}`);
+          
+          let targetLineGroupId: string | null = null;
           const { data: reportGroup } = await supabase
             .from('line_groups')
             .select('line_group_id')
-            .eq('id', job.notify_bets_group_id)
-            .eq('is_active', true)
+            .or(`id.eq.${job.notify_bets_group_id},line_group_id.eq.${job.notify_bets_group_id}`)
             .maybeSingle();
 
           if (reportGroup && reportGroup.line_group_id) {
+            targetLineGroupId = reportGroup.line_group_id;
+          } else if (typeof job.notify_bets_group_id === 'string' && job.notify_bets_group_id.startsWith('C')) {
+            targetLineGroupId = job.notify_bets_group_id;
+          }
+
+          if (targetLineGroupId) {
             const reportTypes = Array.isArray(job.notify_bets_types) ? job.notify_bets_types : [];
             for (const type of reportTypes) {
-              let textMsg: any = "";
-              if (type === 'total') {
-                textMsg = await generateTotalNumbersSummary(round.id, round.lottery_type);
-              } else if (type === 'remaining') {
-                textMsg = await generateRemainingNumbersSummary(round.id, round.lottery_type);
-              } else if (type === 'layoff') {
-                textMsg = await generateLayoffNumbersSummary(round.id, round.lottery_type);
-              } else if (type === 'individual') {
-                const res = await generateIndividualSubmissionsSummaryFlex(round.id, round.lottery_type);
-                textMsg = res.flexMessage;
-              }
-
-              if (textMsg) {
-                try {
-                  await sendLinePush(reportGroup.line_group_id, textMsg);
-                } catch (pushErr) {
-                  console.error(`Failed to send ${type} report to group ${reportGroup.line_group_id}:`, pushErr);
+              try {
+                if (type === 'total') {
+                  const textMsg = await generateTotalNumbersSummary(round.id, round.lottery_type);
+                  if (textMsg) {
+                    const msgs = splitTextByLimit(textMsg);
+                    for (const m of msgs) await sendLinePush(targetLineGroupId, m);
+                  }
+                } else if (type === 'remaining') {
+                  const textMsg = await generateRemainingNumbersSummary(round.id, round.lottery_type);
+                  if (textMsg) {
+                    const msgs = splitTextByLimit(textMsg);
+                    for (const m of msgs) await sendLinePush(targetLineGroupId, m);
+                  }
+                } else if (type === 'layoff') {
+                  const textMsg = await generateLayoffNumbersSummary(round.id, round.lottery_type);
+                  if (textMsg) {
+                    const msgs = splitTextByLimit(textMsg);
+                    for (const m of msgs) await sendLinePush(targetLineGroupId, m);
+                  }
+                } else if (type === 'individual') {
+                  const res = await generateIndividualSubmissionsSummaryFlex(round.id, round.lottery_type);
+                  if (res?.flexMessage) {
+                    await sendLinePush(targetLineGroupId, res.flexMessage);
+                  }
                 }
+              } catch (pushErr) {
+                console.error(`Failed to send ${type} report to group ${targetLineGroupId}:`, pushErr);
               }
             }
+          } else {
+            console.error(`[auto_close_notify] Could not resolve line_group_id for notify_bets_group_id: ${job.notify_bets_group_id}`);
           }
         }
 
