@@ -93,6 +93,9 @@ export default function Dealer() {
 
     // Modal states
     const [showCreateModal, setShowCreateModal] = useState(false)
+    const [templates, setTemplates] = useState({})
+    const [loadingTemplates, setLoadingTemplates] = useState(false)
+    const [savingTemplate, setSavingTemplate] = useState(false)
     const [showEditModal, setShowEditModal] = useState(false)
     const [editingRound, setEditingRound] = useState(null)
     const [showLimitsModal, setShowLimitsModal] = useState(false)
@@ -159,24 +162,251 @@ export default function Dealer() {
         lottery_type: 'lao',
         lottery_name: '',
         open_date: new Date().toISOString().split('T')[0],
-        open_time: '08:00',
+        open_time: '06:00',
         close_date: new Date().toISOString().split('T')[0],
-        close_time: '20:00',
-        delete_before_minutes: 1,
+        close_time: '20:15',
+        delete_before_minutes: 30,
+        delete_after_submit_minutes: 120,
         currency_symbol: '฿',
         currency_name: 'บาท',
+        notify_close_to_groups: true,
         type_limits: getDefaultLimitsForType('lao'),
-        set_prices: getDefaultSetPricesForType('lao')
+        set_prices: getDefaultSetPricesForType('lao'),
+        type_close_times: {},
+        type_close_time_behaviors: {}
     })
+
+    // Open create round modal and populate with template or defaults
+    const handleOpenCreateModal = () => {
+        const defaultType = 'lao'
+        let open_time = '06:00'
+        let close_time = '20:15'
+        let delete_after_submit_minutes = 120
+        let delete_before_minutes = 30
+        let notify_close_to_groups = true
+        let currency_symbol = '฿'
+        let currency_name = 'บาท'
+        let type_limits = getDefaultLimitsForType(defaultType)
+        let set_prices = getDefaultSetPricesForType(defaultType)
+        let type_close_times = {}
+        let type_close_time_behaviors = {}
+
+        const template = templates[defaultType]
+        if (template) {
+            open_time = template.open_time || open_time
+            close_time = template.close_time || close_time
+            delete_before_minutes = template.delete_before_minutes
+            delete_after_submit_minutes = template.delete_after_submit_minutes
+            currency_symbol = template.currency_symbol || currency_symbol
+            currency_name = template.currency_name || currency_name
+            notify_close_to_groups = template.notify_close_to_groups
+            if (template.type_limits) {
+                type_limits = { ...type_limits, ...template.type_limits }
+            }
+            if (template.set_prices) {
+                set_prices = { ...set_prices, ...template.set_prices }
+            }
+            if (template.type_close_times) {
+                type_close_times = { ...template.type_close_times }
+            }
+            if (template.type_close_time_behaviors) {
+                type_close_time_behaviors = { ...template.type_close_time_behaviors }
+            }
+        }
+
+        setRoundForm({
+            lottery_type: defaultType,
+            lottery_name: '',
+            open_date: new Date().toISOString().split('T')[0],
+            open_time,
+            close_date: new Date().toISOString().split('T')[0],
+            close_time,
+            delete_before_minutes,
+            delete_after_submit_minutes,
+            currency_symbol,
+            currency_name,
+            notify_close_to_groups,
+            type_limits,
+            set_prices,
+            type_close_times,
+            type_close_time_behaviors
+        })
+        setShowCreateModal(true)
+    }
+
+    // Save current form settings as template/default in DB
+    const handleSaveTemplate = async () => {
+        if (!user?.id) return
+        try {
+            setSavingTemplate(true)
+            const { error } = await supabase
+                .from('dealer_lottery_templates')
+                .upsert({
+                    dealer_id: user.id,
+                    lottery_type: roundForm.lottery_type,
+                    open_time: roundForm.open_time,
+                    close_time: roundForm.close_time,
+                    delete_before_minutes: roundForm.delete_before_minutes,
+                    delete_after_submit_minutes: roundForm.delete_after_submit_minutes,
+                    currency_symbol: roundForm.currency_symbol,
+                    currency_name: roundForm.currency_name,
+                    notify_close_to_groups: roundForm.notify_close_to_groups,
+                    type_limits: roundForm.type_limits,
+                    set_prices: roundForm.set_prices,
+                    type_close_times: roundForm.type_close_times,
+                    type_close_time_behaviors: roundForm.type_close_time_behaviors
+                }, { onConflict: 'dealer_id,lottery_type' })
+
+            if (error) throw error
+            setTemplates(prev => ({
+                ...prev,
+                [roundForm.lottery_type]: {
+                    dealer_id: user.id,
+                    lottery_type: roundForm.lottery_type,
+                    open_time: roundForm.open_time,
+                    close_time: roundForm.close_time,
+                    delete_before_minutes: roundForm.delete_before_minutes,
+                    delete_after_submit_minutes: roundForm.delete_after_submit_minutes,
+                    currency_symbol: roundForm.currency_symbol,
+                    currency_name: roundForm.currency_name,
+                    notify_close_to_groups: roundForm.notify_close_to_groups,
+                    type_limits: roundForm.type_limits,
+                    set_prices: roundForm.set_prices,
+                    type_close_times: roundForm.type_close_times,
+                    type_close_time_behaviors: roundForm.type_close_time_behaviors
+                }
+            }))
+            toast.success(`บันทึกการตั้งค่าเริ่มต้นสำหรับ${LOTTERY_TYPES[roundForm.lottery_type]}เรียบร้อย!`)
+        } catch (error) {
+            console.error('Error saving template:', error)
+            toast.error('เกิดข้อผิดพลาดในการบันทึกแม่แบบ: ' + error.message)
+        } finally {
+            setSavingTemplate(false)
+        }
+    }
+
+    // Reset current form to system defaults (factory reset)
+    const handleResetToSystemDefaults = () => {
+        const type = roundForm.lottery_type
+        let open_time = '06:00'
+        let close_time = '20:15'
+        let delete_after_submit_minutes = 120
+        let delete_before_minutes = 30
+        let notify_close_to_groups = true
+
+        if (type === 'thai') {
+            open_time = '06:00'
+            close_time = '14:05'
+            delete_after_submit_minutes = 120
+            delete_before_minutes = 30
+            notify_close_to_groups = false
+        } else if (type === 'lao') {
+            open_time = '06:00'
+            close_time = '20:15'
+            delete_after_submit_minutes = 120
+            delete_before_minutes = 30
+            notify_close_to_groups = true
+        } else {
+            open_time = '08:00'
+            close_time = '20:00'
+            delete_after_submit_minutes = 0
+            delete_before_minutes = 1
+            notify_close_to_groups = false
+        }
+
+        setRoundForm(prev => ({
+            ...prev,
+            open_time,
+            close_time,
+            delete_after_submit_minutes,
+            delete_before_minutes,
+            notify_close_to_groups,
+            currency_symbol: '฿',
+            currency_name: 'บาท',
+            type_limits: getDefaultLimitsForType(type),
+            set_prices: getDefaultSetPricesForType(type),
+            type_close_times: {},
+            type_close_time_behaviors: {}
+        }))
+        toast.info('คืนค่าเริ่มต้นโรงงานของระบบเรียบร้อย (ชั่วคราว - กดบันทึกหากต้องการให้บันทึกถาวร)')
+    }
 
     // Update limits when lottery type changes
     const handleLotteryTypeChange = (newType) => {
-        setRoundForm(prev => ({
-            ...prev,
-            lottery_type: newType,
-            type_limits: getDefaultLimitsForType(newType),
-            set_prices: getDefaultSetPricesForType(newType)
-        }))
+        setRoundForm(prev => {
+            let open_time = '06:00'
+            let close_time = '20:15'
+            let delete_after_submit_minutes = 120
+            let delete_before_minutes = 30
+            let notify_close_to_groups = true
+            let currency_symbol = '฿'
+            let currency_name = 'บาท'
+            let type_limits = getDefaultLimitsForType(newType)
+            let set_prices = getDefaultSetPricesForType(newType)
+            let type_close_times = {}
+            let type_close_time_behaviors = {}
+
+            // Check if we have a template for this lottery type
+            const template = templates[newType]
+            if (template) {
+                open_time = template.open_time || open_time
+                close_time = template.close_time || close_time
+                delete_before_minutes = template.delete_before_minutes
+                delete_after_submit_minutes = template.delete_after_submit_minutes
+                currency_symbol = template.currency_symbol || currency_symbol
+                currency_name = template.currency_name || currency_name
+                notify_close_to_groups = template.notify_close_to_groups
+
+                if (template.type_limits) {
+                    type_limits = { ...type_limits, ...template.type_limits }
+                }
+                if (template.set_prices) {
+                    set_prices = { ...set_prices, ...template.set_prices }
+                }
+                if (template.type_close_times) {
+                    type_close_times = { ...template.type_close_times }
+                }
+                if (template.type_close_time_behaviors) {
+                    type_close_time_behaviors = { ...template.type_close_time_behaviors }
+                }
+            } else {
+                if (newType === 'thai') {
+                    open_time = '06:00'
+                    close_time = '14:05'
+                    delete_after_submit_minutes = 120
+                    delete_before_minutes = 30
+                    notify_close_to_groups = false
+                } else if (newType === 'lao') {
+                    open_time = '06:00'
+                    close_time = '20:15'
+                    delete_after_submit_minutes = 120
+                    delete_before_minutes = 30
+                    notify_close_to_groups = true
+                } else {
+                    open_time = '08:00'
+                    close_time = '20:00'
+                    delete_after_submit_minutes = 0
+                    delete_before_minutes = 1
+                    notify_close_to_groups = false
+                }
+            }
+
+            return {
+                ...prev,
+                lottery_type: newType,
+                open_time,
+                close_time,
+                delete_after_submit_minutes,
+                delete_before_minutes,
+                notify_close_to_groups,
+                currency_symbol,
+                currency_name,
+                type_limits,
+                set_prices,
+                type_close_times,
+                type_close_time_behaviors
+            }
+        })
     }
 
     // Auto-select input content on focus
@@ -210,6 +440,7 @@ export default function Dealer() {
         if (!profile?.id) return
         
         if (user?.id && (isDealer || isSuperAdmin)) {
+            fetchTemplates()
             fetchData()
         } else {
             // User is logged in but not a dealer - stop loading
@@ -217,6 +448,31 @@ export default function Dealer() {
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user?.id, profile?.id, isDealer, isSuperAdmin])
+
+    async function fetchTemplates() {
+        if (!user?.id) return
+        try {
+            setLoadingTemplates(true)
+            const { data, error } = await supabase
+                .from('dealer_lottery_templates')
+                .select('*')
+                .eq('dealer_id', user.id)
+
+            if (error) throw error
+
+            const templateMap = {}
+            if (data) {
+                data.forEach(t => {
+                    templateMap[t.lottery_type] = t
+                })
+            }
+            setTemplates(templateMap)
+        } catch (e) {
+            console.error('Error fetching templates:', e)
+        } finally {
+            setLoadingTemplates(false)
+        }
+    }
 
     async function fetchData() {
         setLoading(true)
@@ -1166,71 +1422,6 @@ export default function Dealer() {
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
         }
     }
-
-    // Update assigned bank account for member
-    async function handleUpdateMemberBank(member, bankAccountId) {
-        try {
-            const { error } = await supabase
-                .from('user_dealer_memberships')
-                .update({ assigned_bank_account_id: bankAccountId || null })
-                .eq('id', member.membership_id)
-
-            if (error) throw error
-
-            // Update local state immediately
-            setMembers(prev => prev.map(m =>
-                m.membership_id === member.membership_id
-                    ? { ...m, assigned_bank_account_id: bankAccountId || null }
-                    : m
-            ))
-        } catch (error) {
-            console.error('Error updating member bank:', error)
-            toast.error('เกิดข้อผิดพลาดในการอัปเดตบัญชีธนาคาร')
-        }
-    }
-
-    // Redirect if not dealer or admin (after hooks)
-    if (!profile) {
-        return (
-            <div className="loading-screen" style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                minHeight: '100vh',
-                width: '100%'
-            }}>
-                <div className="spinner"></div>
-                <p>กำลังโหลด...</p>
-            </div>
-        )
-    }
-
-    if (!isDealer && !isSuperAdmin) {
-        return <Navigate to="/" replace />
-    }
-
-    // Show suspended account message for dealers
-    if (isDealer && isAccountSuspended) {
-        return (
-            <div className="suspended-account-page">
-                <div className="suspended-content">
-                    <div className="suspended-icon">
-                        <FiAlertCircle size={64} />
-                    </div>
-                    <h1>บัญชีถูกระงับการใช้งาน</h1>
-                    <p>บัญชีเจ้ามือของคุณถูกระงับการใช้งานชั่วคราว</p>
-                    <p>กรุณาติดต่อผู้ดูแลระบบเพื่อขอข้อมูลเพิ่มเติม</p>
-                    <div className="suspended-info">
-                        <p><strong>อีเมล:</strong> {profile?.email}</p>
-                        <p><strong>ชื่อ:</strong> {profile?.full_name}</p>
-                    </div>
-                </div>
-            </div>
-        )
-    }
-
-    // Create new round
     async function handleCreateRound() {
         try {
             // Combine date and time - store as ISO string with timezone
@@ -1264,30 +1455,45 @@ export default function Dealer() {
                     open_time: formatLocalDateTime(openDateTime),
                     close_time: formatLocalDateTime(closeDateTime),
                     delete_before_minutes: roundForm.delete_before_minutes,
+                    delete_after_submit_minutes: roundForm.delete_after_submit_minutes,
                     currency_symbol: roundForm.currency_symbol,
                     currency_name: roundForm.currency_name,
-                    set_prices: roundForm.set_prices
+                    set_prices: roundForm.set_prices,
+                    notify_close_to_groups: roundForm.notify_close_to_groups,
+                    is_active: false
                 })
                 .select()
                 .single()
 
             if (roundError) throw roundError
 
-            // Create type limits (no payout_rate - comes from user_settings)
+            // Create type limits
             const typeLimitsData = Object.entries(roundForm.type_limits)
-                .filter(([, maxAmount]) => maxAmount > 0)  // Only add limits with value > 0
-                .map(([betType, maxAmount]) => ({
-                    round_id: round.id,
-                    bet_type: betType,
-                    max_per_number: maxAmount,
-                    payout_rate: 0 // Placeholder - actual payout from user_settings
-                }))
+                .filter(([, maxAmount]) => maxAmount !== undefined && maxAmount !== null && maxAmount !== '')
+                .map(([betType, maxAmount]) => {
+                    const specificTime = roundForm.type_close_times?.[betType]
+                    let typeCloseTime = null
+                    if (specificTime) {
+                        const specificDateTime = new Date(`${roundForm.close_date}T${specificTime}:00`)
+                        typeCloseTime = formatLocalDateTime(specificDateTime)
+                    }
+                    return {
+                        round_id: round.id,
+                        bet_type: betType,
+                        max_per_number: maxAmount,
+                        payout_rate: 0,
+                        close_time: typeCloseTime,
+                        close_time_behavior: roundForm.type_close_time_behaviors?.[betType] || 'close_immediately'
+                    }
+                })
 
-            const { error: limitsError } = await supabase
-                .from('type_limits')
-                .insert(typeLimitsData)
+            if (typeLimitsData.length > 0) {
+                const { error: limitsError } = await supabase
+                    .from('type_limits')
+                    .insert(typeLimitsData)
 
-            if (limitsError) throw limitsError
+                if (limitsError) throw limitsError
+            }
 
             setShowCreateModal(false)
             fetchData()
@@ -1311,9 +1517,7 @@ export default function Dealer() {
 
             if (!error) {
                 // Finalize credit deduction - try immediate first, then regular
-                // Only ONE of these will actually deduct (based on billing_cycle)
                 try {
-                    // Try immediate billing first (for immediate billing cycle)
                     const { data: immediateBillingResult, error: immediateBillingError } = await supabase
                         .rpc('create_immediate_billing_record', { 
                             p_round_id: roundId,
@@ -1321,11 +1525,9 @@ export default function Dealer() {
                         })
                     
                     if (!immediateBillingError && immediateBillingResult?.success && immediateBillingResult?.amount_deducted > 0) {
-                        // Immediate billing succeeded - don't call finalize_round_credit
                         console.log('Immediate billing success:', immediateBillingResult)
                         toast.info(`ตัดเครดิต ฿${immediateBillingResult.amount_deducted.toLocaleString()} สำเร็จ`)
                     } else {
-                        // Immediate billing not applicable - try regular finalization
                         const { data: result, error: creditError } = await supabase
                             .rpc('finalize_round_credit', { p_round_id: roundId })
                         
@@ -1339,19 +1541,18 @@ export default function Dealer() {
                 }
                 
                 fetchData()
-                fetchDealerCredit() // Refresh credit balance
+                fetchDealerCredit()
             }
         } catch (error) {
             console.error('Error:', error)
         }
     }
 
-    // Delete round - with history preservation (only for closed + announced + has submissions)
+    // Delete round - with history preservation
     async function handleDeleteRound(roundId, roundStatus) {
         if (!confirm('ต้องการลบงวดนี้?')) return
 
         try {
-            // Get round details first
             const { data: roundData } = await supabase
                 .from('lottery_rounds')
                 .select('*')
@@ -1363,62 +1564,36 @@ export default function Dealer() {
                 return
             }
 
-            // Get all submissions for this round
             const { data: submissions } = await supabase
                 .from('submissions')
                 .select('*')
                 .eq('round_id', roundId)
                 .eq('is_deleted', false)
 
-            // Calculate total amount
             const totalAmount = submissions?.reduce((sum, s) => sum + (s.amount || 0), 0) || 0
 
-            // Only save history if: round is closed/announced + result announced + has submissions (totalAmount > 0)
             const shouldSaveHistory = (roundData.status === 'closed' || roundData.status === 'announced') && 
                                       roundData.is_result_announced === true && 
                                       totalAmount > 0
 
-            console.log('Delete round debug:', {
-                roundId,
-                status: roundData.status,
-                is_result_announced: roundData.is_result_announced,
-                totalAmount,
-                shouldSaveHistory
-            })
-
             if (shouldSaveHistory) {
-                // Get transfers for this round
                 const { data: transfers } = await supabase
                     .from('bet_transfers')
                     .select('*')
                     .eq('round_id', roundId)
 
-                // Calculate dealer summary
-                // Note: submissions table uses commission_amount and prize_amount fields
                 const totalEntries = submissions?.length || 0
                 const totalCommission = submissions?.reduce((sum, s) => sum + (s.commission_amount || 0), 0) || 0
                 const totalPayout = submissions?.reduce((sum, s) => sum + (s.prize_amount || 0), 0) || 0
 
-                console.log('History save debug:', {
-                    totalEntries,
-                    totalAmount,
-                    totalCommission,
-                    totalPayout,
-                    sampleSubmission: submissions?.[0]
-                })
-
-                // Calculate upstream transfers
                 const transferredAmount = transfers?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0
                 const upstreamCommission = transfers?.reduce((sum, t) => sum + (t.commission_earned || 0), 0) || 0
                 const upstreamWinnings = transfers?.reduce((sum, t) => sum + (t.winnings || 0), 0) || 0
 
-                // Calculate profit
-                // กำไร = (ยอดรับ - ค่าคอม - จ่ายถูก) + (ยอดส่ง - (ค่าคอมที่ได้ + รับถูก))
                 const memberProfit = totalAmount - totalCommission - totalPayout
                 const upstreamProfit = transferredAmount - upstreamCommission - upstreamWinnings
                 const profit = memberProfit + upstreamProfit
 
-                // Save dealer round history
                 const { error: historyError } = await supabase
                     .from('round_history')
                     .insert({
@@ -1442,7 +1617,6 @@ export default function Dealer() {
                     console.error('Error saving dealer history:', historyError)
                 }
 
-                // Save user round history for each user
                 const userSubmissions = {}
                 submissions?.forEach(s => {
                     if (!userSubmissions[s.user_id]) {
@@ -1459,7 +1633,6 @@ export default function Dealer() {
                     userSubmissions[s.user_id].winnings += s.prize_amount || 0
                 })
 
-                // Insert user histories
                 const userHistories = Object.entries(userSubmissions).map(([userId, data]) => ({
                     user_id: userId,
                     dealer_id: user.id,
@@ -1484,11 +1657,8 @@ export default function Dealer() {
                 }
             }
 
-            // Only deduct credit if round is still OPEN (not closed or announced)
-            // If round is closed/announced, credit was already deducted when closing
             if (roundStatus === 'open') {
                 try {
-                    // Try immediate billing first
                     const { data: immediateBillingResult, error: immediateBillingError } = await supabase
                         .rpc('create_immediate_billing_record', { 
                             p_round_id: roundId,
@@ -1496,26 +1666,20 @@ export default function Dealer() {
                         })
                     
                     if (!immediateBillingError && immediateBillingResult?.success && immediateBillingResult?.amount_deducted > 0) {
-                        console.log('Immediate billing before delete:', immediateBillingResult)
                         toast.info(`หักค่าธรรมเนียม ฿${immediateBillingResult.amount_deducted.toLocaleString()} ก่อนลบงวด`)
                     } else {
-                        // Immediate billing not applicable - try regular finalization
                         const { data: creditResult, error: creditError } = await supabase
                             .rpc('finalize_round_credit', { p_round_id: roundId })
                         
                         if (!creditError && creditResult?.total_deducted > 0) {
-                            console.log('Credit finalized before delete:', creditResult)
                             toast.info(`หักค่าธรรมเนียม ฿${creditResult.total_deducted.toLocaleString()} ก่อนลบงวด`)
                         }
                     }
                 } catch (billingErr) {
                     console.log('Billing before delete not configured:', billingErr)
                 }
-            } else {
-                console.log('Round already closed/announced, credit already deducted - skipping billing')
             }
 
-            // Now delete the round
             const { error } = await supabase
                 .from('lottery_rounds')
                 .delete()
@@ -1525,7 +1689,7 @@ export default function Dealer() {
                 setSelectedRound(null)
                 setExpandedRoundId(null)
                 fetchData()
-                fetchDealerCredit() // Refresh credit balance after deletion
+                fetchDealerCredit()
                 toast.success('ลบงวดสำเร็จ - บันทึกประวัติแล้ว')
             }
         } catch (error) {
@@ -1536,36 +1700,40 @@ export default function Dealer() {
 
     // Open edit modal with round data
     async function handleOpenEditModal(round) {
-        // Fetch type_limits for this round
         const { data: typeLimits } = await supabase
             .from('type_limits')
             .select('*')
             .eq('round_id', round.id)
 
-        // Build type_limits object from fetched data
         const limitsObj = {}
+        const typeCloseTimesObj = {}
+        const typeCloseTimeBehaviorsObj = {}
         const setPricesObj = round.set_prices || {}
         if (typeLimits) {
             typeLimits.forEach(limit => {
                 limitsObj[limit.bet_type] = limit.max_per_number || 0
+                typeCloseTimeBehaviorsObj[limit.bet_type] = limit.close_time_behavior || 'close_immediately'
+                if (limit.close_time) {
+                    const dt = new Date(limit.close_time)
+                    typeCloseTimesObj[limit.bet_type] = `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`
+                } else {
+                    typeCloseTimesObj[limit.bet_type] = ''
+                }
             })
         }
 
-        // Extract date and time from ISO string (use local time, not UTC)
         const openTime = new Date(round.open_time)
         const closeTime = new Date(round.close_time)
         const formatTimeForInput = (date) => {
             return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
         }
         const formatDateForInput = (date) => {
-            // Use local date instead of UTC to avoid timezone issues
             const year = date.getFullYear()
             const month = String(date.getMonth() + 1).padStart(2, '0')
             const day = String(date.getDate()).padStart(2, '0')
             return `${year}-${month}-${day}`
         }
 
-        // Set form with round data
         setRoundForm({
             lottery_type: round.lottery_type,
             lottery_name: round.lottery_name || '',
@@ -1574,10 +1742,14 @@ export default function Dealer() {
             close_date: formatDateForInput(closeTime),
             close_time: formatTimeForInput(closeTime),
             delete_before_minutes: round.delete_before_minutes || 1,
+            delete_after_submit_minutes: round.delete_after_submit_minutes || 0,
             currency_symbol: round.currency_symbol || '฿',
             currency_name: round.currency_name || 'บาท',
             type_limits: { ...getDefaultLimitsForType(round.lottery_type), ...limitsObj },
-            set_prices: { ...getDefaultSetPricesForType(round.lottery_type), ...setPricesObj }
+            set_prices: { ...getDefaultSetPricesForType(round.lottery_type), ...setPricesObj },
+            type_close_times: typeCloseTimesObj,
+            type_close_time_behaviors: typeCloseTimeBehaviorsObj,
+            notify_close_to_groups: round.notify_close_to_groups ?? true
         })
 
         setEditingRound(round)
@@ -1590,11 +1762,9 @@ export default function Dealer() {
 
         setSaving(true)
         try {
-            // Combine date and time
             const openDateTime = new Date(`${roundForm.open_date}T${roundForm.open_time}:00`)
             const closeDateTime = new Date(`${roundForm.close_date}T${roundForm.close_time}:00`)
-            
-            // Format as ISO string preserving local time intent
+
             const formatLocalDateTime = (date) => {
                 const year = date.getFullYear()
                 const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -1602,7 +1772,6 @@ export default function Dealer() {
                 const hours = String(date.getHours()).padStart(2, '0')
                 const minutes = String(date.getMinutes()).padStart(2, '0')
                 const seconds = String(date.getSeconds()).padStart(2, '0')
-                // Get timezone offset in hours and minutes
                 const tzOffset = -date.getTimezoneOffset()
                 const tzHours = String(Math.floor(Math.abs(tzOffset) / 60)).padStart(2, '0')
                 const tzMinutes = String(Math.abs(tzOffset) % 60).padStart(2, '0')
@@ -1610,7 +1779,6 @@ export default function Dealer() {
                 return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${tzSign}${tzHours}:${tzMinutes}`
             }
 
-            // Update round
             const { error: roundError } = await supabase
                 .from('lottery_rounds')
                 .update({
@@ -1620,15 +1788,16 @@ export default function Dealer() {
                     open_time: formatLocalDateTime(openDateTime),
                     close_time: formatLocalDateTime(closeDateTime),
                     delete_before_minutes: roundForm.delete_before_minutes,
+                    delete_after_submit_minutes: roundForm.delete_after_submit_minutes,
                     currency_symbol: roundForm.currency_symbol,
                     currency_name: roundForm.currency_name,
-                    set_prices: roundForm.set_prices
+                    set_prices: roundForm.set_prices,
+                    notify_close_to_groups: roundForm.notify_close_to_groups
                 })
                 .eq('id', editingRound.id)
 
             if (roundError) throw roundError
 
-            // Delete old type_limits and create new ones
             const { error: deleteError } = await supabase
                 .from('type_limits')
                 .delete()
@@ -1638,16 +1807,25 @@ export default function Dealer() {
                 console.error('Error deleting old limits:', deleteError)
             }
 
-            // Filter only limits that are part of the current lottery type
             const validBetTypes = Object.keys(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {})
             const typeLimitsData = Object.entries(roundForm.type_limits)
-                .filter(([betType, maxAmount]) => maxAmount > 0 && validBetTypes.includes(betType))
-                .map(([betType, maxAmount]) => ({
-                    round_id: editingRound.id,
-                    bet_type: betType,
-                    max_per_number: maxAmount,
-                    payout_rate: 0
-                }))
+                .filter(([betType, maxAmount]) => validBetTypes.includes(betType))
+                .map(([betType, maxAmount]) => {
+                    const specificTime = roundForm.type_close_times?.[betType]
+                    let typeCloseTime = null
+                    if (specificTime) {
+                        const specificDateTime = new Date(`${roundForm.close_date}T${specificTime}:00`)
+                        typeCloseTime = formatLocalDateTime(specificDateTime)
+                    }
+                    return {
+                        round_id: editingRound.id,
+                        bet_type: betType,
+                        max_per_number: maxAmount,
+                        payout_rate: 0,
+                        close_time: typeCloseTime,
+                        close_time_behavior: roundForm.type_close_time_behaviors?.[betType] || 'close_immediately'
+                    }
+                })
 
             if (typeLimitsData.length > 0) {
                 const { error: limitsError } = await supabase
@@ -1663,7 +1841,7 @@ export default function Dealer() {
             setShowEditModal(false)
             setEditingRound(null)
             fetchData()
-            toast.success('แก้ไขงวดสำเร็จ!')
+            toast.success('อัปเดตงวดสำเร็จ!')
 
         } catch (error) {
             console.error('Error updating round:', error)
@@ -1958,7 +2136,7 @@ export default function Dealer() {
                                     <h2>งวดหวยทั้งหมด</h2>
                                     <button
                                         className="btn btn-primary"
-                                        onClick={() => setShowCreateModal(true)}
+                                        onClick={handleOpenCreateModal}
                                         style={{ width: '100%', justifyContent: 'center' }}
                                     >
                                         <FiPlus /> สร้างงวดใหม่
@@ -2543,6 +2721,42 @@ export default function Dealer() {
                                 </div>
                             </div>
 
+                            {/* Notify close to groups */}
+                            <div className="form-group">
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={roundForm.notify_close_to_groups ?? true}
+                                        onChange={e => setRoundForm({ ...roundForm, notify_close_to_groups: e.target.checked })}
+                                        style={{ width: '1.1rem', height: '1.1rem', cursor: 'pointer' }}
+                                    />
+                                    <span>ส่งการแจ้งปิดไปยังกลุ่ม</span>
+                                </label>
+                                <p className="form-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
+                                    เมื่อถึงเวลาปิด ระบบจะส่งข้อความแจ้งปิดรับไปยังกลุ่ม LINE ที่ผูกไว้โดยอัตโนมัติ
+                                </p>
+                            </div>
+
+                            {/* Delete After Submit */}
+                            <div className="form-row">
+                                <div className="form-group" style={{ flex: 1 }}>
+                                    <label className="form-label">ลบเลขหลังป้อน (นาที)</label>
+                                    <input
+                                        type="number"
+                                        className="form-input"
+                                        value={roundForm.delete_after_submit_minutes ?? 120}
+                                        onChange={e => setRoundForm({ ...roundForm, delete_after_submit_minutes: parseInt(e.target.value) || 0 })}
+                                        onFocus={handleInputFocus}
+                                        onKeyDown={handleInputKeyDown}
+                                        min="0"
+                                        placeholder="0 = ไม่จำกัด"
+                                    />
+                                    <p className="form-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
+                                        0 = ลบได้จนกว่าจะถึงเวลาก่อนปิดรับ
+                                    </p>
+                                </div>
+                            </div>
+
                             {/* Delete Before */}
                             <div className="form-row">
                                 <div className="form-group">
@@ -2582,7 +2796,7 @@ export default function Dealer() {
 
                                 <div style={{ 
                                     display: 'grid', 
-                                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
+                                    gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))', 
                                     gap: '0.5rem' 
                                 }}>
                                     {Object.entries(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {}).map(([key, config]) => (
@@ -2601,12 +2815,12 @@ export default function Dealer() {
                                                 </span>
                                                 {config.isSet && <span className="set-badge" style={{ fontSize: '0.65rem', padding: '0.1rem 0.25rem' }}>ชุด</span>}
                                             </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
                                                 <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>อั้น</span>
                                                 <input
                                                     type="number"
                                                     className="form-input small"
-                                                    style={{ width: '90px', textAlign: 'center', padding: '0.35rem 0.5rem', fontSize: '0.95rem' }}
+                                                    style={{ width: '80px', textAlign: 'center', padding: '0.35rem 0.5rem', fontSize: '0.9rem' }}
                                                     value={roundForm.type_limits[key] || 0}
                                                     onChange={e => setRoundForm({
                                                         ...roundForm,
@@ -2619,6 +2833,35 @@ export default function Dealer() {
                                                     onKeyDown={handleInputKeyDown}
                                                 />
                                                 <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', minWidth: '25px' }}>{config.isSet ? 'ชุด' : roundForm.currency_name}</span>
+                                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>ปิด</span>
+                                                <input
+                                                    type="time"
+                                                    className="form-input small"
+                                                    style={{ width: '85px', padding: '0.35rem 0.3rem', fontSize: '0.85rem' }}
+                                                    value={roundForm.type_close_times?.[key] || ''}
+                                                    onChange={e => setRoundForm({
+                                                        ...roundForm,
+                                                        type_close_times: {
+                                                            ...roundForm.type_close_times,
+                                                            [key]: e.target.value
+                                                        }
+                                                    })}
+                                                />
+                                                <select
+                                                    className="form-input small"
+                                                    style={{ width: '100px', padding: '0.35rem 0.3rem', fontSize: '0.85rem', marginLeft: '0.25rem' }}
+                                                    value={roundForm.type_close_time_behaviors?.[key] || 'close_immediately'}
+                                                    onChange={e => setRoundForm({
+                                                        ...roundForm,
+                                                        type_close_time_behaviors: {
+                                                            ...roundForm.type_close_time_behaviors,
+                                                            [key]: e.target.value
+                                                        }
+                                                    })}
+                                                >
+                                                    <option value="close_immediately">ปิดรับทันที</option>
+                                                    <option value="return_excess">คืนเลขเกิน</option>
+                                                </select>
                                             </div>
                                         </div>
                                     ))}
@@ -2627,6 +2870,27 @@ export default function Dealer() {
                         </div>
 
                         <div className="modal-footer">
+                            <div style={{ marginRight: 'auto', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <button className="btn btn-secondary" onClick={handleResetToSystemDefaults} title="คืนค่าข้อมูลเป็นค่าที่ระบบกำหนดจากโรงงาน">
+                                    <FiRotateCcw /> ใช้ค่าเริ่มต้นระบบ
+                                </button>
+                                <button
+                                    className="btn"
+                                    onClick={handleSaveTemplate}
+                                    disabled={savingTemplate}
+                                    style={{
+                                        background: 'rgba(212, 175, 55, 0.15)',
+                                        color: 'var(--color-primary)',
+                                        border: '1px solid var(--color-primary)'
+                                    }}
+                                >
+                                    {savingTemplate ? 'กำลังบันทึก...' : (
+                                        <>
+                                            <FiSave /> บันทึกเป็นค่าเริ่มต้น
+                                        </>
+                                    )}
+                                </button>
+                            </div>
                             <button className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
                                 ยกเลิก
                             </button>
@@ -2731,6 +2995,42 @@ export default function Dealer() {
                                 </div>
                             </div>
 
+                            {/* Notify close to groups */}
+                            <div className="form-group">
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={roundForm.notify_close_to_groups ?? true}
+                                        onChange={e => setRoundForm({ ...roundForm, notify_close_to_groups: e.target.checked })}
+                                        style={{ width: '1.1rem', height: '1.1rem', cursor: 'pointer' }}
+                                    />
+                                    <span>ส่งการแจ้งปิดไปยังกลุ่ม</span>
+                                </label>
+                                <p className="form-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
+                                    เมื่อถึงเวลาปิด ระบบจะส่งข้อความแจ้งปิดรับไปยังกลุ่ม LINE ที่ผูกไว้โดยอัตโนมัติ
+                                </p>
+                            </div>
+
+                            {/* Delete After Submit */}
+                            <div className="form-row">
+                                <div className="form-group" style={{ flex: 1 }}>
+                                    <label className="form-label">ลบเลขหลังป้อน (นาที)</label>
+                                    <input
+                                        type="number"
+                                        className="form-input"
+                                        value={roundForm.delete_after_submit_minutes ?? 120}
+                                        onChange={e => setRoundForm({ ...roundForm, delete_after_submit_minutes: parseInt(e.target.value) || 0 })}
+                                        onFocus={handleInputFocus}
+                                        onKeyDown={handleInputKeyDown}
+                                        min="0"
+                                        placeholder="0 = ไม่จำกัด"
+                                    />
+                                    <p className="form-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
+                                        0 = ลบได้จนกว่าจะถึงเวลาก่อนปิดรับ
+                                    </p>
+                                </div>
+                            </div>
+
                             {/* Delete Before */}
                             <div className="form-row">
                                 <div className="form-group">
@@ -2768,10 +3068,9 @@ export default function Dealer() {
                                     อัตราจ่ายจะใช้ตามที่ตั้งค่าให้แต่ละลูกค้า
                                 </p>
 
-                                {/* Compact limits display */}
                                 <div style={{ 
                                     display: 'grid', 
-                                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
+                                    gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))', 
                                     gap: '0.5rem' 
                                 }}>
                                     {Object.entries(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {}).map(([key, config]) => (
@@ -2790,12 +3089,12 @@ export default function Dealer() {
                                                 </span>
                                                 {config.isSet && <span className="set-badge" style={{ fontSize: '0.65rem', padding: '0.1rem 0.25rem' }}>ชุด</span>}
                                             </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
                                                 <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>อั้น</span>
                                                 <input
                                                     type="number"
                                                     className="form-input small"
-                                                    style={{ width: '90px', textAlign: 'center', padding: '0.35rem 0.5rem', fontSize: '0.95rem' }}
+                                                    style={{ width: '80px', textAlign: 'center', padding: '0.35rem 0.5rem', fontSize: '0.9rem' }}
                                                     value={roundForm.type_limits[key] || 0}
                                                     onChange={e => setRoundForm({
                                                         ...roundForm,
@@ -2808,6 +3107,35 @@ export default function Dealer() {
                                                     onKeyDown={handleInputKeyDown}
                                                 />
                                                 <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', minWidth: '25px' }}>{config.isSet ? 'ชุด' : roundForm.currency_name}</span>
+                                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>ปิด</span>
+                                                <input
+                                                    type="time"
+                                                    className="form-input small"
+                                                    style={{ width: '85px', padding: '0.35rem 0.3rem', fontSize: '0.85rem' }}
+                                                    value={roundForm.type_close_times?.[key] || ''}
+                                                    onChange={e => setRoundForm({
+                                                        ...roundForm,
+                                                        type_close_times: {
+                                                            ...roundForm.type_close_times,
+                                                            [key]: e.target.value
+                                                        }
+                                                    })}
+                                                />
+                                                <select
+                                                    className="form-input small"
+                                                    style={{ width: '100px', padding: '0.35rem 0.3rem', fontSize: '0.85rem', marginLeft: '0.25rem' }}
+                                                    value={roundForm.type_close_time_behaviors?.[key] || 'close_immediately'}
+                                                    onChange={e => setRoundForm({
+                                                        ...roundForm,
+                                                        type_close_time_behaviors: {
+                                                            ...roundForm.type_close_time_behaviors,
+                                                            [key]: e.target.value
+                                                        }
+                                                    })}
+                                                >
+                                                    <option value="close_immediately">ปิดรับทันที</option>
+                                                    <option value="return_excess">คืนเลขเกิน</option>
+                                                </select>
                                             </div>
                                         </div>
                                     ))}
