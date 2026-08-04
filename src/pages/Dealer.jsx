@@ -38,7 +38,11 @@ import {
     FiSearch,
     FiSlash,
     FiInfo,
-    FiMessageSquare
+    FiMessageSquare,
+    FiLink,
+    FiCreditCard,
+    FiImage,
+    FiRefreshCw
 } from 'react-icons/fi'
 import './Dealer.css'
 import './SettingsTabs.css'
