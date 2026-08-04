@@ -27,6 +27,7 @@ import {
     getLotteryTypeKey,
     normalizeBetType
 } from '../../constants/lotteryTypes'
+import { findMatchingLimit } from '../../utils/numberLimits'
 import '../../pages/Dealer.css'
 import '../../pages/SettingsTabs.css'
 
@@ -165,13 +166,14 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
             })
             setTypeLimits(limitsObj)
 
-            // Fetch number-specific limits
+            // Fetch active number-specific limits
             const { data: numberLimitsData } = await supabase
                 .from('number_limits')
                 .select('*')
                 .eq('round_id', round.id)
 
-            setNumberLimits(numberLimitsData || [])
+            const activeNumberLimits = (numberLimitsData || []).filter(nl => nl.is_active === undefined || nl.is_active === true)
+            setNumberLimits(activeNumberLimits)
 
             // Fetch transfers
             const { data: transfersData } = await supabase
@@ -499,14 +501,11 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
             // For 4_set, map to 4_top for limit lookup (the underlying limit type)
             const limitLookupBetType = group.bet_type === '4_set' ? '4_top' : group.bet_type
 
-            // Get limit: first check number_limits, then type_limits
-            const numberLimit = numberLimits.find(nl => {
-                // Also handle 4_set -> 4_top mapping for number limits
-                const nlBetType = nl.bet_type === '4_set' ? '4_top' : nl.bet_type
-                return nlBetType === limitLookupBetType && nl.numbers === group.numbers
-            })
+            // Get limit: first check number_limits (using findMatchingLimit), then type_limits
+            const numberLimit = findMatchingLimit(numberLimits, limitLookupBetType, group.numbers)
+            const numLimit = numberLimit !== undefined && numberLimit !== null ? Number(numberLimit.max_amount) : undefined
             const typeLimit = typeLimits[limitLookupBetType]
-            const limit = numberLimit ? numberLimit.max_amount : (typeLimit || 999999999)
+            const limit = numLimit !== undefined ? numLimit : (typeLimit !== undefined ? typeLimit : 999999999)
 
              // Calculate already transferred amount for this number
              const transferredAmount = transfers
