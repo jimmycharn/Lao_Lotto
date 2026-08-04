@@ -1796,6 +1796,14 @@ describe('pasteParser - parseMultiLinePaste', () => {
 
           const res3DigitDup = parseMultiLinePaste('122*20', 'lao', { asterisk_separator_behavior: 'revert', x_separator_behavior: 'revert' });
           expect(res3DigitDup.length).toBe(3);
+
+          const res4Digit = parseMultiLinePaste('1234*20', 'lao', { asterisk_separator_behavior: 'revert', x_separator_behavior: 'revert' });
+          expect(res4Digit.length).toBe(24);
+          expect(res4Digit.every(r => r.numbers.length === 3 && r.amount === 20)).toBe(true);
+
+          const res5Digit = parseMultiLinePaste('12345*20', 'lao', { asterisk_separator_behavior: 'revert', x_separator_behavior: 'revert' });
+          expect(res5Digit.length).toBe(60);
+          expect(res5Digit.every(r => r.numbers.length === 3 && r.amount === 20)).toBe(true);
         });
 
         it('should treat 20*20 as equal when mixed with self-contained lines and asterisk_separator_behavior is equal', () => {

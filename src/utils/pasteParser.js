@@ -412,7 +412,15 @@ function expandLines(rawLines, lotteryType = 'lao', settings) {
                     expanded.push(`${prefixCtx}${numberStr}=${amount}${suffix}`);
                     continue;
                 } else if (shouldRevert) {
-                    const perms = getPermutations(numberStr);
+                    const perms = numberStr.length === 2
+                        ? get2DigitPermutations(numberStr)
+                        : numberStr.length === 3
+                        ? get3DigitPermutations(numberStr)
+                        : numberStr.length === 4
+                        ? getUnique3DigitPermsFrom4(numberStr)
+                        : numberStr.length === 5
+                        ? getUnique3DigitPermsFrom5(numberStr)
+                        : getPermutations(numberStr);
                     for (const num of perms) {
                         expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
                     }
