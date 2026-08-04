@@ -31,6 +31,24 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '
 // Initialize Supabase client with Service Role Key to bypass RLS for bot actions
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
+function getLimitLookupBetType(betType: string): string {
+  const ALIAS_MAP: Record<string, string> = {
+    'front_top_1': 'pak_top',
+    'middle_top_1': 'pak_top',
+    'back_top_1': 'pak_top',
+    'front_bottom_1': 'pak_bottom',
+    'back_bottom_1': 'pak_bottom',
+    '2_spread': '2_center',
+    '2_tang': '2_center',
+    '2_teng': '2_run',
+    '2_have': '2_run',
+    '2_back': '2_top',
+    '2_front_single': '2_front',
+    '4_set': '4_top'
+  };
+  return ALIAS_MAP[betType] || betType;
+}
+
 async function fetchAllRows(
   queryBuilder: (from: number, to: number) => any,
   pageSize = 1000
@@ -1972,10 +1990,19 @@ async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
   const lotteryType = roundData?.lottery_type || '';
   const isSetBasedLottery = ['lao', 'hanoi'].includes(lotteryType);
 
-  let submissions = [];
+  let submissions: any[] = [];
   let subErr = null;
   try {
-    submissions = await fetchAllSubmissions(roundId);
+    const { data: subsData, error: err } = await fetchAllRows((from, to) =>
+      supabase
+        .from('submissions')
+        .select('bet_type, numbers, amount, created_at')
+        .eq('round_id', roundId)
+        .eq('is_deleted', false)
+        .range(from, to)
+    );
+    subErr = err;
+    submissions = subsData || [];
   } catch (err) {
     subErr = err;
   }
@@ -2155,24 +2182,6 @@ async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
       });
     });
   }
-
-function getLimitLookupBetType(betType: string): string {
-  const ALIAS_MAP: Record<string, string> = {
-    'front_top_1': 'pak_top',
-    'middle_top_1': 'pak_top',
-    'back_top_1': 'pak_top',
-    'front_bottom_1': 'pak_bottom',
-    'back_bottom_1': 'pak_bottom',
-    '2_spread': '2_center',
-    '2_tang': '2_center',
-    '2_teng': '2_run',
-    '2_have': '2_run',
-    '2_back': '2_top',
-    '2_front_single': '2_front',
-    '4_set': '4_top'
-  };
-  return ALIAS_MAP[betType] || betType;
-}
 
   // Process other bet types normally
   for (const group of Object.values(grouped)) {

@@ -37,7 +37,8 @@ import {
     getDefaultLimitsForType,
     getLotteryTypeKey,
     calculate4SetPrizes,
-    normalizeBetType
+    normalizeBetType,
+    getLimitLookupBetType
 } from '../../constants/lotteryTypes'
 import { findMatchingLimit, getEffectivePayoutPercent } from '../../utils/numberLimits'
 import { checkBetWin, deriveWinningNumbers } from '../../utils/scenarioCalculator'
@@ -1399,86 +1400,64 @@ export default function RoundAccordionItem({
         }
         
         // Process non-4_set bets normally
-        Object.values(grouped).forEach(item => {
+        Object.values(grouped).forEach(group => {
             // Skip 4_set for Lao/Hanoi - already handled above
-            if (isSetBasedLottery && (item.bet_type === '4_set' || item.bet_type === '4_top')) {
+            if (isSetBasedLottery && (group.bet_type === '4_set' || group.bet_type === '4_top')) {
                 return
             }
-            
-            // For 4-digit sets, check both 4_set and 4_top for limit lookup
-            const isSet4Digit = item.bet_type === '4_set' || item.bet_type === '4_top'
-            let typeLimit = inlineTypeLimits[item.bet_type]
-            // Fallback: if 4_set not found, try 4_top and vice versa
-            if (typeLimit === undefined && isSet4Digit) {
-                typeLimit = inlineTypeLimits['4_set'] ?? inlineTypeLimits['4_top']
-            }
-            // Fallback: map alias bet_types to their limit-bearing equivalents
-            if (typeLimit === undefined) {
-                const BET_TYPE_LIMIT_ALIASES = {
-                    '2_spread': '2_center',
-                    '2_have': '2_run',
-                    '2_back': '2_bottom',
-                    'front_top_1': 'pak_top',
-                    'middle_top_1': 'pak_top',
-                    'back_top_1': 'pak_top',
-                    'front_bottom_1': 'pak_bottom',
-                    'back_bottom_1': 'pak_bottom',
-                    '3_front': '3_top',
-                    '3_back': '3_top',
-                    '3_bottom': '3_top',
-                    '3_straight': '3_top',
-                    '4_top': '4_set',
-                    '4_tod': '4_set'
-                }
-                const aliasType = BET_TYPE_LIMIT_ALIASES[item.bet_type]
-                if (aliasType) typeLimit = inlineTypeLimits[aliasType]
-            }
 
-            // Enhanced number limit matching: support is_active, include_reversed, reversed_numbers
-            const activeNumberLimits = inlineNumberLimits.filter(nl => nl.is_active !== false)
-            // Try direct match first, then reversed match via findMatchingLimit
-            let numberLimit = activeNumberLimits.find(nl => {
-                const nlNormalized = normalizeNumber(nl.numbers, nl.bet_type)
-                const nlIsSet4 = nl.bet_type === '4_set' || nl.bet_type === '4_top'
-                return (nl.bet_type === item.bet_type || (isSet4Digit && nlIsSet4)) && nlNormalized === item.numbers
-            })
-            // If no direct match, check reversed numbers
-            if (!numberLimit) {
-                numberLimit = activeNumberLimits.find(nl => {
-                    const nlIsSet4 = nl.bet_type === '4_set' || nl.bet_type === '4_top'
-                    if (!(nl.bet_type === item.bet_type || (isSet4Digit && nlIsSet4))) return false
-                    if (!nl.include_reversed || !Array.isArray(nl.reversed_numbers)) return false
-                    return nl.reversed_numbers.includes(item.numbers)
+            const limitLookupBetType = getLimitLookupBetType(group.bet_type)
+
+            const numberLimit = findMatchingLimit(inlineNumberLimits, limitLookupBetType, group.numbers)
+            const numLimit = numberLimit !== undefined && numberLimit !== null ? Number(numberLimit.max_amount) : undefined
+            const typeLimit = inlineTypeLimits[limitLookupBetType]
+            const limit = numLimit !== undefined ? numLimit : (typeLimit !== undefined ? typeLimit : 999999999)
+
+            const transferredAmount = inlineTransfers
+                .filter(t => {
+                    if (t.status === 'returned') return false
+                    const tBetType = getLimitLookupBetType(t.bet_type)
+                    let tNum = t.numbers
+                    if (t.bet_type === '3_tod' || t.bet_type === '4_tod') {
+                        tNum = tNum.split('').sort().join('')
+                    }
+                    return tBetType === limitLookupBetType && tNum === group.numbers
                 })
-            }
+                .reduce((sum, t) => sum + (t.amount || 0), 0)
 
-            const effectiveLimit = numberLimit?.max_amount ?? typeLimit
-            const isSetBased = isSetBasedLottery && isSet4Digit
+            const isSetBased = isSetBasedLottery && (group.bet_type === '4_set' || group.bet_type === '4_top')
+            const transferredSets = isSetBased ? Math.floor(transferredAmount / setPrice) : 0
+
             const limitType = numberLimit?.limit_type || 'limited'
             const payoutPercent = numberLimit ? getEffectivePayoutPercent(numberLimit) : 100
 
-            const transferredForThis = inlineTransfers.filter(t => {
-                if (t.status === 'returned') return false
-                const tIsSet4 = t.bet_type === '4_set' || t.bet_type === '4_top'
-                const tNormalized = normalizeNumber(t.numbers, t.bet_type)
-                // Match if same bet type, or both are 4-digit sets
-                return (t.bet_type === item.bet_type || (isSet4Digit && tIsSet4)) && tNormalized === item.numbers
-            }).reduce((sum, t) => sum + (t.amount || 0), 0)
-
-            const transferredSets = isSetBased ? Math.floor(transferredForThis / setPrice) : 0
-
-            // Check if limit exists (including 0)
-            if (effectiveLimit !== undefined && effectiveLimit !== null) {
-                if (isSetBased) {
-                    const effectiveExcess = item.setCount - effectiveLimit - transferredSets
-                    if (effectiveExcess > 0) {
-                        excessItems.push({ ...item, limit: effectiveLimit, excess: effectiveExcess, transferredSets, isSetBased: true, limitType, payoutPercent, isNumberLimit: !!numberLimit })
-                    }
-                } else {
-                    const effectiveExcess = item.total - effectiveLimit - transferredForThis
-                    if (effectiveExcess > 0) {
-                        excessItems.push({ ...item, limit: effectiveLimit, excess: effectiveExcess, transferredAmount: transferredForThis, limitType, payoutPercent, isNumberLimit: !!numberLimit })
-                    }
+            if (isSetBased) {
+                const effectiveExcess = group.setCount - limit - transferredSets
+                if (effectiveExcess > 0) {
+                    excessItems.push({
+                        ...group,
+                        limit,
+                        excess: effectiveExcess,
+                        transferredSets,
+                        transferredAmount: transferredSets,
+                        isSetBased: true,
+                        limitType,
+                        payoutPercent,
+                        isNumberLimit: !!numberLimit
+                    })
+                }
+            } else {
+                const effectiveExcess = group.total - limit - transferredAmount
+                if (effectiveExcess > 0) {
+                    excessItems.push({
+                        ...group,
+                        limit,
+                        excess: effectiveExcess,
+                        transferredAmount,
+                        limitType,
+                        payoutPercent,
+                        isNumberLimit: !!numberLimit
+                    })
                 }
             }
         })
