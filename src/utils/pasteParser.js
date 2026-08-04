@@ -256,6 +256,7 @@ function findAmountIndex(tokens) {
 }
 function expandLines(rawLines, lotteryType = 'lao', settings) {
     const behavior = settings?.x_separator_behavior || 'auto';
+    const asteriskBehavior = settings?.asterisk_separator_behavior || 'revert';
     const shouldRevert = behavior === 'revert' || (behavior === 'auto' && lotteryType === 'stock');
     rawLines = rawLines.map(line => {
         let s = preprocessShorthands(line);
@@ -398,21 +399,25 @@ function expandLines(rawLines, lotteryType = 'lao', settings) {
                 continue;
             }
         }
-        const xMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(\d{2,3})\s*([*×xX])\s*(\d+)\s*(.*)$/i);
-        if (xMatch) {
+        const xMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(\d{2,5})\s*([*×xX])\s*(\d+)\s*(.*)$/i);
+        if (xMatch && !hasPending) {
             const prefixCtx = xMatch[1] ? xMatch[1] + ' ' : '';
             const numberStr = xMatch[2];
             const amount = xMatch[4];
             const suffix = xMatch[5] || '';
             const hasOtherParts = /[\d*×xX=:\-]/.test(suffix);
-            if (!hasOtherParts && shouldRevert) {
-                const perms = numberStr.length === 2
-                    ? get2DigitPermutations(numberStr)
-                    : get3DigitPermutations(numberStr);
-                for (const num of perms) {
-                    expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
+
+            if (!hasOtherParts) {
+                if (asteriskBehavior === 'equal') {
+                    expanded.push(`${prefixCtx}${numberStr}=${amount}${suffix}`);
+                    continue;
+                } else if (shouldRevert) {
+                    const perms = getPermutations(numberStr);
+                    for (const num of perms) {
+                        expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
+                    }
+                    continue;
                 }
-                continue;
             }
         }
         const siblingMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(พี่น้อง|พน)\s*[=\s]\s*(\d+(?:\s*[*×xX\-+/tTต]\s*\d+)?)(.*)$/i);

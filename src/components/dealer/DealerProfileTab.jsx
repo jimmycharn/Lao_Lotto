@@ -39,14 +39,16 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
         role: profile?.role || 'dealer',
         x_separator_behavior: profile?.x_separator_behavior || 'revert',
         hyphen_separator_behavior: profile?.hyphen_separator_behavior || 'equal',
-        three_digit_perm_mode: profile?.three_digit_perm_mode || 'literal'
+        three_digit_perm_mode: profile?.three_digit_perm_mode || 'literal',
+        asterisk_separator_behavior: profile?.asterisk_separator_behavior || 'revert'
     })
     const [formData, setFormData] = useState({
         full_name: profile?.full_name || '',
         phone: profile?.phone || '',
         x_separator_behavior: profile?.x_separator_behavior || 'revert',
         hyphen_separator_behavior: profile?.hyphen_separator_behavior || 'equal',
-        three_digit_perm_mode: profile?.three_digit_perm_mode || 'literal'
+        three_digit_perm_mode: profile?.three_digit_perm_mode || 'literal',
+        asterisk_separator_behavior: profile?.asterisk_separator_behavior || 'revert'
     })
 
     // Bank form data
@@ -168,7 +170,8 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                 .update({
                     x_separator_behavior: formData.x_separator_behavior,
                     hyphen_separator_behavior: formData.hyphen_separator_behavior,
-                    three_digit_perm_mode: formData.three_digit_perm_mode
+                    three_digit_perm_mode: formData.three_digit_perm_mode,
+                    asterisk_separator_behavior: formData.asterisk_separator_behavior
                 })
                 .eq('id', user.id)
 
@@ -178,7 +181,8 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                 ...profileData,
                 x_separator_behavior: formData.x_separator_behavior,
                 hyphen_separator_behavior: formData.hyphen_separator_behavior,
-                three_digit_perm_mode: formData.three_digit_perm_mode
+                three_digit_perm_mode: formData.three_digit_perm_mode,
+                asterisk_separator_behavior: formData.asterisk_separator_behavior
             })
 
             setIsEditingInterpretation(false)
@@ -513,6 +517,17 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                                 <option value="perm_set">ตีความเป็นคูณชุด (เช่น 288-20*6 เป็น กลับ 3 ประตู ตัวละ 20)</option>
                             </select>
                         </div>
+                        <div className="form-group">
+                            <label className="form-label">การตีความเครื่องหมายดอกจัน (*)</label>
+                            <select
+                                className="form-input"
+                                value={formData.asterisk_separator_behavior}
+                                onChange={e => setFormData({ ...formData, asterisk_separator_behavior: e.target.value })}
+                            >
+                                <option value="equal">เปลี่ยนเป็นเครื่องหมายเท่ากับ = (เช่น 20*20 เป็น 20=20, 123*20 เป็น 123=20)</option>
+                                <option value="revert">ซื้อไป-กลับทุกประตูอัตโนมัติ (เช่น 20*20 เป็น 20=20, 02=20, 123*20 เป็น กลับ 6 ประตู)</option>
+                            </select>
+                        </div>
                         <div className="form-actions">
                             <button
                                 className="btn btn-secondary"
@@ -522,7 +537,8 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                                         ...formData,
                                         x_separator_behavior: profileData.x_separator_behavior || 'revert',
                                         hyphen_separator_behavior: profileData.hyphen_separator_behavior || 'equal',
-                                        three_digit_perm_mode: profileData.three_digit_perm_mode || 'literal'
+                                        three_digit_perm_mode: profileData.three_digit_perm_mode || 'literal',
+                                        asterisk_separator_behavior: profileData.asterisk_separator_behavior || 'revert'
                                     })
                                 }}
                             >
@@ -561,6 +577,14 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                                 {profileData.three_digit_perm_mode === 'perm_set' 
                                     ? 'ตีความเป็นคูณชุด (เช่น 288-20*6 เป็น กลับ 3 ประตู ตัวละ 20)' 
                                     : 'ตีความแบบตรงตัว (เช่น 288-20*6 เป็น เต็ง 20, โต๊ด 6)'}
+                            </span>
+                        </div>
+                        <div className="info-row">
+                            <span className="info-label">การตีความเครื่องหมายดอกจัน (*)</span>
+                            <span className="info-value">
+                                {profileData.asterisk_separator_behavior === 'equal' 
+                                    ? 'เปลี่ยนเป็นเครื่องหมายเท่ากับ = (เช่น 20*20 เป็น 20=20, 123*20 เป็น 123=20)' 
+                                    : 'ซื้อไป-กลับทุกประตูอัตโนมัติ (เช่น 20*20 เป็น 20=20, 02=20)'}
                             </span>
                         </div>
                     </div>

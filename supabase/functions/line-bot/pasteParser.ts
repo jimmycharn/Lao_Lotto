@@ -325,8 +325,9 @@ function findAmountIndex(tokens: string[]): number {
     return -1;
 }
 
-function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_separator_behavior?: string, hyphen_separator_behavior?: string }): string[] {
+function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_separator_behavior?: string, hyphen_separator_behavior?: string, three_digit_perm_mode?: string, asterisk_separator_behavior?: string }): string[] {
     const behavior = settings?.x_separator_behavior || 'auto';
+    const asteriskBehavior = settings?.asterisk_separator_behavior || 'revert';
     const shouldRevert = behavior === 'revert' || (behavior === 'auto' && lotteryType === 'stock');
     rawLines = rawLines.map(line => {
         let s = preprocessShorthands(line);
@@ -442,6 +443,38 @@ function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_sep
         // --- Step 0.0.1: Split compound lines and apply inline bare number grouping ---
         // e.g. "04,47*100,54,52*50" -> ["04*100", "47*100", "54*50", "52*50"]
         // Also supports ' (single quote) as a number separator: "48'57'70×50" -> ["48*50", "57*50", "70*50"]
+        // --- Step 0.0.5: Handle "Smart Auto-Default x/*" separator for 2-5 digits (e.g. 25x30, 123*20) ---
+        const xMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(\d{2,5})\s*([*×xX])\s*(\d+)\s*(.*)$/i);
+        if (xMatch && !hasPending) {
+            const prefixCtx = xMatch[1] ? xMatch[1] + ' ' : '';
+            const numberStr = xMatch[2];
+            const opSymbol = xMatch[3];
+            const amount = xMatch[4];
+            const suffix = xMatch[5] || '';
+            const hasOtherParts = /[\d*×xX=:\-]/.test(suffix);
+            const isAsterisk = opSymbol === '*';
+
+            if (!hasOtherParts) {
+                if (isAsterisk) {
+                    if (asteriskBehavior === 'equal') {
+                        expanded.push(`${prefixCtx}${numberStr}=${amount}${suffix}`);
+                        continue;
+                    } else {
+                        const perms = getPermutations(numberStr);
+                        for (const num of perms) {
+                            expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
+                        }
+                        continue;
+                    }
+                } else if (shouldRevert) {
+                    const perms = getPermutations(numberStr);
+                    for (const num of perms) {
+                        expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
+                    }
+                    continue;
+                }
+            }
+        }
         if (line.includes('/') || line.includes(',') || line.includes("'")) {
             const tokens = line.split(/[\/,'']/).map(t => t.trim()).filter(t => t);
             const hasSeparator = tokens.some(t => {
@@ -865,7 +898,7 @@ function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_sep
     return expanded;
 }
 
-export function parseMultiLinePaste(text: string, lotteryType = 'lao', settings?: { x_separator_behavior?: string, hyphen_separator_behavior?: string, three_digit_perm_mode?: string }): ParsedBet[] {
+export function parseMultiLinePaste(text: string, lotteryType = 'lao', settings?: { x_separator_behavior?: string, hyphen_separator_behavior?: string, three_digit_perm_mode?: string, asterisk_separator_behavior?: string }): ParsedBet[] {
     if (!text || !text.trim()) return [];
 
     // Filter out laughter (555, 5555, etc.) that are standalone and not part of a bet specification

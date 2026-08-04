@@ -1770,6 +1770,49 @@ describe('pasteParser - parseMultiLinePaste', () => {
           });
         }
       });
+
+      describe('asterisk_separator_behavior', () => {
+        it('should treat * as = when asterisk_separator_behavior is equal', () => {
+          const res2Digit = parseMultiLinePaste('20*20', 'lao', { asterisk_separator_behavior: 'equal' });
+          expect(res2Digit.length).toBe(1);
+          expect(res2Digit[0]).toMatchObject({ numbers: '20', amount: 20, betType: '2_top' });
+
+          const res3Digit = parseMultiLinePaste('123*20', 'lao', { asterisk_separator_behavior: 'equal' });
+          expect(res3Digit.length).toBe(1);
+          expect(res3Digit[0]).toMatchObject({ numbers: '123', amount: 20, betType: '3_top' });
+
+          const res3DigitDup = parseMultiLinePaste('122*20', 'lao', { asterisk_separator_behavior: 'equal' });
+          expect(res3DigitDup.length).toBe(1);
+          expect(res3DigitDup[0]).toMatchObject({ numbers: '122', amount: 20, betType: '3_top' });
+        });
+
+        it('should revert all permutations when asterisk_separator_behavior is revert and x_separator_behavior is revert', () => {
+          const res2Digit = parseMultiLinePaste('20*20', 'lao', { asterisk_separator_behavior: 'revert', x_separator_behavior: 'revert' });
+          expect(res2Digit.length).toBe(2);
+          expect(res2Digit.map(r => r.numbers).sort()).toEqual(['02', '20']);
+
+          const res3Digit = parseMultiLinePaste('123*20', 'lao', { asterisk_separator_behavior: 'revert', x_separator_behavior: 'revert' });
+          expect(res3Digit.length).toBe(6);
+
+          const res3DigitDup = parseMultiLinePaste('122*20', 'lao', { asterisk_separator_behavior: 'revert', x_separator_behavior: 'revert' });
+          expect(res3DigitDup.length).toBe(3);
+        });
+
+        it('should treat 20*20 as equal when mixed with self-contained lines and asterisk_separator_behavior is equal', () => {
+          const text = '12=20*10\n20*20\n123=100*50';
+          const res = parseMultiLinePaste(text, 'lao', { asterisk_separator_behavior: 'equal' });
+          expect(res.some(r => r.numbers === '20' && r.amount === 20)).toBe(true);
+          expect(res.some(r => r.numbers === '02')).toBe(false);
+        });
+
+        it('should NOT treat 20*20 as standalone equal line if preceded by bare numbers', () => {
+          const text = '123\n456\n20*20';
+          const res = parseMultiLinePaste(text, 'lao', { asterisk_separator_behavior: 'equal' });
+          // 123 and 456 both get 20 top and 20 tod
+          expect(res.some(r => r.numbers === '123')).toBe(true);
+          expect(res.some(r => r.numbers === '456')).toBe(true);
+        });
+      });
     });
   })
 })
