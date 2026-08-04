@@ -37,7 +37,8 @@ import {
     FiAlertCircle,
     FiSearch,
     FiSlash,
-    FiInfo
+    FiInfo,
+    FiMessageSquare
 } from 'react-icons/fi'
 import './Dealer.css'
 import './SettingsTabs.css'
@@ -62,6 +63,8 @@ import NumberLimitsModal from '../components/dealer/NumberLimitsModal'
 import SummaryModal from '../components/dealer/SummaryModal'
 import RoundAccordionItem from '../components/dealer/RoundAccordionItem'
 import ChangePasswordModal from '../components/ChangePasswordModal'
+import DealerLineBotTab from '../components/dealer/DealerLineBotTab'
+import DealerAutomationTab from '../components/dealer/DealerAutomationTab'
 
 // RoundAccordionItem is now imported from separate file
 
@@ -1916,6 +1919,18 @@ export default function Dealer() {
                         <FiSend /> เจ้ามือตีออก ({upstreamDealers.length})
                     </button>
                     <button
+                        className={`tab-btn ${activeTab === 'lineBot' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('lineBot')}
+                    >
+                        <FiMessageSquare /> จัดการ LINE Bot
+                    </button>
+                    <button
+                        className={`tab-btn ${activeTab === 'automation' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('automation')}
+                    >
+                        <FiSettings /> ตั้งค่าออโตเมชัน
+                    </button>
+                    <button
                         className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
                         onClick={() => setActiveTab('profile')}
                     >
@@ -2416,6 +2431,14 @@ export default function Dealer() {
                             loadingUpstream={loadingUpstream}
                             setLoadingUpstream={setLoadingUpstream}
                         />
+                    )}
+
+                    {activeTab === 'lineBot' && (
+                        <DealerLineBotTab user={user} profile={profile} />
+                    )}
+
+                    {activeTab === 'automation' && (
+                        <DealerAutomationTab user={user} profile={profile} />
                     )}
 
                     {activeTab === 'profile' && (
