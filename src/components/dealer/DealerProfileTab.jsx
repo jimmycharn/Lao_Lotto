@@ -85,14 +85,16 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                 role: profile.role || 'dealer',
                 x_separator_behavior: profile.x_separator_behavior || 'revert',
                 hyphen_separator_behavior: profile.hyphen_separator_behavior || 'equal',
-                three_digit_perm_mode: profile.three_digit_perm_mode || 'literal'
+                three_digit_perm_mode: profile.three_digit_perm_mode || 'literal',
+                asterisk_separator_behavior: profile.asterisk_separator_behavior || 'revert'
             })
             setFormData({
                 full_name: profile.full_name || '',
                 phone: profile.phone || '',
                 x_separator_behavior: profile.x_separator_behavior || 'revert',
                 hyphen_separator_behavior: profile.hyphen_separator_behavior || 'equal',
-                three_digit_perm_mode: profile.three_digit_perm_mode || 'literal'
+                three_digit_perm_mode: profile.three_digit_perm_mode || 'literal',
+                asterisk_separator_behavior: profile.asterisk_separator_behavior || 'revert'
             })
         }
     }, [profile])
