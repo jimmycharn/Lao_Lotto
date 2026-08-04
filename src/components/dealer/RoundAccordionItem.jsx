@@ -1347,56 +1347,56 @@ export default function RoundAccordionItem({
                 // Calculate excess for numbers with same last 3 digits
                 // Rule: Total sets across ALL numbers with same last 3 digits must not exceed limit3Set
                 // If total exceeds limit3Set, the excess comes from later numbers (FIFO)
+                // NOTE: Must check all numbers regardless of count (including single-number groups)
+                // to match Line bot behavior
                 const uniqueNumbers = Object.keys(group3.exactMatches)
                 
-                if (uniqueNumbers.length > 1) {
-                    const sortedNumbers = uniqueNumbers.sort((a, b) => {
-                        const aTime = Math.min(...group3.exactMatches[a].submissions.map(s => new Date(s.created_at).getTime()))
-                        const bTime = Math.min(...group3.exactMatches[b].submissions.map(s => new Date(s.created_at).getTime()))
-                        return aTime - bTime
-                    })
+                const sortedNumbers = uniqueNumbers.sort((a, b) => {
+                    const aTime = Math.min(...group3.exactMatches[a].submissions.map(s => new Date(s.created_at).getTime()))
+                    const bTime = Math.min(...group3.exactMatches[b].submissions.map(s => new Date(s.created_at).getTime()))
+                    return aTime - bTime
+                })
+                
+                // Calculate total transferred for all numbers with same last 3 digits
+                const totalTransferred3Set = inlineTransfers
+                    .filter(t => (t.bet_type === '4_set' || t.bet_type === '3_set') && t.numbers?.slice(-3) === group3.last3Digits)
+                    .reduce((sum, t) => sum + Math.floor((t.amount || 0) / setPrice), 0)
+                
+                // Remaining limit for 3-digit match = limit3Set + transferred
+                let remaining3SetLimit = limit3Set + totalTransferred3Set
+                
+                sortedNumbers.forEach((num) => {
+                    const exactGroup = group3.exactMatches[num]
                     
-                    // Calculate total transferred for all numbers with same last 3 digits
-                    const totalTransferred3Set = inlineTransfers
-                        .filter(t => (t.bet_type === '4_set' || t.bet_type === '3_set') && t.numbers?.slice(-3) === group3.last3Digits)
+                    // Calculate transferred sets for this specific 4-digit number
+                    const transferredForThisNum = inlineTransfers
+                        .filter(t => (t.bet_type === '4_set' || t.bet_type === '3_set') && t.numbers === num)
                         .reduce((sum, t) => sum + Math.floor((t.amount || 0) / setPrice), 0)
                     
-                    // Remaining limit for 3-digit match = limit3Set + transferred
-                    let remaining3SetLimit = limit3Set + totalTransferred3Set
+                    // How many sets can we keep from this number?
+                    const setsToKeep = Math.min(exactGroup.setCount, remaining3SetLimit)
+                    remaining3SetLimit -= setsToKeep
                     
-                    sortedNumbers.forEach((num, idx) => {
-                        const exactGroup = group3.exactMatches[num]
-                        
-                        // Calculate transferred sets for this specific 4-digit number
-                        const transferredForThisNum = inlineTransfers
-                            .filter(t => (t.bet_type === '4_set' || t.bet_type === '3_set') && t.numbers === num)
-                            .reduce((sum, t) => sum + Math.floor((t.amount || 0) / setPrice), 0)
-                        
-                        // How many sets can we keep from this number?
-                        const setsToKeep = Math.min(exactGroup.setCount, remaining3SetLimit)
-                        remaining3SetLimit -= setsToKeep
-                        
-                        // Excess = total sets - sets we can keep
-                        const excessSets = exactGroup.setCount - setsToKeep
-                        
-                        if (excessSets > 0) {
-                            excessItems.push({
-                                bet_type: '4_set', // Display as 4_set since it's still a 4-digit number
-                                numbers: num,
-                                displayNumbers: `${num} (3ตัวหลัง: ${group3.last3Digits})`,
-                                total: excessSets * setPrice,
-                                setCount: exactGroup.setCount,
-                                submissions: exactGroup.submissions.slice(-excessSets),
-                                limit: limit3Set,
-                                excess: excessSets,
-                                transferredSets: transferredForThisNum,
-                                isSetBased: true,
-                                excessType: '3_digit_match', // Mark as 3-digit match excess
-                                last3Digits: group3.last3Digits
-                            })
-                        }
-                    })
-                }
+                    // Excess = total sets - sets we can keep
+                    const excessSets = exactGroup.setCount - setsToKeep
+                    
+                    if (excessSets > 0) {
+                        excessItems.push({
+                            bet_type: '4_set', // Display as 4_set since it's still a 4-digit number
+                            numbers: num,
+                            displayNumbers: `${num} (3ตัวหลัง: ${group3.last3Digits})`,
+                            total: excessSets * setPrice,
+                            setCount: exactGroup.setCount,
+                            submissions: exactGroup.submissions.slice(-excessSets),
+                            limit: limit3Set,
+                            excess: excessSets,
+                            transferredSets: transferredForThisNum,
+                            isSetBased: true,
+                            excessType: '3_digit_match', // Mark as 3-digit match excess
+                            last3Digits: group3.last3Digits
+                        })
+                    }
+                })
             })
         }
         
