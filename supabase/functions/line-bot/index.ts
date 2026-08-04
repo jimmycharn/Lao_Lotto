@@ -49,6 +49,25 @@ function getLimitLookupBetType(betType: string): string {
   return ALIAS_MAP[betType] || betType;
 }
 
+// Bet types where digit order doesn't matter (mirrors web app PERMUTATION_BET_TYPES)
+const PERMUTATION_BET_TYPES = ['2_run', '2_spread', '3_tod', '3_tod_single', '4_tod', '4_float', '5_float'];
+
+// Normalize number by sorting digits for permutation bet types (mirrors web app normalizeNumber)
+function normalizeNumber(numbers: string, betType: string): string {
+  if (PERMUTATION_BET_TYPES.includes(betType)) {
+    return numbers.split('').sort().join('');
+  }
+  return numbers;
+}
+
+// Default per-number limits per lottery type (mirrors web app getDefaultLimitsForType)
+const DEFAULT_TYPE_LIMITS: Record<string, Record<string, number>> = {
+  thai: { run_top: 5000, run_bottom: 5000, pak_top: 3000, pak_bottom: 3000, '2_top': 1000, '2_front': 1000, '2_center': 1000, '2_run': 1000, '2_bottom': 1000, '3_top': 500, '3_tod': 1000, '3_bottom': 1000, '4_float': 1000, '5_float': 1000 },
+  lao: { '4_set': 1, '3_set': 1, run_top: 5000, run_bottom: 5000, pak_top: 3000, pak_bottom: 3000, '2_top': 1000, '2_front': 1000, '2_center': 1000, '2_run': 1000, '2_bottom': 1000, '3_top': 120, '3_tod': 1000, '4_float': 1000, '5_float': 1000 },
+  hanoi: { '4_set': 1, '3_set': 2, run_top: 5000, run_bottom: 5000, pak_top: 5000, pak_bottom: 5000, '2_top': 1000, '2_front': 1000, '2_center': 1000, '2_run': 1000, '2_bottom': 1000, '3_top': 500, '3_tod': 500, '4_float': 200, '5_float': 100 },
+  stock: { '2_top': 1000, '2_bottom': 1000 }
+};
+
 async function fetchAllRows(
   queryBuilder: (from: number, to: number) => any,
   pageSize = 1000
@@ -2049,10 +2068,7 @@ async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
   }> = {};
 
   submissions.forEach((sub: any) => {
-    let subNum = sub.numbers;
-    if (sub.bet_type === '3_tod' || sub.bet_type === '4_tod') {
-      subNum = subNum.split('').sort().join('');
-    }
+    const subNum = normalizeNumber(sub.numbers, sub.bet_type);
     const lookupBetType = getLimitLookupBetType(sub.bet_type);
     const key = `${lookupBetType}|${subNum}`;
     if (!grouped[key]) {
@@ -2073,8 +2089,11 @@ async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
 
   // Calculate set-based excess if Lao/Hanoi lottery
   if (isSetBasedLottery) {
-    const limit3Set = typeLimitsMap['3_set'] !== undefined ? typeLimitsMap['3_set'] : 999999999;
-    const limit4Set = typeLimitsMap['4_set'] !== undefined ? typeLimitsMap['4_set'] : (typeLimitsMap['4_top'] !== undefined ? typeLimitsMap['4_top'] : 999999999);
+    const defaultSetLimits = DEFAULT_TYPE_LIMITS[lotteryType] || {};
+    const limit3Set = typeLimitsMap['3_set'] !== undefined ? typeLimitsMap['3_set'] : (defaultSetLimits['3_set'] !== undefined ? defaultSetLimits['3_set'] : 999999999);
+    const merged4Set = typeLimitsMap['4_set'] !== undefined ? typeLimitsMap['4_set'] : defaultSetLimits['4_set'];
+    const merged4Top = typeLimitsMap['4_top'] !== undefined ? typeLimitsMap['4_top'] : defaultSetLimits['4_top'];
+    const limit4Set = merged4Set !== undefined ? merged4Set : (merged4Top !== undefined ? merged4Top : 999999999);
 
     // Group 4-digit submissions by their last 3 digits
     const groupedByLast3: Record<string, {
@@ -2190,21 +2209,29 @@ async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
     }
 
     const limitLookupBetType = getLimitLookupBetType(group.bet_type);
-    
-    // Find number limit (respecting reversed_numbers/include_reversed)
-    const numberLimit = (numberLimits || []).find((nl: any) => {
+
+    // Find number limit: direct match → reversed match → normalized match (mirrors web app findMatchingLimit)
+    let numberLimit = (numberLimits || []).find((nl: any) => {
       const nlBetType = getLimitLookupBetType(nl.bet_type);
-      if (nlBetType === limitLookupBetType && nl.numbers === group.numbers) {
-        return true;
-      }
-      if (nl.include_reversed && nlBetType === limitLookupBetType && nl.reversed_numbers?.includes(group.numbers)) {
-        return true;
-      }
-      return false;
+      return nlBetType === limitLookupBetType && nl.numbers === group.numbers;
     });
+    if (!numberLimit) {
+      numberLimit = (numberLimits || []).find((nl: any) => {
+        const nlBetType = getLimitLookupBetType(nl.bet_type);
+        return nl.include_reversed && nlBetType === limitLookupBetType && Array.isArray(nl.reversed_numbers) && nl.reversed_numbers.includes(group.numbers);
+      });
+    }
+    if (!numberLimit && PERMUTATION_BET_TYPES.includes(limitLookupBetType)) {
+      const normalizedNumbers = normalizeNumber(group.numbers, limitLookupBetType);
+      numberLimit = (numberLimits || []).find((nl: any) => {
+        const nlBetType = getLimitLookupBetType(nl.bet_type);
+        return nlBetType === limitLookupBetType && normalizeNumber(nl.numbers, nl.bet_type) === normalizedNumbers;
+      });
+    }
 
     const numLimit = numberLimit !== undefined ? Number(numberLimit.max_amount) : undefined;
-    const typeLimit = typeLimitsMap[limitLookupBetType];
+    const defaultTypeLimit = (DEFAULT_TYPE_LIMITS[lotteryType] || {})[limitLookupBetType];
+    const typeLimit = typeLimitsMap[limitLookupBetType] !== undefined ? typeLimitsMap[limitLookupBetType] : defaultTypeLimit;
     const limit = numLimit !== undefined ? numLimit : (typeLimit !== undefined ? typeLimit : 999999999);
 
     const alreadyTransferred = transfersList
@@ -4721,6 +4748,181 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200
       })
+    }
+
+    if (apiPayload && apiPayload.action === 'dump_round_excess') {
+      try {
+        const roundId = apiPayload.round_id || '0c8ef6d1-e763-49d8-b15a-6160e847842e';
+
+        const { data: roundData } = await supabase
+          .from('lottery_rounds')
+          .select('*')
+          .eq('id', roundId)
+          .single();
+
+        const lineBotItems = await calculateRoundExcess(roundId);
+        const lineBotTotal = lineBotItems.reduce((sum, item) => sum + item.amount, 0);
+
+        const { data: subsData } = await fetchAllRows((from, to) =>
+          supabase
+            .from('submissions')
+            .select('id, bet_type, numbers, amount, is_deleted')
+            .eq('round_id', roundId)
+            .eq('is_deleted', false)
+            .range(from, to)
+        );
+        const submissions = subsData || [];
+
+        const { data: typeLimits } = await supabase
+          .from('type_limits')
+          .select('bet_type, max_per_number')
+          .eq('round_id', roundId);
+
+        const typeLimitsMap: Record<string, number> = {};
+        (typeLimits || []).forEach((tl: any) => {
+          typeLimitsMap[tl.bet_type] = Number(tl.max_per_number);
+        });
+
+        const { data: numberLimitsData } = await supabase
+          .from('number_limits')
+          .select('*')
+          .eq('round_id', roundId);
+
+        const activeNumberLimits = (numberLimitsData || []).filter((nl: any) => nl.is_active === undefined || nl.is_active === true);
+
+        const { data: transfersData } = await supabase
+          .from('bet_transfers')
+          .select('*')
+          .eq('round_id', roundId);
+
+        const activeTransfers = (transfersData || []);
+
+        // Exact webAppItems logic from RoundAccordionItem.jsx
+        const isSetBasedLottery = ['lao', 'hanoi'].includes(roundData.lottery_type);
+        const setPrices = roundData?.set_prices || {};
+        const setPrice = Number(setPrices['4_top'] || 120);
+
+        const grouped: Record<string, any> = {};
+        submissions.forEach((sub: any) => {
+          let subNum = sub.numbers;
+          if (sub.bet_type === '3_tod' || sub.bet_type === '4_tod') {
+            subNum = subNum.split('').sort().join('');
+          }
+          const lookupBetType = getLimitLookupBetType(sub.bet_type);
+          const key = `${lookupBetType}|${subNum}`;
+          if (!grouped[key]) {
+            grouped[key] = {
+              bet_type: lookupBetType,
+              numbers: subNum,
+              total: 0,
+              setCount: 0,
+              submissions: []
+            };
+          }
+          grouped[key].total += Number(sub.amount || 0);
+          grouped[key].submissions.push(sub);
+          if (isSetBasedLottery && (sub.bet_type === '4_set' || sub.bet_type === '4_top')) {
+            grouped[key].setCount += Math.ceil(Number(sub.amount || 0) / setPrice);
+          }
+        });
+
+        const webAppItems: any[] = [];
+        Object.values(grouped).forEach((group: any) => {
+          if (isSetBasedLottery && (group.bet_type === '4_set' || group.bet_type === '4_top')) return;
+
+          const limitLookupBetType = getLimitLookupBetType(group.bet_type);
+
+          const numberLimit = activeNumberLimits.find((nl: any) => {
+            const nlBetType = getLimitLookupBetType(nl.bet_type);
+            let nlNum = nl.numbers;
+            if (nl.bet_type === '3_tod' || nl.bet_type === '4_tod') {
+              nlNum = nlNum.split('').sort().join('');
+            }
+            if (nlBetType === limitLookupBetType && nlNum === group.numbers) return true;
+            if (nl.include_reversed && nlBetType === limitLookupBetType && Array.isArray(nl.reversed_numbers) && nl.reversed_numbers.includes(group.numbers)) return true;
+            return false;
+          });
+
+          const numLimit = numberLimit !== undefined && numberLimit !== null ? Number(numberLimit.max_amount) : undefined;
+          const typeLimit = typeLimitsMap[limitLookupBetType];
+          const limit = numLimit !== undefined ? numLimit : (typeLimit !== undefined ? typeLimit : 999999999);
+
+          const transferredAmount = activeTransfers
+            .filter((t: any) => {
+              if (t.status === 'returned') return false;
+              const tBetType = getLimitLookupBetType(t.bet_type);
+              let tNum = t.numbers;
+              if (t.bet_type === '3_tod' || t.bet_type === '4_tod') {
+                tNum = tNum.split('').sort().join('');
+              }
+              return tBetType === limitLookupBetType && tNum === group.numbers;
+            })
+            .reduce((sum: number, t: any) => sum + Number(t.amount || 0), 0);
+
+          const isSetBased = isSetBasedLottery && (group.bet_type === '4_set' || group.bet_type === '4_top');
+          const transferredSets = isSetBased ? Math.floor(transferredAmount / setPrice) : 0;
+
+          if (isSetBased) {
+            const effectiveExcess = group.setCount - limit - transferredSets;
+            if (effectiveExcess > 0) {
+              webAppItems.push({
+                bet_type: group.bet_type,
+                numbers: group.numbers,
+                limit,
+                excess: effectiveExcess,
+                amount: effectiveExcess * setPrice
+              });
+            }
+          } else {
+            const effectiveExcess = group.total - limit - transferredAmount;
+            if (effectiveExcess > 0) {
+              webAppItems.push({
+                bet_type: group.bet_type,
+                numbers: group.numbers,
+                limit,
+                total: group.total,
+                transferredAmount,
+                excess: effectiveExcess,
+                amount: effectiveExcess
+              });
+            }
+          }
+        });
+
+        const webAppTotal = webAppItems.reduce((sum, item) => sum + item.amount, 0);
+
+        // Also check if there are raw submissions grouped by sub.bet_type without lookupBetType mapping
+        const rawGrouped: Record<string, number> = {};
+        submissions.forEach((s: any) => {
+          let num = s.numbers;
+          if (s.bet_type === '3_tod' || s.bet_type === '4_tod') num = num.split('').sort().join('');
+          const k = `${s.bet_type}|${num}`;
+          rawGrouped[k] = (rawGrouped[k] || 0) + Number(s.amount || 0);
+        });
+
+        return new Response(JSON.stringify({
+          roundId,
+          roundName: roundData.lottery_name,
+          submissionsCount: submissions.length,
+          lineBotTotal,
+          lineBotCount: lineBotItems.length,
+          lineBotItems,
+          webAppTotal,
+          webAppCount: webAppItems.length,
+          webAppItems,
+          typeLimitsMap,
+          activeNumberLimits,
+          activeTransfers
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200
+        });
+      } catch (err: any) {
+        return new Response(JSON.stringify({ error: err.stack || err.message }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 500
+        });
+      }
     }
 
 
