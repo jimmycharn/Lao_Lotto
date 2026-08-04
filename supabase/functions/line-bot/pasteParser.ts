@@ -443,38 +443,6 @@ function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_sep
         // --- Step 0.0.1: Split compound lines and apply inline bare number grouping ---
         // e.g. "04,47*100,54,52*50" -> ["04*100", "47*100", "54*50", "52*50"]
         // Also supports ' (single quote) as a number separator: "48'57'70×50" -> ["48*50", "57*50", "70*50"]
-        // --- Step 0.0.5: Handle "Smart Auto-Default x/*" separator for 2-5 digits (e.g. 25x30, 123*20) ---
-        const xMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(\d{2,5})\s*([*×xX])\s*(\d+)\s*(.*)$/i);
-        if (xMatch && !hasPending) {
-            const prefixCtx = xMatch[1] ? xMatch[1] + ' ' : '';
-            const numberStr = xMatch[2];
-            const opSymbol = xMatch[3];
-            const amount = xMatch[4];
-            const suffix = xMatch[5] || '';
-            const hasOtherParts = /[\d*×xX=:\-]/.test(suffix);
-            const isAsterisk = opSymbol === '*';
-
-            if (!hasOtherParts) {
-                if (isAsterisk) {
-                    if (asteriskBehavior === 'equal') {
-                        expanded.push(`${prefixCtx}${numberStr}=${amount}${suffix}`);
-                        continue;
-                    } else {
-                        const perms = getPermutations(numberStr);
-                        for (const num of perms) {
-                            expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
-                        }
-                        continue;
-                    }
-                } else if (shouldRevert) {
-                    const perms = getPermutations(numberStr);
-                    for (const num of perms) {
-                        expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
-                    }
-                    continue;
-                }
-            }
-        }
         if (line.includes('/') || line.includes(',') || line.includes("'")) {
             const tokens = line.split(/[\/,'']/).map(t => t.trim()).filter(t => t);
             const hasSeparator = tokens.some(t => {
@@ -509,27 +477,26 @@ function expandLines(rawLines: string[], lotteryType = 'lao', settings?: { x_sep
             }
         }
 
-        // --- Step 0.0.5: Handle "Smart Auto-Default x/*" separator for 2-3 digits (e.g. 25x30, 123*20) ---
-        const xMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(\d{2,3})\s*([*×xX])\s*(\d+)\s*(.*)$/i);
-        if (xMatch) {
+        // --- Step 0.0.5: Handle "Smart Auto-Default x/*" separator for 2-5 digits (e.g. 25x30, 123*20) ---
+        const xMatch = line.match(/^(?:(บนล่าง|ล่างบน|บล|ลบ|บน|บ|ล่าง|ล)\.?\s*)?(\d{2,5})\s*([*×xX])\s*(\d+)\s*(.*)$/i);
+        if (xMatch && !hasPending) {
             const prefixCtx = xMatch[1] ? xMatch[1] + ' ' : '';
             const numberStr = xMatch[2];
             const amount = xMatch[4];
             const suffix = xMatch[5] || '';
-
-            // If suffix contains other digits or separators (e.g. "x20" in 25x20x20, or "*6" in 456*20*6),
-            // it has more than 2 parts, so we do NOT apply auto-reversal/permutation.
             const hasOtherParts = /[\d*×xX=:\-]/.test(suffix);
 
-            if (!hasOtherParts && shouldRevert) {
-                const perms = numberStr.length === 2 
-                    ? get2DigitPermutations(numberStr) 
-                    : get3DigitPermutations(numberStr);
-                    
-                for (const num of perms) {
-                    expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
+            if (!hasOtherParts) {
+                if (asteriskBehavior === 'equal') {
+                    expanded.push(`${prefixCtx}${numberStr}=${amount}${suffix}`);
+                    continue;
+                } else if (shouldRevert) {
+                    const perms = getPermutations(numberStr);
+                    for (const num of perms) {
+                        expanded.push(`${prefixCtx}${num}=${amount}${suffix}`);
+                    }
+                    continue;
                 }
-                continue;
             }
         }
 
