@@ -5033,25 +5033,28 @@ serve(async (req) => {
         }
       }
 
-      // Fallback: search for active automation job for this dealer & lottery_type if not linked by ID
+      // Fallback: search for automation job for this dealer & lottery_type if not linked by ID
       if (!job) {
         const { data: fallbackJob } = await supabase
           .from('dealer_automation_jobs')
           .select('*')
           .eq('dealer_id', round.dealer_id)
           .eq('lottery_type', round.lottery_type)
-          .eq('is_active', true)
           .order('updated_at', { ascending: false })
           .limit(1)
           .maybeSingle();
         if (fallbackJob) {
           job = fallbackJob;
+          if (job && !job.is_active) {
+            isJobActive = false;
+          }
         }
       }
 
       // Check if notifications or automation is enabled for this round
-      const isAutomationActive = round.created_by_job_id ? isJobActive : (round.notify_close_to_groups !== false);
+      const isAutomationActive = job ? job.is_active : (round.notify_close_to_groups !== false);
       if (!isAutomationActive) {
+        console.log(`[auto_close_notify] Automation disabled for round ${roundId} (job active status is false).`);
         return new Response(JSON.stringify({ success: true, round_id: roundId, message: 'Automation and notifications disabled (job is inactive or settings are off)' }), {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -5791,8 +5794,24 @@ serve(async (req) => {
         }
       }
 
-      // Process legacy templates (for fallback compatibility)
+      // Fetch existing automation jobs (both active and inactive) to check dealer migration
+      const { data: allJobsForDealer } = await supabase
+        .from('dealer_automation_jobs')
+        .select('dealer_id, lottery_type');
+      
+      const configuredJobKeys = new Set(
+        (allJobsForDealer || []).map((j: any) => `${j.dealer_id}|${j.lottery_type}`)
+      );
+
+      // Process legacy templates (only for fallback compatibility when NO automation job exists for that lottery type)
       for (const template of (templates || [])) {
+        const jobKey = `${template.dealer_id}|${template.lottery_type}`;
+        if (configuredJobKeys.has(jobKey)) {
+          // Dealer has configured an automation job for this lottery type; ignore legacy template to respect job settings
+          console.log(`[auto_create] Skipping legacy template for dealer ${template.dealer_id} (${template.lottery_type}) because an automation job exists.`);
+          continue;
+        }
+
         try {
           let shouldCreate = false;
           const scheduleDays = Array.isArray(template.schedule_days) ? template.schedule_days : [];
