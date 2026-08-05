@@ -8872,14 +8872,18 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   `📝 สรุปยอดได้เสียสุทธิ:\n👉 ${groupNetLabel}\n` +
                   `👥 สมาชิกถูกรางวัล: ${groupWinnerCount} รายการ`;
 
-                // Send in chunks of 10
+                const altSummaryText = groupSummaryText.trim().length > 390 
+                  ? groupSummaryText.trim().slice(0, 387) + '...' 
+                  : groupSummaryText.trim();
+
+                // Send in chunks of 3 to stay safely under LINE LIFF payload size limits
                 const carouselMessages: any[] = [];
-                const chunkSize = 10;
+                const chunkSize = 3;
                 for (let i = 0; i < bubbles.length; i += chunkSize) {
                   const chunk = bubbles.slice(i, i + chunkSize);
                   carouselMessages.push({
                     "type": "flex",
-                    "altText": `📊 รายงานผลได้เสียสำหรับสมาชิกในกลุ่ม (${activeRound.lottery_type.toUpperCase()})`,
+                    "altText": altSummaryText,
                     "contents": {
                       "type": "carousel",
                       "contents": chunk
@@ -8888,12 +8892,11 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 }
 
                 if (targetGroupId === groupId) {
-                  const toReply = carouselMessages.slice(0, 5);
-                  const toPush = carouselMessages.slice(5);
-
-                  await sendLineReply(replyToken, toReply);
+                  // First send group overall summary text, then carousel flexes
+                  await sendLineReply(replyToken, [groupSummaryText, ...carouselMessages.slice(0, 4)]);
                   currentGroupProcessed = true;
 
+                  const toPush = carouselMessages.slice(4);
                   for (const msg of toPush) {
                     try {
                       await sendLinePush(targetGroupId, msg, dealerId);
@@ -8903,6 +8906,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   }
                 } else {
                   console.log(`[แจ้งผล] pushing ${carouselMessages.length} messages to group=${targetGroupId}`);
+                  await sendLinePush(targetGroupId, groupSummaryText, dealerId);
                   for (const msg of carouselMessages) {
                     try {
                       await sendLinePush(targetGroupId, msg, dealerId);
