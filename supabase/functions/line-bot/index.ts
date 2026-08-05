@@ -1815,30 +1815,88 @@ async function sendLineReply(
   }
 }
 
-// Helper: Send LINE Push Message (proactive, no reply token needed)
-async function sendLinePush(to: string, textOrPayload: string | Record<string, any>): Promise<void> {
-  if (!LINE_CHANNEL_ACCESS_TOKEN) {
-    console.error("LINE_CHANNEL_ACCESS_TOKEN not configured");
-    return;
+// Helper: Enqueue Self-Bot Push Message Fallback when OA push fails or quota is exceeded
+async function enqueueSelfBotPushFallback(to: string, messagePayload: any, dealerIdInput?: string): Promise<void> {
+  try {
+    let resolvedDealerId = dealerIdInput;
+    let fallbackEnabled = false;
+
+    if (to) {
+      const { data: groupData } = await supabaseClient
+        .from('line_groups')
+        .select('dealer_id, push_fallback_self_bot')
+        .eq('line_group_id', to)
+        .maybeSingle();
+
+      if (groupData) {
+        if (!resolvedDealerId) resolvedDealerId = groupData.dealer_id;
+        if (groupData.push_fallback_self_bot !== null && groupData.push_fallback_self_bot !== undefined) {
+          fallbackEnabled = groupData.push_fallback_self_bot;
+        }
+      }
+    }
+
+    if (!fallbackEnabled && resolvedDealerId) {
+      const { data: profileData } = await supabaseClient
+        .from('profiles')
+        .select('push_fallback_self_bot')
+        .eq('id', resolvedDealerId)
+        .maybeSingle();
+
+      if (profileData?.push_fallback_self_bot) {
+        fallbackEnabled = true;
+      }
+    }
+
+    if (fallbackEnabled) {
+      const msgType = messagePayload?.type === 'flex' ? 'flex' : 'text';
+      await supabaseClient.from('self_bot_push_queue').insert({
+        dealer_id: resolvedDealerId,
+        target_line_group_id: to,
+        message_payload: messagePayload,
+        message_type: msgType,
+        status: 'pending'
+      });
+      console.log(`[SelfBotFallback] Successfully enqueued push message to Self-Bot queue for target ${to}`);
+    }
+  } catch (err: any) {
+    console.error(`[SelfBotFallback] Failed to enqueue fallback message:`, err.message);
   }
+}
+
+// Helper: Send LINE Push Message (proactive, no reply token needed)
+async function sendLinePush(to: string, textOrPayload: string | Record<string, any>, dealerId?: string): Promise<void> {
   const message = typeof textOrPayload === "string"
     ? { type: "text", text: textOrPayload }
     : textOrPayload;
 
-  const response = await fetch("https://api.line.me/v2/bot/message/push", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`
-    },
-    body: JSON.stringify({
-      to,
-      messages: [message]
-    })
-  });
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error(`Failed to send LINE push: ${response.status} - ${errText}`);
+  if (!LINE_CHANNEL_ACCESS_TOKEN) {
+    console.error("LINE_CHANNEL_ACCESS_TOKEN not configured");
+    await enqueueSelfBotPushFallback(to, message, dealerId);
+    return;
+  }
+
+  try {
+    const response = await fetch("https://api.line.me/v2/bot/message/push", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`
+      },
+      body: JSON.stringify({
+        to,
+        messages: [message]
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error(`Failed to send LINE push: ${response.status} - ${errText}`);
+      await enqueueSelfBotPushFallback(to, message, dealerId);
+    }
+  } catch (pushErr: any) {
+    console.error(`Error sending LINE push:`, pushErr);
+    await enqueueSelfBotPushFallback(to, message, dealerId);
   }
 }
 

@@ -1,0 +1,17 @@
+{
+  "name": "line-self-bot",
+  "version": "1.0.0",
+  "description": "LINE Self-Bot service for Lao Lotto Push Message Fallback",
+  "main": "bot.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "node bot.js"
+  },
+  "dependencies": {
+    "@evex/linejs": "npm:@jsr/evex__linejs@^3.0.0",
+    "@supabase/supabase-js": "^2.49.1",
+    "dotenv": "^16.4.5",
+    "node-fetch": "^2.7.0"
+  }
+}
