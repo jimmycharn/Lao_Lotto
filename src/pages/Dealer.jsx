@@ -538,7 +538,8 @@ export default function Dealer() {
                         phone,
                         created_at,
                         role,
-                        password_changed
+                        password_changed,
+                        line_user_id
                     )
                 `)
                 .eq('dealer_id', user.id)
@@ -559,7 +560,8 @@ export default function Dealer() {
                 blocked_at: m.blocked_at,
                 assigned_bank_account_id: m.assigned_bank_account_id,
                 is_dealer: m.profiles?.role === 'dealer', // Mark if member is also a dealer
-                password_changed: m.profiles?.password_changed || false // Track if user has changed password
+                password_changed: m.profiles?.password_changed || false, // Track if user has changed password
+                line_user_id: m.profiles?.line_user_id || ''
             }))
 
             // Separate regular members from dealer members (เจ้ามือตีเข้า)
