@@ -44,10 +44,15 @@ export default function DealerLineBotTab({ user, profile }) {
     const [selectedTypeFilter, setSelectedTypeFilter] = useState('all')
     const [allowedLotteryTypes, setAllowedLotteryTypes] = useState([])
     const [pushFallbackSelfBot, setPushFallbackSelfBot] = useState(profile?.push_fallback_self_bot || false)
+    const [selfBotLineUserId, setSelfBotLineUserId] = useState(profile?.self_bot_line_user_id || '')
+    const [savingSelfBotId, setSavingSelfBotId] = useState(false)
 
     useEffect(() => {
         if (profile?.push_fallback_self_bot !== undefined) {
             setPushFallbackSelfBot(profile.push_fallback_self_bot)
+        }
+        if (profile?.self_bot_line_user_id !== undefined) {
+            setSelfBotLineUserId(profile.self_bot_line_user_id || '')
         }
     }, [profile])
 
@@ -65,6 +70,25 @@ export default function DealerLineBotTab({ user, profile }) {
             console.error('Error updating push fallback setting:', error)
             toast.error('ไม่สามารถอัปเดตตั้งค่าแจ้งเตือนสำรองได้')
             setPushFallbackSelfBot(!checked)
+        }
+    }
+
+    const handleSaveSelfBotLineUserId = async () => {
+        setSavingSelfBotId(true)
+        try {
+            const cleanId = selfBotLineUserId.trim()
+            const { error } = await supabase
+                .from('profiles')
+                .update({ self_bot_line_user_id: cleanId || null })
+                .eq('id', user.id)
+
+            if (error) throw error
+            toast.success(cleanId ? 'บันทึก LINE User ID ของ Self-Bot สำเร็จ! Official Bot จะละเว้นข้อความจากบอทนี้แล้ว' : 'ลบ LINE User ID ของ Self-Bot เรียบร้อยแล้ว')
+        } catch (error) {
+            console.error('Error saving self bot line user id:', error)
+            toast.error('ไม่สามารถบันทึก LINE User ID ของ Self-Bot ได้')
+        } finally {
+            setSavingSelfBotId(false)
         }
     }
 
@@ -661,6 +685,44 @@ export default function DealerLineBotTab({ user, profile }) {
                             {pushFallbackSelfBot ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
                         </span>
                     </label>
+                </div>
+
+                {/* Self-Bot LINE User ID Input */}
+                <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem',
+                    padding: '1rem 1.25rem',
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--color-border)',
+                    marginTop: '1rem'
+                }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '0.95rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <FiTerminal style={{ color: '#36a2eb' }} /> LINE User ID ของบัญชี Self-Bot (ละเว้นไม่ให้ Official Bot อ่านโพยซ้ำ)
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', lineHeight: '1.4' }}>
+                        ระบุ LINE User ID ของบัญชี Self-Bot (เช่น <code style={{ color: 'var(--color-primary)' }}>u31dba245e37496758cbd7b23d8952ecc</code>) เพื่อให้ Official Bot สังเกตเห็นและข้าม (Ignore) ข้อความทั้งหมดที่ส่งจาก Self-Bot นี้โดยอัตโนมัติ ไม่นำไปตีความว่าเป็นโพยแทงหวย
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                        <input
+                            type="text"
+                            className="form-input"
+                            placeholder="กรอก LINE User ID ของ Self-Bot (เช่น U123456789...)"
+                            value={selfBotLineUserId}
+                            disabled={!isOwnerOrSuper || savingSelfBotId}
+                            onChange={(e) => setSelfBotLineUserId(e.target.value)}
+                            style={{ flex: '1 1 280px', fontSize: '0.9rem' }}
+                        />
+                        <button
+                            className="btn btn-primary"
+                            onClick={handleSaveSelfBotLineUserId}
+                            disabled={!isOwnerOrSuper || savingSelfBotId}
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', whiteSpace: 'nowrap' }}
+                        >
+                            <FiCheck /> {savingSelfBotId ? 'กำลังบันทึก...' : 'บันทึก ID'}
+                        </button>
+                    </div>
                 </div>
             </div>
 

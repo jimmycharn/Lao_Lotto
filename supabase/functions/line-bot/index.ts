@@ -7123,6 +7123,20 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
         console.log(`[LINE BOT EVENT] type: ${event.type}, userId: ${userId}, groupId: ${groupId}, text: ${event.message?.text || ''}`);
 
+        // Check if message comes from a registered Self-Bot LINE User ID -> Ignore completely!
+        if (userId) {
+          const { data: selfBotMatch } = await supabase
+            .from('profiles')
+            .select('id')
+            .ilike('self_bot_line_user_id', userId.trim())
+            .limit(1);
+
+          if (selfBotMatch && selfBotMatch.length > 0) {
+            console.log(`[LINE BOT IGNORE] Message comes from registered Self-Bot LINE User ID (${userId}). Completely ignoring event.`);
+            continue;
+          }
+        }
+
       // Automatically upsert group member details in the background if event comes from a group or room
       if (userId && (groupId.startsWith('C') || groupId.startsWith('R'))) {
         upsertGroupMember(groupId, userId, sourceType).catch(err => {
