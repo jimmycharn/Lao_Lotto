@@ -1826,11 +1826,14 @@ async function enqueueSelfBotPushFallback(to: string, messagePayload: any, deale
         ? 'c' + to.substring(1) 
         : (to.startsWith('c') ? 'C' + to.substring(1) : to);
 
-      const { data: groupData } = await supabase
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(to);
+      const query = supabase
         .from('line_groups')
-        .select('dealer_id, push_fallback_self_bot')
-        .or(`id.eq.${to},line_group_id.eq.${to},line_group_id.eq.${altTo}`)
-        .maybeSingle();
+        .select('dealer_id, push_fallback_self_bot');
+
+      const { data: groupData } = isUuid
+        ? await query.eq('id', to).maybeSingle()
+        : await query.or(`line_group_id.eq.${to},line_group_id.eq.${altTo}`).maybeSingle();
 
       if (groupData) {
         if (!resolvedDealerId) resolvedDealerId = groupData.dealer_id;

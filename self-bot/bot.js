@@ -51,21 +51,25 @@ async function getJoinedChatsCached(client) {
 async function resolveSelfBotGroupMid(client, targetLineGroupId) {
     if (!targetLineGroupId) return null;
 
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetLineGroupId);
+    const altId = targetLineGroupId.startsWith('C')
+        ? 'c' + targetLineGroupId.substring(1)
+        : (targetLineGroupId.startsWith('c') ? 'C' + targetLineGroupId.substring(1) : null);
+
     // 1. Check DB for cached self_bot_chat_mid (fastest path, survives restarts, supports UUID or MID)
     try {
-        const altId = targetLineGroupId.startsWith('C')
-            ? 'c' + targetLineGroupId.substring(1)
-            : (targetLineGroupId.startsWith('c') ? 'C' + targetLineGroupId.substring(1) : null);
-
-        const filterCond = `id.eq.${targetLineGroupId},line_group_id.eq.${targetLineGroupId}${altId ? `,line_group_id.eq.${altId}` : ''}`;
-
-        const { data: cachedRow } = await supabase
+        let dbQuery = supabase
             .from("line_groups")
             .select("self_bot_chat_mid")
-            .or(filterCond)
-            .not("self_bot_chat_mid", "is", null)
-            .limit(1)
-            .maybeSingle();
+            .not("self_bot_chat_mid", "is", null);
+
+        if (isUuid) {
+            dbQuery = dbQuery.eq("id", targetLineGroupId);
+        } else {
+            dbQuery = dbQuery.or(`line_group_id.eq.${targetLineGroupId}${altId ? `,line_group_id.eq.${altId}` : ''}`);
+        }
+
+        const { data: cachedRow } = await dbQuery.limit(1).maybeSingle();
 
         if (cachedRow?.self_bot_chat_mid) {
             return cachedRow.self_bot_chat_mid;
@@ -79,14 +83,12 @@ async function resolveSelfBotGroupMid(client, targetLineGroupId) {
     // Helper: save resolved MID to DB for future lookups
     async function saveMidToDb(resolvedMid) {
         try {
-            const altId = targetLineGroupId.startsWith('C')
-                ? 'c' + targetLineGroupId.substring(1)
-                : (targetLineGroupId.startsWith('c') ? 'C' + targetLineGroupId.substring(1) : null);
-            const filterCond = `id.eq.${targetLineGroupId},line_group_id.eq.${targetLineGroupId}${altId ? `,line_group_id.eq.${altId}` : ''}`;
-            await supabase
-                .from("line_groups")
-                .update({ self_bot_chat_mid: resolvedMid })
-                .or(filterCond);
+            let updateQuery = supabase.from("line_groups").update({ self_bot_chat_mid: resolvedMid });
+            if (isUuid) {
+                await updateQuery.eq("id", targetLineGroupId);
+            } else {
+                await updateQuery.or(`line_group_id.eq.${targetLineGroupId}${altId ? `,line_group_id.eq.${altId}` : ''}`);
+            }
             console.log(`💾 [Self-Bot] Saved self_bot_chat_mid=${resolvedMid} for ${targetLineGroupId}`);
         } catch (saveErr) {
             console.error("❌ Error saving self_bot_chat_mid:", saveErr.message || saveErr);
@@ -107,15 +109,13 @@ async function resolveSelfBotGroupMid(client, targetLineGroupId) {
 
     // 3. Name-based match via line_groups.group_name
     try {
-        const altId = targetLineGroupId.startsWith('C')
-            ? 'c' + targetLineGroupId.substring(1)
-            : (targetLineGroupId.startsWith('c') ? 'C' + targetLineGroupId.substring(1) : null);
-        const filterCond = `id.eq.${targetLineGroupId},line_group_id.eq.${targetLineGroupId}${altId ? `,line_group_id.eq.${altId}` : ''}`;
-        const { data: dbGroup } = await supabase
-            .from("line_groups")
-            .select("group_name")
-            .or(filterCond)
-            .maybeSingle();
+        let dbGroupQuery = supabase.from("line_groups").select("group_name");
+        if (isUuid) {
+            dbGroupQuery = dbGroupQuery.eq("id", targetLineGroupId);
+        } else {
+            dbGroupQuery = dbGroupQuery.or(`line_group_id.eq.${targetLineGroupId}${altId ? `,line_group_id.eq.${altId}` : ''}`);
+        }
+        const { data: dbGroup } = await dbGroupQuery.maybeSingle();
 
         if (dbGroup?.group_name) {
             const targetName = dbGroup.group_name.trim().toLowerCase();
