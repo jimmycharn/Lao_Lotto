@@ -290,8 +290,19 @@ async function startBot() {
             console.error("Error handling message:", err.message);
         }
     });
+    client.on("error", (err) => {
+        console.error("⚠️ [Self-Bot] LineJS Error:", err?.message || err);
+    });
 
-    client.listen({ talk: true, square: false });
+    client.on("end", (profile) => {
+        console.warn("⚠️ [Self-Bot] Client connection ended:", profile?.displayName || "Unknown");
+    });
+
+    try {
+        client.listen({ talk: true, square: false });
+    } catch (listenErr) {
+        console.error("⚠️ [Self-Bot] Error starting talk listener:", listenErr.message || listenErr);
+    }
 
     // Start Polling for Self-Bot Push Queue every 3 seconds
     setInterval(() => {
@@ -301,4 +312,12 @@ async function startBot() {
     console.log("✅ Self-Bot พร้อมทำงานและคอยประมวลผลข้อความ Push Fallback แล้ว!");
 }
 
-startBot().catch(console.error);
+process.on("unhandledRejection", (reason) => {
+    console.error("⚠️ [Self-Bot] Unhandled Rejection (non-fatal):", reason?.message || reason);
+});
+
+process.on("uncaughtException", (err) => {
+    console.error("⚠️ [Self-Bot] Uncaught Exception (non-fatal):", err?.message || err);
+});
+
+startBot().catch(err => console.error("❌ Fatal Error starting Self-Bot:", err.message || err));
