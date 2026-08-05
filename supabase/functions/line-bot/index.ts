@@ -12599,7 +12599,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               if (rawGroups && rawGroups.length > 0) {
                 const uniqueGroupIds = Array.from(new Set(rawGroups.map(g => g.line_group_id).filter(Boolean)));
-                Promise.allSettled(
+                await Promise.allSettled(
                   uniqueGroupIds.map(async (targetGroupId) => {
                     if (targetGroupId === groupId || (groupId && targetGroupId.toLowerCase() === groupId.toLowerCase())) {
                       return; // skip current group (already replied)
