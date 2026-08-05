@@ -8862,8 +8862,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   ? `สมาชิกต้องจ่ายเภา: ฿${Math.round(netToPay).toLocaleString('th-TH')}` 
                   : (netToPay < 0 ? `เภาต้องจ่ายสมาชิก: ฿${Math.abs(Math.round(netToPay)).toLocaleString('th-TH')}` : 'เสมอ');
 
-                const groupSummaryText = `📊 สรุปผลได้เสีย: ${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()}\n` +
+                let groupSummaryText = `📊 สรุปผลได้เสีย: ${activeRound.lottery_name || activeRound.lottery_type.toUpperCase()}\n` +
                   `📅 งวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n` +
+                  `🏆 ผลรางวัล: ${winNumStr || 'ยังไม่ระบุ'}\n` +
                   `----------------------------------\n` +
                   `💰 ยอดแทงรวม: ฿${Math.round(groupTotalBet).toLocaleString('th-TH')}\n` +
                   `💸 ค่าคอมรวม: ฿${Math.round(groupTotalComm).toLocaleString('th-TH')}\n` +
@@ -8871,6 +8872,26 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   `----------------------------------\n` +
                   `📝 สรุปยอดได้เสียสุทธิ:\n👉 ${groupNetLabel}\n` +
                   `👥 สมาชิกถูกรางวัล: ${groupWinnerCount} รายการ`;
+
+                if (sortedUserSummaries.length > 0) {
+                  groupSummaryText += `\n----------------------------------\n👤 รายละเอียดรายคน:\n`;
+                  sortedUserSummaries.forEach((u, idx) => {
+                    const userName = profilesMap[u.userId] || 'ไม่ระบุชื่อ';
+                    const roundedBet = Math.round(u.totalBet);
+                    const roundedComm = Math.round(u.totalCommission);
+                    const roundedWin = Math.round(u.totalWin);
+                    const net = u.totalWin - (u.totalBet - u.totalCommission);
+                    const roundedNet = Math.round(net);
+
+                    let netStr = roundedNet > 0 
+                      ? `ต้องเก็บ ฿${roundedNet.toLocaleString('th-TH')}` 
+                      : (roundedNet < 0 ? `ต้องจ่าย ฿${Math.abs(roundedNet).toLocaleString('th-TH')}` : 'เสมอ');
+
+                    groupSummaryText += `${idx + 1}. คุณ ${userName}\n` +
+                      `   ส่ง: ฿${roundedBet.toLocaleString('th-TH')} | คอม: ฿${roundedComm.toLocaleString('th-TH')} | ถูก: ฿${roundedWin.toLocaleString('th-TH')}\n` +
+                      `   👉 สุทธิ: ${netStr}\n`;
+                  });
+                }
 
                 const altSummaryText = groupSummaryText.trim().length > 390 
                   ? groupSummaryText.trim().slice(0, 387) + '...' 
