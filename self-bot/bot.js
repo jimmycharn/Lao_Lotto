@@ -194,20 +194,22 @@ async function sendFlexMessageViaLiff(client, targetChatMid, flexPayload) {
     }
 
     try {
-        const liffTokenResult = await client.base.talk.issueLiffView({
-            request: {
-                liffId: liffId,
-                context: {
-                    chat: {
-                        chatMid: targetChatMid
-                    }
-                }
-            }
-        });
+        let liffToken = null;
 
-        const liffToken = liffTokenResult?.accessToken;
+        // Try @evex/linejs LIFF methods
+        if (client.liff && typeof client.liff.getToken === "function") {
+            const tokenRes = await client.liff.getToken({ chatMid: targetChatMid, liffId });
+            liffToken = typeof tokenRes === "string" ? tokenRes : (tokenRes?.accessToken || tokenRes?.token);
+        } else if (client.base?.liff && typeof client.base.liff.getLiffToken === "function") {
+            const tokenRes = await client.base.liff.getLiffToken({ chatMid: targetChatMid, liffId });
+            liffToken = typeof tokenRes === "string" ? tokenRes : (tokenRes?.accessToken || tokenRes?.token);
+        } else if (client.base?.liff && typeof client.base.liff.issueLiffView === "function") {
+            const tokenRes = await client.base.liff.issueLiffView({ chatMid: targetChatMid, liffId });
+            liffToken = tokenRes?.accessToken || tokenRes?.token;
+        }
+
         if (!liffToken) {
-            throw new Error("Failed to get LiffToken");
+            throw new Error("Could not acquire LIFF token from client.liff / client.base.liff");
         }
 
         const response = await fetch("https://api.line.me/message/v3/share", {
