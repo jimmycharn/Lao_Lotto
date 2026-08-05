@@ -659,7 +659,7 @@ async function generateIndividualSubmissionsSummaryFlex(roundId: string, lottery
 
   const flexMessage = {
     "type": "flex",
-    "altText": summaryText,
+    "altText": `👥 สมาชิกที่ส่งเลขแล้ว (${typeName})`,
     "contents": {
       "type": "bubble",
       "size": "mega",
@@ -1855,19 +1855,6 @@ async function enqueueSelfBotPushFallback(to: string, messagePayload: any, deale
     if (fallbackEnabled) {
       const msgType = messagePayload?.type === 'flex' ? 'flex' : 'text';
 
-      // Deduplicate: check if a pending fallback message for this group already exists in queue
-      const { data: existingPending } = await supabase
-        .from('self_bot_push_queue')
-        .select('id')
-        .eq('target_line_group_id', to)
-        .eq('status', 'pending')
-        .limit(1);
-
-      if (existingPending && existingPending.length > 0) {
-        console.log(`[SelfBotFallback] Pending fallback message already exists for target ${to}, skipping duplicate insert`);
-        return;
-      }
-
       await supabase.from('self_bot_push_queue').insert({
         dealer_id: resolvedDealerId,
         target_line_group_id: to,
@@ -1875,7 +1862,7 @@ async function enqueueSelfBotPushFallback(to: string, messagePayload: any, deale
         message_type: msgType,
         status: 'pending'
       });
-      console.log(`[SelfBotFallback] Successfully enqueued push message to Self-Bot queue for target ${to}`);
+      console.log(`[SelfBotFallback] Successfully enqueued ${msgType} message to Self-Bot queue for target ${to}`);
     } else {
       console.log(`[SelfBotFallback] Fallback disabled or dealerId missing for target ${to}`);
     }
@@ -3810,7 +3797,7 @@ async function generateRoundSummaryFlex(
 
     flexMessage = {
       "type": "flex",
-      "altText": summaryText.trim(),
+      "altText": summaryText.trim().length > 390 ? summaryText.trim().slice(0, 387) + '...' : summaryText.trim(),
       "contents": {
         "type": "bubble",
         "size": "mega",
@@ -4180,7 +4167,7 @@ async function generateRoundSummaryFlex(
 
     flexMessage = {
       "type": "flex",
-      "altText": summaryText.trim(),
+      "altText": summaryText.trim().length > 390 ? summaryText.trim().slice(0, 387) + '...' : summaryText.trim(),
       "contents": {
         "type": "bubble",
         "size": "mega",
@@ -5605,24 +5592,24 @@ serve(async (req) => {
                   const textMsg = await generateTotalNumbersSummary(round.id, round.lottery_type);
                   if (textMsg) {
                     const msgs = splitTextByLimit(textMsg);
-                    for (const m of msgs) await sendLinePush(targetLineGroupId, m);
+                    for (const m of msgs) await sendLinePush(targetLineGroupId, m, round.dealer_id);
                   }
                 } else if (type === 'remaining') {
                   const textMsg = await generateRemainingNumbersSummary(round.id, round.lottery_type);
                   if (textMsg) {
                     const msgs = splitTextByLimit(textMsg);
-                    for (const m of msgs) await sendLinePush(targetLineGroupId, m);
+                    for (const m of msgs) await sendLinePush(targetLineGroupId, m, round.dealer_id);
                   }
                 } else if (type === 'layoff') {
                   const textMsg = await generateLayoffNumbersSummary(round.id, round.lottery_type);
                   if (textMsg) {
                     const msgs = splitTextByLimit(textMsg);
-                    for (const m of msgs) await sendLinePush(targetLineGroupId, m);
+                    for (const m of msgs) await sendLinePush(targetLineGroupId, m, round.dealer_id);
                   }
                 } else if (type === 'individual') {
                   const res = await generateIndividualSubmissionsSummaryFlex(round.id, round.lottery_type);
                   if (res?.flexMessage) {
-                    await sendLinePush(targetLineGroupId, res.flexMessage);
+                    await sendLinePush(targetLineGroupId, res.flexMessage, round.dealer_id);
                   }
                 }
               } catch (pushErr) {
@@ -10229,7 +10216,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               const flexMessage = {
                 "type": "flex",
-                "altText": summaryText,
+                "altText": `👥 สมาชิกที่ส่งเลขแล้ว (${typeName})`,
                 "contents": {
                   "type": "bubble",
                   "size": "mega",
