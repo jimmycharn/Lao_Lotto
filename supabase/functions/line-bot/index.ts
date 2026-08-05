@@ -8892,11 +8892,10 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 }
 
                 if (targetGroupId === groupId) {
-                  // First send group overall summary text, then carousel flexes
-                  await sendLineReply(replyToken, [groupSummaryText, ...carouselMessages.slice(0, 4)]);
+                  await sendLineReply(replyToken, carouselMessages.slice(0, 5));
                   currentGroupProcessed = true;
 
-                  const toPush = carouselMessages.slice(4);
+                  const toPush = carouselMessages.slice(5);
                   for (const msg of toPush) {
                     try {
                       await sendLinePush(targetGroupId, msg, dealerId);
@@ -8906,7 +8905,6 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   }
                 } else {
                   console.log(`[แจ้งผล] pushing ${carouselMessages.length} messages to group=${targetGroupId}`);
-                  await sendLinePush(targetGroupId, groupSummaryText, dealerId);
                   for (const msg of carouselMessages) {
                     try {
                       await sendLinePush(targetGroupId, msg, dealerId);
