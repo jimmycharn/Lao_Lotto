@@ -1,29 +1,31 @@
-const { Client } = require("@evex/linejs");
+const { loginWithAuthToken, loginWithQR } = require("@evex/linejs");
 const fs = require("fs");
 const fetch = require("node-fetch");
 require("dotenv").config();
 const supabase = require("./db");
 
-const STORAGE_FILE = "./storage.json";
+let STORAGE_FILE = "./storage.json";
+if (!fs.existsSync(STORAGE_FILE) && fs.existsSync("./storage_a.json")) {
+    try {
+        fs.copyFileSync("./storage_a.json", STORAGE_FILE);
+        console.log("📋 คัดลอกข้อมูลล็อกอินจาก storage_a.json เป็น storage.json สำเร็จ");
+    } catch (e) {}
+}
 
-// ─── Storage: Session Token Storage ──────────────────────────────────────────
+let storageData = {};
+if (fs.existsSync(STORAGE_FILE)) {
+    try { storageData = JSON.parse(fs.readFileSync(STORAGE_FILE)); } catch (e) {}
+}
+
 const storage = {
-    set: (key, value) => {
-        let data = {};
-        if (fs.existsSync(STORAGE_FILE)) {
-            try { data = JSON.parse(fs.readFileSync(STORAGE_FILE)); } catch (e) {}
-        }
-        data[key] = value;
-        fs.writeFileSync(STORAGE_FILE, JSON.stringify(data, null, 2));
-    },
-    get: (key) => {
-        if (!fs.existsSync(STORAGE_FILE)) return undefined;
+    set: async (key, value) => {
+        storageData[key] = value;
         try {
-            const data = JSON.parse(fs.readFileSync(STORAGE_FILE));
-            return data[key];
-        } catch (e) {
-            return undefined;
-        }
+            fs.writeFileSync(STORAGE_FILE, JSON.stringify(storageData, null, 2));
+        } catch (e) {}
+    },
+    get: async (key) => {
+        return storageData[key];
     }
 };
 
@@ -31,7 +33,7 @@ const storage = {
 async function sendFlexMessageViaLiff(client, targetChatMid, flexPayload) {
     const liffId = process.env.LIFF_ID;
     if (!liffId) {
-        console.warn("⚠️ LIFF_ID not set. Falling back to plain text.");
+        console.warn("⚠️ LIFF_ID not set in .env. Falling back to plain text.");
         return false;
     }
 
@@ -100,7 +102,6 @@ async function processPushQueue(client) {
         for (const item of queueItems) {
             console.log(`🚀 [Self-Bot] Processing queue item ${item.id} for group ${item.target_line_group_id}`);
             
-            // Mark processing
             await supabase
                 .from("self_bot_push_queue")
                 .update({ status: "processing" })
@@ -114,28 +115,15 @@ async function processPushQueue(client) {
                 const payload = item.message_payload;
 
                 if (item.message_type === 'flex') {
-                    // Try LIFF first for Flex Message
                     success = await sendFlexMessageViaLiff(client, chatMid, payload);
                     if (!success) {
-                        // Fallback to text message
                         const text = extractTextFromFlex(payload);
-                        await client.base.talk.sendMessage({
-                            to: chatMid,
-                            text: text,
-                            contentType: "NONE",
-                            e2ee: false
-                        });
+                        await client.sendCompactMessage(chatMid, text);
                         success = true;
                     }
                 } else {
-                    // Send text message
                     const text = typeof payload === 'string' ? payload : (payload.text || JSON.stringify(payload));
-                    await client.base.talk.sendMessage({
-                        to: chatMid,
-                        text: text,
-                        contentType: "NONE",
-                        e2ee: false
-                    });
+                    await client.sendCompactMessage(chatMid, text);
                     success = true;
                 }
             } catch (sendErr) {
@@ -156,7 +144,7 @@ async function processPushQueue(client) {
             }
         }
     } catch (queueErr) {
-        console.error("❌ Error processing self_bot_push_queue:", queueErr);
+        console.error("❌ Error processing self_bot_push_queue:", queueErr.message || queueErr);
     }
 }
 
@@ -164,53 +152,46 @@ async function processPushQueue(client) {
 async function startBot() {
     console.log("🤖 กำลังเริ่มต้น LINE Self-Bot...");
 
-    const client = new Client({ storage });
-    const hasToken = fs.existsSync(STORAGE_FILE) && fs.readFileSync(STORAGE_FILE).includes("authToken");
+    let client;
+    const existingAuthToken = storageData.authToken;
 
-    if (hasToken) {
+    if (existingAuthToken) {
         console.log("🔑 พบ Auth Token เดิม กำลังเข้าสู่ระบบ...");
-        await client.login();
-    } else {
-        console.log("📱 ไม่พบ Session เดิม กรุณาเข้าสู่ระบบ:");
-        client.on("pincode", (pincode) => {
-            console.log(`========================================`);
-            console.log(`🔑 กรุณากรอกรหัส Pincode บนโทรศัพท์: ${pincode}`);
-            console.log(`========================================`);
-        });
-        client.on("qr", (qr) => {
-            console.log(`========================================`);
-            console.log(`📸 สแกน QR Code นี้เพื่อล็อกอิน: ${qr.url}`);
-            console.log(`========================================`);
-        });
-        await client.login();
+        try {
+            client = await loginWithAuthToken(existingAuthToken, { device: 'DESKTOPWIN', storage });
+        } catch (authErr) {
+            console.warn("⚠️ Auth Token เดิมหมดอายุ หรือใช้งานไม่ได้ กำลังเริ่มสแกน QR Code ใหม่...");
+            client = null;
+        }
     }
 
-    console.log(`🚀 เข้าสู่ระบบสำเร็จ! Self-Bot MID: ${client.selfMid}`);
+    if (!client) {
+        console.log("📱 กำลังเตรียม QR Code สำหรับเข้าสู่ระบบ...");
+        client = await loginWithQR({
+            onReceiveQRUrl: (qrUrl) => {
+                console.log(`========================================`);
+                console.log(`📸 สแกน QR Code นี้เพื่อล็อกอิน: ${qrUrl}`);
+                console.log(`========================================`);
+            },
+            onPincodeRequest: (pincode) => {
+                console.log(`========================================`);
+                console.log(`🔑 กรุณากรอกรหัส Pincode บนโทรศัพท์: ${pincode}`);
+                console.log(`========================================`);
+            }
+        }, { device: 'DESKTOPWIN', storage });
+    }
 
-    // Receive events
-    client.on("update", async (op) => {
+    const myProfile = await client.getMyProfile();
+    console.log(`🚀 เข้าสู่ระบบสำเร็จ! Self-Bot ชื่อ: ${myProfile.displayName}`);
+
+    // Listen to talk events
+    client.on("message", async (msg) => {
         try {
-            if (op.type === "RECEIVE_MESSAGE" || Number(op.type) === 26) {
-                const message = op.message;
-                if (!message) return;
-
-                const senderMid = message.from || op.sender?.mid;
-                const text = message.text;
-                const chatMid = message.to || op.param?.[0];
-
-                if (senderMid && senderMid !== client.selfMid) {
-                    if (text && text.toLowerCase() === "hello selfbot") {
-                        await client.base.talk.sendMessage({
-                            to: chatMid,
-                            text: "สวัสดีครับ! บอท Self-Bot พร้อมทำหน้าที่แจ้งเตือนแทนแล้วครับ 🤖",
-                            contentType: "NONE",
-                            e2ee: false
-                        });
-                    }
-                }
+            if (msg && msg.text && msg.text.toLowerCase() === "hello selfbot") {
+                await client.sendCompactMessage(msg.to, "สวัสดีครับ! บอท Self-Bot พร้อมทำหน้าที่แจ้งเตือนแทนแล้วครับ 🤖");
             }
         } catch (err) {
-            console.error("Error processing update:", err);
+            console.error("Error handling message:", err.message);
         }
     });
 
