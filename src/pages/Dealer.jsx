@@ -117,6 +117,7 @@ export default function Dealer() {
     const [loadingUpstream, setLoadingUpstream] = useState(false)
     const [downstreamDealers, setDownstreamDealers] = useState([]) // Dealers who send bets TO us
     const [memberTypeFilter, setMemberTypeFilter] = useState('all') // 'all' | 'member' | 'dealer'
+    const [memberSearchQuery, setMemberSearchQuery] = useState('')
     
     // Add member modal states
     const [showAddMemberModal, setShowAddMemberModal] = useState(false)
@@ -2452,20 +2453,91 @@ export default function Dealer() {
                                 </div>
                             </div>
 
-                            {/* Members List - Accordion Style */}
-                            <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            {/* Members List Header with Search Box */}
+                            <div className="section-header" style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                                gap: '1rem',
+                                marginBottom: '1rem',
+                                marginTop: '1rem'
+                            }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                    <h2>
+                                    <h2 style={{ margin: 0 }}>
                                         {memberTypeFilter === 'all' ? 'สมาชิกทั้งหมด' : 
                                          memberTypeFilter === 'member' ? 'สมาชิกทั่วไป' : 'เจ้ามือที่ตีเลขเข้ามา'}
                                     </h2>
                                     <span className="badge">
-                                        {memberTypeFilter === 'all' 
-                                            ? members.length + downstreamDealers.filter(d => d.membership_status === 'active').length
-                                            : memberTypeFilter === 'member' 
-                                                ? members.length 
-                                                : downstreamDealers.filter(d => d.membership_status === 'active').length} คน
+                                        {(() => {
+                                            const activeDownstreamDealers = downstreamDealers.filter(d => d.membership_status === 'active')
+                                            let list = memberTypeFilter === 'all' 
+                                                ? [...members.map(m => ({ ...m, is_dealer: false })), ...activeDownstreamDealers]
+                                                : memberTypeFilter === 'member' 
+                                                    ? members.map(m => ({ ...m, is_dealer: false }))
+                                                    : activeDownstreamDealers
+                                            if (memberSearchQuery.trim()) {
+                                                const q = memberSearchQuery.trim().toLowerCase()
+                                                list = list.filter(m => 
+                                                    (m.full_name || '').toLowerCase().includes(q) ||
+                                                    (m.email || '').toLowerCase().includes(q) ||
+                                                    (m.phone || '').toLowerCase().includes(q) ||
+                                                    (m.line_user_id || '').toLowerCase().includes(q) ||
+                                                    (m.bank_account || '').toLowerCase().includes(q)
+                                                )
+                                            }
+                                            return list.length
+                                        })()} คน
                                     </span>
+                                </div>
+
+                                {/* Search Box Input */}
+                                <div style={{ position: 'relative', minWidth: '240px', flex: '0 1 320px' }}>
+                                    <FiSearch style={{
+                                        position: 'absolute',
+                                        left: '0.85rem',
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        color: 'var(--color-text-muted)',
+                                        fontSize: '1rem',
+                                        pointerEvents: 'none'
+                                    }} />
+                                    <input
+                                        type="text"
+                                        className="form-input"
+                                        placeholder="ค้นหาชื่อ, เบอร์โทร, อีเมล, LINE User ID..."
+                                        value={memberSearchQuery}
+                                        onChange={(e) => setMemberSearchQuery(e.target.value)}
+                                        style={{
+                                            paddingLeft: '2.4rem',
+                                            paddingRight: memberSearchQuery ? '2.2rem' : '0.85rem',
+                                            width: '100%',
+                                            borderRadius: 'var(--radius-md)',
+                                            fontSize: '0.9rem',
+                                            background: 'var(--color-surface)',
+                                            border: '1px solid var(--color-border)'
+                                        }}
+                                    />
+                                    {memberSearchQuery && (
+                                        <button
+                                            onClick={() => setMemberSearchQuery('')}
+                                            style={{
+                                                position: 'absolute',
+                                                right: '0.5rem',
+                                                top: '50%',
+                                                transform: 'translateY(-50%)',
+                                                background: 'none',
+                                                border: 'none',
+                                                color: 'var(--color-text-muted)',
+                                                cursor: 'pointer',
+                                                padding: '0.25rem',
+                                                display: 'flex',
+                                                alignItems: 'center'
+                                            }}
+                                        >
+                                            <FiX size={16} />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
 
@@ -2528,12 +2600,24 @@ export default function Dealer() {
 
                             {(() => {
                                 const activeDownstreamDealers = downstreamDealers.filter(d => d.membership_status === 'active')
-                                const filteredMembers = memberTypeFilter === 'all' 
+                                let allActive = memberTypeFilter === 'all' 
                                     ? [...members.map(m => ({ ...m, is_dealer: false })), ...activeDownstreamDealers]
                                     : memberTypeFilter === 'member' 
                                         ? members.map(m => ({ ...m, is_dealer: false }))
                                         : activeDownstreamDealers
-                                
+
+                                if (memberSearchQuery.trim()) {
+                                    const q = memberSearchQuery.trim().toLowerCase()
+                                    allActive = allActive.filter(m => 
+                                        (m.full_name || '').toLowerCase().includes(q) ||
+                                        (m.email || '').toLowerCase().includes(q) ||
+                                        (m.phone || '').toLowerCase().includes(q) ||
+                                        (m.line_user_id || '').toLowerCase().includes(q) ||
+                                        (m.bank_account || '').toLowerCase().includes(q)
+                                    )
+                                }
+
+                                const filteredMembers = allActive
                                 const pendingDownstreamDealers = downstreamDealers.filter(d => d.membership_status === 'pending')
                                 
                                 if (filteredMembers.length === 0 && pendingMembers.length === 0 && pendingDownstreamDealers.length === 0) {
@@ -2550,9 +2634,7 @@ export default function Dealer() {
                                     return (
                                         <div className="empty-state card" style={{ padding: '1.5rem' }}>
                                             <p style={{ opacity: 0.7 }}>
-                                                {memberTypeFilter === 'dealer' 
-                                                    ? 'ยังไม่มีเจ้ามือที่ตีเลขเข้ามา' 
-                                                    : 'ยังไม่มีสมาชิกที่อนุมัติแล้ว'}
+                                                {memberSearchQuery ? `ไม่พบข้อมูลสมาชิกที่ค้นหา "${memberSearchQuery}"` : (memberTypeFilter === 'dealer' ? 'ยังไม่มีเจ้ามือที่ตีเลขเข้ามา' : 'ยังไม่มีสมาชิกที่อนุมัติแล้ว')}
                                             </p>
                                         </div>
                                     )
