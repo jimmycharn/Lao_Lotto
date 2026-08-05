@@ -159,33 +159,39 @@ async function syncGroupMidsOnStartup(client) {
 
         console.log(`🔄 [Self-Bot Sync] Syncing group MIDs. Self-bot is in ${joinedChats.length} chats.`);
 
-        // Fetch all line_groups that have group_name but no self_bot_chat_mid
         const { data: groups } = await supabase
             .from("line_groups")
             .select("line_group_id, group_name, self_bot_chat_mid")
-            .is("self_bot_chat_mid", null)
-            .not("group_name", "is", null)
             .eq("is_active", true);
 
-        if (!groups || groups.length === 0) {
-            console.log(`✅ [Self-Bot Sync] All groups already have self_bot_chat_mid cached.`);
-            return;
-        }
+        if (!groups || groups.length === 0) return;
 
         let syncCount = 0;
         for (const group of groups) {
-            const targetName = group.group_name.trim().toLowerCase();
-            const match = joinedChats.find(c => c.name && c.name.trim().toLowerCase() === targetName);
-            if (match) {
+            let match = null;
+
+            // 1. Direct MID match (case-insensitive + C↔c conversion)
+            if (group.line_group_id) {
+                const targetLid = group.line_group_id.trim().toLowerCase();
+                match = joinedChats.find(c => c.mid && c.mid.trim().toLowerCase() === targetLid);
+            }
+
+            // 2. Fallback: Group Name match
+            if (!match && group.group_name) {
+                const targetName = group.group_name.trim().toLowerCase();
+                match = joinedChats.find(c => c.name && c.name.trim().toLowerCase() === targetName);
+            }
+
+            if (match && group.self_bot_chat_mid !== match.mid) {
                 await supabase
                     .from("line_groups")
                     .update({ self_bot_chat_mid: match.mid })
                     .eq("line_group_id", group.line_group_id);
-                console.log(`💾 [Self-Bot Sync] ${group.line_group_id} => ${match.mid} (${group.group_name})`);
+                console.log(`💾 [Self-Bot Sync] Synced ${group.line_group_id} (${group.group_name || 'No Name'}) => self_bot_chat_mid=${match.mid}`);
                 syncCount++;
             }
         }
-        console.log(`✅ [Self-Bot Sync] Synced ${syncCount}/${groups.length} groups.`);
+        console.log(`✅ [Self-Bot Sync] Successfully synced ${syncCount} group MIDs.`);
     } catch (err) {
         console.error("❌ [Self-Bot Sync] Error during startup sync:", err.message || err);
     }
