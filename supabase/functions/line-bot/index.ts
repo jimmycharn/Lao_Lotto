@@ -12550,6 +12550,10 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               const announceMsg = `📢 ประกาศจากเภา:\n${param}`;
 
+              // Reply immediately in current group so Official Bot responds instantly
+              await sendLineReply(replyToken, announceMsg);
+
+              // Broadcast push/fallback to all other groups concurrently in background
               const { data: allGroups } = await supabase
                 .from('line_groups')
                 .select('line_group_id')
@@ -12557,19 +12561,20 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 .eq('is_active', true);
 
               if (allGroups && allGroups.length > 0) {
-                for (const g of allGroups) {
-                  if (g.line_group_id === groupId || (g.line_group_id && groupId && g.line_group_id.toLowerCase() === groupId.toLowerCase())) {
-                    continue;
-                  }
-                  try {
-                    await sendLinePush(g.line_group_id, announceMsg, dealerId);
-                  } catch (e) {
-                    console.error(`Failed to push announce message to group ${g.line_group_id}:`, e);
-                  }
-                }
+                Promise.allSettled(
+                  allGroups.map(async (g) => {
+                    if (!g.line_group_id) return;
+                    if (g.line_group_id === groupId || (groupId && g.line_group_id.toLowerCase() === groupId.toLowerCase())) {
+                      return;
+                    }
+                    try {
+                      await sendLinePush(g.line_group_id, announceMsg, dealerId);
+                    } catch (e) {
+                      console.error(`Failed to push announce message to group ${g.line_group_id}:`, e);
+                    }
+                  })
+                );
               }
-
-              await sendLineReply(replyToken, announceMsg);
               continue;
             }
 
