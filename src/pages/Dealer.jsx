@@ -1268,6 +1268,29 @@ export default function Dealer() {
         }
     }
 
+    // Update assigned bank account for member
+    async function handleUpdateMemberBank(member, bankAccountId) {
+        try {
+            if (!member.membership_id) {
+                toast.error('ไม่พบข้อมูลสมาชิก')
+                return
+            }
+
+            const { error } = await supabase
+                .from('user_dealer_memberships')
+                .update({ assigned_bank_account_id: bankAccountId || null })
+                .eq('id', member.membership_id)
+
+            if (error) throw error
+
+            toast.success('อัปเดตบัญชีธนาคารสำหรับสมาชิกสำเร็จ')
+            setMembers(prev => prev.map(m => m.id === member.id ? { ...m, assigned_bank_account_id: bankAccountId } : m))
+        } catch (err) {
+            console.error('Error updating assigned bank account:', err)
+            toast.error('เกิดข้อผิดพลาดในการอัปเดตบัญชีธนาคาร: ' + err.message)
+        }
+    }
+
     // Approve downstream dealer connection request
     async function handleApproveDownstreamDealer(dealer) {
         try {
@@ -2553,8 +2576,7 @@ export default function Dealer() {
                                                 onUpdateBank={(bankAccountId) => handleUpdateMemberBank(member, bankAccountId)}
                                                 isDealer={member.is_dealer}
                                                 onCopyCredentials={copyMemberCredentials}
-                                                isPerUserYearly={billingCycle === 'per_user_yearly'}
-                                                onRenew={() => handleRenewMemberPackage(member)}
+                                                isPerUserYearly={false}
                                                 onUpdateLineUserId={(lineId) => handleUpdateMemberLineUserId(member.id, lineId)}
                                             />
                                         ))}
