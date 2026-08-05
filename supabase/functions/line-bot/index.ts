@@ -8893,7 +8893,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
                   for (const msg of toPush) {
                     try {
-                      await sendLinePush(targetGroupId, msg);
+                      await sendLinePush(targetGroupId, msg, dealerId);
                     } catch (pushErr) {
                       console.error(`Failed to push overflow results to group ${targetGroupId}:`, pushErr);
                     }
@@ -8902,7 +8902,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   console.log(`[แจ้งผล] pushing ${carouselMessages.length} messages to group=${targetGroupId}`);
                   for (const msg of carouselMessages) {
                     try {
-                      await sendLinePush(targetGroupId, msg);
+                      await sendLinePush(targetGroupId, msg, dealerId);
                       console.log(`[แจ้งผล] push success to group=${targetGroupId}`);
                     } catch (pushErr) {
                       console.error(`Failed to push results message to group ${targetGroupId}:`, pushErr);
