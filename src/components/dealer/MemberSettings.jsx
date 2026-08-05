@@ -340,91 +340,106 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                             ))}
                         </div>
 
-                        {/* เปิดแถม Checkbox */}
-                        <label
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.5rem',
-                                margin: '0.75rem 0 0.5rem',
-                                cursor: 'pointer',
-                                fontSize: '0.95rem',
-                                color: settings[activeTab]?.bonusEnabled ? '#22c55e' : 'var(--color-text)'
-                            }}
-                        >
-                            <input
-                                type="checkbox"
-                                checked={settings[activeTab]?.bonusEnabled || false}
-                                onChange={(e) => {
-                                    setSettings(prev => ({
-                                        ...prev,
-                                        [activeTab]: {
-                                            ...prev[activeTab],
-                                            bonusEnabled: e.target.checked
-                                        }
-                                    }))
+                        {/* Settings Options Bar */}
+                        <div style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: '1.25rem',
+                            margin: '1rem 0 1.25rem',
+                            padding: '0.85rem 1.25rem',
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            borderRadius: 'var(--radius-md)',
+                            border: '1px solid var(--color-border)',
+                            alignItems: 'center'
+                        }}>
+                            {/* 1. อนุญาตให้ส่ง(แทง) ประเภทหวยนั้นที่ตั้งค่า */}
+                            <label
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    cursor: 'pointer',
+                                    fontSize: '0.95rem',
+                                    color: !blockedLotteryTypes.includes(activeTab) ? '#22c55e' : '#ef4444',
+                                    margin: 0
                                 }}
-                                style={{ width: '18px', height: '18px', accentColor: '#22c55e', cursor: 'pointer' }}
-                            />
-                            <FiGift style={{ color: settings[activeTab]?.bonusEnabled ? '#22c55e' : 'var(--color-text-muted)' }} />
-                            <span style={{ fontWeight: 500 }}>เปิดแถมเงินแทง</span>
-                        </label>
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={!blockedLotteryTypes.includes(activeTab)}
+                                    onChange={(e) => {
+                                        setBlockedLotteryTypes(prev => 
+                                            e.target.checked 
+                                                ? prev.filter(t => t !== activeTab)
+                                                : [...prev, activeTab]
+                                        )
+                                    }}
+                                    style={{ width: '18px', height: '18px', accentColor: '#22c55e', cursor: 'pointer' }}
+                                />
+                                <span style={{ fontWeight: 500 }}>
+                                    {!blockedLotteryTypes.includes(activeTab) ? '✓ อนุญาตให้ส่ง (แทง)' : '✕ ไม่อนุญาตให้ส่ง (แทง)'}
+                                </span>
+                            </label>
 
-                        {/* คืนเลขเกินลิมิต Checkbox */}
-                        <label
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.5rem',
-                                margin: '0.5rem 0 0.5rem',
-                                cursor: 'pointer',
-                                fontSize: '0.95rem',
-                                color: settings[activeTab]?.returnExcessOnOverflow ? '#eab308' : 'var(--color-text)'
-                            }}
-                        >
-                            <input
-                                type="checkbox"
-                                checked={settings[activeTab]?.returnExcessOnOverflow || false}
-                                onChange={(e) => {
-                                    setSettings(prev => ({
-                                        ...prev,
-                                        [activeTab]: {
-                                            ...prev[activeTab],
-                                            returnExcessOnOverflow: e.target.checked
-                                        }
-                                    }))
+                            {/* 2. บวกเพิ่มเงินซื้อ (เปิดแถม) */}
+                            <label
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    cursor: 'pointer',
+                                    fontSize: '0.95rem',
+                                    color: settings[activeTab]?.bonusEnabled ? '#22c55e' : 'var(--color-text-muted)',
+                                    margin: 0
                                 }}
-                                style={{ width: '18px', height: '18px', accentColor: '#eab308', cursor: 'pointer' }}
-                            />
-                            <span style={{ fontWeight: 500 }}>คืนเลขเกินลิมิต (ไม่รับยอดเกิน)</span>
-                        </label>
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={settings[activeTab]?.bonusEnabled || false}
+                                    onChange={(e) => {
+                                        setSettings(prev => ({
+                                            ...prev,
+                                            [activeTab]: {
+                                                ...prev[activeTab],
+                                                bonusEnabled: e.target.checked
+                                            }
+                                        }))
+                                    }}
+                                    style={{ width: '18px', height: '18px', accentColor: '#22c55e', cursor: 'pointer' }}
+                                />
+                                <FiGift style={{ color: settings[activeTab]?.bonusEnabled ? '#22c55e' : 'var(--color-text-muted)' }} />
+                                <span style={{ fontWeight: 500 }}>บวกเพิ่มเงินซื้อ (เปิดแถม)</span>
+                            </label>
 
-                        {/* ไม่อนุญาตส่งโพย Checkbox */}
-                        <label
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.5rem',
-                                margin: '0.75rem 0 1rem',
-                                cursor: 'pointer',
-                                fontSize: '0.95rem',
-                                color: blockedLotteryTypes.includes(activeTab) ? '#ef4444' : 'var(--color-text)'
-                            }}
-                        >
-                            <input
-                                type="checkbox"
-                                checked={blockedLotteryTypes.includes(activeTab)}
-                                onChange={(e) => {
-                                    setBlockedLotteryTypes(prev => 
-                                        e.target.checked 
-                                            ? [...prev, activeTab]
-                                            : prev.filter(t => t !== activeTab)
-                                    )
+                            {/* 3. คืนเลขเกินลิมิต (ไม่รับยอดเกิน) */}
+                            <label
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    cursor: 'pointer',
+                                    fontSize: '0.95rem',
+                                    color: settings[activeTab]?.returnExcessOnOverflow ? '#eab308' : 'var(--color-text-muted)',
+                                    margin: 0
                                 }}
-                                style={{ width: '18px', height: '18px', accentColor: '#ef4444', cursor: 'pointer' }}
-                            />
-                            <span style={{ fontWeight: 500 }}>ไม่อนุญาตส่งโพย</span>
-                        </label>
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={settings[activeTab]?.returnExcessOnOverflow || false}
+                                    onChange={(e) => {
+                                        setSettings(prev => ({
+                                            ...prev,
+                                            [activeTab]: {
+                                                ...prev[activeTab],
+                                                returnExcessOnOverflow: e.target.checked
+                                            }
+                                        }))
+                                    }}
+                                    style={{ width: '18px', height: '18px', accentColor: '#eab308', cursor: 'pointer' }}
+                                />
+                                <span style={{ fontWeight: 500 }}>คืนเลขเกินลิมิต (ไม่รับยอดเกิน)</span>
+                            </label>
+                        </div>
 
                         {/* 4 ตัวชุด Section for Lao or Hanoi */}
                         {(activeTab === 'lao' || activeTab === 'hanoi') && settings[activeTab]?.['4_set'] && (
@@ -518,7 +533,7 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                                         <th>ประเภท</th>
                                         <th>ค่าคอม</th>
                                         <th>อัตราจ่าย</th>
-                                        {settings[activeTab]?.bonusEnabled && <th>แถม</th>}
+                                        {settings[activeTab]?.bonusEnabled && <th>+% บวกเพิ่ม (แถม)</th>}
                                     </tr>
                                 </thead>
                                 <tbody>
