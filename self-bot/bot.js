@@ -51,17 +51,59 @@ async function getJoinedChatsCached(client) {
 async function resolveSelfBotGroupMid(client, targetLineGroupId) {
     if (!targetLineGroupId) return null;
 
+    // 1. Check DB for cached self_bot_chat_mid (fastest path, survives restarts)
+    try {
+        const altId = targetLineGroupId.startsWith('C')
+            ? 'c' + targetLineGroupId.substring(1)
+            : (targetLineGroupId.startsWith('c') ? 'C' + targetLineGroupId.substring(1) : null);
+
+        let dbQuery = supabase
+            .from("line_groups")
+            .select("self_bot_chat_mid")
+            .in("line_group_id", altId ? [targetLineGroupId, altId] : [targetLineGroupId])
+            .not("self_bot_chat_mid", "is", null)
+            .limit(1);
+
+        const { data: cachedRow } = await dbQuery.maybeSingle();
+        if (cachedRow?.self_bot_chat_mid) {
+            return cachedRow.self_bot_chat_mid;
+        }
+    } catch (dbErr) {
+        console.error("❌ Error checking self_bot_chat_mid cache:", dbErr.message || dbErr);
+    }
+
     const joinedChats = await getJoinedChatsCached(client);
 
-    // 1. Direct match on chat.mid
-    const directMatch = joinedChats.find(c => 
-        c.mid === targetLineGroupId || 
-        c.mid.toLowerCase() === targetLineGroupId.toLowerCase() ||
-        (targetLineGroupId.startsWith('C') && c.mid === 'c' + targetLineGroupId.substring(1))
-    );
-    if (directMatch) return directMatch.mid;
+    // Helper: save resolved MID to DB for future lookups
+    async function saveMidToDb(resolvedMid) {
+        try {
+            const altId = targetLineGroupId.startsWith('C')
+                ? 'c' + targetLineGroupId.substring(1)
+                : null;
+            const ids = altId ? [targetLineGroupId, altId] : [targetLineGroupId];
+            await supabase
+                .from("line_groups")
+                .update({ self_bot_chat_mid: resolvedMid })
+                .in("line_group_id", ids);
+            console.log(`💾 [Self-Bot] Saved self_bot_chat_mid=${resolvedMid} for ${targetLineGroupId}`);
+        } catch (saveErr) {
+            console.error("❌ Error saving self_bot_chat_mid:", saveErr.message || saveErr);
+        }
+    }
 
-    // 2. Look up group_name in line_groups DB
+    // 2. Direct match on chat.mid (case-insensitive + C↔c conversion)
+    const directMatch = joinedChats.find(c =>
+        c.mid === targetLineGroupId ||
+        c.mid.toLowerCase() === targetLineGroupId.toLowerCase() ||
+        (targetLineGroupId.startsWith('C') && c.mid === 'c' + targetLineGroupId.substring(1)) ||
+        (targetLineGroupId.startsWith('c') && c.mid === 'C' + targetLineGroupId.substring(1))
+    );
+    if (directMatch) {
+        await saveMidToDb(directMatch.mid);
+        return directMatch.mid;
+    }
+
+    // 3. Name-based match via line_groups.group_name
     try {
         const { data: dbGroup } = await supabase
             .from("line_groups")
@@ -73,32 +115,74 @@ async function resolveSelfBotGroupMid(client, targetLineGroupId) {
             const targetName = dbGroup.group_name.trim().toLowerCase();
             const nameMatch = joinedChats.find(c => c.name && c.name.trim().toLowerCase() === targetName);
             if (nameMatch) {
-                console.log(`🎯 [Self-Bot] Resolved OA Group ID (${targetLineGroupId}) => Self-Bot MID (${nameMatch.mid}) via Group Name: "${dbGroup.group_name}"`);
+                console.log(`🎯 [Self-Bot] Resolved ${targetLineGroupId} => ${nameMatch.mid} via Group Name: "${dbGroup.group_name}"`);
+                await saveMidToDb(nameMatch.mid);
                 return nameMatch.mid;
-            }
-
-            // Force refresh chats once if no match found (in case bot was newly added to group)
-            cachedJoinedChats = await client.fetchJoinedChats();
-            lastChatFetchTime = Date.now();
-            const reMatch = cachedJoinedChats.find(c => c.name && c.name.trim().toLowerCase() === targetName);
-            if (reMatch) {
-                console.log(`🎯 [Self-Bot] Resolved OA Group ID (${targetLineGroupId}) => Self-Bot MID (${reMatch.mid}) via refreshed Group Name: "${dbGroup.group_name}"`);
-                return reMatch.mid;
             }
         }
     } catch (dbErr) {
         console.error("❌ Error resolving group name in DB:", dbErr.message || dbErr);
     }
 
-    // Fallback: check if 'c' + targetLineGroupId.substring(1) is in joinedChats
-    if (targetLineGroupId.startsWith('C')) {
-        const altMid = 'c' + targetLineGroupId.substring(1);
-        const altMatch = joinedChats.find(c => c.mid === altMid);
-        if (altMatch) return altMatch.mid;
+    // 4. Force-refresh joinedChats and retry
+    try {
+        cachedJoinedChats = await client.fetchJoinedChats();
+        lastChatFetchTime = Date.now();
+        const refreshedMatch = cachedJoinedChats.find(c =>
+            c.mid === targetLineGroupId ||
+            c.mid.toLowerCase() === targetLineGroupId.toLowerCase() ||
+            (targetLineGroupId.startsWith('C') && c.mid === 'c' + targetLineGroupId.substring(1))
+        );
+        if (refreshedMatch) {
+            await saveMidToDb(refreshedMatch.mid);
+            return refreshedMatch.mid;
+        }
+    } catch (refreshErr) {
+        console.error("❌ Error refreshing joined chats:", refreshErr.message || refreshErr);
     }
 
     console.warn(`⚠️ [Self-Bot] Self-Bot is NOT a member of group ${targetLineGroupId}`);
     return null;
+}
+
+// ─── Startup Sync: Pre-populate self_bot_chat_mid for all line_groups ────────
+async function syncGroupMidsOnStartup(client) {
+    try {
+        const joinedChats = await getJoinedChatsCached(client);
+        if (!joinedChats || joinedChats.length === 0) return;
+
+        console.log(`🔄 [Self-Bot Sync] Syncing group MIDs. Self-bot is in ${joinedChats.length} chats.`);
+
+        // Fetch all line_groups that have group_name but no self_bot_chat_mid
+        const { data: groups } = await supabase
+            .from("line_groups")
+            .select("line_group_id, group_name, self_bot_chat_mid")
+            .is("self_bot_chat_mid", null)
+            .not("group_name", "is", null)
+            .eq("is_active", true);
+
+        if (!groups || groups.length === 0) {
+            console.log(`✅ [Self-Bot Sync] All groups already have self_bot_chat_mid cached.`);
+            return;
+        }
+
+        let syncCount = 0;
+        for (const group of groups) {
+            const targetName = group.group_name.trim().toLowerCase();
+            const match = joinedChats.find(c => c.name && c.name.trim().toLowerCase() === targetName);
+            if (match) {
+                await supabase
+                    .from("line_groups")
+                    .update({ self_bot_chat_mid: match.mid })
+                    .eq("line_group_id", group.line_group_id);
+                console.log(`💾 [Self-Bot Sync] ${group.line_group_id} => ${match.mid} (${group.group_name})`);
+                syncCount++;
+            }
+        }
+        console.log(`✅ [Self-Bot Sync] Synced ${syncCount}/${groups.length} groups.`);
+    } catch (err) {
+        console.error("❌ [Self-Bot Sync] Error during startup sync:", err.message || err);
+    }
 }
 
 // ─── Helper: Send Flex Message via LIFF ──────────────────────────────────────
@@ -277,8 +361,9 @@ async function startBot() {
     const myProfile = await client.getMyProfile();
     console.log(`🚀 เข้าสู่ระบบสำเร็จ! Self-Bot ชื่อ: ${myProfile.displayName}`);
 
-    // Pre-fetch joined chats
+    // Pre-fetch joined chats and sync group MIDs
     await getJoinedChatsCached(client);
+    await syncGroupMidsOnStartup(client);
 
     // Listen to talk events
     client.on("message", async (msg) => {

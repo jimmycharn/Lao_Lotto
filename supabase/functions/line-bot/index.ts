@@ -12591,26 +12591,35 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               await sendLineReply(replyToken, announceMsg);
 
               // Broadcast push to ALL active groups of this dealer (not filtered by lottery_type)
-              const { data: rawGroups } = await supabase
+              console.log(`[/ประกาศ] dealerId=${dealerId}, currentGroupId=${groupId}`);
+              const { data: rawGroups, error: groupsErr } = await supabase
                 .from('line_groups')
                 .select('line_group_id')
                 .eq('dealer_id', dealerId)
                 .eq('is_active', true);
 
+              console.log(`[/ประกาศ] rawGroups count=${rawGroups?.length ?? 0}, err=${groupsErr?.message ?? 'none'}`);
+
               if (rawGroups && rawGroups.length > 0) {
                 const uniqueGroupIds = Array.from(new Set(rawGroups.map(g => g.line_group_id).filter(Boolean)));
+                console.log(`[/ประกาศ] Pushing to groups: ${JSON.stringify(uniqueGroupIds)}`);
                 await Promise.allSettled(
                   uniqueGroupIds.map(async (targetGroupId) => {
                     if (targetGroupId === groupId || (groupId && targetGroupId.toLowerCase() === groupId.toLowerCase())) {
+                      console.log(`[/ประกาศ] Skipping current group ${targetGroupId}`);
                       return; // skip current group (already replied)
                     }
                     try {
+                      console.log(`[/ประกาศ] Pushing to ${targetGroupId}...`);
                       await sendLinePush(targetGroupId, announceMsg, dealerId);
+                      console.log(`[/ประกาศ] Push OK to ${targetGroupId}`);
                     } catch (e) {
-                      console.error(`Failed to push announce message to group ${targetGroupId}:`, e);
+                      console.error(`[/ประกาศ] Failed push to ${targetGroupId}:`, e);
                     }
                   })
                 );
+              } else {
+                console.log(`[/ประกาศ] No other groups found for dealer ${dealerId}`);
               }
               continue;
             }
