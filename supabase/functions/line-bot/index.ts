@@ -1822,10 +1822,14 @@ async function enqueueSelfBotPushFallback(to: string, messagePayload: any, deale
     let fallbackEnabled = false;
 
     if (to) {
-      const { data: groupData } = await supabaseClient
+      const altTo = to.startsWith('C') 
+        ? 'c' + to.substring(1) 
+        : (to.startsWith('c') ? 'C' + to.substring(1) : to);
+
+      const { data: groupData } = await supabase
         .from('line_groups')
         .select('dealer_id, push_fallback_self_bot')
-        .eq('line_group_id', to)
+        .in('line_group_id', [to, altTo])
         .maybeSingle();
 
       if (groupData) {
@@ -1837,7 +1841,7 @@ async function enqueueSelfBotPushFallback(to: string, messagePayload: any, deale
     }
 
     if (!fallbackEnabled && resolvedDealerId) {
-      const { data: profileData } = await supabaseClient
+      const { data: profileData } = await supabase
         .from('profiles')
         .select('push_fallback_self_bot')
         .eq('id', resolvedDealerId)
@@ -1850,7 +1854,7 @@ async function enqueueSelfBotPushFallback(to: string, messagePayload: any, deale
 
     if (fallbackEnabled) {
       const msgType = messagePayload?.type === 'flex' ? 'flex' : 'text';
-      await supabaseClient.from('self_bot_push_queue').insert({
+      await supabase.from('self_bot_push_queue').insert({
         dealer_id: resolvedDealerId,
         target_line_group_id: to,
         message_payload: messagePayload,
@@ -1858,6 +1862,8 @@ async function enqueueSelfBotPushFallback(to: string, messagePayload: any, deale
         status: 'pending'
       });
       console.log(`[SelfBotFallback] Successfully enqueued push message to Self-Bot queue for target ${to}`);
+    } else {
+      console.log(`[SelfBotFallback] Fallback disabled or dealerId missing for target ${to}`);
     }
   } catch (err: any) {
     console.error(`[SelfBotFallback] Failed to enqueue fallback message:`, err.message);
@@ -12548,16 +12554,15 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 .from('line_groups')
                 .select('line_group_id')
                 .eq('dealer_id', dealerId)
-                .eq('lottery_type', groupLink.lottery_type)
                 .eq('is_active', true);
 
               if (allGroups && allGroups.length > 0) {
                 for (const g of allGroups) {
-                  if (g.line_group_id === groupId) {
+                  if (g.line_group_id === groupId || (g.line_group_id && groupId && g.line_group_id.toLowerCase() === groupId.toLowerCase())) {
                     continue;
                   }
                   try {
-                    await sendLinePush(g.line_group_id, announceMsg);
+                    await sendLinePush(g.line_group_id, announceMsg, dealerId);
                   } catch (e) {
                     console.error(`Failed to push announce message to group ${g.line_group_id}:`, e);
                   }

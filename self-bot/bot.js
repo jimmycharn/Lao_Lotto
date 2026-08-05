@@ -113,18 +113,32 @@ async function processPushQueue(client) {
             try {
                 const chatMid = item.target_line_group_id;
                 const payload = item.message_payload;
+                const text = typeof payload === 'string' ? payload : (payload.text || extractTextFromFlex(payload));
+
+                let targetMid = chatMid;
+                if (targetMid && targetMid.startsWith('C')) {
+                    targetMid = 'c' + targetMid.substring(1);
+                }
 
                 if (item.message_type === 'flex') {
-                    success = await sendFlexMessageViaLiff(client, chatMid, payload);
+                    success = await sendFlexMessageViaLiff(client, targetMid, payload);
                     if (!success) {
-                        const text = extractTextFromFlex(payload);
+                        try {
+                            await client.sendCompactMessage(targetMid, text);
+                            success = true;
+                        } catch (e1) {
+                            await client.sendCompactMessage(chatMid, text);
+                            success = true;
+                        }
+                    }
+                } else {
+                    try {
+                        await client.sendCompactMessage(targetMid, text);
+                        success = true;
+                    } catch (e1) {
                         await client.sendCompactMessage(chatMid, text);
                         success = true;
                     }
-                } else {
-                    const text = typeof payload === 'string' ? payload : (payload.text || JSON.stringify(payload));
-                    await client.sendCompactMessage(chatMid, text);
-                    success = true;
                 }
             } catch (sendErr) {
                 console.error(`❌ [Self-Bot] Failed to send message for queue item ${item.id}:`, sendErr.message);
