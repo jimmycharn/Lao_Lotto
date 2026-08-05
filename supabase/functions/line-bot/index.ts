@@ -1829,7 +1829,7 @@ async function enqueueSelfBotPushFallback(to: string, messagePayload: any, deale
       const { data: groupData } = await supabase
         .from('line_groups')
         .select('dealer_id, push_fallback_self_bot')
-        .in('line_group_id', [to, altTo])
+        .or(`id.eq.${to},line_group_id.eq.${to},line_group_id.eq.${altTo}`)
         .maybeSingle();
 
       if (groupData) {

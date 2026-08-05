@@ -51,20 +51,22 @@ async function getJoinedChatsCached(client) {
 async function resolveSelfBotGroupMid(client, targetLineGroupId) {
     if (!targetLineGroupId) return null;
 
-    // 1. Check DB for cached self_bot_chat_mid (fastest path, survives restarts)
+    // 1. Check DB for cached self_bot_chat_mid (fastest path, survives restarts, supports UUID or MID)
     try {
         const altId = targetLineGroupId.startsWith('C')
             ? 'c' + targetLineGroupId.substring(1)
             : (targetLineGroupId.startsWith('c') ? 'C' + targetLineGroupId.substring(1) : null);
 
-        let dbQuery = supabase
+        const filterCond = `id.eq.${targetLineGroupId},line_group_id.eq.${targetLineGroupId}${altId ? `,line_group_id.eq.${altId}` : ''}`;
+
+        const { data: cachedRow } = await supabase
             .from("line_groups")
             .select("self_bot_chat_mid")
-            .in("line_group_id", altId ? [targetLineGroupId, altId] : [targetLineGroupId])
+            .or(filterCond)
             .not("self_bot_chat_mid", "is", null)
-            .limit(1);
+            .limit(1)
+            .maybeSingle();
 
-        const { data: cachedRow } = await dbQuery.maybeSingle();
         if (cachedRow?.self_bot_chat_mid) {
             return cachedRow.self_bot_chat_mid;
         }
@@ -79,12 +81,12 @@ async function resolveSelfBotGroupMid(client, targetLineGroupId) {
         try {
             const altId = targetLineGroupId.startsWith('C')
                 ? 'c' + targetLineGroupId.substring(1)
-                : null;
-            const ids = altId ? [targetLineGroupId, altId] : [targetLineGroupId];
+                : (targetLineGroupId.startsWith('c') ? 'C' + targetLineGroupId.substring(1) : null);
+            const filterCond = `id.eq.${targetLineGroupId},line_group_id.eq.${targetLineGroupId}${altId ? `,line_group_id.eq.${altId}` : ''}`;
             await supabase
                 .from("line_groups")
                 .update({ self_bot_chat_mid: resolvedMid })
-                .in("line_group_id", ids);
+                .or(filterCond);
             console.log(`💾 [Self-Bot] Saved self_bot_chat_mid=${resolvedMid} for ${targetLineGroupId}`);
         } catch (saveErr) {
             console.error("❌ Error saving self_bot_chat_mid:", saveErr.message || saveErr);
@@ -105,10 +107,14 @@ async function resolveSelfBotGroupMid(client, targetLineGroupId) {
 
     // 3. Name-based match via line_groups.group_name
     try {
+        const altId = targetLineGroupId.startsWith('C')
+            ? 'c' + targetLineGroupId.substring(1)
+            : (targetLineGroupId.startsWith('c') ? 'C' + targetLineGroupId.substring(1) : null);
+        const filterCond = `id.eq.${targetLineGroupId},line_group_id.eq.${targetLineGroupId}${altId ? `,line_group_id.eq.${altId}` : ''}`;
         const { data: dbGroup } = await supabase
             .from("line_groups")
             .select("group_name")
-            .eq("line_group_id", targetLineGroupId)
+            .or(filterCond)
             .maybeSingle();
 
         if (dbGroup?.group_name) {
@@ -196,17 +202,31 @@ async function sendFlexMessageViaLiff(client, targetChatMid, flexPayload) {
     try {
         let liffToken = null;
 
-        try {
-            // Use @evex/linejs client.liff methods
-            if (client.liff && typeof client.liff.issueView === "function") {
-                const res = await client.liff.issueView({ chatMid: targetChatMid, liffId });
-                liffToken = res?.accessToken || res?.token;
-            } else if (client.liff && typeof client.liff.getToken === "function") {
-                const tokenRes = await client.liff.getToken({ chatMid: targetChatMid, liffId });
-                liffToken = typeof tokenRes === "string" ? tokenRes : (tokenRes?.accessToken || tokenRes?.token);
+        const midsToTry = [targetChatMid];
+        if (targetChatMid.startsWith('c')) {
+            midsToTry.push('C' + targetChatMid.substring(1));
+        } else if (targetChatMid.startsWith('C')) {
+            midsToTry.push('c' + targetChatMid.substring(1));
+        }
+
+        let lastLiffErr = null;
+        for (const midCandidate of midsToTry) {
+            try {
+                if (client.liff && typeof client.liff.issueView === "function") {
+                    const res = await client.liff.issueView({ chatMid: midCandidate, liffId });
+                    liffToken = res?.accessToken || res?.token;
+                } else if (client.liff && typeof client.liff.getToken === "function") {
+                    const tokenRes = await client.liff.getToken({ chatMid: midCandidate, liffId });
+                    liffToken = typeof tokenRes === "string" ? tokenRes : (tokenRes?.accessToken || tokenRes?.token);
+                }
+                if (liffToken) break;
+            } catch (liffErr) {
+                lastLiffErr = liffErr;
             }
-        } catch (liffErr) {
-            const errStr = JSON.stringify(liffErr?.message || liffErr || '');
+        }
+
+        if (!liffToken && lastLiffErr) {
+            const errStr = JSON.stringify(lastLiffErr?.message || lastLiffErr || '');
             if (errStr.includes("CONSENT_REQUIRED") || errStr.includes("user consent required")) {
                 console.error("⚠️ [Self-Bot LIFF] ต้องกดกดยินยอมสิทธิ์ (User Consent Required) บนมือถือ Self-Bot!");
                 console.error(`👉 เปิดลิงก์นี้บนมือถือ Self-Bot ใน LINE เพื่อกด "ยินยอม": https://liff.line.me/${liffId}`);
