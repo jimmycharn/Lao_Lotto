@@ -361,6 +361,13 @@ async function startBot() {
     const myProfile = await client.getMyProfile();
     console.log(`🚀 เข้าสู่ระบบสำเร็จ! Self-Bot ชื่อ: ${myProfile.displayName}`);
 
+    // Explicitly persist authToken to storage.json so login is remembered
+    const activeToken = client.authToken || client.base?.authToken;
+    if (activeToken) {
+        await storage.set("authToken", activeToken);
+        console.log("💾 บันทึก Auth Token ลง storage.json เรียบร้อยแล้ว");
+    }
+
     // Pre-fetch joined chats and sync group MIDs
     await getJoinedChatsCached(client);
     await syncGroupMidsOnStartup(client);
@@ -399,11 +406,35 @@ async function startBot() {
 }
 
 process.on("unhandledRejection", (reason) => {
-    console.error("⚠️ [Self-Bot] Unhandled Rejection (non-fatal):", reason?.message || reason);
+    const reasonStr = String(reason?.message || reason || '');
+    if (reasonStr.includes("V3_TOKEN_CLIENT_LOGGED_OUT") || reasonStr.includes("NOT_AUTHORIZED_DEVICE")) {
+        console.error("❌ [Self-Bot] Auth Token หมดอายุหรือถูกออกจากระบบ (V3_TOKEN_CLIENT_LOGGED_OUT)");
+        console.error("⚠️ กำลังลบข้อมูล storage.json และรีสตาร์ทเพื่อสแกน QR Code ใหม่...");
+        try {
+            if (fs.existsSync(STORAGE_FILE)) {
+                fs.unlinkSync(STORAGE_FILE);
+                console.log("🗑️ ลบ storage.json เรียบร้อยแล้ว");
+            }
+        } catch (e) {}
+        process.exit(1);
+    }
+    console.error("⚠️ [Self-Bot] Unhandled Rejection (non-fatal):", reasonStr);
 });
 
 process.on("uncaughtException", (err) => {
-    console.error("⚠️ [Self-Bot] Uncaught Exception (non-fatal):", err?.message || err);
+    const errStr = String(err?.message || err || '');
+    if (errStr.includes("V3_TOKEN_CLIENT_LOGGED_OUT") || errStr.includes("NOT_AUTHORIZED_DEVICE")) {
+        console.error("❌ [Self-Bot] Auth Token หมดอายุหรือถูกออกจากระบบ (V3_TOKEN_CLIENT_LOGGED_OUT)");
+        console.error("⚠️ กำลังลบข้อมูล storage.json และรีสตาร์ทเพื่อสแกน QR Code ใหม่...");
+        try {
+            if (fs.existsSync(STORAGE_FILE)) {
+                fs.unlinkSync(STORAGE_FILE);
+                console.log("🗑️ ลบ storage.json เรียบร้อยแล้ว");
+            }
+        } catch (e) {}
+        process.exit(1);
+    }
+    console.error("⚠️ [Self-Bot] Uncaught Exception (non-fatal):", errStr);
 });
 
 startBot().catch(err => console.error("❌ Fatal Error starting Self-Bot:", err.message || err));
