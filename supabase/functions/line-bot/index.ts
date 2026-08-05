@@ -1854,6 +1854,20 @@ async function enqueueSelfBotPushFallback(to: string, messagePayload: any, deale
 
     if (fallbackEnabled) {
       const msgType = messagePayload?.type === 'flex' ? 'flex' : 'text';
+
+      // Deduplicate: check if a pending fallback message for this group already exists in queue
+      const { data: existingPending } = await supabase
+        .from('self_bot_push_queue')
+        .select('id')
+        .eq('target_line_group_id', to)
+        .eq('status', 'pending')
+        .limit(1);
+
+      if (existingPending && existingPending.length > 0) {
+        console.log(`[SelfBotFallback] Pending fallback message already exists for target ${to}, skipping duplicate insert`);
+        return;
+      }
+
       await supabase.from('self_bot_push_queue').insert({
         dealer_id: resolvedDealerId,
         target_line_group_id: to,
@@ -12554,23 +12568,23 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               await sendLineReply(replyToken, announceMsg);
 
               // Broadcast push/fallback to all other groups concurrently in background
-              const { data: allGroups } = await supabase
+              const { data: rawGroups } = await supabase
                 .from('line_groups')
                 .select('line_group_id')
                 .eq('dealer_id', dealerId)
                 .eq('is_active', true);
 
-              if (allGroups && allGroups.length > 0) {
+              if (rawGroups && rawGroups.length > 0) {
+                const uniqueGroupIds = Array.from(new Set(rawGroups.map(g => g.line_group_id).filter(Boolean)));
                 Promise.allSettled(
-                  allGroups.map(async (g) => {
-                    if (!g.line_group_id) return;
-                    if (g.line_group_id === groupId || (groupId && g.line_group_id.toLowerCase() === groupId.toLowerCase())) {
+                  uniqueGroupIds.map(async (targetGroupId) => {
+                    if (targetGroupId === groupId || (groupId && targetGroupId.toLowerCase() === groupId.toLowerCase())) {
                       return;
                     }
                     try {
-                      await sendLinePush(g.line_group_id, announceMsg, dealerId);
+                      await sendLinePush(targetGroupId, announceMsg, dealerId);
                     } catch (e) {
-                      console.error(`Failed to push announce message to group ${g.line_group_id}:`, e);
+                      console.error(`Failed to push announce message to group ${targetGroupId}:`, e);
                     }
                   })
                 );

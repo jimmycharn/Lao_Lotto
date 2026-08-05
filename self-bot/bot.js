@@ -160,7 +160,13 @@ function extractTextFromFlex(payload) {
 }
 
 // ─── Queue Processor: Poll & Process self_bot_push_queue ──────────────────────
+let isProcessingQueue = false;
+const activeProcessingIds = new Set();
+
 async function processPushQueue(client) {
+    if (isProcessingQueue) return;
+    isProcessingQueue = true;
+
     try {
         const { data: queueItems, error } = await supabase
             .from("self_bot_push_queue")
@@ -172,8 +178,11 @@ async function processPushQueue(client) {
         if (error || !queueItems || queueItems.length === 0) return;
 
         for (const item of queueItems) {
+            if (activeProcessingIds.has(item.id)) continue;
+            activeProcessingIds.add(item.id);
+
             console.log(`🚀 [Self-Bot] Processing queue item ${item.id} for group ${item.target_line_group_id}`);
-            
+
             await supabase
                 .from("self_bot_push_queue")
                 .update({ status: "processing" })
@@ -190,6 +199,7 @@ async function processPushQueue(client) {
                         .from("self_bot_push_queue")
                         .update({ status: "skipped_not_in_group", error_message: "Self-Bot is not in this group", processed_at: new Date().toISOString() })
                         .eq("id", item.id);
+                    activeProcessingIds.delete(item.id);
                     continue;
                 }
                 const payload = item.message_payload;
@@ -221,9 +231,12 @@ async function processPushQueue(client) {
                     .update({ status: "failed", error_message: errorMsg, processed_at: new Date().toISOString() })
                     .eq("id", item.id);
             }
+            activeProcessingIds.delete(item.id);
         }
     } catch (queueErr) {
         console.error("❌ Error processing self_bot_push_queue:", queueErr.message || queueErr);
+    } finally {
+        isProcessingQueue = false;
     }
 }
 
