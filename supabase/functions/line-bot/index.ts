@@ -1920,6 +1920,35 @@ async function sendLinePush(to: string, textOrPayload: string | Record<string, a
   }
 }
 
+// Helper: Resolve target LINE group ID (line_group_id string or database UUID) to line_group_id
+async function resolveTargetLineGroupId(groupIdOrId: string | null | undefined): Promise<string | null> {
+  if (!groupIdOrId) return null;
+  const strId = String(groupIdOrId).trim();
+  if (!strId) return null;
+
+  try {
+    const { data: matchedGroup } = await supabase
+      .from('line_groups')
+      .select('line_group_id')
+      .or(`id.eq.${strId},line_group_id.eq.${strId}`)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+
+    if (matchedGroup?.line_group_id) {
+      return matchedGroup.line_group_id;
+    }
+  } catch (err) {
+    console.error("Error resolving target LINE group ID:", err);
+  }
+
+  if (strId.startsWith('C') || strId.startsWith('c')) {
+    return strId;
+  }
+
+  return null;
+}
+
 // Helper: Fetch Group Name from LINE API
 async function fetchGroupName(groupId: string): Promise<string | null> {
   if (!LINE_CHANNEL_ACCESS_TOKEN || !groupId) return null;
@@ -5231,14 +5260,11 @@ serve(async (req) => {
             // Route notification to configured LINE group
             let layoffGroups: any[] = [];
             if (job.layoff_notify_group_enabled && job.layoff_notify_group_id) {
-              const { data: specificGroup } = await supabase
-                .from('line_groups')
-                .select('line_group_id')
-                .eq('id', job.layoff_notify_group_id)
-                .eq('is_active', true)
-                .maybeSingle();
-              if (specificGroup) {
-                layoffGroups.push(specificGroup);
+              const targetGid = await resolveTargetLineGroupId(job.layoff_notify_group_id);
+              if (targetGid) {
+                layoffGroups.push({ line_group_id: targetGid });
+              } else {
+                console.error(`[auto_scheduled_layoff] Could not resolve line_group_id for layoff_notify_group_id: ${job.layoff_notify_group_id}`);
               }
             } else {
               // Legacy fallback
@@ -5534,14 +5560,11 @@ serve(async (req) => {
               // Route layoff notification
               let layoffGroups: any[] = [];
               if (job && job.layoff_notify_group_enabled && job.layoff_notify_group_id) {
-                const { data: specificGroup } = await supabase
-                  .from('line_groups')
-                  .select('line_group_id')
-                  .eq('id', job.layoff_notify_group_id)
-                  .eq('is_active', true)
-                  .maybeSingle();
-                if (specificGroup) {
-                  layoffGroups.push(specificGroup);
+                const targetGid = await resolveTargetLineGroupId(job.layoff_notify_group_id);
+                if (targetGid) {
+                  layoffGroups.push({ line_group_id: targetGid });
+                } else {
+                  console.error(`[auto_close_notify] Could not resolve line_group_id for layoff_notify_group_id: ${job.layoff_notify_group_id}`);
                 }
               } else {
                 // Legacy fallback: push to all groups with notify_layoff_bets = true
@@ -5572,18 +5595,7 @@ serve(async (req) => {
         if (job && job.notify_bets_enabled && job.notify_bets_group_id) {
           console.log(`[auto_close_notify] Custom reports enabled for job ${job.id}. Group ID=${job.notify_bets_group_id}, types=${JSON.stringify(job.notify_bets_types)}`);
           
-          let targetLineGroupId: string | null = null;
-          const { data: reportGroup } = await supabase
-            .from('line_groups')
-            .select('line_group_id')
-            .or(`id.eq.${job.notify_bets_group_id},line_group_id.eq.${job.notify_bets_group_id}`)
-            .maybeSingle();
-
-          if (reportGroup && reportGroup.line_group_id) {
-            targetLineGroupId = reportGroup.line_group_id;
-          } else if (typeof job.notify_bets_group_id === 'string' && job.notify_bets_group_id.startsWith('C')) {
-            targetLineGroupId = job.notify_bets_group_id;
-          }
+          const targetLineGroupId = await resolveTargetLineGroupId(job.notify_bets_group_id);
 
           if (targetLineGroupId) {
             const reportTypes = Array.isArray(job.notify_bets_types) ? job.notify_bets_types : [];
@@ -5745,14 +5757,11 @@ serve(async (req) => {
         // Route closing summary notification
         let summaryGroups: any[] = [];
         if (job && job.result_notify_group_id) {
-          const { data: specificGroup } = await supabase
-            .from('line_groups')
-            .select('line_group_id')
-            .eq('id', job.result_notify_group_id)
-            .eq('is_active', true)
-            .maybeSingle();
-          if (specificGroup) {
-            summaryGroups.push(specificGroup);
+          const targetGid = await resolveTargetLineGroupId(job.result_notify_group_id);
+          if (targetGid) {
+            summaryGroups.push({ line_group_id: targetGid });
+          } else {
+            console.error(`[auto_close_notify] Could not resolve line_group_id for result_notify_group_id: ${job.result_notify_group_id}`);
           }
         } else {
           // Fallback/Legacy: Push to groups matching notify_round_summary = true
@@ -6055,7 +6064,12 @@ serve(async (req) => {
             .eq('is_active', true);
 
           if (job.open_notify_group_id) {
-            groupsQuery = groupsQuery.eq('id', job.open_notify_group_id);
+            const targetGid = await resolveTargetLineGroupId(job.open_notify_group_id);
+            if (targetGid) {
+              groupsQuery = groupsQuery.eq('line_group_id', targetGid);
+            } else {
+              groupsQuery = groupsQuery.eq('id', job.open_notify_group_id);
+            }
           } else {
             // When sending to "all groups", notify all active groups of this lottery type
             groupsQuery = groupsQuery.eq('lottery_type', job.lottery_type);
@@ -6233,7 +6247,12 @@ serve(async (req) => {
             .eq('is_active', true);
 
           if (template.open_notify_group_id) {
-            groupsQuery = groupsQuery.eq('id', template.open_notify_group_id);
+            const targetGid = await resolveTargetLineGroupId(template.open_notify_group_id);
+            if (targetGid) {
+              groupsQuery = groupsQuery.eq('line_group_id', targetGid);
+            } else {
+              groupsQuery = groupsQuery.eq('id', template.open_notify_group_id);
+            }
           } else {
             // When sending to "all groups", notify all active groups of this lottery type
             groupsQuery = groupsQuery.eq('lottery_type', template.lottery_type);
