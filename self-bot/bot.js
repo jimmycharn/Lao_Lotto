@@ -246,7 +246,7 @@ async function sendFlexMessageViaLiff(client, targetChatMid, flexPayload) {
             throw new Error("Could not acquire LIFF token");
         }
 
-        const response = await fetch("https://api.line.me/message/v3/share", {
+        let response = await fetch("https://api.line.me/message/v3/share", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -256,6 +256,20 @@ async function sendFlexMessageViaLiff(client, targetChatMid, flexPayload) {
                 messages: [flexPayload]
             })
         });
+
+        if (!response.ok && (response.status === 429 || response.status >= 500)) {
+            await new Promise(r => setTimeout(r, 300));
+            response = await fetch("https://api.line.me/message/v3/share", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${liffToken}`
+                },
+                body: JSON.stringify({
+                    messages: [flexPayload]
+                })
+            });
+        }
 
         if (response.ok) {
             console.log(`✅ [Self-Bot] Flex Message sent via LIFF to ${targetChatMid}`);
