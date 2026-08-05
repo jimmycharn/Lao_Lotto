@@ -177,8 +177,8 @@ async function processPushQueue(client) {
 
         if (error || !queueItems || queueItems.length === 0) return;
 
-        for (const item of queueItems) {
-            if (activeProcessingIds.has(item.id)) continue;
+        await Promise.allSettled(queueItems.map(async (item) => {
+            if (activeProcessingIds.has(item.id)) return;
             activeProcessingIds.add(item.id);
 
             console.log(`🚀 [Self-Bot] Processing queue item ${item.id} for group ${item.target_line_group_id}`);
@@ -200,7 +200,7 @@ async function processPushQueue(client) {
                         .update({ status: "skipped_not_in_group", error_message: "Self-Bot is not in this group", processed_at: new Date().toISOString() })
                         .eq("id", item.id);
                     activeProcessingIds.delete(item.id);
-                    continue;
+                    return;
                 }
                 const payload = item.message_payload;
                 const text = typeof payload === 'string' ? payload : (payload.text || extractTextFromFlex(payload));
@@ -232,7 +232,7 @@ async function processPushQueue(client) {
                     .eq("id", item.id);
             }
             activeProcessingIds.delete(item.id);
-        }
+        }));
     } catch (queueErr) {
         console.error("❌ Error processing self_bot_push_queue:", queueErr.message || queueErr);
     } finally {
@@ -290,6 +290,7 @@ async function startBot() {
             console.error("Error handling message:", err.message);
         }
     });
+
     client.on("error", (err) => {
         console.error("⚠️ [Self-Bot] LineJS Error:", err?.message || err);
     });
@@ -304,10 +305,10 @@ async function startBot() {
         console.error("⚠️ [Self-Bot] Error starting talk listener:", listenErr.message || listenErr);
     }
 
-    // Start Polling for Self-Bot Push Queue every 3 seconds
+    // Start Polling for Self-Bot Push Queue every 1 second for instant notification
     setInterval(() => {
         processPushQueue(client);
-    }, 3000);
+    }, 1000);
 
     console.log("✅ Self-Bot พร้อมทำงานและคอยประมวลผลข้อความ Push Fallback แล้ว!");
 }

@@ -12567,12 +12567,18 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               // Reply immediately in current group so Official Bot responds instantly
               await sendLineReply(replyToken, announceMsg);
 
-              // Broadcast push/fallback to all other groups concurrently in background
-              const { data: rawGroups } = await supabase
+              // Broadcast push/fallback to other groups matching lottery_type concurrently in background
+              let groupQuery = supabase
                 .from('line_groups')
                 .select('line_group_id')
                 .eq('dealer_id', dealerId)
                 .eq('is_active', true);
+
+              if (groupLink?.lottery_type && groupLink.lottery_type !== 'all') {
+                groupQuery = groupQuery.in('lottery_type', [groupLink.lottery_type, 'all']);
+              }
+
+              const { data: rawGroups } = await groupQuery;
 
               if (rawGroups && rawGroups.length > 0) {
                 const uniqueGroupIds = Array.from(new Set(rawGroups.map(g => g.line_group_id).filter(Boolean)));
