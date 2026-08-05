@@ -7124,16 +7124,25 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
         console.log(`[LINE BOT EVENT] type: ${event.type}, userId: ${userId}, groupId: ${groupId}, text: ${event.message?.text || ''}`);
 
         // Check if message comes from a registered Self-Bot LINE User ID -> Ignore completely!
+        // But ONLY if the sender's userId is NOT the dealer's own line_user_id (safety guard)
         if (userId) {
           const { data: selfBotMatch } = await supabase
             .from('profiles')
-            .select('id')
+            .select('id, line_user_id')
             .ilike('self_bot_line_user_id', userId.trim())
             .limit(1);
 
           if (selfBotMatch && selfBotMatch.length > 0) {
-            console.log(`[LINE BOT IGNORE] Message comes from registered Self-Bot LINE User ID (${userId}). Completely ignoring event.`);
-            continue;
+            // Safety check: don't ignore if this userId is also the dealer's own LINE User ID
+            const ownerProfile = selfBotMatch[0];
+            const ownerLineId = (ownerProfile.line_user_id || '').trim().toLowerCase();
+            const senderLower = userId.trim().toLowerCase();
+            if (ownerLineId !== senderLower) {
+              console.log(`[LINE BOT IGNORE] Message comes from registered Self-Bot LINE User ID (${userId}). Completely ignoring event.`);
+              continue;
+            } else {
+              console.log(`[LINE BOT WARN] self_bot_line_user_id matches dealer's own line_user_id (${userId}). Skipping ignore to prevent lockout.`);
+            }
           }
         }
 
@@ -12581,25 +12590,19 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               // Reply immediately in current group so Official Bot responds instantly
               await sendLineReply(replyToken, announceMsg);
 
-              // Broadcast push/fallback to other groups matching lottery_type concurrently in background
-              let groupQuery = supabase
+              // Broadcast push to ALL active groups of this dealer (not filtered by lottery_type)
+              const { data: rawGroups } = await supabase
                 .from('line_groups')
                 .select('line_group_id')
                 .eq('dealer_id', dealerId)
                 .eq('is_active', true);
-
-              if (groupLink?.lottery_type && groupLink.lottery_type !== 'all') {
-                groupQuery = groupQuery.in('lottery_type', [groupLink.lottery_type, 'all']);
-              }
-
-              const { data: rawGroups } = await groupQuery;
 
               if (rawGroups && rawGroups.length > 0) {
                 const uniqueGroupIds = Array.from(new Set(rawGroups.map(g => g.line_group_id).filter(Boolean)));
                 Promise.allSettled(
                   uniqueGroupIds.map(async (targetGroupId) => {
                     if (targetGroupId === groupId || (groupId && targetGroupId.toLowerCase() === groupId.toLowerCase())) {
-                      return;
+                      return; // skip current group (already replied)
                     }
                     try {
                       await sendLinePush(targetGroupId, announceMsg, dealerId);
