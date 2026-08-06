@@ -8697,7 +8697,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   userSummaries[userId].totalBet += amt;
                   userSummaries[userId].totalCommission += comm;
                   userSummaries[userId].totalWin += win;
-                  if (sub.is_winner) {
+                  if (win > 0 || sub.is_winner) {
                     userSummaries[userId].winCount++;
                   }
                 });
@@ -8867,13 +8867,16 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 let groupTotalBet = 0;
                 let groupTotalComm = 0;
                 let groupTotalWin = 0;
-                let groupWinnerCount = 0;
+                let groupWinnerMemberCount = 0;
+                let groupTotalWinItemsCount = 0;
+
                 for (const u of sortedUserSummaries) {
                   groupTotalBet += u.totalBet;
                   groupTotalComm += u.totalCommission;
                   groupTotalWin += u.totalWin;
+                  groupTotalWinItemsCount += (u.winCount || 0);
                   if (u.totalWin > 0) {
-                    groupWinnerCount++;
+                    groupWinnerMemberCount++;
                   }
                 }
                 const netToPay = groupTotalBet - groupTotalComm - groupTotalWin;
@@ -8891,18 +8894,23 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                     const roundedBet = Math.round(u.totalBet);
                     const roundedComm = Math.round(u.totalCommission);
                     const roundedWin = Math.round(u.totalWin);
+                    const winItemsText = u.winCount > 0 ? ` (ถูก ${u.winCount} รายการ)` : '';
 
                     groupSummaryText += `----------------------------------\n` +
                       `👤 คุณ ${userName}\n` +
                       `💰 ยอดแทงรวม: ฿${roundedBet.toLocaleString('th-TH')}\n` +
                       `💸 ค่าคอมรวม: ฿${roundedComm.toLocaleString('th-TH')}\n` +
-                      `🎉 ยอดถูกรางวัลรวม: ฿${roundedWin.toLocaleString('th-TH')}\n`;
+                      `🎉 ยอดถูกรางวัลรวม: ฿${roundedWin.toLocaleString('th-TH')}${winItemsText}\n`;
                   });
                 }
 
+                const winLabelText = groupTotalWinItemsCount > 0 
+                  ? `${groupWinnerMemberCount} คน (ถูกรางวัลรวม ${groupTotalWinItemsCount} รายการ)` 
+                  : `${groupWinnerMemberCount} คน`;
+
                 groupSummaryText += `----------------------------------\n` +
                   `📝 สรุปยอดได้เสียสุทธิ:\n👉 ${groupNetLabel}\n` +
-                  `👥 สมาชิกถูกรางวัล: ${groupWinnerCount} รายการ`;
+                  `👥 สมาชิกถูกรางวัล: ${winLabelText}`;
 
                 const altSummaryText = groupSummaryText.trim().length > 390 
                   ? groupSummaryText.trim().slice(0, 387) + '...' 
