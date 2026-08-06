@@ -10234,7 +10234,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               const flexMessage = {
                 "type": "flex",
-                "altText": `👥 สมาชิกที่ส่งเลขแล้ว (${typeName})`,
+                "altText": summaryText.trim().length > 390 ? summaryText.trim().slice(0, 387) + '...' : summaryText.trim(),
                 "contents": {
                   "type": "bubble",
                   "size": "mega",
