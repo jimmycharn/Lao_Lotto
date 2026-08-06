@@ -1745,6 +1745,25 @@ async function verifySignature(body: string, signature: string, channelSecret: s
   return isValid;
 }
 
+// Helper to split text by character limit without cutting lines
+function splitTextByLimit(textStr: string, limit = 4000): string[] {
+  if (!textStr) return [];
+  if (textStr.length <= limit) return [textStr];
+  const lines = textStr.split('\n');
+  const chunks: string[] = [];
+  let currentChunk = '';
+  for (const line of lines) {
+    if ((currentChunk + '\n' + line).length > limit) {
+      if (currentChunk) chunks.push(currentChunk);
+      currentChunk = line;
+    } else {
+      currentChunk = currentChunk === '' ? line : currentChunk + '\n' + line;
+    }
+  }
+  if (currentChunk) chunks.push(currentChunk);
+  return chunks;
+}
+
 // Helper: Send Reply Message to LINE
 async function sendLineReply(
   replyToken: string,
@@ -10500,24 +10519,6 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               await sendLineReply(replyToken, summaryText);
               continue;
-            }
-
-            // Helper to split text by character limit without cutting lines
-            function splitTextByLimit(textStr: string, limit = 4000): string[] {
-              if (textStr.length <= limit) return [textStr];
-              const lines = textStr.split('\n');
-              const chunks: string[] = [];
-              let currentChunk = '';
-              for (const line of lines) {
-                if ((currentChunk + '\n' + line).length > limit) {
-                  if (currentChunk) chunks.push(currentChunk);
-                  currentChunk = line;
-                } else {
-                  currentChunk = currentChunk === '' ? line : currentChunk + '\n' + line;
-                }
-              }
-              if (currentChunk) chunks.push(currentChunk);
-              return chunks;
             }
 
             const typeRanks: Record<string, number> = {
