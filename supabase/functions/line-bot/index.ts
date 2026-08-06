@@ -8894,23 +8894,18 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                     const roundedBet = Math.round(u.totalBet);
                     const roundedComm = Math.round(u.totalCommission);
                     const roundedWin = Math.round(u.totalWin);
-                    const winItemsText = u.winCount > 0 ? ` (ถูก ${u.winCount} รายการ)` : '';
 
                     groupSummaryText += `----------------------------------\n` +
                       `👤 คุณ ${userName}\n` +
                       `💰 ยอดแทงรวม: ฿${roundedBet.toLocaleString('th-TH')}\n` +
                       `💸 ค่าคอมรวม: ฿${roundedComm.toLocaleString('th-TH')}\n` +
-                      `🎉 ยอดถูกรางวัลรวม: ฿${roundedWin.toLocaleString('th-TH')}${winItemsText}\n`;
+                      `🎉 ถูกรางวัลรวม: ฿${roundedWin.toLocaleString('th-TH')}\n`;
                   });
                 }
 
-                const winLabelText = groupTotalWinItemsCount > 0 
-                  ? `${groupWinnerMemberCount} คน (ถูกรางวัลรวม ${groupTotalWinItemsCount} รายการ)` 
-                  : `${groupWinnerMemberCount} คน`;
-
                 groupSummaryText += `----------------------------------\n` +
                   `📝 สรุปยอดได้เสียสุทธิ:\n👉 ${groupNetLabel}\n` +
-                  `👥 สมาชิกถูกรางวัล: ${winLabelText}`;
+                  `👥 ถูกรางวัล: ${groupTotalWinItemsCount} รายการ`;
 
                 const altSummaryText = groupSummaryText.trim().length > 390 
                   ? groupSummaryText.trim().slice(0, 387) + '...' 
