@@ -43,58 +43,7 @@ export default function DealerLineBotTab({ user, profile }) {
     const [searchGroupQuery, setSearchGroupQuery] = useState('')
     const [selectedTypeFilter, setSelectedTypeFilter] = useState('all')
     const [allowedLotteryTypes, setAllowedLotteryTypes] = useState([])
-    const [pushFallbackSelfBot, setPushFallbackSelfBot] = useState(profile?.push_fallback_self_bot || false)
-    const [selfBotLineUserId, setSelfBotLineUserId] = useState(profile?.self_bot_line_user_id || '')
-    const [savingSelfBotId, setSavingSelfBotId] = useState(false)
 
-    useEffect(() => {
-        if (profile?.push_fallback_self_bot !== undefined) {
-            setPushFallbackSelfBot(profile.push_fallback_self_bot)
-        }
-        if (profile?.self_bot_line_user_id !== undefined) {
-            setSelfBotLineUserId(profile.self_bot_line_user_id || '')
-        }
-    }, [profile])
-
-    const handleTogglePushFallbackSelfBot = async (checked) => {
-        setPushFallbackSelfBot(checked)
-        try {
-            const { error } = await supabase
-                .from('profiles')
-                .update({ push_fallback_self_bot: checked })
-                .eq('id', user.id)
-
-            if (error) throw error
-            toast.success(checked ? 'เปิดใช้งานแจ้งเตือนสำรองด้วย Self-Bot เมื่อ Push Msg หมดแล้ว!' : 'ปิดใช้งานแจ้งเตือนสำรองด้วย Self-Bot แล้ว')
-        } catch (error) {
-            console.error('Error updating push fallback setting:', error)
-            toast.error('ไม่สามารถอัปเดตตั้งค่าแจ้งเตือนสำรองได้')
-            setPushFallbackSelfBot(!checked)
-        }
-    }
-
-    const handleSaveSelfBotLineUserId = async () => {
-        setSavingSelfBotId(true)
-        try {
-            const cleanId = selfBotLineUserId.trim()
-            const { error } = await supabase
-                .from('profiles')
-                .update({ self_bot_line_user_id: cleanId || null })
-                .eq('id', user.id)
-
-            if (error) throw error
-            toast.success(cleanId ? 'บันทึก LINE User ID ของ Self-Bot สำเร็จ! Official Bot จะละเว้นข้อความจากบอทนี้แล้ว' : 'ลบ LINE User ID ของ Self-Bot เรียบร้อยแล้ว')
-        } catch (error) {
-            console.error('Error saving self bot line user id:', error)
-            toast.error('ไม่สามารถบันทึก LINE User ID ของ Self-Bot ได้')
-        } finally {
-            setSavingSelfBotId(false)
-        }
-    }
-
-    const isOwnerOrSuper = profile?.role === 'dealer' || profile?.role === 'superadmin'
-
-    // Call Edge Function to sync/refresh real LINE group names from the LINE API
     const refreshGroupNames = async () => {
         try {
             const { error } = await supabase.functions.invoke('line-bot', {
@@ -644,88 +593,6 @@ export default function DealerLineBotTab({ user, profile }) {
 
     return (
         <div className="line-bot-section">
-            {/* Settings Card: LINE Bot Settings & Self-Bot Fallback */}
-            <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeft: '4px solid var(--color-success)', background: 'rgba(34, 197, 94, 0.02)' }}>
-                <h3 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#22c55e' }}>
-                    <FiSettings /> ตั้งค่าระบบบอท & สลับการแจ้งเตือน
-                </h3>
-
-                <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '1rem 1.25rem',
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--color-border)',
-                    flexWrap: 'wrap',
-                    gap: '1rem'
-                }}>
-                    <div style={{ flex: 1, minWidth: '260px' }}>
-                        <div style={{ fontWeight: 'bold', fontSize: '1rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <FiMessageSquare style={{ color: '#22c55e' }} /> Push Mgs หมดให้ Self bot แจ้งแทน
-                        </div>
-                        <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: '0.25rem', lineHeight: '1.4' }}>
-                            เมื่อโควต้าข้อความ Push Message ของ LINE Official Account หมดลง ระบบจะสลับไปส่งข้อความแจ้งเตือน (เช่น สรุปโพย, ปิดรับแทง, ประกาศผล) ผ่าน LINE Self-Bot แทนให้อัตโนมัติ
-                        </div>
-                    </div>
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed', margin: 0 }}>
-                        <input
-                            type="checkbox"
-                            checked={pushFallbackSelfBot}
-                            disabled={!isOwnerOrSuper}
-                            onChange={e => handleTogglePushFallbackSelfBot(e.target.checked)}
-                            style={{ width: '1.25rem', height: '1.25rem', cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed' }}
-                        />
-                        <span style={{ 
-                            fontSize: '0.95rem', 
-                            color: pushFallbackSelfBot ? '#22c55e' : 'var(--color-text-muted)',
-                            fontWeight: 'bold'
-                        }}>
-                            {pushFallbackSelfBot ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
-                        </span>
-                    </label>
-                </div>
-
-                {/* Self-Bot LINE User ID Input */}
-                <div style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.5rem',
-                    padding: '1rem 1.25rem',
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--color-border)',
-                    marginTop: '1rem'
-                }}>
-                    <div style={{ fontWeight: 'bold', fontSize: '0.95rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <FiTerminal style={{ color: '#36a2eb' }} /> LINE User ID ของบัญชี Self-Bot (ละเว้นไม่ให้ Official Bot อ่านโพยซ้ำ)
-                    </div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', lineHeight: '1.4' }}>
-                        ระบุ LINE User ID ของบัญชี Self-Bot (เช่น <code style={{ color: 'var(--color-primary)' }}>u31dba245e37496758cbd7b23d8952ecc</code>) เพื่อให้ Official Bot สังเกตเห็นและข้าม (Ignore) ข้อความทั้งหมดที่ส่งจาก Self-Bot นี้โดยอัตโนมัติ ไม่นำไปตีความว่าเป็นโพยแทงหวย
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                        <input
-                            type="text"
-                            className="form-input"
-                            placeholder="กรอก LINE User ID ของ Self-Bot (เช่น U123456789...)"
-                            value={selfBotLineUserId}
-                            disabled={!isOwnerOrSuper || savingSelfBotId}
-                            onChange={(e) => setSelfBotLineUserId(e.target.value)}
-                            style={{ flex: '1 1 280px', fontSize: '0.9rem' }}
-                        />
-                        <button
-                            className="btn btn-primary"
-                            onClick={handleSaveSelfBotLineUserId}
-                            disabled={!isOwnerOrSuper || savingSelfBotId}
-                            style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', whiteSpace: 'nowrap' }}
-                        >
-                            <FiCheck /> {savingSelfBotId ? 'กำลังบันทึก...' : 'บันทึก ID'}
-                        </button>
-                    </div>
-                </div>
-            </div>
-
             {/* Dealer Member Code & 1-on-1 Registration Guide Card */}
             <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeft: '4px solid #36a2eb', background: 'rgba(54, 162, 235, 0.02)' }}>
                 <h3 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#36a2eb' }}>

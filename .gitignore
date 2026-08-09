@@ -29,3 +29,10 @@ dist-ssr
 *.sw?
 # Added by code-review-graph
 .code-review-graph/
+
+# Retired LINE Self-Bot session/token artifacts
+self-bot/
+**/storage.json
+**/storage_*.json
+**/*authToken*
+**/*refreshToken*

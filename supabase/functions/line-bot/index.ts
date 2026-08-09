@@ -1834,65 +1834,6 @@ async function sendLineReply(
   }
 }
 
-// Helper: Enqueue Self-Bot Push Message Fallback when OA push fails or quota is exceeded
-async function enqueueSelfBotPushFallback(to: string, messagePayload: any, dealerIdInput?: string): Promise<void> {
-  try {
-    let resolvedDealerId = dealerIdInput;
-    let fallbackEnabled = false;
-
-    if (to) {
-      const altTo = to.startsWith('C') 
-        ? 'c' + to.substring(1) 
-        : (to.startsWith('c') ? 'C' + to.substring(1) : to);
-
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(to);
-      const query = supabase
-        .from('line_groups')
-        .select('dealer_id, push_fallback_self_bot');
-
-      const { data: groupData } = isUuid
-        ? await query.eq('id', to).maybeSingle()
-        : await query.or(`line_group_id.eq.${to},line_group_id.eq.${altTo}`).maybeSingle();
-
-      if (groupData) {
-        if (!resolvedDealerId) resolvedDealerId = groupData.dealer_id;
-        if (groupData.push_fallback_self_bot !== null && groupData.push_fallback_self_bot !== undefined) {
-          fallbackEnabled = groupData.push_fallback_self_bot;
-        }
-      }
-    }
-
-    if (!fallbackEnabled && resolvedDealerId) {
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('push_fallback_self_bot')
-        .eq('id', resolvedDealerId)
-        .maybeSingle();
-
-      if (profileData?.push_fallback_self_bot) {
-        fallbackEnabled = true;
-      }
-    }
-
-    if (fallbackEnabled) {
-      const msgType = messagePayload?.type === 'flex' ? 'flex' : 'text';
-
-      await supabase.from('self_bot_push_queue').insert({
-        dealer_id: resolvedDealerId,
-        target_line_group_id: to,
-        message_payload: messagePayload,
-        message_type: msgType,
-        status: 'pending'
-      });
-      console.log(`[SelfBotFallback] Successfully enqueued ${msgType} message to Self-Bot queue for target ${to}`);
-    } else {
-      console.log(`[SelfBotFallback] Fallback disabled or dealerId missing for target ${to}`);
-    }
-  } catch (err: any) {
-    console.error(`[SelfBotFallback] Failed to enqueue fallback message:`, err.message);
-  }
-}
-
 // Helper: Send LINE Push Message (proactive, no reply token needed)
 async function sendLinePush(to: string, textOrPayload: string | Record<string, any>, dealerId?: string): Promise<void> {
   const message = typeof textOrPayload === "string"
@@ -1901,7 +1842,6 @@ async function sendLinePush(to: string, textOrPayload: string | Record<string, a
 
   if (!LINE_CHANNEL_ACCESS_TOKEN) {
     console.error("LINE_CHANNEL_ACCESS_TOKEN not configured");
-    await enqueueSelfBotPushFallback(to, message, dealerId);
     return;
   }
 
@@ -1921,11 +1861,9 @@ async function sendLinePush(to: string, textOrPayload: string | Record<string, a
     if (!response.ok) {
       const errText = await response.text();
       console.error(`Failed to send LINE push: ${response.status} - ${errText}`);
-      await enqueueSelfBotPushFallback(to, message, dealerId);
     }
   } catch (pushErr: any) {
     console.error(`Error sending LINE push:`, pushErr);
-    await enqueueSelfBotPushFallback(to, message, dealerId);
   }
 }
 
@@ -7150,29 +7088,6 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
         const sourceType = event.source?.type || 'user'
 
         console.log(`[LINE BOT EVENT] type: ${event.type}, userId: ${userId}, groupId: ${groupId}, text: ${event.message?.text || ''}`);
-
-        // Check if message comes from a registered Self-Bot LINE User ID -> Ignore completely!
-        // But ONLY if the sender's userId is NOT the dealer's own line_user_id (safety guard)
-        if (userId) {
-          const { data: selfBotMatch } = await supabase
-            .from('profiles')
-            .select('id, line_user_id')
-            .ilike('self_bot_line_user_id', userId.trim())
-            .limit(1);
-
-          if (selfBotMatch && selfBotMatch.length > 0) {
-            // Safety check: don't ignore if this userId is also the dealer's own LINE User ID
-            const ownerProfile = selfBotMatch[0];
-            const ownerLineId = (ownerProfile.line_user_id || '').trim().toLowerCase();
-            const senderLower = userId.trim().toLowerCase();
-            if (ownerLineId !== senderLower) {
-              console.log(`[LINE BOT IGNORE] Message comes from registered Self-Bot LINE User ID (${userId}). Completely ignoring event.`);
-              continue;
-            } else {
-              console.log(`[LINE BOT WARN] self_bot_line_user_id matches dealer's own line_user_id (${userId}). Skipping ignore to prevent lockout.`);
-            }
-          }
-        }
 
       // Automatically upsert group member details in the background if event comes from a group or room
       if (userId && (groupId.startsWith('C') || groupId.startsWith('R'))) {
