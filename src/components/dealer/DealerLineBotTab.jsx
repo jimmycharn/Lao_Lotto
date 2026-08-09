@@ -43,6 +43,7 @@ export default function DealerLineBotTab({ user, profile }) {
     const [searchGroupQuery, setSearchGroupQuery] = useState('')
     const [selectedTypeFilter, setSelectedTypeFilter] = useState('all')
     const [allowedLotteryTypes, setAllowedLotteryTypes] = useState([])
+    const isOwnerOrSuper = profile?.role === 'dealer' || profile?.role === 'superadmin'
 
     const refreshGroupNames = async () => {
         try {
