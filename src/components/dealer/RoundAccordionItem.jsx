@@ -2079,15 +2079,17 @@ export default function RoundAccordionItem({
                     user_name: userName,
                     user_id: sub.user_id,
                     items: [],
-                    total: 0,
+                    originalTotal: 0,
+                    activeTotal: 0,
                     created_at: sub.created_at,
                     bill_note: sub.bill_note,
                     is_paid: sub.is_paid || false
                 }
             }
             bills[key].items.push(sub)
+            bills[key].originalTotal += (sub.amount || 0)
             if (!sub.is_deleted) {
-                bills[key].total += sub.amount
+                bills[key].activeTotal += (sub.amount || 0)
             }
         })
         return Object.values(bills).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
@@ -4052,8 +4054,8 @@ export default function RoundAccordionItem({
                                                                 billsByUser[bill.user_name] = { user_name: bill.user_name, user_id: bill.user_id, bills: [], total: 0, totalCommission: 0 }
                                                             }
                                                             billsByUser[bill.user_name].bills.push(bill)
-                                                            billsByUser[bill.user_name].total += bill.total
-                                                            billsByUser[bill.user_name].totalCommission += bill.items.reduce((sum, item) => sum + getCommission(item), 0)
+                                                            billsByUser[bill.user_name].total += bill.activeTotal
+                                                            billsByUser[bill.user_name].totalCommission += bill.items.filter(item => !item.is_deleted).reduce((sum, item) => sum + getCommission(item), 0)
                                                         })
 
                                                         if (Object.keys(billsByUser).length === 0) {
@@ -4280,13 +4282,13 @@ export default function RoundAccordionItem({
                                                                                     {/* Line 2: amount, commission + winning total */}
                                                                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: '1.4rem' }}>
                                                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                                                                            <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>
+                                                                                            <span style={{ fontWeight: '600', fontSize: '0.95rem', textDecoration: isBillAllCancelled ? 'line-through' : 'none', color: isBillAllCancelled ? '#ef4444' : 'inherit' }}>
                                                                                                 {round.currency_symbol}{(() => {
-                                                                                                    if (inlineBetTypeFilter === 'all') return bill.total.toLocaleString()
+                                                                                                    if (inlineBetTypeFilter === 'all') return bill.originalTotal.toLocaleString()
                                                                                                     return bill.items.filter(item => item.bet_type === inlineBetTypeFilter).reduce((sum, item) => sum + item.amount, 0).toLocaleString()
                                                                                                 })()}
                                                                                             </span>
-                                                                                            <span style={{ fontSize: '0.8rem', color: 'var(--color-warning)' }}>
+                                                                                            <span style={{ fontSize: '0.8rem', color: isBillAllCancelled ? '#ef4444' : 'var(--color-warning)', textDecoration: isBillAllCancelled ? 'line-through' : 'none' }}>
                                                                                                 คอม {round.currency_symbol}{(() => {
                                                                                                     if (inlineBetTypeFilter === 'all') return Math.round(bill.items.reduce((sum, item) => sum + getCommission(item), 0)).toLocaleString()
                                                                                                     return Math.round(bill.items.filter(item => item.bet_type === inlineBetTypeFilter).reduce((sum, item) => sum + getCommission(item), 0)).toLocaleString()
