@@ -142,13 +142,12 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
     async function fetchAllData() {
         setLoading(true)
         try {
-            // Fetch submissions
+            // Fetch submissions (including cancelled ones to display with strikethrough)
             const { data: subsData } = await fetchAllRows(
                 (from, to) => supabase
                     .from('submissions')
                     .select(`*, profiles (full_name, email)`)
                     .eq('round_id', round.id)
-                    .eq('is_deleted', false)
                     .order('created_at', { ascending: false })
                     .range(from, to)
             )
@@ -306,9 +305,9 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
         // Get set price for 4_top from round settings
         const setPrice = round?.set_prices?.['4_top'] || 120
 
-        // Group submissions by bet_type + numbers (using canonical lookup type for aliases)
+        // Group active submissions by bet_type + numbers (using canonical lookup type for aliases)
         const grouped = {}
-        submissions.forEach(sub => {
+        submissions.filter(s => !s.is_deleted).forEach(sub => {
             let subNum = sub.numbers
             if (sub.bet_type === '3_tod' || sub.bet_type === '4_tod') {
                 subNum = subNum.split('').sort().join('')
@@ -1212,8 +1211,11 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
         ? userFilteredSubmissions
         : userFilteredSubmissions.filter(s => s.bet_type === betTypeFilter)
 
-    // Group by bet type for summary (based on user-filtered submissions)
-    const summaryByType = userFilteredSubmissions.reduce((acc, sub) => {
+    // Filter active submissions for totals and summary calculations (exclude cancelled items from totals)
+    const activeUserFilteredSubmissions = userFilteredSubmissions.filter(s => !s.is_deleted)
+
+    // Group by bet type for summary (based on active user-filtered submissions)
+    const summaryByType = activeUserFilteredSubmissions.reduce((acc, sub) => {
         if (!acc[sub.bet_type]) {
             acc[sub.bet_type] = { count: 0, amount: 0 }
         }
@@ -1222,7 +1224,7 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
         return acc
     }, {})
 
-    const totalAmount = userFilteredSubmissions.reduce((sum, s) => sum + (s.amount || 0), 0)
+    const totalAmount = activeUserFilteredSubmissions.reduce((sum, s) => sum + (s.amount || 0), 0)
     const totalExcess = excessItems.reduce((sum, item) => sum + item.excess, 0)
     const totalTransferred = transfers.reduce((sum, t) => sum + (t.amount || 0), 0)
 
@@ -1345,20 +1347,24 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
                                                 </thead>
                                                 <tbody>
                                                     {filteredSubmissions.map(sub => (
-                                                        <tr key={sub.id} className={sub.is_winner ? 'winner-row' : ''}>
+                                                        <tr key={sub.id} className={`${sub.is_winner ? 'winner-row' : ''} ${sub.is_deleted ? 'cancelled-row' : ''}`} style={sub.is_deleted ? { opacity: 0.65, background: 'rgba(239, 68, 68, 0.08)' } : {}}>
                                                             <td>
-                                                                <span className="type-badge">{BET_TYPES[sub.bet_type]}</span>
+                                                                <span className="type-badge" style={sub.is_deleted ? { textDecoration: 'line-through' } : {}}>{BET_TYPES[sub.bet_type]}</span>
                                                             </td>
-                                                            <td className="number-cell">{sub.numbers}</td>
-                                                            <td>{round.currency_symbol}{sub.amount?.toLocaleString()}</td>
-                                                            <td className="time-cell">
+                                                            <td className="number-cell" style={sub.is_deleted ? { textDecoration: 'line-through', color: 'var(--color-danger)' } : {}}>{sub.numbers}</td>
+                                                            <td style={sub.is_deleted ? { textDecoration: 'line-through', color: 'var(--color-text-muted)' } : {}}>{round.currency_symbol}{sub.amount?.toLocaleString()}</td>
+                                                            <td className="time-cell" style={sub.is_deleted ? { textDecoration: 'line-through' } : {}}>
                                                                 {new Date(sub.created_at).toLocaleTimeString('th-TH', {
                                                                     hour: '2-digit',
                                                                     minute: '2-digit'
                                                                 })}
                                                             </td>
                                                             <td>
-                                                                {round.is_result_announced ? (
+                                                                {sub.is_deleted ? (
+                                                                    <span className="status-badge cancelled" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', fontWeight: 600 }}>
+                                                                        <FiX /> ยกเลิกแล้ว
+                                                                    </span>
+                                                                ) : round.is_result_announced ? (
                                                                     sub.is_winner ? (
                                                                         <span className="status-badge won"><FiCheck /> ถูกรางวัล</span>
                                                                     ) : (

@@ -509,7 +509,6 @@ export default function RoundAccordionItem({
                     .from('submissions')
                     .select('*, profiles:user_id(id, full_name, email)')
                     .eq('round_id', round.id)
-                    .eq('is_deleted', false)
                     .order('created_at', { ascending: false })
                     .range(from, to)
             )
@@ -855,7 +854,6 @@ export default function RoundAccordionItem({
                         .from('submissions')
                         .select(`*, profiles:user_id (full_name, email)`)
                         .eq('round_id', round.id)
-                        .eq('is_deleted', false)
                         .order('created_at', { ascending: false })
                         .range(from, to)
                 ),
@@ -1237,7 +1235,7 @@ export default function RoundAccordionItem({
         const isSetBasedLottery = ['lao', 'hanoi'].includes(round.lottery_type)
         const setPrice = round?.set_prices?.['4_top'] || 120
 
-        inlineSubmissions.forEach(sub => {
+        inlineSubmissions.filter(s => !s.is_deleted).forEach(sub => {
             const normalizedNumbers = normalizeNumber(sub.numbers, sub.bet_type)
             const lookupBetType = getLimitLookupBetType(sub.bet_type)
             const key = `${lookupBetType}|${normalizedNumbers}`
@@ -2088,7 +2086,9 @@ export default function RoundAccordionItem({
                 }
             }
             bills[key].items.push(sub)
-            bills[key].total += sub.amount
+            if (!sub.is_deleted) {
+                bills[key].total += sub.amount
+            }
         })
         return Object.values(bills).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     }
@@ -2584,7 +2584,7 @@ export default function RoundAccordionItem({
     }
 
     const userSummaries = !summaryData.loading && summaryData.submissions.length > 0 ? Object.values(
-        summaryData.submissions.reduce((acc, sub) => {
+        summaryData.submissions.filter(s => !s.is_deleted).reduce((acc, sub) => {
             const userId = sub.user_id
             if (!acc[userId]) {
                 acc[userId] = {
@@ -3207,7 +3207,7 @@ export default function RoundAccordionItem({
                                 <button className={`inline-tab ${inlineTab === 'total' ? 'active' : ''}`} onClick={() => setInlineTab('total')}>
                                     ยอดรวม <span className="tab-count">({(() => {
                                         const grouped = {}
-                                        inlineSubmissions.forEach(s => {
+                                        inlineSubmissions.filter(s => !s.is_deleted).forEach(s => {
                                             const normalized = normalizeNumber(s.numbers, s.bet_type)
                                             const key = `${normalized}|${s.bet_type}`
                                             grouped[key] = true
@@ -3218,7 +3218,7 @@ export default function RoundAccordionItem({
                                 <button className={`inline-tab ${inlineTab === 'remaining' ? 'active' : ''}`} onClick={() => setInlineTab('remaining')}>
                                     ยอดเหลือ <span className="tab-count">({(() => {
                                         const submissionsByKey = {}
-                                        inlineSubmissions.forEach(s => {
+                                        inlineSubmissions.filter(s => !s.is_deleted).forEach(s => {
                                             const normalized = normalizeNumber(s.numbers, s.bet_type)
                                             const key = `${normalized}|${s.bet_type}`
                                             if (!submissionsByKey[key]) submissionsByKey[key] = 0
@@ -3968,8 +3968,9 @@ export default function RoundAccordionItem({
                                                                                 displayLabel = sub.display_bet_type
                                                                             }
 
+                                                                            const isCancelled = sub.is_deleted
                                                                             return (
-                                                                                <tr key={sub.id} style={{ background: isSelected ? 'rgba(239, 68, 68, 0.1)' : 'transparent' }}>
+                                                                                <tr key={sub.id} style={{ background: isSelected ? 'rgba(239, 68, 68, 0.1)' : (isCancelled ? 'rgba(239, 68, 68, 0.06)' : 'transparent'), opacity: isCancelled ? 0.65 : 1 }}>
                                                                                     <td>
                                                                                         <input 
                                                                                             type="checkbox" 
@@ -3979,17 +3980,20 @@ export default function RoundAccordionItem({
                                                                                         />
                                                                                     </td>
                                                                                     <td className="number-cell">
-                                                                                        <div className="number-value">{sub.numbers}</div>
+                                                                                        <div className="number-value" style={{ textDecoration: isCancelled ? 'line-through' : 'none' }}>
+                                                                                            {sub.numbers}
+                                                                                            {isCancelled && <span style={{ color: '#ef4444', fontSize: '0.75rem', marginLeft: '0.3rem', fontWeight: 600 }}>[🚫 ยกเลิก]</span>}
+                                                                                        </div>
                                                                                         {(displayMode === 'summary' || displayMode === 'grouped') && sub.count > 1 && (
                                                                                             <div className="count-sub-label">({sub.count})</div>
                                                                                         )}
                                                                                     </td>
                                                                                     {displayMode !== 'summary' && (
-                                                                                        <td style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                                                        <td style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', textDecoration: isCancelled ? 'line-through' : 'none' }}>
                                                                                             {displayLabel}
                                                                                         </td>
                                                                                     )}
-                                                                                    <td style={{ textAlign: 'right' }}>
+                                                                                    <td style={{ textAlign: 'right', textDecoration: isCancelled ? 'line-through' : 'none' }}>
                                                                                         {displayMode === 'summary' && sub.display_amount ? (
                                                                                             <>{round.currency_symbol}{sub.display_amount}</>
                                                                                         ) : (

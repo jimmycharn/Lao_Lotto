@@ -616,23 +616,22 @@ export default function UserDashboard() {
                     .select('*')
                     .eq('round_id', selectedRound.id)
                     .eq('user_id', user.id)
-                    .eq('is_deleted', false)
                     .order('created_at', { ascending: false })
                     .range(from, to)
             )
 
             if (!error) {
                 setSubmissions(data || [])
-                console.log(`[USER-ROUNDS] round=${selectedRound.id} user=${user.id} subs=${(data||[]).length} totalAmount=${(data||[]).reduce((s,x)=>s+(x.amount||0),0)}`)
+                const activeSubs = (data || []).filter(s => !s.is_deleted)
+                console.log(`[USER-ROUNDS] round=${selectedRound.id} user=${user.id} subs=${activeSubs.length} totalAmount=${activeSubs.reduce((s,x)=>s+(x.amount||0),0)}`)
                 console.log(`[USER-ROUNDS] IDs:`, (data||[]).map(s => s.id).sort())
                 console.log(`[USER-ROUNDS] bills:`, [...new Set((data||[]).map(s => s.bill_id))])
-                // Update round summary for collapsed header
-                const subs = data || []
-                const totalAmount = subs.reduce((sum, s) => sum + (s.amount || 0), 0)
-                const totalCommission = subs.reduce((sum, s) => sum + calculateCommissionAmount(s.amount || 0, s.bet_type, selectedRound), 0)
+                // Update round summary for collapsed header (using active submissions only)
+                const totalAmount = activeSubs.reduce((sum, s) => sum + (s.amount || 0), 0)
+                const totalCommission = activeSubs.reduce((sum, s) => sum + calculateCommissionAmount(s.amount || 0, s.bet_type, selectedRound), 0)
                 setRoundSummaries(prev => ({
                     ...prev,
-                    [selectedRound.id]: { count: subs.length, totalAmount, totalCommission }
+                    [selectedRound.id]: { count: activeSubs.length, totalAmount, totalCommission }
                 }))
             }
         } catch (error) {
@@ -3401,7 +3400,6 @@ export default function UserDashboard() {
                                                                         if (filterBetType) {
                                                                             filtered = filtered.filter(sub => sub.bet_type === filterBetType)
                                                                         }
-
                                                                         // Filter by search query
                                                                         if (searchQuery.trim()) {
                                                                             const query = searchQuery.toLowerCase().trim()
@@ -3464,8 +3462,10 @@ export default function UserDashboard() {
                                                                         return (
                                                                             <div className="bill-view-container">
                                                                                 {sortedBillEntries.map(([billId, billItems]) => {
-                                                                                    const billTotal = billItems.reduce((sum, item) => sum + item.amount, 0)
-                                                                                    const billCommission = billItems.reduce((sum, item) => sum + calculateCommissionAmount(item.amount || 0, item.bet_type, round), 0)
+                                                                                    const activeBillItems = billItems.filter(item => !item.is_deleted)
+                                                                                    const billTotal = activeBillItems.reduce((sum, item) => sum + item.amount, 0)
+                                                                                    const billCommission = activeBillItems.reduce((sum, item) => sum + calculateCommissionAmount(item.amount || 0, item.bet_type, round), 0)
+                                                                                    const isBillAllCancelled = billItems.length > 0 && billItems.every(item => item.is_deleted)
                                                                                     const billTime = new Date(billItems[0].created_at).toLocaleTimeString('th-TH', {
                                                                                         hour: '2-digit',
                                                                                         minute: '2-digit'
@@ -3509,7 +3509,7 @@ export default function UserDashboard() {
                                                                                     const handleCopyBill = async (e) => {
                                                                                         e.stopPropagation()
                                                                                         const text = formatCopyText({
-                                                                                            submissions: billItems,
+                                                                                            submissions: billItems.filter(s => !s.is_deleted),
                                                                                             round,
                                                                                             userName: profile?.full_name || profile?.email || '-',
                                                                                             billName: billItems[0]?.bill_note || billId,
@@ -3520,7 +3520,7 @@ export default function UserDashboard() {
                                                                                     }
 
                                                                                     return (
-                                                                                        <div key={billId} className={`bill-card-new ${isExpandedBill ? 'expanded' : ''} ${isDealerSubmitted ? 'dealer-submitted' : ''}`}>
+                                                                                        <div key={billId} className={`bill-card-new ${isExpandedBill ? 'expanded' : ''} ${isDealerSubmitted ? 'dealer-submitted' : ''} ${isBillAllCancelled ? 'is-cancelled' : ''}`} style={isBillAllCancelled ? { opacity: 0.75, border: '1px dashed #ef4444' } : {}}>
                                                                                             {/* Bill Header */}
                                                                                             <div
                                                                                                 className="bill-card-header"
@@ -3539,13 +3539,18 @@ export default function UserDashboard() {
                                                                                                         ({actualLineCount})
                                                                                                     </span>
                                                                                                     {billItems[0]?.is_paid && <span title="ชำระเงินแล้ว" style={{ color: 'var(--color-success)', fontSize: '0.85rem', fontWeight: '700' }}>฿✓</span>}
+                                                                                                    {isBillAllCancelled && (
+                                                                                                        <span className="status-badge cancelled" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', fontWeight: 600, fontSize: '0.75rem', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>
+                                                                                                            🚫 ยกเลิกแล้ว
+                                                                                                        </span>
+                                                                                                    )}
                                                                                                 </div>
                                                                                                 {/* Line 2: amount, commission, copy */}
                                                                                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.75rem' }}>
-                                                                                                    <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>
+                                                                                                    <span style={{ fontWeight: '600', fontSize: '0.95rem', textDecoration: isBillAllCancelled ? 'line-through' : 'none', color: isBillAllCancelled ? 'var(--color-text-muted)' : 'inherit' }}>
                                                                                                         {round.currency_symbol}{billTotal.toLocaleString()}
                                                                                                     </span>
-                                                                                                    <span style={{ fontSize: '0.8rem', color: 'var(--color-warning)' }}>
+                                                                                                    <span style={{ fontSize: '0.8rem', color: 'var(--color-warning)', textDecoration: isBillAllCancelled ? 'line-through' : 'none' }}>
                                                                                                         คอม {round.currency_symbol}{Math.round(billCommission).toLocaleString()}
                                                                                                     </span>
                                                                                                     <button
@@ -3580,15 +3585,16 @@ export default function UserDashboard() {
                                                                                                     {sortedBillItems.map(sub => (
                                                                                                         <div
                                                                                                             key={sub.id || sub.entry_id}
-                                                                                                            className="bill-item-row"
-                                                                                                            style={{ gap: '0.5rem', padding: '0.65rem 0.75rem' }}
+                                                                                                            className={`bill-item-row ${sub.is_deleted ? 'cancelled-row' : ''}`}
+                                                                                                            style={{ gap: '0.5rem', padding: '0.65rem 0.75rem', opacity: sub.is_deleted ? 0.65 : 1, background: sub.is_deleted ? 'rgba(239, 68, 68, 0.08)' : undefined }}
                                                                                                         >
                                                                                                             {displayMode === 'summary' && sub.display_numbers ? (
                                                                                                                 <>
-                                                                                                                    <span className="bill-display-text" style={{ flex: 1 }}>
+                                                                                                                    <span className="bill-display-text" style={{ flex: 1, textDecoration: sub.is_deleted ? 'line-through' : 'none' }}>
                                                                                                                         {sub.display_numbers}
+                                                                                                                        {sub.is_deleted && <span style={{ color: '#ef4444', fontSize: '0.75rem', marginLeft: '0.4rem', fontWeight: 600 }}>[🚫 ยกเลิก]</span>}
                                                                                                                     </span>
-                                                                                                                    <span className="bill-item-commission" style={{ color: 'var(--color-warning)', fontSize: '0.8rem', width: '60px', textAlign: 'right', flexShrink: 0 }}>
+                                                                                                                    <span className="bill-item-commission" style={{ color: 'var(--color-warning)', fontSize: '0.8rem', width: '60px', textAlign: 'right', flexShrink: 0, textDecoration: sub.is_deleted ? 'line-through' : 'none' }}>
                                                                                                                         {round.currency_symbol}{Math.round(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)).toLocaleString()}
                                                                                                                     </span>
                                                                                                                     <span className="bill-item-amount" style={{ width: '60px', textAlign: 'right', flexShrink: 0 }}>

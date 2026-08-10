@@ -15687,17 +15687,16 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               continue;
             }
 
-            // 1. Find the active submissions with this bill_id
+            // 1. Find the submissions with this bill_id (including cancelled ones)
             const { data: subs, error: fetchErr } = await supabase
               .from('submissions')
-              .select('id, amount, bet_type, numbers, user_id, round_id, entry_id, display_numbers, display_amount, display_bet_type')
+              .select('id, amount, bet_type, numbers, user_id, round_id, entry_id, display_numbers, display_amount, display_bet_type, is_deleted')
               .eq('bill_id', billCode)
-              .eq('is_deleted', false)
               .order('created_at', { ascending: true })
               .order('id', { ascending: true });
 
             if (fetchErr || !subs || subs.length === 0) {
-              await sendLineReply(replyToken, `❌ ไม่พบใบโพยหมายเลข "${billCode}" หรือใบโพยนี้ถูกยกเลิกไปแล้ว`);
+              await sendLineReply(replyToken, `❌ ไม่พบใบโพยหมายเลข "${billCode}"`);
               continue;
             }
 
@@ -15867,8 +15866,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             entryGroups.forEach((group) => {
               const first = group[0];
               const count = group.length;
-              const groupSum = group.reduce((sum, s) => sum + Number(s.amount || 0), 0);
-              const groupBaseSum = group.reduce((sum, s) => sum + getBaseAmountForSub(s), 0);
+              const activeGroup = group.filter((s: any) => !s.is_deleted);
+              const groupSum = activeGroup.reduce((sum: number, s: any) => sum + Number(s.amount || 0), 0);
+              const groupBaseSum = activeGroup.reduce((sum: number, s: any) => sum + getBaseAmountForSub(s), 0);
               totalAmount += groupSum;
               totalBaseAmount += groupBaseSum;
 
@@ -15890,7 +15890,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               const alreadyHasCountSuffix = /\(\d+\)\s*$/.test(disp);
               const countSuffix = (count > 1 && !alreadyHasCountSuffix) ? ` (${count})` : '';
-              formattedLines.push(`${disp}${countSuffix}`);
+              const isGroupAllCancelled = group.length > 0 && group.every((s: any) => s.is_deleted);
+              const lineText = `${disp}${countSuffix}`;
+              formattedLines.push(isGroupAllCancelled ? `~${lineText}~ [🚫 ยกเลิก]` : lineText);
             });
 
             // Process items without entry_id (historical/fallback grouping)
@@ -15921,16 +15923,20 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   }
                 }
 
-                const groupSum = group.reduce((sum, s) => sum + Number(s.amount || 0), 0);
-                const groupBaseSum = group.reduce((sum, s) => sum + getBaseAmountForSub(s), 0);
+                const activeGroup = group.filter((s: any) => !s.is_deleted);
+                const groupSum = activeGroup.reduce((sum: number, s: any) => sum + Number(s.amount || 0), 0);
+                const groupBaseSum = activeGroup.reduce((sum: number, s: any) => sum + getBaseAmountForSub(s), 0);
                 totalAmount += groupSum;
                 totalBaseAmount += groupBaseSum;
+                const isGroupAllCancelled = group.length > 0 && group.every((s: any) => s.is_deleted);
 
                 if (group.length > 1) {
                   const count = group.length;
-                  formattedLines.push(`${numStr}=${current.amount}*${count} คูณชุด (${count})`);
+                  const lineText = `${numStr}=${current.amount}*${count} คูณชุด (${count})`;
+                  formattedLines.push(isGroupAllCancelled ? `~${lineText}~ [🚫 ยกเลิก]` : lineText);
                 } else {
-                  formattedLines.push(`${numStr}=${current.amount} ${isLaoOrHanoi ? 'ตรง' : 'บน'}`);
+                  const lineText = `${numStr}=${current.amount} ${isLaoOrHanoi ? 'ตรง' : 'บน'}`;
+                  formattedLines.push(isGroupAllCancelled ? `~${lineText}~ [🚫 ยกเลิก]` : lineText);
                 }
               }
               // B. 2-digit reverse grouping
@@ -15952,30 +15958,38 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   }
                 }
 
-                const groupSum = group.reduce((sum, s) => sum + Number(s.amount || 0), 0);
-                const groupBaseSum = group.reduce((sum, s) => sum + getBaseAmountForSub(s), 0);
+                const activeGroup = group.filter((s: any) => !s.is_deleted);
+                const groupSum = activeGroup.reduce((sum: number, s: any) => sum + Number(s.amount || 0), 0);
+                const groupBaseSum = activeGroup.reduce((sum: number, s: any) => sum + getBaseAmountForSub(s), 0);
                 totalAmount += groupSum;
                 totalBaseAmount += groupBaseSum;
+                const isGroupAllCancelled = group.length > 0 && group.every((s: any) => s.is_deleted);
 
                 if (group.length > 1) {
                   const label = betTypeStr === '2_top' ? 'บนกลับ' : 'ล่างกลับ';
-                  formattedLines.push(`${numStr}=${current.amount}*${current.amount} ${label} (${group.length})`);
+                  const lineText = `${numStr}=${current.amount}*${current.amount} ${label} (${group.length})`;
+                  formattedLines.push(isGroupAllCancelled ? `~${lineText}~ [🚫 ยกเลิก]` : lineText);
                 } else {
                   const label = betTypeStr === '2_top' ? 'บน' : 'ล่าง';
-                  formattedLines.push(`${numStr}=${current.amount} ${label}`);
+                  const lineText = `${numStr}=${current.amount} ${label}`;
+                  formattedLines.push(isGroupAllCancelled ? `~${lineText}~ [🚫 ยกเลิก]` : lineText);
                 }
               }
               // C. Other items (singles, double 2-digits like 77, 4-digits, runners, etc.)
               else {
                 visited.add(i);
-                totalAmount += Number(current.amount || 0);
-                totalBaseAmount += getBaseAmountForSub(current);
+                if (!current.is_deleted) {
+                  totalAmount += Number(current.amount || 0);
+                  totalBaseAmount += getBaseAmountForSub(current);
+                }
                 const label = LABELS[betTypeStr] || betTypeStr;
-                formattedLines.push(`${numStr}=${current.amount} ${label}`);
+                const lineText = `${numStr}=${current.amount} ${label}`;
+                formattedLines.push(current.is_deleted ? `~${lineText}~ [🚫 ยกเลิก]` : lineText);
               }
             }
 
-            let summaryText = `📄 ใบโพย: ${billCode}\n`;
+            const isBillAllCancelled = subs.length > 0 && subs.every((s: any) => s.is_deleted);
+            let summaryText = `📄 ใบโพย: ${billCode}${isBillAllCancelled ? ' 🚫 [ยกเลิกแล้ว]' : ''}\n`;
             summaryText += `ประเภท: ${roundData.lottery_type.toUpperCase()}\n`;
             summaryText += `งวดวันที่: ${getRoundDisplayDate(roundData, false)}\n`;
             summaryText += `ผู้ซื้อ: คุณ ${buyerName}\n`;
