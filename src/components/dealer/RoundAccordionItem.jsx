@@ -4185,6 +4185,7 @@ export default function RoundAccordionItem({
                                                                         const isExpanded = expandedBills.includes(billKey)
                                                                         const billDate = new Date(bill.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
                                                                         const billTime = new Date(bill.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+                                                                        const isBillAllCancelled = bill.items.length > 0 && bill.items.every(item => item.is_deleted)
                                                                         // Check if this bill has any winning items and calculate total win payout
                                                                         let billTotalWinPayout = 0
                                                                         if (round.is_result_announced && round.winning_numbers) {
@@ -4193,13 +4194,13 @@ export default function RoundAccordionItem({
                                                                                 if (wi) billTotalWinPayout += wi.payout
                                                                             })
                                                                         }
-                                                                        const billHasWin = billTotalWinPayout > 0
+                                                                        const billHasWin = billTotalWinPayout > 0 && !isBillAllCancelled
                                                                         
                                                                         return (
-                                                                            <div key={bill.bill_id} className={`bill-card-new ${isExpanded ? 'expanded' : ''}`} style={{ 
-                                                                                border: billHasWin ? '2px solid var(--color-success)' : '1px solid var(--color-border)',
+                                                                            <div key={bill.bill_id} className={`bill-card-new ${isExpanded ? 'expanded' : ''} ${isBillAllCancelled ? 'is-cancelled' : ''}`} style={{ 
+                                                                                border: isBillAllCancelled ? '1.5px dashed #ef4444' : (billHasWin ? '2px solid var(--color-success)' : '1px solid var(--color-border)'),
                                                                                 borderRadius: '8px',
-                                                                                background: 'var(--color-surface)',
+                                                                                background: isBillAllCancelled ? 'rgba(239, 68, 68, 0.05)' : 'var(--color-surface)',
                                                                                 overflow: 'hidden'
                                                                             }}>
                                                                                 {/* Bill header - clickable to expand/collapse */}
@@ -4207,9 +4208,11 @@ export default function RoundAccordionItem({
                                                                                     onClick={() => toggleBillExpand(billKey)}
                                                                                     style={{ 
                                                                                         padding: '0.6rem 0.75rem',
-                                                                                        background: billHasWin 
-                                                                                            ? (isExpanded ? 'rgba(0, 210, 106, 0.2)' : 'rgba(0, 210, 106, 0.12)') 
-                                                                                            : (isExpanded ? 'rgba(255,193,7,0.15)' : 'rgba(255,193,7,0.08)'),
+                                                                                        background: isBillAllCancelled
+                                                                                            ? 'rgba(239, 68, 68, 0.12)'
+                                                                                            : (billHasWin 
+                                                                                                ? (isExpanded ? 'rgba(0, 210, 106, 0.2)' : 'rgba(0, 210, 106, 0.12)') 
+                                                                                                : (isExpanded ? 'rgba(255,193,7,0.15)' : 'rgba(255,193,7,0.08)')),
                                                                                         cursor: 'pointer',
                                                                                         transition: 'background 0.2s ease'
                                                                                     }}
@@ -4217,13 +4220,13 @@ export default function RoundAccordionItem({
                                                                                     {/* Line 1: [note] date time (N items) ฿✓ + edit/delete buttons */}
                                                                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
                                                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
-                                                                                            <span style={{ color: billHasWin ? 'var(--color-success)' : 'var(--color-text-muted)', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', flexShrink: 0 }}>
+                                                                                            <span style={{ color: isBillAllCancelled ? '#ef4444' : (billHasWin ? 'var(--color-success)' : 'var(--color-text-muted)'), transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', flexShrink: 0 }}>
                                                                                                 <FiChevronRight size={14} />
                                                                                             </span>
                                                                                             {bill.bill_note && (
-                                                                                                <span style={{ fontWeight: '600', color: 'var(--color-text)' }}>{bill.bill_note}</span>
+                                                                                                <span style={{ fontWeight: '600', color: 'var(--color-text)', textDecoration: isBillAllCancelled ? 'line-through' : 'none' }}>{bill.bill_note}</span>
                                                                                             )}
-                                                                                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
+                                                                                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', textDecoration: isBillAllCancelled ? 'line-through' : 'none' }}>
                                                                                                 {billDate} {billTime}
                                                                                             </span>
                                                                                             <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>

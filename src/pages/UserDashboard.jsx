@@ -3462,9 +3462,8 @@ export default function UserDashboard() {
                                                                         return (
                                                                             <div className="bill-view-container">
                                                                                 {sortedBillEntries.map(([billId, billItems]) => {
-                                                                                    const activeBillItems = billItems.filter(item => !item.is_deleted)
-                                                                                    const billTotal = activeBillItems.reduce((sum, item) => sum + item.amount, 0)
-                                                                                    const billCommission = activeBillItems.reduce((sum, item) => sum + calculateCommissionAmount(item.amount || 0, item.bet_type, round), 0)
+                                                                                    const billTotal = billItems.reduce((sum, item) => sum + (item.amount || 0), 0)
+                                                                                    const billCommission = billItems.reduce((sum, item) => sum + calculateCommissionAmount(item.amount || 0, item.bet_type, round), 0)
                                                                                     const isBillAllCancelled = billItems.length > 0 && billItems.every(item => item.is_deleted)
                                                                                     const billTime = new Date(billItems[0].created_at).toLocaleTimeString('th-TH', {
                                                                                         hour: '2-digit',
@@ -3520,19 +3519,19 @@ export default function UserDashboard() {
                                                                                     }
 
                                                                                     return (
-                                                                                        <div key={billId} className={`bill-card-new ${isExpandedBill ? 'expanded' : ''} ${isDealerSubmitted ? 'dealer-submitted' : ''} ${isBillAllCancelled ? 'is-cancelled' : ''}`} style={isBillAllCancelled ? { opacity: 0.75, border: '1px dashed #ef4444' } : {}}>
+                                                                                        <div key={billId} className={`bill-card-new ${isExpandedBill ? 'expanded' : ''} ${isDealerSubmitted ? 'dealer-submitted' : ''} ${isBillAllCancelled ? 'is-cancelled' : ''}`} style={isBillAllCancelled ? { background: 'rgba(239, 68, 68, 0.05)', border: '1.5px dashed #ef4444' } : {}}>
                                                                                             {/* Bill Header */}
                                                                                             <div
                                                                                                 className="bill-card-header"
                                                                                                 onClick={() => toggleBill(billId)}
-                                                                                                style={{ padding: '0.6rem 0.75rem', cursor: 'pointer' }}
+                                                                                                style={{ padding: '0.6rem 0.75rem', cursor: 'pointer', background: isBillAllCancelled ? 'rgba(239, 68, 68, 0.12)' : undefined }}
                                                                                             >
                                                                                                 {/* Line 1: [note] date time (N items) ฿✓ */}
                                                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
                                                                                                     {billItems[0]?.bill_note && (
-                                                                                                        <span style={{ fontWeight: '600', color: 'var(--color-text)' }}>{billItems[0].bill_note}</span>
+                                                                                                        <span style={{ fontWeight: '600', color: 'var(--color-text)', textDecoration: isBillAllCancelled ? 'line-through' : 'none' }}>{billItems[0].bill_note}</span>
                                                                                                     )}
-                                                                                                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
+                                                                                                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', textDecoration: isBillAllCancelled ? 'line-through' : 'none' }}>
                                                                                                         {billDate} {billTime}
                                                                                                     </span>
                                                                                                     <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
@@ -3540,17 +3539,17 @@ export default function UserDashboard() {
                                                                                                     </span>
                                                                                                     {billItems[0]?.is_paid && <span title="ชำระเงินแล้ว" style={{ color: 'var(--color-success)', fontSize: '0.85rem', fontWeight: '700' }}>฿✓</span>}
                                                                                                     {isBillAllCancelled && (
-                                                                                                        <span className="status-badge cancelled" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', fontWeight: 600, fontSize: '0.75rem', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>
+                                                                                                        <span className="status-badge cancelled" style={{ background: '#ef4444', color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', padding: '0.15rem 0.4rem', borderRadius: '4px', marginLeft: '0.4rem' }}>
                                                                                                             🚫 ยกเลิกแล้ว
                                                                                                         </span>
                                                                                                     )}
                                                                                                 </div>
                                                                                                 {/* Line 2: amount, commission, copy */}
                                                                                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.75rem' }}>
-                                                                                                    <span style={{ fontWeight: '600', fontSize: '0.95rem', textDecoration: isBillAllCancelled ? 'line-through' : 'none', color: isBillAllCancelled ? 'var(--color-text-muted)' : 'inherit' }}>
+                                                                                                    <span style={{ fontWeight: '600', fontSize: '0.95rem', textDecoration: isBillAllCancelled ? 'line-through' : 'none', color: isBillAllCancelled ? '#ef4444' : 'inherit' }}>
                                                                                                         {round.currency_symbol}{billTotal.toLocaleString()}
                                                                                                     </span>
-                                                                                                    <span style={{ fontSize: '0.8rem', color: 'var(--color-warning)', textDecoration: isBillAllCancelled ? 'line-through' : 'none' }}>
+                                                                                                    <span style={{ fontSize: '0.8rem', color: isBillAllCancelled ? '#ef4444' : 'var(--color-warning)', textDecoration: isBillAllCancelled ? 'line-through' : 'none' }}>
                                                                                                         คอม {round.currency_symbol}{Math.round(billCommission).toLocaleString()}
                                                                                                     </span>
                                                                                                     <button
