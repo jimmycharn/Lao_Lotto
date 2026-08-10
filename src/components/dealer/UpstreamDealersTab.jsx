@@ -17,7 +17,7 @@ import { confirmDialog } from '../../utils/confirmDialog'
 import UpstreamDealerSettings from './UpstreamDealerSettings'
 
 // Upstream Dealers Tab - For managing dealers to transfer bets to
-export default function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loadingUpstream, setLoadingUpstream }) {
+export default function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loadingUpstream, setLoadingUpstream, fetchUpstreamDealers: fetchUpstreamDealersProp }) {
     const { toast } = useToast()
     const [showAddModal, setShowAddModal] = useState(false)
     const [saving, setSaving] = useState(false)
@@ -39,6 +39,9 @@ export default function UpstreamDealersTab({ user, upstreamDealers, setUpstreamD
     }, [user?.id])
 
     async function fetchUpstreamDealers() {
+        if (fetchUpstreamDealersProp) {
+            return fetchUpstreamDealersProp()
+        }
         if (!user?.id) {
             setLoadingUpstream(false)
             return

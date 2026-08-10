@@ -690,6 +690,83 @@ export default function Dealer() {
         fetchDealerCredit()
         fetchAssignedBankAccount()
         fetchTopupHistory()
+        fetchUpstreamDealers()
+    }
+
+    // Fetch upstream dealers (เจ้ามือตีออก)
+    async function fetchUpstreamDealers() {
+        if (!user?.id) return
+        setLoadingUpstream(true)
+        
+        const timeoutId = setTimeout(() => {
+            console.warn('Fetch upstream dealers timeout')
+            setLoadingUpstream(false)
+        }, 10000)
+        
+        try {
+            // Fetch manual upstream connections
+            const { data: manualData, error: manualError } = await supabase
+                .from('dealer_upstream_connections')
+                .select(`
+                    *,
+                    upstream_profile:upstream_dealer_id (
+                        id, full_name, email, phone
+                    )
+                `)
+                .eq('dealer_id', user.id)
+                .order('created_at', { ascending: false })
+
+            // Fetch dealers that user was a member of (excluding self)
+            const { data: membershipData, error: membershipError } = await supabase
+                .from('user_dealer_memberships')
+                .select(`
+                    dealer_id,
+                    status,
+                    created_at,
+                    profiles:dealer_id (
+                        id, full_name, email, phone, role
+                    )
+                `)
+                .eq('user_id', user.id)
+                .eq('status', 'active')
+                .neq('dealer_id', user.id)
+
+            clearTimeout(timeoutId)
+            
+            let allDealers = []
+            
+            if (!manualError && manualData) {
+                allDealers = [...manualData]
+            }
+            
+            if (!membershipError && membershipData) {
+                const membershipDealers = membershipData
+                    .filter(m => m.profiles?.id && m.profiles?.role === 'dealer')
+                    .map(m => ({
+                        id: `membership-${m.dealer_id}`,
+                        dealer_id: user.id,
+                        upstream_dealer_id: m.dealer_id,
+                        upstream_name: m.profiles?.full_name || m.profiles?.email || 'ไม่ระบุชื่อ',
+                        upstream_contact: m.profiles?.phone || m.profiles?.email || '',
+                        upstream_profile: m.profiles,
+                        is_linked: true,
+                        is_from_membership: true,
+                        created_at: m.created_at
+                    }))
+                
+                const existingIds = allDealers.map(d => d.upstream_dealer_id).filter(Boolean)
+                const newDealers = membershipDealers.filter(d => !existingIds.includes(d.upstream_dealer_id))
+                allDealers = [...allDealers, ...newDealers]
+            }
+            
+            setUpstreamDealers(allDealers)
+        } catch (error) {
+            clearTimeout(timeoutId)
+            console.error('Error fetching upstream dealers:', error)
+            setUpstreamDealers([])
+        } finally {
+            setLoadingUpstream(false)
+        }
     }
 
     // Fetch round history for dealer
@@ -2741,6 +2818,7 @@ export default function Dealer() {
                             setUpstreamDealers={setUpstreamDealers}
                             loadingUpstream={loadingUpstream}
                             setLoadingUpstream={setLoadingUpstream}
+                            fetchUpstreamDealers={fetchUpstreamDealers}
                         />
                     )}
 
@@ -5954,7 +6032,7 @@ function UpstreamDealerAccordionItem({ dealer, isExpanded, onToggle, onEdit, onD
 }
 
 // Upstream Dealers Tab - For managing dealers to transfer bets to
-function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loadingUpstream, setLoadingUpstream }) {
+function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loadingUpstream, setLoadingUpstream, fetchUpstreamDealers: fetchUpstreamDealersProp }) {
     const [showAddModal, setShowAddModal] = useState(false)
     const [saving, setSaving] = useState(false)
     const [editingDealer, setEditingDealer] = useState(null)
@@ -5975,6 +6053,9 @@ function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loading
     }, [user?.id])
 
     async function fetchUpstreamDealers() {
+        if (fetchUpstreamDealersProp) {
+            return fetchUpstreamDealersProp()
+        }
         if (!user?.id) {
             setLoadingUpstream(false)
             return
