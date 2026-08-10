@@ -2430,8 +2430,8 @@ export default function RoundAccordionItem({
     const handleCopyTotal = async () => {
         // Use filtered submissions based on current filter
         const submissionsToCopy = inlineUserFilter === 'all' 
-            ? inlineSubmissions 
-            : inlineSubmissions.filter(s => (s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ') === inlineUserFilter)
+            ? inlineSubmissions.filter(s => !s.is_deleted) 
+            : inlineSubmissions.filter(s => !s.is_deleted && (s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ') === inlineUserFilter)
         
         if (submissionsToCopy.length === 0) {
             toast.warning('ไม่มีรายการที่จะคัดลอก')
@@ -3657,6 +3657,7 @@ export default function RoundAccordionItem({
                                             {/* แสดงผลแบบตาราง 2 แถว: หัวข้อ + ค่า */}
                                             {(() => {
                                                 const filtered = inlineSubmissions.filter(s => {
+                                                    if (s.is_deleted) return false
                                                     const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
                                                     if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
                                                     if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
@@ -4482,7 +4483,7 @@ export default function RoundAccordionItem({
                                             {(() => {
                                                 // Calculate remaining amounts (submissions - transfers) grouped by numbers+bet_type
                                                 const remainingByKey = {}
-                                                inlineSubmissions.forEach(s => {
+                                                inlineSubmissions.filter(s => !s.is_deleted).forEach(s => {
                                                     const key = `${s.numbers}|${s.bet_type}`
                                                     if (!remainingByKey[key]) {
                                                         remainingByKey[key] = {
@@ -5265,7 +5266,7 @@ export default function RoundAccordionItem({
                 onClose={() => setShowAIAnalysis(false)}
                 round={round}
                 user={user}
-                submissions={inlineSubmissions}
+                submissions={inlineSubmissions.filter(s => !s.is_deleted)}
                 transfers={inlineTransfers}
                 userSettingsMap={summaryData.userSettings}
                 onApplyRecommendations={(recommendations) => {
