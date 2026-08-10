@@ -1582,7 +1582,7 @@ export default function Dealer() {
                     currency_name: roundForm.currency_name,
                     set_prices: roundForm.set_prices,
                     notify_close_to_groups: roundForm.notify_close_to_groups,
-                    is_active: true
+                    is_active: false
                 })
                 .select()
                 .single()
@@ -1619,7 +1619,7 @@ export default function Dealer() {
 
             setShowCreateModal(false)
             fetchData()
-            toast.success('สร้างงวดสำเร็จ!')
+            toast.success('สร้างงวดสำเร็จ! (ปิดใช้งานไว้จนกว่าจะกดเปิด)')
 
         } catch (error) {
             console.error('Error creating round:', error)
@@ -1630,7 +1630,7 @@ export default function Dealer() {
     // Toggle round active status (show/hide for users)
     async function handleToggleRoundActive(round) {
         try {
-            const currentActive = round.is_active !== false
+            const currentActive = round.is_active === true
             const newActive = !currentActive
             const { error } = await supabase
                 .from('lottery_rounds')

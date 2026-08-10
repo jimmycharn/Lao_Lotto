@@ -2822,7 +2822,7 @@ export default function RoundAccordionItem({
                             {/* Row 4: Active toggle + เขียนโพย + AI วิเคราะห์ */}
                             <div className="open-round-extra-actions">
                                 {(() => {
-                                    const isRoundActive = round.is_active !== false
+                                    const isRoundActive = round.is_active === true
                                     return (
                                         <button 
                                             className={`extra-action-btn ${isRoundActive ? 'active-on' : 'active-off'}`}
