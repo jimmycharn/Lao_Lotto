@@ -1582,7 +1582,7 @@ export default function Dealer() {
                     currency_name: roundForm.currency_name,
                     set_prices: roundForm.set_prices,
                     notify_close_to_groups: roundForm.notify_close_to_groups,
-                    is_active: false
+                    is_active: true
                 })
                 .select()
                 .single()
@@ -1624,6 +1624,26 @@ export default function Dealer() {
         } catch (error) {
             console.error('Error creating round:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+
+    // Toggle round active status (show/hide for users)
+    async function handleToggleRoundActive(round) {
+        try {
+            const currentActive = round.is_active !== false
+            const newActive = !currentActive
+            const { error } = await supabase
+                .from('lottery_rounds')
+                .update({ is_active: newActive })
+                .eq('id', round.id)
+
+            if (error) throw error
+
+            toast.success(newActive ? 'เปิดใช้งานงวดสำเร็จ (แสดงให้สมาชิกเห็น)' : 'ปิดใช้งานงวดสำเร็จ (ซ่อนจากสมาชิก)')
+            setRounds(prev => prev.map(r => r.id === round.id ? { ...r, is_active: newActive } : r))
+        } catch (err) {
+            console.error('Error toggling round active status:', err)
+            toast.error('เกิดข้อผิดพลาดในการเปลี่ยนสถานะงวด: ' + err.message)
         }
     }
 
@@ -2369,6 +2389,7 @@ export default function Dealer() {
                                                     onShowNumberLimits={() => { setSelectedRound(round); setShowNumberLimitsModal(true); }}
                                                     onDeleteRound={() => handleDeleteRound(round.id, round.status)}
                                                     onShowResults={() => { setSelectedRound(round); setShowResultsModal(true); }}
+                                                    onToggleActive={() => handleToggleRoundActive(round)}
                                                     getStatusBadge={(r) => getStatusBadge(r, true)}
                                                     formatDate={formatDate}
                                                     formatTime={formatTime}

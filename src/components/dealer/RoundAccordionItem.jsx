@@ -2819,13 +2819,18 @@ export default function RoundAccordionItem({
 
                             {/* Row 4: Active toggle + เขียนโพย + AI วิเคราะห์ */}
                             <div className="open-round-extra-actions">
-                                <button 
-                                    className={`extra-action-btn ${round.is_active ? 'active-on' : 'active-off'}`}
-                                    onClick={(e) => { e.stopPropagation(); onToggleActive(); }} 
-                                    title={round.is_active ? 'ปิดใช้งาน (ซ่อนจาก user)' : 'เปิดใช้งาน (แสดงให้ user เห็น)'}
-                                >
-                                    <FiPower /> {round.is_active ? 'เปิดอยู่' : 'ปิดอยู่'}
-                                </button>
+                                {(() => {
+                                    const isRoundActive = round.is_active !== false
+                                    return (
+                                        <button 
+                                            className={`extra-action-btn ${isRoundActive ? 'active-on' : 'active-off'}`}
+                                            onClick={(e) => { e.stopPropagation(); if (onToggleActive) onToggleActive(); }} 
+                                            title={isRoundActive ? 'ปิดใช้งาน (ซ่อนจากสมาชิก)' : 'เปิดใช้งาน (แสดงให้สมาชิกเห็น)'}
+                                        >
+                                            <FiPower /> {isRoundActive ? 'เปิดอยู่' : 'ปิดอยู่'}
+                                        </button>
+                                    )
+                                })()}
                                 {keyableMembers.length > 0 && (
                                     <button
                                         className="extra-action-btn write-bet-btn"
