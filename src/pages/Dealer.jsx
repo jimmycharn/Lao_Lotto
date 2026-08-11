@@ -1082,7 +1082,7 @@ export default function Dealer() {
                     const totalPayout = submissions?.reduce((sum, s) => sum + (s.prize_amount || 0), 0) || 0
 
                     const transferredAmount = transfers?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0
-                    const upstreamCommission = transfers?.reduce((sum, t) => sum + (t.commission_earned || 0), 0) || 0
+                    const upstreamCommission = transfers?.reduce((sum, t) => sum + calculateTransferCommission(t), 0) || 0
                     const upstreamWinnings = transfers?.reduce((sum, t) => sum + (t.winnings || 0), 0) || 0
 
                     const memberProfit = totalAmount - totalCommission - totalPayout
