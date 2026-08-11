@@ -2821,7 +2821,7 @@ export default function Dealer() {
                                                                                                             </tr>
                                                                                                         </thead>
                                                                                                         <tbody>
-                                                                                                            {transfers.map(t => {
+                                                                                                            {effectiveTransfers.map(t => {
                                                                                                                 const upstreamName = t.upstream_dealer?.full_name || t.upstream_dealer?.email || 'เจ้ามือ'
                                                                                                                 const tProfit = -(t.amount || 0) + (t.commission_earned || 0) + (t.winnings || 0)
                                                                                                                 return (
