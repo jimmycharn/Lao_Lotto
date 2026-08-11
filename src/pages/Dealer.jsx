@@ -334,7 +334,7 @@ export default function Dealer() {
             const inProfit = inAmt - inComm - inPay
 
             const outAmt = h.transferred_amount || 0
-            const outComm = h.upstream_commission || (outAmt > 0 ? Math.round(outAmt * 0.25) : 0)
+            const outComm = h.upstream_commission || (outAmt > 0 ? Math.round(outAmt * (25 / 120)) : 0)
             const outWin = h.upstream_winnings || 0
             const outProfit = -outAmt + outComm + outWin
 
@@ -2758,11 +2758,20 @@ export default function Dealer() {
                                                          const hInPay = history.total_payout || 0
                                                          const hInProfit = hInAmt - hInComm - hInPay
 
-                                                         const hOutAmt = history.transferred_amount || 0
-                                                         const hOutComm = history.upstream_commission || (hOutAmt > 0 ? Math.round(hOutAmt * 0.25) : 0)
-                                                         const hOutWin = history.upstream_winnings || 0
-                                                         const hOutProfit = -hOutAmt + hOutComm + hOutWin
+                                                         const rawTransfers = details?.transfers || []
+                                                         let hOutAmt = history.transferred_amount || 0
+                                                         let hOutComm = history.upstream_commission || 0
+                                                         let hOutWin = history.upstream_winnings || 0
 
+                                                         if (rawTransfers.length > 0) {
+                                                             hOutAmt = rawTransfers.reduce((sum, t) => sum + (t.amount || 0), 0)
+                                                             hOutComm = rawTransfers.reduce((sum, t) => sum + calculateTransferCommission(t), 0)
+                                                             hOutWin = rawTransfers.reduce((sum, t) => sum + (t.winnings || 0), 0)
+                                                         } else if (!hOutComm && hOutAmt > 0) {
+                                                             hOutComm = Math.round(hOutAmt * (25 / 120))
+                                                         }
+
+                                                         const hOutProfit = -hOutAmt + hOutComm + hOutWin
                                                          const cardProfit = hInProfit + hOutProfit
                                                         return (
                                                             <div key={history.id} className={`round-accordion-item ${history.lottery_type}`} style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
