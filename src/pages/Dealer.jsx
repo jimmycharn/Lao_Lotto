@@ -163,7 +163,7 @@ export default function Dealer() {
             if (userIds.length > 0) {
                 const { data: profilesData } = await supabase
                     .from('profiles')
-                    .select('id, full_name, email, line_display_name')
+                    .select('id, full_name, email, phone')
                     .in('id', userIds)
                 if (profilesData) {
                     profilesData.forEach(p => {
