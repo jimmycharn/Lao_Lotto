@@ -75,6 +75,31 @@ import MemberAccordionItem from '../components/dealer/MemberAccordionItem'
 
 // RoundAccordionItem is now imported from separate file
 
+
+// Helper function to calculate layoff transfer commission (4_set is fixed Baht per set, others are %)
+function calculateTransferCommission(t, setPrice = 120) {
+    if (t.commission_earned !== undefined && t.commission_earned !== null && Number(t.commission_earned) > 0) {
+        return Number(t.commission_earned)
+    }
+    const amt = Number(t.amount || 0)
+    if (amt <= 0) return 0
+
+    if (t.bet_type === '4_set') {
+        // 4_set (หวยชุด 4 ตัว) commission is FIXED BAHT PER SET (25 Baht / set of 120 Baht)
+        const numSets = Math.max(1, Math.floor(amt / setPrice))
+        const commPerSet = 25
+        return numSets * commPerSet
+    } else if (t.bet_type === '3_top' || t.bet_type === '3_tod' || t.bet_type === '3_front' || t.bet_type === '3_straight') {
+        return Math.round(amt * 0.30)
+    } else if (t.bet_type === '2_top' || t.bet_type === '2_bottom' || t.bet_type === '2_front' || t.bet_type === '2_spread') {
+        return Math.round(amt * 0.28)
+    } else if (t.bet_type === '1_top' || t.bet_type === '1_bottom' || t.bet_type === 'run_top') {
+        return Math.round(amt * 0.12)
+    } else {
+        return Math.round(amt * 0.25)
+    }
+}
+
 export default function Dealer() {
     const { user, profile, isDealer, isSuperAdmin, isAccountSuspended } = useAuth()
     const { toast } = useToast()
@@ -211,7 +236,13 @@ export default function Dealer() {
                     .from('bet_transfers')
                     .select('*, upstream_dealer:upstream_dealer_id(full_name, email, phone)')
                     .eq('round_id', historyItem.round_id)
-                if (transData) transfers = transData
+                if (transData) {
+                    transfers = transData.map(t => ({
+                        ...t,
+                        commission_earned: calculateTransferCommission(t),
+                        winnings: t.winnings || 0
+                    }))
+                }
             }
 
             const userHistoriesWithProfiles = userHistories.map(uh => ({
@@ -303,7 +334,7 @@ export default function Dealer() {
             const inProfit = inAmt - inComm - inPay
 
             const outAmt = h.transferred_amount || 0
-            const outComm = h.upstream_commission || 0
+            const outComm = h.upstream_commission || (outAmt > 0 ? Math.round(outAmt * 0.25) : 0)
             const outWin = h.upstream_winnings || 0
             const outProfit = -outAmt + outComm + outWin
 
@@ -317,7 +348,7 @@ export default function Dealer() {
             acc.upstream_winnings += outWin
             acc.outgoing_profit += outProfit
 
-            acc.profit += (h.profit !== undefined ? h.profit : (inProfit + outProfit))
+            acc.profit = acc.incoming_profit + acc.outgoing_profit
             return acc
         }, {
             total_amount: 0,
@@ -2787,7 +2818,7 @@ export default function Dealer() {
                                                                                         const dName = t.upstream_dealer?.full_name || t.target_dealer_name || "เจ้ามือ"
                                                                                         if (!groupedMap[dName]) {
                                                                                             groupedMap[dName] = {
-                                                                                                id: t.id,
+                                                                                                id: t.id || dName,
                                                                                                 dealerName: dName,
                                                                                                 entriesCount: 0,
                                                                                                 amount: 0,
@@ -2795,11 +2826,9 @@ export default function Dealer() {
                                                                                                 winnings: 0
                                                                                             }
                                                                                         }
-                                                                                        const amt = t.amount || 0
-                                                                                        const commRate = t.bet_type === "3_top" || t.bet_type === "3_tod" ? 0.30 :
-                                                                                                         t.bet_type === "2_top" || t.bet_type === "2_bottom" ? 0.28 : 0.25
-                                                                                        const comm = t.commission_earned !== undefined ? t.commission_earned : Math.round(amt * commRate)
-                                                                                        const win = t.winnings || 0
+                                                                                        const amt = Number(t.amount || 0)
+                                                                                        const comm = calculateTransferCommission(t)
+                                                                                        const win = Number(t.winnings || 0)
 
                                                                                         groupedMap[dName].entriesCount += 1
                                                                                         groupedMap[dName].amount += amt
@@ -2808,15 +2837,19 @@ export default function Dealer() {
                                                                                     })
                                                                                 }
 
+                                                                                const outAmt = Number(history.transferred_amount || 0)
+                                                                                const outComm = Number(history.upstream_commission || (outAmt > 0 ? Math.round(outAmt * 0.25) : 0))
+                                                                                const outWin = Number(history.upstream_winnings || 0)
+
                                                                                 const effectiveTransfers = Object.values(groupedMap).length > 0 
                                                                                     ? Object.values(groupedMap) 
-                                                                                    : ((history.transferred_amount || 0) > 0 ? [{
+                                                                                    : (outAmt > 0 ? [{
                                                                                         id: "archived_transfer_" + history.id,
                                                                                         dealerName: "เจ้ามือ (สรุปในประวัติ)",
-                                                                                        entriesCount: "-",
-                                                                                        amount: history.transferred_amount,
-                                                                                        commission_earned: history.upstream_commission,
-                                                                                        winnings: history.upstream_winnings
+                                                                                        entriesCount: history.total_entries || "-",
+                                                                                        amount: outAmt,
+                                                                                        commission_earned: outComm,
+                                                                                        winnings: outWin
                                                                                     }] : [])
                                                                                 
                                                                                 return (
