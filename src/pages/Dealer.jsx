@@ -157,6 +157,38 @@ export default function Dealer() {
                 }
             }
 
+            // 2.5 Fallback for active closed/announced rounds not yet archived into user_round_history
+            if (userHistories.length === 0 && historyItem.round_id) {
+                const { data: subData } = await supabase
+                    .from('submissions')
+                    .select('*, profiles:user_id(id, full_name, email, phone)')
+                    .eq('round_id', historyItem.round_id)
+                    .eq('is_deleted', false)
+
+                if (subData && subData.length > 0) {
+                    const userSubmissions = {}
+                    subData.forEach(s => {
+                        const uid = s.user_id
+                        if (!userSubmissions[uid]) {
+                            userSubmissions[uid] = {
+                                id: s.id,
+                                user_id: uid,
+                                total_entries: 0,
+                                total_amount: 0,
+                                total_commission: 0,
+                                total_winnings: 0,
+                                profiles: s.profiles
+                            }
+                        }
+                        userSubmissions[uid].total_entries += 1
+                        userSubmissions[uid].total_amount += (s.amount || 0)
+                        userSubmissions[uid].total_commission += (s.commission_amount || 0)
+                        userSubmissions[uid].total_winnings += (s.prize_amount || 0)
+                    })
+                    userHistories = Object.values(userSubmissions)
+                }
+            }
+
             // 3. Populate profiles manually to ensure no PostgREST join relationship failure
             const userIds = Array.from(new Set(userHistories.map(uh => uh.user_id).filter(Boolean)))
             let profilesMap = {}
@@ -917,21 +949,94 @@ export default function Dealer() {
         }
     }
 
-    // Fetch round history for dealer
+    // Fetch round history for dealer (both archived round_history and active closed/announced rounds)
     async function fetchRoundHistory() {
         if (!user?.id) return
         setHistoryLoading(true)
         try {
-            const { data, error } = await supabase
+            // 1. Fetch archived rounds from round_history (without .limit(50))
+            const { data: dbHistoryList, error } = await supabase
                 .from('round_history')
                 .select('*')
                 .eq('dealer_id', user.id)
-                .order('deleted_at', { ascending: false })
-                .limit(50)
+                .order('created_at', { ascending: false })
 
-            if (!error && data) {
-                setRoundHistory(data)
+            if (error) throw error
+
+            const archivedRounds = dbHistoryList || []
+            const existingRoundIds = new Set()
+            archivedRounds.forEach(h => {
+                if (h.round_id) existingRoundIds.add(h.round_id)
+                if (h.id) existingRoundIds.add(h.id)
+            })
+
+            // 2. Fetch active closed or announced rounds from lottery_rounds
+            const { data: activeClosedRounds } = await supabase
+                .from('lottery_rounds')
+                .select('*')
+                .eq('dealer_id', user.id)
+                .in('status', ['closed', 'announced'])
+                .order('close_time', { ascending: false })
+
+            const activeHistoryItems = []
+            if (activeClosedRounds && activeClosedRounds.length > 0) {
+                for (const round of activeClosedRounds) {
+                    if (existingRoundIds.has(round.id)) continue
+
+                    // Fetch submissions for this active closed round
+                    const { data: submissions } = await supabase
+                        .from('submissions')
+                        .select('amount, commission_amount, prize_amount, is_winner, bet_type, numbers, is_deleted')
+                        .eq('round_id', round.id)
+                        .eq('is_deleted', false)
+
+                    // Fetch transfers for this active closed round
+                    const { data: transfers } = await supabase
+                        .from('bet_transfers')
+                        .select('*')
+                        .eq('round_id', round.id)
+
+                    const totalEntries = submissions?.length || 0
+                    const totalAmount = submissions?.reduce((sum, s) => sum + (s.amount || 0), 0) || 0
+                    const totalCommission = submissions?.reduce((sum, s) => sum + (s.commission_amount || 0), 0) || 0
+                    const totalPayout = submissions?.reduce((sum, s) => sum + (s.prize_amount || 0), 0) || 0
+
+                    const transferredAmount = transfers?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0
+                    const upstreamCommission = transfers?.reduce((sum, t) => sum + (t.commission_earned || 0), 0) || 0
+                    const upstreamWinnings = transfers?.reduce((sum, t) => sum + (t.winnings || 0), 0) || 0
+
+                    const memberProfit = totalAmount - totalCommission - totalPayout
+                    const upstreamProfit = transferredAmount - upstreamCommission - upstreamWinnings
+                    const profit = memberProfit + upstreamProfit
+
+                    activeHistoryItems.push({
+                        id: round.id,
+                        round_id: round.id,
+                        dealer_id: user.id,
+                        lottery_type: round.lottery_type,
+                        round_date: round.draw_date || round.open_time?.split('T')[0],
+                        open_time: round.open_time,
+                        close_time: round.close_time,
+                        total_entries: totalEntries,
+                        total_amount: totalAmount,
+                        total_commission: totalCommission,
+                        total_payout: totalPayout,
+                        transferred_amount: transferredAmount,
+                        upstream_commission: upstreamCommission,
+                        upstream_winnings: upstreamWinnings,
+                        profit: profit,
+                        is_active_closed: true
+                    })
+                }
             }
+
+            const combinedHistory = [...activeHistoryItems, ...archivedRounds].sort((a, b) => {
+                const dateA = new Date(a.round_date || a.created_at || a.open_time).getTime()
+                const dateB = new Date(b.round_date || b.created_at || b.open_time).getTime()
+                return dateB - dateA
+            })
+
+            setRoundHistory(combinedHistory)
         } catch (error) {
             console.error('Error fetching round history:', error)
         } finally {
