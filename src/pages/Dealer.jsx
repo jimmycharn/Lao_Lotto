@@ -2747,7 +2747,16 @@ export default function Dealer() {
                                                                         ) : (
                                                                             (() => {
                                                                                 const userHistories = details?.userHistories || []
-                                                                                const transfers = details?.transfers || []
+                                                                                const rawTransfers = details?.transfers || []
+                                                                                const effectiveTransfers = rawTransfers.length > 0 ? rawTransfers : (
+                                                                                    (history.transferred_amount || 0) > 0 ? [{
+                                                                                        id: 'archived_transfer_' + history.id,
+                                                                                        amount: history.transferred_amount,
+                                                                                        commission_earned: history.upstream_commission,
+                                                                                        winnings: history.upstream_winnings,
+                                                                                        upstream_dealer: { full_name: 'เจ้ามือ (สรุปในประวัติ)', email: '' }
+                                                                                    }] : []
+                                                                                )
                                                                                 
                                                                                 return (
                                                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -2795,7 +2804,7 @@ export default function Dealer() {
                                                                                         </div>
 
                                                                                         {/* Outgoing Layoff Bet Transfers Table */}
-                                                                                        {transfers.length > 0 && (
+                                                                                        {effectiveTransfers.length > 0 && (
                                                                                             <div>
                                                                                                 <h4 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.75rem', color: '#ef4444' }}>
                                                                                                     🚀 รายละเอียดการตีออกให้เจ้ามือในงวดนี้
