@@ -2753,6 +2753,17 @@ export default function Dealer() {
                                                     {filteredRoundHistory.map(history => {
                                                         const isExpanded = expandedHistoryId === history.id
                                                         const details = historyDetails[history.id]
+                                                         const hInAmt = history.total_amount || 0
+                                                         const hInComm = history.total_commission || 0
+                                                         const hInPay = history.total_payout || 0
+                                                         const hInProfit = hInAmt - hInComm - hInPay
+
+                                                         const hOutAmt = history.transferred_amount || 0
+                                                         const hOutComm = history.upstream_commission || (hOutAmt > 0 ? Math.round(hOutAmt * 0.25) : 0)
+                                                         const hOutWin = history.upstream_winnings || 0
+                                                         const hOutProfit = -hOutAmt + hOutComm + hOutWin
+
+                                                         const cardProfit = hInProfit + hOutProfit
                                                         return (
                                                             <div key={history.id} className={`round-accordion-item ${history.lottery_type}`} style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
                                                                 {/* Accordion Header - Clickable */}
@@ -2792,8 +2803,8 @@ export default function Dealer() {
                                                                         </div>
                                                                         <div style={{ textAlign: 'center' }}>
                                                                             <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>กำไร</div>
-                                                                            <div style={{ fontWeight: '600', color: history.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                                                                                {history.profit >= 0 ? '+' : ''}฿{history.profit?.toLocaleString()}
+                                                                            <div style={{ fontWeight: '600', color: cardProfit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                                                                {cardProfit >= 0 ? '+' : ''}฿{cardProfit.toLocaleString()}
                                                                             </div>
                                                                         </div>
                                                                     </div>
