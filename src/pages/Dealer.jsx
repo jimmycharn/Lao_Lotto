@@ -2696,9 +2696,9 @@ export default function Dealer() {
                                                         <span style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--color-warning)" }}>{filteredRoundHistory.length} งวด</span>
                                                     </div>
                                                     <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                                                        <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>💵 กำไรสุทธิรวมทั้งหมด (ยอดรับ + ยอดส่ง):</span>
+                                                        <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>💵 กำไรสุทธิ:</span>
                                                         <span style={{ fontSize: "1.2rem", fontWeight: 800, color: historyTotals.profit >= 0 ? "var(--color-success)" : "var(--color-danger)" }}>
-                                                            {historyTotals.profit >= 0 ? "+" : ""}฿{Math.round(historyTotals.profit).toLocaleString()}
+                                                            {historyTotals.profit >= 0 ? "+฿" : "-฿"}{Math.abs(Math.round(historyTotals.profit)).toLocaleString()}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -2710,7 +2710,7 @@ export default function Dealer() {
                                                         <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--color-success)", marginBottom: "0.6rem", display: "flex", justifyContent: "space-between" }}>
                                                             <span>🟢 ยอดรับ (จากสมาชิก)</span>
                                                             <span style={{ color: historyTotals.incoming_profit >= 0 ? "var(--color-success)" : "var(--color-danger)" }}>
-                                                                กำไร: {historyTotals.incoming_profit >= 0 ? "+" : ""}฿{Math.round(historyTotals.incoming_profit).toLocaleString()}
+                                                                กำไร: {historyTotals.incoming_profit >= 0 ? "+฿" : "-฿"}{Math.abs(Math.round(historyTotals.incoming_profit)).toLocaleString()}
                                                             </span>
                                                         </div>
                                                         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.5rem", textAlign: "center", fontSize: "0.8rem" }}>
@@ -2734,7 +2734,7 @@ export default function Dealer() {
                                                         <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#ef4444", marginBottom: "0.6rem", display: "flex", justifyContent: "space-between" }}>
                                                             <span>🔴 ยอดส่ง (ตีออกให้เจ้ามือ)</span>
                                                             <span style={{ color: historyTotals.outgoing_profit >= 0 ? "var(--color-success)" : "#ef4444" }}>
-                                                                กำไร: {historyTotals.outgoing_profit >= 0 ? "+" : ""}฿{Math.round(historyTotals.outgoing_profit).toLocaleString()}
+                                                                กำไร: {historyTotals.outgoing_profit >= 0 ? "+฿" : "-฿"}{Math.abs(Math.round(historyTotals.outgoing_profit)).toLocaleString()}
                                                             </span>
                                                         </div>
                                                         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.5rem", textAlign: "center", fontSize: "0.8rem" }}>
@@ -2927,7 +2927,7 @@ export default function Dealer() {
                                                                                                                         <td style={{ padding: "0.5rem", textAlign: "right", color: "var(--color-warning)" }}>฿{Math.round(uh.total_commission || 0).toLocaleString()}</td>
                                                                                                                         <td style={{ padding: "0.5rem", textAlign: "right", color: "var(--color-danger)" }}>฿{(uh.total_winnings || 0).toLocaleString()}</td>
                                                                                                                         <td style={{ padding: "0.5rem", textAlign: "right", fontWeight: 600, color: dealerProfit >= 0 ? "var(--color-success)" : "var(--color-danger)" }}>
-                                                                                                                            {dealerProfit >= 0 ? "+" : ""}฿{Math.round(dealerProfit).toLocaleString()}
+                                                                                                                            {dealerProfit >= 0 ? "+฿" : "-฿"}{Math.abs(Math.round(dealerProfit)).toLocaleString()}
                                                                                                                         </td>
                                                                                                                     </tr>
                                                                                                                 )
@@ -2969,7 +2969,7 @@ export default function Dealer() {
                                                                                                                         <td style={{ padding: "0.5rem", textAlign: "right", color: "var(--color-success)" }}>+฿{Math.round(t.commission_earned || 0).toLocaleString()}</td>
                                                                                                                         <td style={{ padding: "0.5rem", textAlign: "right", color: "var(--color-success)" }}>+฿{(t.winnings || 0).toLocaleString()}</td>
                                                                                                                         <td style={{ padding: "0.5rem", textAlign: "right", fontWeight: 600, color: tProfit >= 0 ? "var(--color-success)" : "#ef4444" }}>
-                                                                                                                            {tProfit >= 0 ? "+" : ""}฿{Math.round(tProfit).toLocaleString()}
+                                                                                                                            {tProfit >= 0 ? "+฿" : "-฿"}{Math.abs(Math.round(tProfit)).toLocaleString()}
                                                                                                                         </td>
                                                                                                                     </tr>
                                                                                                                 )
