@@ -345,7 +345,7 @@ export default function Dealer() {
             const inProfit = inAmt - inComm - inPay
 
             const outAmt = h.transferred_amount || 0
-            const outComm = h.upstream_commission || (outAmt > 0 ? Math.round(outAmt * (25 / 120)) : 0)
+            const outComm = Number(h.upstream_commission || 0)
             const outWin = h.upstream_winnings || 0
             const outProfit = -outAmt + outComm + outWin
 
@@ -2789,7 +2789,7 @@ export default function Dealer() {
                                                              hOutComm = rawTransfers.reduce((sum, t) => sum + calculateTransferCommission(t), 0)
                                                              hOutWin = rawTransfers.reduce((sum, t) => sum + (t.winnings || 0), 0)
                                                          } else if (!hOutComm && hOutAmt > 0) {
-                                                             hOutComm = Math.round(hOutAmt * (25 / 120))
+                                                             hOutComm = Number(history.upstream_commission || 0)
                                                          }
 
                                                          const hOutProfit = -hOutAmt + hOutComm + hOutWin
@@ -2879,7 +2879,7 @@ export default function Dealer() {
                                                                                 }
 
                                                                                 const outAmt = Number(history.transferred_amount || 0)
-                                                                                const outComm = Number(history.upstream_commission || (outAmt > 0 ? Math.round(outAmt * (25 / 120)) : 0))
+                                                                                 const outComm = Number(history.upstream_commission || 0)
                                                                                 const outWin = Number(history.upstream_winnings || 0)
 
                                                                                 const effectiveTransfers = Object.values(groupedMap).length > 0 
