@@ -130,28 +130,59 @@ export default function Dealer() {
         }))
 
         try {
-            let query = supabase
-                .from('user_round_history')
-                .select('*, profiles:user_id(full_name, email, line_display_name)')
+            let userHistories = []
 
+            // 1. First try querying user_round_history by round_id
             if (historyItem.round_id) {
-                query = query.eq('round_id', historyItem.round_id)
-            } else {
-                query = query
+                const { data: byRoundId, error: err1 } = await supabase
+                    .from('user_round_history')
+                    .select('*')
                     .eq('dealer_id', user.id)
-                    .eq('round_date', historyItem.round_date)
-                    .eq('lottery_type', historyItem.lottery_type)
+                    .eq('round_id', historyItem.round_id)
+                if (!err1 && byRoundId && byRoundId.length > 0) {
+                    userHistories = byRoundId
+                }
             }
 
-            const { data: userHistories, error: uhErr } = await query
-            if (uhErr) console.error('Error fetching user_round_history:', uhErr)
+            // 2. Fallback: try querying user_round_history by dealer_id, lottery_type, round_date
+            if (userHistories.length === 0) {
+                const { data: byDateType, error: err2 } = await supabase
+                    .from('user_round_history')
+                    .select('*')
+                    .eq('dealer_id', user.id)
+                    .eq('lottery_type', historyItem.lottery_type)
+                    .eq('round_date', historyItem.round_date)
+                if (!err2 && byDateType && byDateType.length > 0) {
+                    userHistories = byDateType
+                }
+            }
+
+            // 3. Populate profiles manually to ensure no PostgREST join relationship failure
+            const userIds = Array.from(new Set(userHistories.map(uh => uh.user_id).filter(Boolean)))
+            let profilesMap = {}
+            if (userIds.length > 0) {
+                const { data: profilesData } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, email, line_display_name')
+                    .in('id', userIds)
+                if (profilesData) {
+                    profilesData.forEach(p => {
+                        profilesMap[p.id] = p
+                    })
+                }
+            }
+
+            const userHistoriesWithProfiles = userHistories.map(uh => ({
+                ...uh,
+                profiles: profilesMap[uh.user_id] || null
+            }))
 
             setHistoryDetails(prev => ({
                 ...prev,
                 [historyId]: {
                     loading: false,
                     loaded: true,
-                    userHistories: userHistories || []
+                    userHistories: userHistoriesWithProfiles
                 }
             }))
         } catch (err) {
