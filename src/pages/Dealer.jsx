@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
@@ -29,6 +29,7 @@ import {
     FiLock,
     FiSend,
     FiRotateCcw,
+    FiChevronRight,
     FiChevronDown,
     FiChevronUp,
     FiSave,
@@ -113,6 +114,122 @@ export default function Dealer() {
     const [roundsTab, setRoundsTab] = useState('open') // 'open' | 'closed' | 'history'
     const [roundHistory, setRoundHistory] = useState([])
     const [historyLoading, setHistoryLoading] = useState(false)
+    const [historyMonthFilter, setHistoryMonthFilter] = useState('all')
+    const [historyTypeFilter, setHistoryTypeFilter] = useState('all')
+    const [expandedHistoryId, setExpandedHistoryId] = useState(null)
+    const [historyDetails, setHistoryDetails] = useState({})
+
+    // Fetch details for an expanded history round
+    async function fetchHistoryDetails(historyItem) {
+        const historyId = historyItem.id
+        if (historyDetails[historyId]?.loaded) return
+
+        setHistoryDetails(prev => ({
+            ...prev,
+            [historyId]: { ...prev[historyId], loading: true }
+        }))
+
+        try {
+            let query = supabase
+                .from('user_round_history')
+                .select('*, profiles:user_id(full_name, email, line_display_name)')
+
+            if (historyItem.round_id) {
+                query = query.eq('round_id', historyItem.round_id)
+            } else {
+                query = query
+                    .eq('dealer_id', user.id)
+                    .eq('round_date', historyItem.round_date)
+                    .eq('lottery_type', historyItem.lottery_type)
+            }
+
+            const { data: userHistories, error: uhErr } = await query
+            if (uhErr) console.error('Error fetching user_round_history:', uhErr)
+
+            setHistoryDetails(prev => ({
+                ...prev,
+                [historyId]: {
+                    loading: false,
+                    loaded: true,
+                    userHistories: userHistories || []
+                }
+            }))
+        } catch (err) {
+            console.error('Error fetching history details:', err)
+            setHistoryDetails(prev => ({
+                ...prev,
+                [historyId]: { loading: false, loaded: true, userHistories: [] }
+            }))
+        }
+    }
+
+    const toggleExpandHistory = (historyItem) => {
+        if (expandedHistoryId === historyItem.id) {
+            setExpandedHistoryId(null)
+        } else {
+            setExpandedHistoryId(historyItem.id)
+            fetchHistoryDetails(historyItem)
+        }
+    }
+
+    const availableHistoryMonths = useMemo(() => {
+        const monthSet = new Set()
+        roundHistory.forEach(h => {
+            const dateStr = h.round_date || h.created_at || h.open_time
+            if (dateStr) {
+                const d = new Date(dateStr)
+                if (!isNaN(d.getTime())) {
+                    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+                    monthSet.add(key)
+                }
+            }
+        })
+        return Array.from(monthSet).sort().reverse()
+    }, [roundHistory])
+
+    const formatMonthLabel = (yearMonthStr) => {
+        if (!yearMonthStr || yearMonthStr === 'all') return 'ทุกเดือน'
+        const [year, month] = yearMonthStr.split('-')
+        const d = new Date(parseInt(year), parseInt(month) - 1, 1)
+        return d.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })
+    }
+
+    const availableHistoryTypes = useMemo(() => {
+        const typeSet = new Set()
+        roundHistory.forEach(h => {
+            if (h.lottery_type) typeSet.add(h.lottery_type)
+        })
+        return Array.from(typeSet)
+    }, [roundHistory])
+
+    const filteredRoundHistory = useMemo(() => {
+        return roundHistory.filter(h => {
+            if (historyMonthFilter !== 'all') {
+                const dateStr = h.round_date || h.created_at || h.open_time
+                if (dateStr) {
+                    const d = new Date(dateStr)
+                    if (!isNaN(d.getTime())) {
+                        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+                        if (key !== historyMonthFilter) return false
+                    }
+                }
+            }
+            if (historyTypeFilter !== 'all') {
+                if (h.lottery_type !== historyTypeFilter) return false
+            }
+            return true
+        })
+    }, [roundHistory, historyMonthFilter, historyTypeFilter])
+
+    const historyTotals = useMemo(() => {
+        return filteredRoundHistory.reduce((acc, h) => {
+            acc.total_amount += (h.total_amount || 0)
+            acc.total_commission += (h.total_commission || 0)
+            acc.total_payout += (h.total_payout || 0)
+            acc.profit += (h.profit || 0)
+            return acc
+        }, { total_amount: 0, total_commission: 0, total_payout: 0, profit: 0 })
+    }, [filteredRoundHistory])
     const [upstreamDealers, setUpstreamDealers] = useState([])
     const [loadingUpstream, setLoadingUpstream] = useState(false)
     const [downstreamDealers, setDownstreamDealers] = useState([]) // Dealers who send bets TO us
@@ -2321,46 +2438,192 @@ export default function Dealer() {
                                             <p>ประวัติจะแสดงเมื่อคุณลบงวดหวยที่ปิดแล้ว</p>
                                         </div>
                                     ) : (
-                                        <div className="history-list">
-                                            {roundHistory.map(history => (
-                                                <div key={history.id} className={`round-accordion-item ${history.lottery_type}`}>
-                                                    <div className="round-accordion-header" style={{ cursor: 'default' }}>
-                                                        <div className="round-info">
-                                                            <span className={`lottery-badge ${history.lottery_type}`}>
-                                                                {LOTTERY_TYPES[history.lottery_type] || history.lottery_type}
-                                                            </span>
-                                                            <div className="round-details">
-                                                                <span className="round-name">
-                                                                    {LOTTERY_TYPES[history.lottery_type] || history.lottery_type}
-                                                                </span>
-                                                                <span className="round-date">
-                                                                    <FiCalendar /> {formatDate(history.round_date)}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                        <div className="history-stats" style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
-                                                            <div style={{ textAlign: 'center' }}>
-                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ยอดรวม</div>
-                                                                <div style={{ fontWeight: '600' }}>฿{history.total_amount?.toLocaleString()}</div>
-                                                            </div>
-                                                            <div style={{ textAlign: 'center' }}>
-                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ค่าคอม</div>
-                                                                <div style={{ fontWeight: '600' }}>฿{history.total_commission?.toLocaleString()}</div>
-                                                            </div>
-                                                            <div style={{ textAlign: 'center' }}>
-                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>จ่าย</div>
-                                                                <div style={{ fontWeight: '600', color: 'var(--color-danger)' }}>฿{history.total_payout?.toLocaleString()}</div>
-                                                            </div>
-                                                            <div style={{ textAlign: 'center' }}>
-                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>กำไร</div>
-                                                                <div style={{ fontWeight: '600', color: history.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                                                                    {history.profit >= 0 ? '+' : ''}฿{history.profit?.toLocaleString()}
-                                                                </div>
-                                                            </div>
-                                                        </div>
+                                        <div className="history-tab-container">
+                                            {/* Filters Bar: Month & Lottery Type */}
+                                            <div className="history-filters-bar" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1rem', background: 'var(--color-surface)', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: '200px' }}>
+                                                    <label style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>📅 เลือกเดือน:</label>
+                                                    <select 
+                                                        className="form-control" 
+                                                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', borderRadius: '6px' }}
+                                                        value={historyMonthFilter} 
+                                                        onChange={e => setHistoryMonthFilter(e.target.value)}
+                                                    >
+                                                        <option value="all">ทุกเดือน</option>
+                                                        {availableHistoryMonths.map(ym => (
+                                                            <option key={ym} value={ym}>{formatMonthLabel(ym)}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: '200px' }}>
+                                                    <label style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>🎯 ประเภทหวย:</label>
+                                                    <select 
+                                                        className="form-control" 
+                                                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', borderRadius: '6px' }}
+                                                        value={historyTypeFilter} 
+                                                        onChange={e => setHistoryTypeFilter(e.target.value)}
+                                                    >
+                                                        <option value="all">ทุกประเภทหวย</option>
+                                                        {availableHistoryTypes.map(type => (
+                                                            <option key={type} value={type}>{LOTTERY_TYPES[type] || type}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            {/* Aggregated Profit / Stats Summary Box */}
+                                            <div className="history-summary-stats-box" style={{ 
+                                                display: 'grid', 
+                                                gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', 
+                                                gap: '0.75rem', 
+                                                marginBottom: '1rem', 
+                                                background: 'rgba(255, 193, 7, 0.08)', 
+                                                padding: '1rem', 
+                                                borderRadius: '10px', 
+                                                border: '1px solid rgba(255, 193, 7, 0.2)' 
+                                            }}>
+                                                <div style={{ textAlign: 'center' }}>
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>จำนวนงวดที่เลือก</div>
+                                                    <div style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--color-warning)' }}>{filteredRoundHistory.length} งวด</div>
+                                                </div>
+                                                <div style={{ textAlign: 'center' }}>
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>ยอดรวมส่ง</div>
+                                                    <div style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--color-primary)' }}>฿{historyTotals.total_amount.toLocaleString()}</div>
+                                                </div>
+                                                <div style={{ textAlign: 'center' }}>
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>ค่าคอมรวม</div>
+                                                    <div style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--color-warning)' }}>฿{Math.round(historyTotals.total_commission).toLocaleString()}</div>
+                                                </div>
+                                                <div style={{ textAlign: 'center' }}>
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>จ่ายรวม</div>
+                                                    <div style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--color-danger)' }}>฿{historyTotals.total_payout.toLocaleString()}</div>
+                                                </div>
+                                                <div style={{ textAlign: 'center' }}>
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>กำไรสุทธิรวม</div>
+                                                    <div style={{ fontSize: '1.1rem', fontWeight: '700', color: historyTotals.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                                        {historyTotals.profit >= 0 ? '+' : ''}฿{historyTotals.profit.toLocaleString()}
                                                     </div>
                                                 </div>
-                                            ))}
+                                            </div>
+
+                                            {/* History Cards List */}
+                                            {filteredRoundHistory.length === 0 ? (
+                                                <div className="empty-state card" style={{ padding: '2rem', textAlign: 'center' }}>
+                                                    <p style={{ color: 'var(--color-text-muted)' }}>ไม่พบประวัติหวยที่ตรงกับเงื่อนไขการค้นหา</p>
+                                                </div>
+                                            ) : (
+                                                <div className="history-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                                    {filteredRoundHistory.map(history => {
+                                                        const isExpanded = expandedHistoryId === history.id
+                                                        const details = historyDetails[history.id]
+                                                        return (
+                                                            <div key={history.id} className={`round-accordion-item ${history.lottery_type}`} style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
+                                                                {/* Accordion Header - Clickable */}
+                                                                <div 
+                                                                    className="round-accordion-header" 
+                                                                    onClick={() => toggleExpandHistory(history)}
+                                                                    style={{ cursor: 'pointer', padding: '0.85rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}
+                                                                >
+                                                                    <div className="round-info" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                                        <span style={{ color: 'var(--color-text-muted)', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-flex' }}>
+                                                                            <FiChevronRight size={18} />
+                                                                        </span>
+                                                                        <span className={`lottery-badge ${history.lottery_type}`}>
+                                                                            {LOTTERY_TYPES[history.lottery_type] || history.lottery_type}
+                                                                        </span>
+                                                                        <div className="round-details">
+                                                                            <span className="round-name" style={{ fontWeight: 600 }}>
+                                                                                {LOTTERY_TYPES[history.lottery_type] || history.lottery_type}
+                                                                            </span>
+                                                                            <span className="round-date" style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginLeft: '0.5rem' }}>
+                                                                                <FiCalendar /> {formatDate(history.round_date)}
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="history-stats" style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+                                                                        <div style={{ textAlign: 'center' }}>
+                                                                            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ยอดรวม</div>
+                                                                            <div style={{ fontWeight: '600' }}>฿{history.total_amount?.toLocaleString()}</div>
+                                                                        </div>
+                                                                        <div style={{ textAlign: 'center' }}>
+                                                                            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ค่าคอม</div>
+                                                                            <div style={{ fontWeight: '600' }}>฿{history.total_commission?.toLocaleString()}</div>
+                                                                        </div>
+                                                                        <div style={{ textAlign: 'center' }}>
+                                                                            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>จ่าย</div>
+                                                                            <div style={{ fontWeight: '600', color: 'var(--color-danger)' }}>฿{history.total_payout?.toLocaleString()}</div>
+                                                                        </div>
+                                                                        <div style={{ textAlign: 'center' }}>
+                                                                            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>กำไร</div>
+                                                                            <div style={{ fontWeight: '600', color: history.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                                                                {history.profit >= 0 ? '+' : ''}฿{history.profit?.toLocaleString()}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Accordion Content - Member Submissions Breakdown */}
+                                                                {isExpanded && (
+                                                                    <div className="history-accordion-content" style={{ padding: '1rem', borderTop: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.15)' }}>
+                                                                        <h4 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--color-warning)' }}>
+                                                                            📊 รายละเอียดการส่งเลขของสมาชิกในงวดนี้
+                                                                        </h4>
+                                                                        {details?.loading ? (
+                                                                            <div style={{ padding: '1rem', textAlign: 'center' }}>
+                                                                                <div className="spinner" style={{ width: '20px', height: '20px', display: 'inline-block' }}></div>
+                                                                                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginLeft: '0.5rem' }}>กำลังโหลดรายละเอียด...</span>
+                                                                            </div>
+                                                                        ) : (
+                                                                            (() => {
+                                                                                const userHistories = details?.userHistories || []
+                                                                                
+                                                                                if (userHistories.length === 0) {
+                                                                                    return <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', padding: '0.5rem' }}>ไม่มีรายละเอียดสมาชิกบันทึกไว้สำหรับงวดนี้</div>
+                                                                                }
+
+                                                                                return (
+                                                                                    <div className="history-members-breakdown" style={{ overflowX: 'auto' }}>
+                                                                                        <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse' }}>
+                                                                                            <thead>
+                                                                                                <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)', textAlign: 'left' }}>
+                                                                                                    <th style={{ padding: '0.4rem 0.5rem' }}>สมาชิก</th>
+                                                                                                    <th style={{ padding: '0.4rem 0.5rem', textAlign: 'center' }}>จำนวนรายการ</th>
+                                                                                                    <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>ยอดส่ง</th>
+                                                                                                    <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>ค่าคอม</th>
+                                                                                                    <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>ถูกรางวัล</th>
+                                                                                                    <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>กำไรเจ้ามือ</th>
+                                                                                                </tr>
+                                                                                            </thead>
+                                                                                            <tbody>
+                                                                                                {userHistories.map(uh => {
+                                                                                                    const memberName = uh.profiles?.full_name || uh.profiles?.line_display_name || uh.profiles?.email || 'ไม่ระบุ'
+                                                                                                    const dealerProfit = (uh.total_amount || 0) - (uh.total_commission || 0) - (uh.total_winnings || 0)
+                                                                                                    return (
+                                                                                                        <tr key={uh.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                                                                                            <td style={{ padding: '0.5rem', fontWeight: 600 }}>{memberName}</td>
+                                                                                                            <td style={{ padding: '0.5rem', textAlign: 'center' }}>{uh.total_entries}</td>
+                                                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', fontWeight: 600 }}>฿{(uh.total_amount || 0).toLocaleString()}</td>
+                                                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--color-warning)' }}>฿{Math.round(uh.total_commission || 0).toLocaleString()}</td>
+                                                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--color-danger)' }}>฿{(uh.total_winnings || 0).toLocaleString()}</td>
+                                                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', fontWeight: 600, color: dealerProfit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                                                                                                {dealerProfit >= 0 ? '+' : ''}฿{dealerProfit.toLocaleString()}
+                                                                                                            </td>
+                                                                                                        </tr>
+                                                                                                    )
+                                                                                                })}
+                                                                                            </tbody>
+                                                                                        </table>
+                                                                                    </div>
+                                                                                )
+                                                                            })()
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )
+                                                    })}
+                                                </div>
+                                            )}
                                         </div>
                                     )
                                 ) : (
