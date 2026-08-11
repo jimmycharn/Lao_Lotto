@@ -77,6 +77,15 @@ import MemberAccordionItem from '../components/dealer/MemberAccordionItem'
 
 
 // Helper function to calculate layoff transfer commission (4_set is fixed Baht per set, others are %)
+// Helper to ensure member commission is non-zero
+function getMemberCommission(amount, commission) {
+    if (commission !== undefined && commission !== null && Number(commission) > 0) {
+        return Number(commission)
+    }
+    const amt = Number(amount || 0)
+    if (amt <= 0) return 0
+    return Math.round(amt * 0.20)
+}
 function calculateTransferCommission(t, setPrice = 120) {
     if (t.commission_earned !== undefined && t.commission_earned !== null && Number(t.commission_earned) > 0) {
         return Number(t.commission_earned)
@@ -246,6 +255,8 @@ export default function Dealer() {
             }
 
             const userHistoriesWithProfiles = userHistories.map(uh => ({
+                total_commission: getMemberCommission(uh.total_amount, uh.total_commission),
+                total_winnings: Number(uh.total_winnings || 0),
                 ...uh,
                 profiles: profilesMap[uh.user_id] || null
             }))
@@ -2753,12 +2764,22 @@ export default function Dealer() {
                                                     {filteredRoundHistory.map(history => {
                                                         const isExpanded = expandedHistoryId === history.id
                                                         const details = historyDetails[history.id]
+                                                         const userHistories = details?.userHistories || []
+                                                         const rawTransfers = details?.transfers || []
+
                                                          const hInAmt = history.total_amount || 0
-                                                         const hInComm = history.total_commission || 0
-                                                         const hInPay = history.total_payout || 0
+                                                         let hInComm = history.total_commission || 0
+                                                         let hInPay = history.total_payout || 0
+
+                                                         if (userHistories.length > 0) {
+                                                             hInComm = userHistories.reduce((sum, u) => sum + (u.total_commission || 0), 0)
+                                                             hInPay = userHistories.reduce((sum, u) => sum + (u.total_winnings || 0), 0)
+                                                         } else if (!hInComm && hInAmt > 0) {
+                                                             hInComm = Math.round(hInAmt * 0.20)
+                                                         }
+
                                                          const hInProfit = hInAmt - hInComm - hInPay
 
-                                                         const rawTransfers = details?.transfers || []
                                                          let hOutAmt = history.transferred_amount || 0
                                                          let hOutComm = history.upstream_commission || 0
                                                          let hOutWin = history.upstream_winnings || 0
@@ -2804,11 +2825,11 @@ export default function Dealer() {
                                                                         </div>
                                                                         <div style={{ textAlign: 'center' }}>
                                                                             <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ค่าคอม</div>
-                                                                            <div style={{ fontWeight: '600' }}>฿{history.total_commission?.toLocaleString()}</div>
+                                                                            <div style={{ fontWeight: '600' }}>฿{Math.round(hInComm || 0).toLocaleString()}</div>
                                                                         </div>
                                                                         <div style={{ textAlign: 'center' }}>
                                                                             <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>จ่าย</div>
-                                                                            <div style={{ fontWeight: '600', color: 'var(--color-danger)' }}>฿{history.total_payout?.toLocaleString()}</div>
+                                                                            <div style={{ fontWeight: '600', color: 'var(--color-danger)' }}>฿{Math.round(hInPay || 0).toLocaleString()}</div>
                                                                         </div>
                                                                         <div style={{ textAlign: 'center' }}>
                                                                             <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>กำไร</div>
