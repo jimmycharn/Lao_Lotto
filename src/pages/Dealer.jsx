@@ -204,6 +204,16 @@ export default function Dealer() {
                 }
             }
 
+            // 4. Query bet_transfers for this round to show outgoing layoff details
+            let transfers = []
+            if (historyItem.round_id) {
+                const { data: transData } = await supabase
+                    .from('bet_transfers')
+                    .select('*, upstream_dealer:upstream_dealer_id(full_name, email, phone)')
+                    .eq('round_id', historyItem.round_id)
+                if (transData) transfers = transData
+            }
+
             const userHistoriesWithProfiles = userHistories.map(uh => ({
                 ...uh,
                 profiles: profilesMap[uh.user_id] || null
@@ -214,7 +224,8 @@ export default function Dealer() {
                 [historyId]: {
                     loading: false,
                     loaded: true,
-                    userHistories: userHistoriesWithProfiles
+                    userHistories: userHistoriesWithProfiles,
+                    transfers: transfers
                 }
             }))
         } catch (err) {
@@ -286,12 +297,39 @@ export default function Dealer() {
 
     const historyTotals = useMemo(() => {
         return filteredRoundHistory.reduce((acc, h) => {
-            acc.total_amount += (h.total_amount || 0)
-            acc.total_commission += (h.total_commission || 0)
-            acc.total_payout += (h.total_payout || 0)
-            acc.profit += (h.profit || 0)
+            const inAmt = h.total_amount || 0
+            const inComm = h.total_commission || 0
+            const inPay = h.total_payout || 0
+            const inProfit = inAmt - inComm - inPay
+
+            const outAmt = h.transferred_amount || 0
+            const outComm = h.upstream_commission || 0
+            const outWin = h.upstream_winnings || 0
+            const outProfit = -outAmt + outComm + outWin
+
+            acc.total_amount += inAmt
+            acc.total_commission += inComm
+            acc.total_payout += inPay
+            acc.incoming_profit += inProfit
+
+            acc.transferred_amount += outAmt
+            acc.upstream_commission += outComm
+            acc.upstream_winnings += outWin
+            acc.outgoing_profit += outProfit
+
+            acc.profit += (h.profit !== undefined ? h.profit : (inProfit + outProfit))
             return acc
-        }, { total_amount: 0, total_commission: 0, total_payout: 0, profit: 0 })
+        }, {
+            total_amount: 0,
+            total_commission: 0,
+            total_payout: 0,
+            incoming_profit: 0,
+            transferred_amount: 0,
+            upstream_commission: 0,
+            upstream_winnings: 0,
+            outgoing_profit: 0,
+            profit: 0
+        })
     }, [filteredRoundHistory])
     const [upstreamDealers, setUpstreamDealers] = useState([])
     const [loadingUpstream, setLoadingUpstream] = useState(false)
@@ -1006,7 +1044,7 @@ export default function Dealer() {
                     const upstreamWinnings = transfers?.reduce((sum, t) => sum + (t.winnings || 0), 0) || 0
 
                     const memberProfit = totalAmount - totalCommission - totalPayout
-                    const upstreamProfit = transferredAmount - upstreamCommission - upstreamWinnings
+                    const upstreamProfit = -transferredAmount + upstreamCommission + upstreamWinnings
                     const profit = memberProfit + upstreamProfit
 
                     activeHistoryItems.push({
@@ -1986,7 +2024,7 @@ export default function Dealer() {
                 const upstreamWinnings = transfers?.reduce((sum, t) => sum + (t.winnings || 0), 0) || 0
 
                 const memberProfit = totalAmount - totalCommission - totalPayout
-                const upstreamProfit = transferredAmount - upstreamCommission - upstreamWinnings
+                const upstreamProfit = -transferredAmount + upstreamCommission + upstreamWinnings
                 const profit = memberProfit + upstreamProfit
 
                 const { error: historyError } = await supabase
@@ -2701,9 +2739,6 @@ export default function Dealer() {
                                                                 {/* Accordion Content - Member Submissions Breakdown */}
                                                                 {isExpanded && (
                                                                     <div className="history-accordion-content" style={{ padding: '1rem', borderTop: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.15)' }}>
-                                                                        <h4 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--color-warning)' }}>
-                                                                            📊 รายละเอียดการส่งเลขของสมาชิกในงวดนี้
-                                                                        </h4>
                                                                         {details?.loading ? (
                                                                             <div style={{ padding: '1rem', textAlign: 'center' }}>
                                                                                 <div className="spinner" style={{ width: '20px', height: '20px', display: 'inline-block' }}></div>
@@ -2712,43 +2747,91 @@ export default function Dealer() {
                                                                         ) : (
                                                                             (() => {
                                                                                 const userHistories = details?.userHistories || []
+                                                                                const transfers = details?.transfers || []
                                                                                 
-                                                                                if (userHistories.length === 0) {
-                                                                                    return <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', padding: '0.5rem' }}>ไม่มีรายละเอียดสมาชิกบันทึกไว้สำหรับงวดนี้</div>
-                                                                                }
-
                                                                                 return (
-                                                                                    <div className="history-members-breakdown" style={{ overflowX: 'auto' }}>
-                                                                                        <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse' }}>
-                                                                                            <thead>
-                                                                                                <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)', textAlign: 'left' }}>
-                                                                                                    <th style={{ padding: '0.4rem 0.5rem' }}>สมาชิก</th>
-                                                                                                    <th style={{ padding: '0.4rem 0.5rem', textAlign: 'center' }}>จำนวนรายการ</th>
-                                                                                                    <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>ยอดส่ง</th>
-                                                                                                    <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>ค่าคอม</th>
-                                                                                                    <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>ถูกรางวัล</th>
-                                                                                                    <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>กำไรเจ้ามือ</th>
-                                                                                                </tr>
-                                                                                            </thead>
-                                                                                            <tbody>
-                                                                                                {userHistories.map(uh => {
-                                                                                                    const memberName = uh.profiles?.full_name || uh.profiles?.line_display_name || uh.profiles?.email || 'ไม่ระบุ'
-                                                                                                    const dealerProfit = (uh.total_amount || 0) - (uh.total_commission || 0) - (uh.total_winnings || 0)
-                                                                                                    return (
-                                                                                                        <tr key={uh.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                                                                                            <td style={{ padding: '0.5rem', fontWeight: 600 }}>{memberName}</td>
-                                                                                                            <td style={{ padding: '0.5rem', textAlign: 'center' }}>{uh.total_entries}</td>
-                                                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', fontWeight: 600 }}>฿{(uh.total_amount || 0).toLocaleString()}</td>
-                                                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--color-warning)' }}>฿{Math.round(uh.total_commission || 0).toLocaleString()}</td>
-                                                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--color-danger)' }}>฿{(uh.total_winnings || 0).toLocaleString()}</td>
-                                                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', fontWeight: 600, color: dealerProfit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                                                                                                                {dealerProfit >= 0 ? '+' : ''}฿{dealerProfit.toLocaleString()}
-                                                                                                            </td>
-                                                                                                        </tr>
-                                                                                                    )
-                                                                                                })}
-                                                                                            </tbody>
-                                                                                        </table>
+                                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                                                                                        {/* Member Submissions Table */}
+                                                                                        <div>
+                                                                                            <h4 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--color-warning)' }}>
+                                                                                                📊 รายละเอียดการส่งเลขของสมาชิกในงวดนี้
+                                                                                            </h4>
+                                                                                            {userHistories.length === 0 ? (
+                                                                                                <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', padding: '0.5rem' }}>ไม่มีรายละเอียดสมาชิกบันทึกไว้สำหรับงวดนี้</div>
+                                                                                            ) : (
+                                                                                                <div className="history-members-breakdown" style={{ overflowX: 'auto' }}>
+                                                                                                    <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse' }}>
+                                                                                                        <thead>
+                                                                                                            <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)', textAlign: 'left' }}>
+                                                                                                                <th style={{ padding: '0.4rem 0.5rem' }}>สมาชิก</th>
+                                                                                                                <th style={{ padding: '0.4rem 0.5rem', textAlign: 'center' }}>จำนวนรายการ</th>
+                                                                                                                <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>ยอดส่ง</th>
+                                                                                                                <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>ค่าคอม</th>
+                                                                                                                <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>ถูกรางวัล</th>
+                                                                                                                <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>กำไรเจ้ามือ</th>
+                                                                                                            </tr>
+                                                                                                        </thead>
+                                                                                                        <tbody>
+                                                                                                            {userHistories.map(uh => {
+                                                                                                                const memberName = uh.profiles?.full_name || uh.profiles?.line_display_name || uh.profiles?.email || 'ไม่ระบุ'
+                                                                                                                const dealerProfit = (uh.total_amount || 0) - (uh.total_commission || 0) - (uh.total_winnings || 0)
+                                                                                                                return (
+                                                                                                                    <tr key={uh.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                                                                                                        <td style={{ padding: '0.5rem', fontWeight: 600 }}>{memberName}</td>
+                                                                                                                        <td style={{ padding: '0.5rem', textAlign: 'center' }}>{uh.total_entries}</td>
+                                                                                                                        <td style={{ padding: '0.5rem', textAlign: 'right', fontWeight: 600 }}>฿{(uh.total_amount || 0).toLocaleString()}</td>
+                                                                                                                        <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--color-warning)' }}>฿{Math.round(uh.total_commission || 0).toLocaleString()}</td>
+                                                                                                                        <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--color-danger)' }}>฿{(uh.total_winnings || 0).toLocaleString()}</td>
+                                                                                                                        <td style={{ padding: '0.5rem', textAlign: 'right', fontWeight: 600, color: dealerProfit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                                                                                                            {dealerProfit >= 0 ? '+' : ''}฿{dealerProfit.toLocaleString()}
+                                                                                                                        </td>
+                                                                                                                    </tr>
+                                                                                                                )
+                                                                                                            })}
+                                                                                                        </tbody>
+                                                                                                    </table>
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+
+                                                                                        {/* Outgoing Layoff Bet Transfers Table */}
+                                                                                        {transfers.length > 0 && (
+                                                                                            <div>
+                                                                                                <h4 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.75rem', color: '#ef4444' }}>
+                                                                                                    🚀 รายละเอียดการตีออกให้เจ้ามือในงวดนี้
+                                                                                                </h4>
+                                                                                                <div className="history-transfers-breakdown" style={{ overflowX: 'auto' }}>
+                                                                                                    <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse' }}>
+                                                                                                        <thead>
+                                                                                                            <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)', textAlign: 'left' }}>
+                                                                                                                <th style={{ padding: '0.4rem 0.5rem' }}>เจ้ามือรับตีออก</th>
+                                                                                                                <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>ยอดตีออก</th>
+                                                                                                                <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>ค่าคอมได้รับ</th>
+                                                                                                                <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>รับคืนรางวัล</th>
+                                                                                                                <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>กำไรจากการตีออก</th>
+                                                                                                            </tr>
+                                                                                                        </thead>
+                                                                                                        <tbody>
+                                                                                                            {transfers.map(t => {
+                                                                                                                const upstreamName = t.upstream_dealer?.full_name || t.upstream_dealer?.email || 'เจ้ามือ'
+                                                                                                                const tProfit = -(t.amount || 0) + (t.commission_earned || 0) + (t.winnings || 0)
+                                                                                                                return (
+                                                                                                                    <tr key={t.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                                                                                                        <td style={{ padding: '0.5rem', fontWeight: 600 }}>{upstreamName}</td>
+                                                                                                                        <td style={{ padding: '0.5rem', textAlign: 'right', fontWeight: 600, color: '#ef4444' }}>-฿{(t.amount || 0).toLocaleString()}</td>
+                                                                                                                        <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--color-success)' }}>+฿{Math.round(t.commission_earned || 0).toLocaleString()}</td>
+                                                                                                                        <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--color-success)' }}>+฿{(t.winnings || 0).toLocaleString()}</td>
+                                                                                                                        <td style={{ padding: '0.5rem', textAlign: 'right', fontWeight: 600, color: tProfit >= 0 ? 'var(--color-success)' : '#ef4444' }}>
+                                                                                                                            {tProfit >= 0 ? '+' : ''}฿{tProfit.toLocaleString()}
+                                                                                                                        </td>
+                                                                                                                    </tr>
+                                                                                                                )
+                                                                                                            })}
+                                                                                                        </tbody>
+                                                                                                    </table>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        )}
                                                                                     </div>
                                                                                 )
                                                                             })()
