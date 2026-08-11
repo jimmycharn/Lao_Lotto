@@ -345,7 +345,7 @@ export default function Dealer() {
             const inProfit = inAmt - inComm - inPay
 
             const outAmt = h.transferred_amount || 0
-            const outComm = Number(h.upstream_commission || 0)
+            const outComm = Number(h.upstream_commission || 0) > 0 ? Number(h.upstream_commission) : Math.round(outAmt * (25 / 120))
             const outWin = h.upstream_winnings || 0
             const outProfit = -outAmt + outComm + outWin
 
@@ -2789,7 +2789,7 @@ export default function Dealer() {
                                                              hOutComm = rawTransfers.reduce((sum, t) => sum + calculateTransferCommission(t), 0)
                                                              hOutWin = rawTransfers.reduce((sum, t) => sum + (t.winnings || 0), 0)
                                                          } else if (!hOutComm && hOutAmt > 0) {
-                                                             hOutComm = Number(history.upstream_commission || 0)
+                                                             hOutComm = Number(history.upstream_commission || 0) > 0 ? Number(history.upstream_commission) : Math.round(hOutAmt * (25 / 120))
                                                          }
 
                                                          const hOutProfit = -hOutAmt + hOutComm + hOutWin
@@ -2879,7 +2879,7 @@ export default function Dealer() {
                                                                                 }
 
                                                                                 const outAmt = Number(history.transferred_amount || 0)
-                                                                                 const outComm = Number(history.upstream_commission || 0)
+                                                                                 const outComm = Number(history.upstream_commission || 0) > 0 ? Number(history.upstream_commission) : Math.round(outAmt * (25 / 120))
                                                                                 const outWin = Number(history.upstream_winnings || 0)
 
                                                                                 const effectiveTransfers = Object.values(groupedMap).length > 0 

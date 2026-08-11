@@ -9352,9 +9352,14 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 totalCommission += parseFloat(h.total_commission || 0);
                 totalPayout += parseFloat(h.total_payout || 0);
 
+                const hTransferred = parseFloat(h.transferred_amount || 0);
+                const hUpstreamComm = parseFloat(h.upstream_commission || 0) > 0 
+                  ? parseFloat(h.upstream_commission) 
+                  : Math.round(hTransferred * (25 / 120));
+
                 totalTransferredEntries += (h.transferred_entries || 0);
-                totalTransferred += parseFloat(h.transferred_amount || 0);
-                totalUpstreamComm += parseFloat(h.upstream_commission || 0);
+                totalTransferred += hTransferred;
+                totalUpstreamComm += hUpstreamComm;
                 totalUpstreamWin += parseFloat(h.upstream_winnings || 0);
               }
 
