@@ -2879,7 +2879,7 @@ export default function Dealer() {
                                                                                 }
 
                                                                                 const outAmt = Number(history.transferred_amount || 0)
-                                                                                const outComm = Number(history.upstream_commission || (outAmt > 0 ? Math.round(outAmt * 0.25) : 0))
+                                                                                const outComm = Number(history.upstream_commission || (outAmt > 0 ? Math.round(outAmt * (25 / 120)) : 0))
                                                                                 const outWin = Number(history.upstream_winnings || 0)
 
                                                                                 const effectiveTransfers = Object.values(groupedMap).length > 0 
