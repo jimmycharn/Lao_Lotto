@@ -2866,7 +2866,7 @@ export default function Dealer() {
                                                                                     : (outAmt > 0 ? [{
                                                                                         id: "archived_transfer_" + history.id,
                                                                                         dealerName: "เจ้ามือ (สรุปในประวัติ)",
-                                                                                        entriesCount: history.total_entries || "-",
+                                                                                        entriesCount: "-",
                                                                                         amount: outAmt,
                                                                                         commission_earned: outComm,
                                                                                         winnings: outWin
