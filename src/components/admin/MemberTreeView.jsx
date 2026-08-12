@@ -27,6 +27,7 @@ export default function MemberTreeView({ users = [], memberships = [], searchTer
     const dealerMembersMap = useMemo(() => {
         const map = {}
         memberships.forEach(m => {
+            if (m.user_id === m.dealer_id) return
             if (!map[m.dealer_id]) map[m.dealer_id] = []
             if (userMap[m.user_id] && !map[m.dealer_id].some(u => u.id === m.user_id)) {
                 map[m.dealer_id].push(userMap[m.user_id])
@@ -39,6 +40,7 @@ export default function MemberTreeView({ users = [], memberships = [], searchTer
     const memberDealersMap = useMemo(() => {
         const map = {}
         memberships.forEach(m => {
+            if (m.user_id === m.dealer_id) return
             if (!map[m.user_id]) map[m.user_id] = []
             if (userMap[m.dealer_id] && !map[m.user_id].some(d => d.id === m.dealer_id)) {
                 map[m.user_id].push(userMap[m.dealer_id])
