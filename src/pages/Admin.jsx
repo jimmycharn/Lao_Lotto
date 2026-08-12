@@ -283,17 +283,26 @@ export default function Admin() {
         }))) return
 
         try {
-            const { error } = await supabase
-                .from('profiles')
-                .delete()
-                .eq('id', targetUser.id)
+            // First attempt to delete via RPC function (deletes from auth.users & profiles)
+            const { error: rpcError } = await supabase.rpc('delete_user_by_superadmin', {
+                target_user_id: targetUser.id
+            })
 
-            if (error) throw error
+            if (rpcError) {
+                console.warn('RPC delete failed, falling back to direct profiles delete:', rpcError)
+                const { error: directError } = await supabase
+                    .from('profiles')
+                    .delete()
+                    .eq('id', targetUser.id)
+
+                if (directError) throw directError
+            }
+
             toast.success('ลบสมาชิกเรียบร้อยแล้ว')
             fetchUsers()
         } catch (error) {
             console.error('Error deleting user:', error)
-            toast.error('เกิดข้อผิดพลาดในการลบสมาชิก')
+            toast.error('เกิดข้อผิดพลาดในการลบสมาชิก: ' + (error.message || ''))
         }
     }
 
