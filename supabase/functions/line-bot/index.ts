@@ -3711,6 +3711,11 @@ async function generateRoundSummaryFlex(
 
   const roundedTotalCombinedProfit = Math.round(totalCombinedProfit);
 
+  const formatSignedMoney = (val: number, symbol = '฿') => {
+    const rounded = Math.round(val);
+    return rounded < 0 ? `-${symbol}${Math.abs(rounded).toLocaleString('th-TH')}` : `${symbol}${rounded.toLocaleString('th-TH')}`;
+  };
+
   const sortedUserSummaries = Object.values(userSummaries).sort((a, b) => {
     if (b.totalBet !== a.totalBet) {
       return b.totalBet - a.totalBet;
@@ -3921,17 +3926,17 @@ async function generateRoundSummaryFlex(
     summaryText += `- ค่าคอม: ฿${roundedGrandTotalCommission.toLocaleString('th-TH')}\n`;
     if (isAnnounced) {
       summaryText += `- จ่าย: ฿${roundedGrandTotalWin.toLocaleString('th-TH')}\n`;
-      summaryText += `- กำไร: ฿${roundedDealerProfit.toLocaleString('th-TH')}\n`;
+      summaryText += `- กำไร: ${formatSignedMoney(roundedDealerProfit)}\n`;
     }
     summaryText += `\n🔴 ยอดส่ง ${outgoingTicketCount} รายการ\n`;
     summaryText += `- ยอดรวม: ฿${roundedOutgoingTotalBet.toLocaleString('th-TH')}\n`;
     summaryText += `- ค่าคอม: ฿${roundedOutgoingTotalCommission.toLocaleString('th-TH')}\n`;
     if (isAnnounced) {
       summaryText += `- รับ: ฿${roundedOutgoingTotalWin.toLocaleString('th-TH')}\n`;
-      summaryText += `- กำไร: ฿${roundedOutgoingProfit.toLocaleString('th-TH')}\n`;
+      summaryText += `- กำไร: ${formatSignedMoney(roundedOutgoingProfit)}\n`;
     }
     if (isAnnounced) {
-      summaryText += `\n💰 กำไรรวม: ฿${roundedTotalCombinedProfit.toLocaleString('th-TH')}\n`;
+      summaryText += `\n💰 กำไรรวม: ${formatSignedMoney(roundedTotalCombinedProfit)}\n`;
     }
     summaryText += `--------------------------\n`;
     summaryText += `2. รายละเอียดแต่ละคน\n`;
@@ -4068,7 +4073,7 @@ async function generateRoundSummaryFlex(
               { "type": "text", "text": `รวม: ฿${roundedGrandTotalBet.toLocaleString('th-TH')}`, "size": "xs", "color": "#64748b" },
               { "type": "text", "text": `คอม: ฿${roundedGrandTotalCommission.toLocaleString('th-TH')}`, "size": "xs", "color": "#64748b" },
               { "type": "text", "text": isAnnounced ? `จ่าย: ฿${roundedGrandTotalWin.toLocaleString('th-TH')}` : "จ่าย: -", "size": "xs", "color": "#64748b", "align": "end" },
-              { "type": "text", "text": isAnnounced ? `กำไร: ฿${roundedDealerProfit.toLocaleString('th-TH')}` : "กำไร: -", "size": "xs", "color": isAnnounced && roundedDealerProfit >= 0 ? "#10b981" : "#ef4444", "align": "end" }
+              { "type": "text", "text": isAnnounced ? `กำไร: ${formatSignedMoney(roundedDealerProfit)}` : "กำไร: -", "size": "xs", "color": isAnnounced && roundedDealerProfit >= 0 ? "#10b981" : "#ef4444", "align": "end" }
             ]
           }
         ]
@@ -4093,7 +4098,7 @@ async function generateRoundSummaryFlex(
               { "type": "text", "text": `รวม: ฿${roundedOutgoingTotalBet.toLocaleString('th-TH')}`, "size": "xs", "color": "#64748b" },
               { "type": "text", "text": `คอม: ฿${roundedOutgoingTotalCommission.toLocaleString('th-TH')}`, "size": "xs", "color": "#64748b" },
               { "type": "text", "text": isAnnounced ? `รับ: ฿${roundedOutgoingTotalWin.toLocaleString('th-TH')}` : "รับ: -", "size": "xs", "color": "#64748b", "align": "end" },
-              { "type": "text", "text": isAnnounced ? `กำไร: ฿${roundedOutgoingProfit.toLocaleString('th-TH')}` : "กำไร: -", "size": "xs", "color": isAnnounced && roundedOutgoingProfit >= 0 ? "#10b981" : "#ef4444", "align": "end" }
+              { "type": "text", "text": isAnnounced ? `กำไร: ${formatSignedMoney(roundedOutgoingProfit)}` : "กำไร: -", "size": "xs", "color": isAnnounced && roundedOutgoingProfit >= 0 ? "#10b981" : "#ef4444", "align": "end" }
             ]
           }
         ]
@@ -4115,7 +4120,7 @@ async function generateRoundSummaryFlex(
           },
           {
             "type": "text",
-            "text": `฿${roundedTotalCombinedProfit.toLocaleString('th-TH')}`,
+            "text": formatSignedMoney(roundedTotalCombinedProfit),
             "weight": "bold",
             "size": "sm",
             "align": "end",
@@ -15368,7 +15373,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 const memberWinningSubs = winningSubs.filter((s: any) => s.user_id === targetProfile.id);
 
                 if (memberWinningSubs.length === 0) {
-                  await sendLineReply(replyToken, `📭 ในงวดวันที่ ${roundDateStr} คุณ ${targetProfile.full_name} ยังไม่มีเลขที่ถูกรางวัลค่ะ`);
+                  const winNumStr = formatWinningNumbersForDisplay(activeRound.winning_numbers, activeRound.lottery_type);
+                  await sendLineReply(replyToken, `📭 ในงวดวันที่ ${roundDateStr} (ผลรางวัล: ${winNumStr}) คุณ ${targetProfile.full_name} ยังไม่มีเลขที่ถูกรางวัลค่ะ`);
                   continue;
                 }
 
@@ -15395,9 +15401,11 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 });
 
                 const lotteryName = (activeRound.lottery_type || '').toUpperCase();
+                const winNumStr = formatWinningNumbersForDisplay(activeRound.winning_numbers, activeRound.lottery_type);
                 let out = `🏆 รายการถูกรางวัลของ คุณ ${targetProfile.full_name}\n`;
                 out += `ประเภท: ${lotteryName}\n`;
                 out += `งวดวันที่: ${roundDateStr}\n`;
+                out += `🎯 ผลรางวัล: ${winNumStr}\n`;
                 out += `----------------------\n`;
 
                 let grandTotalWin = 0;
@@ -15452,14 +15460,17 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 });
 
                 if (billOrder.length === 0) {
-                  await sendLineReply(replyToken, `📭 ในงวดวันที่ ${roundDateStr} คุณ ${senderProfile.full_name} ยังไม่มีเลขที่ถูกรางวัลค่ะ`);
+                  const winNumStr = formatWinningNumbersForDisplay(activeRound.winning_numbers, activeRound.lottery_type);
+                  await sendLineReply(replyToken, `📭 ในงวดวันที่ ${roundDateStr} (ผลรางวัล: ${winNumStr}) คุณ ${senderProfile.full_name} ยังไม่มีเลขที่ถูกรางวัลค่ะ`);
                   continue;
                 }
 
                 const lotteryName = (activeRound.lottery_type || '').toUpperCase();
+                const winNumStr = formatWinningNumbersForDisplay(activeRound.winning_numbers, activeRound.lottery_type);
                 let out = `🏆 รายการถูกรางวัลของ คุณ ${senderProfile.full_name}\n`;
                 out += `ประเภท: ${lotteryName}\n`;
                 out += `งวดวันที่: ${roundDateStr}\n`;
+                out += `🎯 ผลรางวัล: ${winNumStr}\n`;
                 out += `----------------------\n`;
 
                 let grandTotalWin = 0;
@@ -15496,7 +15507,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 }
 
                 if (winningUserIds.length === 0) {
-                  await sendLineReply(replyToken, `📭 ในงวดวันที่ ${roundDateStr} ยังไม่มีสมาชิกคนใดถูกรางวัลสำหรับหวยประเภท ${listLotteryType.toUpperCase()} ค่ะ`);
+                  const winNumStr = formatWinningNumbersForDisplay(activeRound.winning_numbers, activeRound.lottery_type);
+                  await sendLineReply(replyToken, `📭 ในงวดวันที่ ${roundDateStr} (ผลรางวัล: ${winNumStr}) ยังไม่มีสมาชิกคนใดถูกรางวัลสำหรับหวยประเภท ${listLotteryType.toUpperCase()} ค่ะ`);
                   continue;
                 }
 
@@ -15542,8 +15554,10 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 });
 
                 const lotteryName = (activeRound.lottery_type || '').toUpperCase();
+                const winNumStr = formatWinningNumbersForDisplay(activeRound.winning_numbers, activeRound.lottery_type);
                 let out = `🏆 รายงานสมาชิกที่ถูกรางวัล (${lotteryName})\n`;
                 out += `งวดวันที่: ${roundDateStr}\n`;
+                out += `🎯 ผลรางวัล: ${winNumStr}\n`;
                 out += `----------------------\n`;
 
                 let grandTotalWin = 0;

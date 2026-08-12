@@ -14,7 +14,9 @@ import {
     FiCheck,
     FiSave,
     FiX,
-    FiGift
+    FiGift,
+    FiSearch,
+    FiFilter
 } from 'react-icons/fi'
 import './Admin.css'
 
@@ -24,9 +26,33 @@ export default function Admin() {
     const [activeTab, setActiveTab] = useState('draws')
     const [draws, setDraws] = useState([])
     const [users, setUsers] = useState([])
+    const [searchTerm, setSearchTerm] = useState('')
+    const [roleFilter, setRoleFilter] = useState('all') // 'all', 'admin', 'dealer', 'user'
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
     const [editingDraw, setEditingDraw] = useState(null)
+
+    const filteredUsers = users.filter(user => {
+        // 1. Role Filter
+        if (roleFilter === 'admin') {
+            if (user.role !== 'superadmin' && user.role !== 'admin') return false
+        } else if (roleFilter === 'dealer') {
+            if (user.role !== 'dealer') return false
+        } else if (roleFilter === 'user') {
+            if (user.role && user.role !== 'user') return false
+        }
+
+        // 2. Search Term Filter
+        if (searchTerm.trim() !== '') {
+            const term = searchTerm.toLowerCase().trim()
+            const nameMatch = (user.full_name || '').toLowerCase().includes(term)
+            const emailMatch = (user.email || '').toLowerCase().includes(term)
+            const codeMatch = (user.member_code || '').toLowerCase().includes(term)
+            if (!nameMatch && !emailMatch && !codeMatch) return false
+        }
+
+        return true
+    })
     const [formData, setFormData] = useState({
         draw_date: '',
         two_digit: '',
@@ -317,13 +343,54 @@ export default function Admin() {
                         </>
                     ) : (
                         <>
-                            <div className="content-header">
-                                <h3>สมาชิกทั้งหมด ({users.length})</h3>
+                            <div className="content-header users-header">
+                                <h3>
+                                    สมาชิกทั้งหมด ({filteredUsers.length}{filteredUsers.length !== users.length ? ` / ${users.length}` : ''})
+                                </h3>
+                                <div className="user-filter-controls">
+                                    <div className="search-input-wrap">
+                                        <FiSearch className="search-icon" />
+                                        <input
+                                            type="text"
+                                            placeholder="ค้นหาชื่อ หรืออีเมล..."
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                        />
+                                        {searchTerm && (
+                                            <button
+                                                className="clear-search-btn"
+                                                onClick={() => setSearchTerm('')}
+                                                title="ล้างคำค้นหา"
+                                            >
+                                                <FiX />
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    <div className="filter-select-wrap">
+                                        <FiFilter className="filter-icon" />
+                                        <select
+                                            className="role-filter-select"
+                                            value={roleFilter}
+                                            onChange={(e) => setRoleFilter(e.target.value)}
+                                        >
+                                            <option value="all">สิทธิ์ทั้งหมด (ทุกประเภท)</option>
+                                            <option value="admin">Admin</option>
+                                            <option value="dealer">เจ้ามือ</option>
+                                            <option value="user">ผู้ใช้</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
 
                             {loading ? (
                                 <div className="loading-state">
                                     <div className="spinner"></div>
+                                </div>
+                            ) : filteredUsers.length === 0 ? (
+                                <div className="empty-state">
+                                    <FiUsers className="empty-icon" />
+                                    <p>ไม่พบสมาชิกตรงตามเงื่อนไขค้นหา</p>
                                 </div>
                             ) : (
                                 <div className="table-wrap">
@@ -338,7 +405,7 @@ export default function Admin() {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {users.map(user => (
+                                            {filteredUsers.map(user => (
                                                 <tr key={user.id}>
                                                     <td>{user.full_name || '-'}</td>
                                                     <td>{user.email}</td>
