@@ -6,11 +6,20 @@ import {
     FiUsers,
     FiBriefcase,
     FiMaximize2,
-    FiMinimize2
+    FiMinimize2,
+    FiSlash,
+    FiUnlock,
+    FiTrash2
 } from 'react-icons/fi'
 import './MemberTreeView.css'
 
-export default function MemberTreeView({ users = [], memberships = [], searchTerm = '' }) {
+export default function MemberTreeView({
+    users = [],
+    memberships = [],
+    searchTerm = '',
+    onToggleBlock,
+    onDeleteUser
+}) {
     const [perspective, setPerspective] = useState('dealer') // 'dealer' (Dealer -> Members) or 'member' (Member -> Dealers)
     const [expandedNodeIds, setExpandedNodeIds] = useState({})
 
@@ -77,16 +86,19 @@ export default function MemberTreeView({ users = [], memberships = [], searchTer
         return list
     }, [users, perspective, searchTerm, dealerMembersMap, memberDealersMap])
 
-    const toggleNode = (id) => {
-        setExpandedNodeIds(prev => ({ ...prev, [id]: !prev[id] }))
+    const toggleNode = (nodeId) => {
+        setExpandedNodeIds(prev => ({
+            ...prev,
+            [nodeId]: !prev[nodeId]
+        }))
     }
 
     const expandAll = () => {
-        const nextState = {}
+        const all = {}
         rootNodes.forEach(node => {
-            nextState[node.id] = true
+            all[node.id] = true
         })
-        setExpandedNodeIds(nextState)
+        setExpandedNodeIds(all)
     }
 
     const collapseAll = () => {
@@ -115,6 +127,11 @@ export default function MemberTreeView({ users = [], memberships = [], searchTer
             default:
                 return 'ผู้ใช้'
         }
+    }
+
+    const formatLastActive = (timestamp) => {
+        if (!timestamp) return 'ยังไม่เคยเข้าใช้'
+        return new Date(timestamp).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })
     }
 
     return (
@@ -165,7 +182,7 @@ export default function MemberTreeView({ users = [], memberships = [], searchTer
                         const isExpanded = !!expandedNodeIds[node.id] || (searchTerm && searchTerm.trim() !== '')
 
                         return (
-                            <div className="tree-node-card" key={node.id}>
+                            <div className={`tree-node-card ${node.is_active === false ? 'node-blocked' : ''}`} key={node.id}>
                                 <div className="tree-node-header" onClick={() => toggleNode(node.id)}>
                                     <div className="tree-node-left">
                                         <div className="tree-expand-icon">
@@ -174,8 +191,13 @@ export default function MemberTreeView({ users = [], memberships = [], searchTer
                                         <div className="tree-node-info">
                                             <span className="tree-node-title">
                                                 {node.full_name || 'ไม่ระบุชื่อ'}
+                                                {node.is_active === false && (
+                                                    <span className="status-badge blocked" style={{ marginLeft: '6px' }}>🔴 โดนบล็อก</span>
+                                                )}
                                             </span>
-                                            <span className="tree-node-sub">{node.email}</span>
+                                            <span className="tree-node-sub">
+                                                {node.email} • ใช้งานล่าสุด: {formatLastActive(node.last_login_at)}
+                                            </span>
                                         </div>
                                     </div>
 
@@ -188,6 +210,24 @@ export default function MemberTreeView({ users = [], memberships = [], searchTer
                                                 ? `สมาชิก ${children.length} คน`
                                                 : `สังกัด ${children.length} เจ้ามือ`}
                                         </span>
+                                        {onToggleBlock && (
+                                            <button
+                                                className={`tree-action-icon-btn ${node.is_active === false ? 'unblock' : 'block'}`}
+                                                title={node.is_active === false ? 'ปลดบล็อก' : 'ระงับการใช้งาน (บล็อก)'}
+                                                onClick={(e) => { e.stopPropagation(); onToggleBlock(node); }}
+                                            >
+                                                {node.is_active === false ? <FiUnlock /> : <FiSlash />}
+                                            </button>
+                                        )}
+                                        {onDeleteUser && (
+                                            <button
+                                                className="tree-action-icon-btn delete"
+                                                title="ลบสมาชิก"
+                                                onClick={(e) => { e.stopPropagation(); onDeleteUser(node); }}
+                                            >
+                                                <FiTrash2 />
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
 
@@ -199,16 +239,41 @@ export default function MemberTreeView({ users = [], memberships = [], searchTer
                                             </div>
                                         ) : (
                                             children.map(child => (
-                                                <div className="tree-child-item" key={child.id}>
+                                                <div className={`tree-child-item ${child.is_active === false ? 'child-blocked' : ''}`} key={child.id}>
                                                     <div className="tree-node-info">
                                                         <span className="tree-node-title" style={{ fontSize: '0.875rem' }}>
                                                             {child.full_name || 'ไม่ระบุชื่อ'}
+                                                            {child.is_active === false && (
+                                                                <span className="status-badge blocked" style={{ marginLeft: '6px' }}>🔴 โดนบล็อก</span>
+                                                            )}
                                                         </span>
-                                                        <span className="tree-node-sub">{child.email}</span>
+                                                        <span className="tree-node-sub">
+                                                            {child.email} • ใช้งานล่าสุด: {formatLastActive(child.last_login_at)}
+                                                        </span>
                                                     </div>
-                                                    <span className={`role-badge ${getRoleBadgeClass(child.role)}`}>
-                                                        {getRoleLabel(child.role)}
-                                                    </span>
+                                                    <div className="tree-child-right" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                        <span className={`role-badge ${getRoleBadgeClass(child.role)}`}>
+                                                            {getRoleLabel(child.role)}
+                                                        </span>
+                                                        {onToggleBlock && (
+                                                            <button
+                                                                className={`tree-action-icon-btn ${child.is_active === false ? 'unblock' : 'block'}`}
+                                                                title={child.is_active === false ? 'ปลดบล็อก' : 'ระงับการใช้งาน (บล็อก)'}
+                                                                onClick={() => onToggleBlock(child)}
+                                                            >
+                                                                {child.is_active === false ? <FiUnlock /> : <FiSlash />}
+                                                            </button>
+                                                        )}
+                                                        {onDeleteUser && (
+                                                            <button
+                                                                className="tree-action-icon-btn delete"
+                                                                title="ลบสมาชิก"
+                                                                onClick={() => onDeleteUser(child)}
+                                                            >
+                                                                <FiTrash2 />
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             ))
                                         )}

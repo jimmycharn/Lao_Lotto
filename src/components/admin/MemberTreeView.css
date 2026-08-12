@@ -168,6 +168,53 @@
     position: relative;
 }
 
+.tree-child-item:last-child {
+    border-bottom: none;
+}
+
+.tree-action-icon-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.tree-action-icon-btn:hover {
+    color: var(--text-primary);
+}
+
+.tree-action-icon-btn.block:hover {
+    background: rgba(245, 158, 11, 0.2);
+    color: var(--color-warning);
+}
+
+.tree-action-icon-btn.unblock {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--color-success);
+}
+
+.tree-action-icon-btn.unblock:hover {
+    background: rgba(16, 185, 129, 0.3);
+}
+
+.tree-action-icon-btn.delete:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--color-error);
+}
+
+.tree-node-card.node-blocked,
+.tree-child-item.child-blocked {
+    opacity: 0.75;
+    background: rgba(239, 68, 68, 0.03);
+}
+
 .tree-child-item::before {
     content: '';
     position: absolute;
