@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
 import { FiMail, FiLock, FiUser, FiEye, FiEyeOff, FiGift } from 'react-icons/fi'
 import { checkDeviceSession } from '../utils/deviceSession'
 import OtpVerificationModal from '../components/OtpVerificationModal'
@@ -86,9 +87,24 @@ export default function Login() {
                 return
             }
 
-            // Step 2: Check device session
             const userId = data?.user?.id
             if (userId) {
+                // Check if account is blocked (is_active === false)
+                const { data: profileCheck } = await supabase
+                    .from('profiles')
+                    .select('is_active')
+                    .eq('id', userId)
+                    .single()
+
+                if (profileCheck && profileCheck.is_active === false) {
+                    setError('บัญชีนี้ถูกระงับการใช้งาน (โดนบล็อก) กรุณาติดต่อ Admin เพื่อขอให้ปลดบล็อกให้')
+                    setPendingOtpUserId(null)
+                    setPendingOtp(false)
+                    await signOut()
+                    setLoading(false)
+                    return
+                }
+
                 try {
                     console.log('Checking device session for user:', userId)
                     // Block redirect immediately while we check

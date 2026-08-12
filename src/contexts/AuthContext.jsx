@@ -333,6 +333,14 @@ export function AuthProvider({ children }) {
             }
             
             if (data) {
+                if (data.is_active === false) {
+                    console.warn('Account is blocked:', data.email)
+                    setForceLogoutReason('ACCOUNT_BLOCKED')
+                    clearAllAuthState()
+                    try { await supabase.auth.signOut({ scope: 'local' }) } catch (_) {}
+                    setLoading(false)
+                    return
+                }
                 console.log('Profile loaded:', data.role)
                 setProfile(data)
                 setCachedProfile(userId, data)
@@ -378,6 +386,14 @@ export function AuthProvider({ children }) {
                     setTimeout(() => reject(new Error('Login timeout')), 10000)
                 )
             ])
+
+            if (!error && data?.user) {
+                await supabase
+                    .from('profiles')
+                    .update({ last_login_at: new Date().toISOString() })
+                    .eq('id', data.user.id)
+            }
+
             return { data, error }
         } catch (err) {
             return { data: null, error: { message: err.message === 'Login timeout' ? 'การเข้าสู่ระบบใช้เวลานานเกินไป กรุณาลองใหม่' : err.message } }

@@ -15,20 +15,40 @@ export default function ForceLogoutOverlay() {
         <div style={overlayStyle}>
             <div style={modalStyle}>
                 <div style={iconWrapperStyle}>
-                    <FiSmartphone size={36} color="#f5576c" />
+                    {forceLogoutReason === 'ACCOUNT_BLOCKED' ? (
+                        <FiAlertTriangle size={36} color="#f5576c" />
+                    ) : (
+                        <FiSmartphone size={36} color="#f5576c" />
+                    )}
                 </div>
 
-                <h2 style={titleStyle}>มีการเข้าสู่ระบบจากอุปกรณ์อื่น</h2>
+                <h2 style={titleStyle}>
+                    {forceLogoutReason === 'ACCOUNT_BLOCKED' ? 'บัญชีของคุณถูกระงับการใช้งาน' : 'มีการเข้าสู่ระบบจากอุปกรณ์อื่น'}
+                </h2>
 
                 <p style={messageStyle}>
-                    บัญชีของคุณถูกเข้าสู่ระบบจากอุปกรณ์ใหม่
-                    <br />
-                    เซสชันนี้ถูกยกเลิกแล้ว
+                    {forceLogoutReason === 'ACCOUNT_BLOCKED' ? (
+                        <>
+                            บัญชีของคุณถูกบล็อกการใช้งาน
+                            <br />
+                            กรุณาติดต่อ Admin เพื่อขอให้ปลดบล็อกให้ต่อไป
+                        </>
+                    ) : (
+                        <>
+                            บัญชีของคุณถูกเข้าสู่ระบบจากอุปกรณ์ใหม่
+                            <br />
+                            เซสชันนี้ถูกยกเลิกแล้ว
+                        </>
+                    )}
                 </p>
 
                 <div style={warningBoxStyle}>
                     <FiAlertTriangle size={16} color="#ffc107" />
-                    <span>หากไม่ใช่คุณที่เข้าสู่ระบบ กรุณาเปลี่ยนรหัสผ่านทันที</span>
+                    <span>
+                        {forceLogoutReason === 'ACCOUNT_BLOCKED'
+                            ? 'ติดต่อ Admin เพื่อขอความช่วยเหลือ'
+                            : 'หากไม่ใช่คุณที่เข้าสู่ระบบ กรุณาเปลี่ยนรหัสผ่านทันที'}
+                    </span>
                 </div>
 
                 <button onClick={handleLogout} style={buttonStyle}>
