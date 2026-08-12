@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { supabase } from '../lib/supabase'
 import { confirmDialog } from '../utils/confirmDialog'
+import MemberTreeView from '../components/admin/MemberTreeView'
 import {
     FiSettings,
     FiUsers,
@@ -16,7 +17,9 @@ import {
     FiX,
     FiGift,
     FiSearch,
-    FiFilter
+    FiFilter,
+    FiList,
+    FiGitBranch
 } from 'react-icons/fi'
 import './Admin.css'
 
@@ -26,6 +29,8 @@ export default function Admin() {
     const [activeTab, setActiveTab] = useState('draws')
     const [draws, setDraws] = useState([])
     const [users, setUsers] = useState([])
+    const [memberships, setMemberships] = useState([])
+    const [viewMode, setViewMode] = useState('table') // 'table' or 'tree'
     const [searchTerm, setSearchTerm] = useState('')
     const [roleFilter, setRoleFilter] = useState('all') // 'all', 'admin', 'dealer', 'user'
     const [loading, setLoading] = useState(true)
@@ -100,6 +105,12 @@ export default function Admin() {
                 .order('created_at', { ascending: false })
 
             if (!error) setUsers(data || [])
+
+            const { data: memData } = await supabase
+                .from('user_dealer_memberships')
+                .select('*')
+
+            setMemberships(memData || [])
         } catch (error) {
             console.error('Error:', error)
         } finally {
@@ -344,9 +355,26 @@ export default function Admin() {
                     ) : (
                         <>
                             <div className="content-header users-header">
-                                <h3>
-                                    สมาชิกทั้งหมด ({filteredUsers.length}{filteredUsers.length !== users.length ? ` / ${users.length}` : ''})
-                                </h3>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                                    <h3>
+                                        สมาชิกทั้งหมด ({filteredUsers.length}{filteredUsers.length !== users.length ? ` / ${users.length}` : ''})
+                                    </h3>
+                                    <div className="tree-mode-toggle">
+                                        <button
+                                            className={`tree-mode-btn ${viewMode === 'table' ? 'active' : ''}`}
+                                            onClick={() => setViewMode('table')}
+                                        >
+                                            <FiList /> ตาราง
+                                        </button>
+                                        <button
+                                            className={`tree-mode-btn ${viewMode === 'tree' ? 'active' : ''}`}
+                                            onClick={() => setViewMode('tree')}
+                                        >
+                                            <FiGitBranch /> แผนผัง (Tree View)
+                                        </button>
+                                    </div>
+                                </div>
+
                                 <div className="user-filter-controls">
                                     <div className="search-input-wrap">
                                         <FiSearch className="search-icon" />
@@ -367,19 +395,21 @@ export default function Admin() {
                                         )}
                                     </div>
 
-                                    <div className="filter-select-wrap">
-                                        <FiFilter className="filter-icon" />
-                                        <select
-                                            className="role-filter-select"
-                                            value={roleFilter}
-                                            onChange={(e) => setRoleFilter(e.target.value)}
-                                        >
-                                            <option value="all">สิทธิ์ทั้งหมด (ทุกประเภท)</option>
-                                            <option value="admin">Admin</option>
-                                            <option value="dealer">เจ้ามือ</option>
-                                            <option value="user">ผู้ใช้</option>
-                                        </select>
-                                    </div>
+                                    {viewMode === 'table' && (
+                                        <div className="filter-select-wrap">
+                                            <FiFilter className="filter-icon" />
+                                            <select
+                                                className="role-filter-select"
+                                                value={roleFilter}
+                                                onChange={(e) => setRoleFilter(e.target.value)}
+                                            >
+                                                <option value="all">สิทธิ์ทั้งหมด (ทุกประเภท)</option>
+                                                <option value="admin">Admin</option>
+                                                <option value="dealer">เจ้ามือ</option>
+                                                <option value="user">ผู้ใช้</option>
+                                            </select>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -387,6 +417,12 @@ export default function Admin() {
                                 <div className="loading-state">
                                     <div className="spinner"></div>
                                 </div>
+                            ) : viewMode === 'tree' ? (
+                                <MemberTreeView
+                                    users={users}
+                                    memberships={memberships}
+                                    searchTerm={searchTerm}
+                                />
                             ) : filteredUsers.length === 0 ? (
                                 <div className="empty-state">
                                     <FiUsers className="empty-icon" />
