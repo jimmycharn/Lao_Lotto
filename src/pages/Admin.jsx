@@ -27,7 +27,7 @@ import {
 import './Admin.css'
 
 export default function Admin() {
-    const { isSuperAdmin } = useAuth()
+    const { isSuperAdmin, user: currentUser } = useAuth()
     const { toast } = useToast()
     const [activeTab, setActiveTab] = useState('draws')
     const [draws, setDraws] = useState([])
@@ -488,6 +488,7 @@ export default function Admin() {
                                     searchTerm={searchTerm}
                                     onToggleBlock={handleToggleBlockUser}
                                     onDeleteUser={handleDeleteUser}
+                                    currentUserId={currentUser?.id}
                                 />
                             ) : filteredUsers.length === 0 ? (
                                 <div className="empty-state">
@@ -509,55 +510,68 @@ export default function Admin() {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {filteredUsers.map(user => (
-                                                <tr key={user.id} className={user.is_active === false ? 'row-blocked' : ''}>
-                                                    <td>
-                                                        {user.full_name || '-'}
-                                                        {user.is_active === false && (
-                                                            <span className="status-badge blocked" style={{ marginLeft: '6px' }}>🔴 โดนบล็อก</span>
-                                                        )}
-                                                    </td>
-                                                    <td>{user.email}</td>
-                                                    <td>฿{(user.balance || 0).toLocaleString()}</td>
-                                                    <td>
-                                                        <select
-                                                            className={`role-select ${getRoleBadgeClass(user.role)}`}
-                                                            value={user.role || 'user'}
-                                                            onChange={(e) => handleUpdateUserRole(user.id, e.target.value)}
-                                                        >
-                                                            <option value="user">ผู้ใช้</option>
-                                                            <option value="dealer">เจ้ามือ</option>
-                                                            <option value="superadmin">Admin</option>
-                                                        </select>
-                                                    </td>
-                                                    <td className="time-cell">
-                                                        {user.last_login_at
-                                                            ? new Date(user.last_login_at).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })
-                                                            : '-'}
-                                                    </td>
-                                                    <td className="time-cell">
-                                                        {new Date(user.created_at).toLocaleDateString('th-TH')}
-                                                    </td>
-                                                    <td>
-                                                        <div className="action-buttons" style={{ justifyContent: 'center' }}>
-                                                            <button
-                                                                className={`action-btn ${user.is_active === false ? 'unblock' : 'block'}`}
-                                                                title={user.is_active === false ? 'ปลดบล็อก' : 'ระงับการใช้งาน (บล็อก)'}
-                                                                onClick={() => handleToggleBlockUser(user)}
+                                            {filteredUsers.map(user => {
+                                                const isSelf = user.id === currentUser?.id
+                                                return (
+                                                    <tr key={user.id} className={user.is_active === false ? 'row-blocked' : ''}>
+                                                        <td>
+                                                            {user.full_name || '-'}
+                                                            {isSelf && (
+                                                                <span className="status-badge current-user" style={{ marginLeft: '6px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', fontSize: '0.75rem' }}>(คุณ)</span>
+                                                            )}
+                                                            {user.is_active === false && (
+                                                                <span className="status-badge blocked" style={{ marginLeft: '6px' }}>🔴 โดนบล็อก</span>
+                                                            )}
+                                                        </td>
+                                                        <td>{user.email}</td>
+                                                        <td>฿{(user.balance || 0).toLocaleString()}</td>
+                                                        <td>
+                                                            <select
+                                                                className={`role-select ${getRoleBadgeClass(user.role)}`}
+                                                                value={user.role || 'user'}
+                                                                onChange={(e) => handleUpdateUserRole(user.id, e.target.value)}
+                                                                disabled={isSelf}
                                                             >
-                                                                {user.is_active === false ? <FiUnlock /> : <FiSlash />}
-                                                            </button>
-                                                            <button
-                                                                className="action-btn delete"
-                                                                title="ลบสมาชิก"
-                                                                onClick={() => handleDeleteUser(user)}
-                                                            >
-                                                                <FiTrash2 />
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                                                <option value="user">ผู้ใช้</option>
+                                                                <option value="dealer">เจ้ามือ</option>
+                                                                <option value="superadmin">Admin</option>
+                                                            </select>
+                                                        </td>
+                                                        <td className="time-cell">
+                                                            {user.last_login_at
+                                                                ? new Date(user.last_login_at).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })
+                                                                : '-'}
+                                                        </td>
+                                                        <td className="time-cell">
+                                                            {new Date(user.created_at).toLocaleDateString('th-TH')}
+                                                        </td>
+                                                        <td>
+                                                            <div className="action-buttons" style={{ justifyContent: 'center' }}>
+                                                                {!isSelf ? (
+                                                                    <>
+                                                                        <button
+                                                                            className={`action-btn ${user.is_active === false ? 'unblock' : 'block'}`}
+                                                                            title={user.is_active === false ? 'ปลดบล็อก' : 'ระงับการใช้งาน (บล็อก)'}
+                                                                            onClick={() => handleToggleBlockUser(user)}
+                                                                        >
+                                                                            {user.is_active === false ? <FiUnlock /> : <FiSlash />}
+                                                                        </button>
+                                                                        <button
+                                                                            className="action-btn delete"
+                                                                            title="ลบสมาชิก"
+                                                                            onClick={() => handleDeleteUser(user)}
+                                                                        >
+                                                                            <FiTrash2 />
+                                                                        </button>
+                                                                    </>
+                                                                ) : (
+                                                                    <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>-</span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>

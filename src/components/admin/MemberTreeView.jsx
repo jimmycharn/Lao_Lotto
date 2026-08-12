@@ -18,7 +18,8 @@ export default function MemberTreeView({
     memberships = [],
     searchTerm = '',
     onToggleBlock,
-    onDeleteUser
+    onDeleteUser,
+    currentUserId
 }) {
     const [perspective, setPerspective] = useState('dealer') // 'dealer' (Dealer -> Members) or 'member' (Member -> Dealers)
     const [expandedNodeIds, setExpandedNodeIds] = useState({})
@@ -180,6 +181,7 @@ export default function MemberTreeView({
                             ? (dealerMembersMap[node.id] || [])
                             : (memberDealersMap[node.id] || [])
                         const isExpanded = !!expandedNodeIds[node.id] || (searchTerm && searchTerm.trim() !== '')
+                        const isSelfNode = node.id === currentUserId
 
                         return (
                             <div className={`tree-node-card ${node.is_active === false ? 'node-blocked' : ''}`} key={node.id}>
@@ -191,6 +193,9 @@ export default function MemberTreeView({
                                         <div className="tree-node-info">
                                             <span className="tree-node-title">
                                                 {node.full_name || 'ไม่ระบุชื่อ'}
+                                                {isSelfNode && (
+                                                    <span className="status-badge current-user" style={{ marginLeft: '6px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', fontSize: '0.75rem' }}>(คุณ)</span>
+                                                )}
                                                 {node.is_active === false && (
                                                     <span className="status-badge blocked" style={{ marginLeft: '6px' }}>🔴 โดนบล็อก</span>
                                                 )}
@@ -210,7 +215,7 @@ export default function MemberTreeView({
                                                 ? `สมาชิก ${children.length} คน`
                                                 : `สังกัด ${children.length} เจ้ามือ`}
                                         </span>
-                                        {onToggleBlock && (
+                                        {!isSelfNode && onToggleBlock && (
                                             <button
                                                 className={`tree-action-icon-btn ${node.is_active === false ? 'unblock' : 'block'}`}
                                                 title={node.is_active === false ? 'ปลดบล็อก' : 'ระงับการใช้งาน (บล็อก)'}
@@ -219,7 +224,7 @@ export default function MemberTreeView({
                                                 {node.is_active === false ? <FiUnlock /> : <FiSlash />}
                                             </button>
                                         )}
-                                        {onDeleteUser && (
+                                        {!isSelfNode && onDeleteUser && (
                                             <button
                                                 className="tree-action-icon-btn delete"
                                                 title="ลบสมาชิก"
@@ -238,44 +243,50 @@ export default function MemberTreeView({
                                                 {perspective === 'dealer' ? 'ยังไม่มีสมาชิกในสังกัด' : 'ยังไม่ได้สังกัดเจ้ามือใด'}
                                             </div>
                                         ) : (
-                                            children.map(child => (
-                                                <div className={`tree-child-item ${child.is_active === false ? 'child-blocked' : ''}`} key={child.id}>
-                                                    <div className="tree-node-info">
-                                                        <span className="tree-node-title" style={{ fontSize: '0.875rem' }}>
-                                                            {child.full_name || 'ไม่ระบุชื่อ'}
-                                                            {child.is_active === false && (
-                                                                <span className="status-badge blocked" style={{ marginLeft: '6px' }}>🔴 โดนบล็อก</span>
+                                            children.map(child => {
+                                                const isSelfChild = child.id === currentUserId
+                                                return (
+                                                    <div className={`tree-child-item ${child.is_active === false ? 'child-blocked' : ''}`} key={child.id}>
+                                                        <div className="tree-node-info">
+                                                            <span className="tree-node-title" style={{ fontSize: '0.875rem' }}>
+                                                                {child.full_name || 'ไม่ระบุชื่อ'}
+                                                                {isSelfChild && (
+                                                                    <span className="status-badge current-user" style={{ marginLeft: '6px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', fontSize: '0.75rem' }}>(คุณ)</span>
+                                                                )}
+                                                                {child.is_active === false && (
+                                                                    <span className="status-badge blocked" style={{ marginLeft: '6px' }}>🔴 โดนบล็อก</span>
+                                                                )}
+                                                            </span>
+                                                            <span className="tree-node-sub">
+                                                                {child.email} • ใช้งานล่าสุด: {formatLastActive(child.last_login_at)}
+                                                            </span>
+                                                        </div>
+                                                        <div className="tree-child-right" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                            <span className={`role-badge ${getRoleBadgeClass(child.role)}`}>
+                                                                {getRoleLabel(child.role)}
+                                                            </span>
+                                                            {!isSelfChild && onToggleBlock && (
+                                                                <button
+                                                                    className={`tree-action-icon-btn ${child.is_active === false ? 'unblock' : 'block'}`}
+                                                                    title={child.is_active === false ? 'ปลดบล็อก' : 'ระงับการใช้งาน (บล็อก)'}
+                                                                    onClick={() => onToggleBlock(child)}
+                                                                >
+                                                                    {child.is_active === false ? <FiUnlock /> : <FiSlash />}
+                                                                </button>
                                                             )}
-                                                        </span>
-                                                        <span className="tree-node-sub">
-                                                            {child.email} • ใช้งานล่าสุด: {formatLastActive(child.last_login_at)}
-                                                        </span>
+                                                            {!isSelfChild && onDeleteUser && (
+                                                                <button
+                                                                    className="tree-action-icon-btn delete"
+                                                                    title="ลบสมาชิก"
+                                                                    onClick={() => onDeleteUser(child)}
+                                                                >
+                                                                    <FiTrash2 />
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                    <div className="tree-child-right" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                        <span className={`role-badge ${getRoleBadgeClass(child.role)}`}>
-                                                            {getRoleLabel(child.role)}
-                                                        </span>
-                                                        {onToggleBlock && (
-                                                            <button
-                                                                className={`tree-action-icon-btn ${child.is_active === false ? 'unblock' : 'block'}`}
-                                                                title={child.is_active === false ? 'ปลดบล็อก' : 'ระงับการใช้งาน (บล็อก)'}
-                                                                onClick={() => onToggleBlock(child)}
-                                                            >
-                                                                {child.is_active === false ? <FiUnlock /> : <FiSlash />}
-                                                            </button>
-                                                        )}
-                                                        {onDeleteUser && (
-                                                            <button
-                                                                className="tree-action-icon-btn delete"
-                                                                title="ลบสมาชิก"
-                                                                onClick={() => onDeleteUser(child)}
-                                                            >
-                                                                <FiTrash2 />
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            ))
+                                                )
+                                            })
                                         )}
                                     </div>
                                 )}
