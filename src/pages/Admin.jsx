@@ -19,7 +19,10 @@ import {
     FiSearch,
     FiFilter,
     FiList,
-    FiGitBranch
+    FiGitBranch,
+    FiSlash,
+    FiUnlock,
+    FiLock
 } from 'react-icons/fi'
 import './Admin.css'
 
@@ -242,6 +245,58 @@ export default function Admin() {
         }
     }
 
+    const handleToggleBlockUser = async (targetUser) => {
+        const isCurrentlyBlocked = targetUser.is_active === false
+        const actionText = isCurrentlyBlocked ? 'ปลดบล็อก' : 'ระงับการใช้งาน (บล็อก)'
+
+        if (!(await confirmDialog({
+            title: `ยืนยัน${actionText}`,
+            message: `ต้องการ${actionText} สมาชิกคุณ ${targetUser.full_name || targetUser.email}?`,
+            confirmText: actionText,
+            type: isCurrentlyBlocked ? 'info' : 'danger'
+        }))) return
+
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .update({
+                    is_active: isCurrentlyBlocked ? true : false,
+                    deactivated_at: isCurrentlyBlocked ? null : new Date().toISOString()
+                })
+                .eq('id', targetUser.id)
+
+            if (error) throw error
+            toast.success(`${actionText}สมาชิกเรียบร้อยแล้ว`)
+            fetchUsers()
+        } catch (error) {
+            console.error('Error toggling block status:', error)
+            toast.error('เกิดข้อผิดพลาดในการเปลี่ยนสถานะสมาชิก')
+        }
+    }
+
+    const handleDeleteUser = async (targetUser) => {
+        if (!(await confirmDialog({
+            title: 'ยืนยันการลบสมาชิก',
+            message: `ต้องการลบสมาชิกคุณ ${targetUser.full_name || targetUser.email}? การกระทำนี้ไม่สามารถย้อนกลับได้`,
+            confirmText: 'ลบสมาชิก',
+            type: 'danger'
+        }))) return
+
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .delete()
+                .eq('id', targetUser.id)
+
+            if (error) throw error
+            toast.success('ลบสมาชิกเรียบร้อยแล้ว')
+            fetchUsers()
+        } catch (error) {
+            console.error('Error deleting user:', error)
+            toast.error('เกิดข้อผิดพลาดในการลบสมาชิก')
+        }
+    }
+
     const getRoleBadgeClass = (role) => {
         switch (role) {
             case 'superadmin': return 'role-admin'
@@ -422,6 +477,8 @@ export default function Admin() {
                                     users={users}
                                     memberships={memberships}
                                     searchTerm={searchTerm}
+                                    onToggleBlock={handleToggleBlockUser}
+                                    onDeleteUser={handleDeleteUser}
                                 />
                             ) : filteredUsers.length === 0 ? (
                                 <div className="empty-state">
@@ -437,13 +494,20 @@ export default function Admin() {
                                                 <th>อีเมล</th>
                                                 <th>ยอดเงิน</th>
                                                 <th>สิทธิ์</th>
+                                                <th>ใช้งานล่าสุด</th>
                                                 <th>สมัครเมื่อ</th>
+                                                <th style={{ textAlign: 'center' }}>จัดการ</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {filteredUsers.map(user => (
-                                                <tr key={user.id}>
-                                                    <td>{user.full_name || '-'}</td>
+                                                <tr key={user.id} className={user.is_active === false ? 'row-blocked' : ''}>
+                                                    <td>
+                                                        {user.full_name || '-'}
+                                                        {user.is_active === false && (
+                                                            <span className="status-badge blocked" style={{ marginLeft: '6px' }}>🔴 โดนบล็อก</span>
+                                                        )}
+                                                    </td>
                                                     <td>{user.email}</td>
                                                     <td>฿{(user.balance || 0).toLocaleString()}</td>
                                                     <td>
@@ -458,7 +522,30 @@ export default function Admin() {
                                                         </select>
                                                     </td>
                                                     <td className="time-cell">
+                                                        {user.last_login_at
+                                                            ? new Date(user.last_login_at).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })
+                                                            : '-'}
+                                                    </td>
+                                                    <td className="time-cell">
                                                         {new Date(user.created_at).toLocaleDateString('th-TH')}
+                                                    </td>
+                                                    <td>
+                                                        <div className="action-buttons" style={{ justifyContent: 'center' }}>
+                                                            <button
+                                                                className={`action-btn ${user.is_active === false ? 'unblock' : 'block'}`}
+                                                                title={user.is_active === false ? 'ปลดบล็อก' : 'ระงับการใช้งาน (บล็อก)'}
+                                                                onClick={() => handleToggleBlockUser(user)}
+                                                            >
+                                                                {user.is_active === false ? <FiUnlock /> : <FiSlash />}
+                                                            </button>
+                                                            <button
+                                                                className="action-btn delete"
+                                                                title="ลบสมาชิก"
+                                                                onClick={() => handleDeleteUser(user)}
+                                                            >
+                                                                <FiTrash2 />
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))}

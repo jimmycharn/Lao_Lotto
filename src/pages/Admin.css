@@ -259,6 +259,18 @@
     color: var(--color-warning);
 }
 
+.status-badge.blocked {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--color-error);
+    font-size: 0.7rem;
+    padding: 0.15rem 0.5rem;
+}
+
+tr.row-blocked {
+    opacity: 0.75;
+    background: rgba(239, 68, 68, 0.03);
+}
+
 .action-buttons {
     display: flex;
     gap: 0.5rem;
@@ -285,6 +297,20 @@
 .action-btn.edit:hover {
     background: rgba(212, 175, 55, 0.2);
     color: var(--color-primary);
+}
+
+.action-btn.block:hover {
+    background: rgba(245, 158, 11, 0.2);
+    color: var(--color-warning);
+}
+
+.action-btn.unblock {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--color-success);
+}
+
+.action-btn.unblock:hover {
+    background: rgba(16, 185, 129, 0.3);
 }
 
 .action-btn.delete:hover {
