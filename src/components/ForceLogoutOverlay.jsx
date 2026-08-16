@@ -11,44 +11,33 @@ export default function ForceLogoutOverlay() {
         window.location.href = '/login'
     }
 
+    const content = LOGOUT_MESSAGES[forceLogoutReason] || LOGOUT_MESSAGES.DEFAULT
+
     return (
         <div style={overlayStyle}>
             <div style={modalStyle}>
                 <div style={iconWrapperStyle}>
-                    {forceLogoutReason === 'ACCOUNT_BLOCKED' ? (
-                        <FiAlertTriangle size={36} color="#f5576c" />
-                    ) : (
+                    {content.icon === 'device' ? (
                         <FiSmartphone size={36} color="#f5576c" />
+                    ) : (
+                        <FiAlertTriangle size={36} color="#f5576c" />
                     )}
                 </div>
 
-                <h2 style={titleStyle}>
-                    {forceLogoutReason === 'ACCOUNT_BLOCKED' ? 'บัญชีของคุณถูกระงับการใช้งาน' : 'มีการเข้าสู่ระบบจากอุปกรณ์อื่น'}
-                </h2>
+                <h2 style={titleStyle}>{content.title}</h2>
 
                 <p style={messageStyle}>
-                    {forceLogoutReason === 'ACCOUNT_BLOCKED' ? (
-                        <>
-                            บัญชีของคุณถูกบล็อกการใช้งาน
-                            <br />
-                            กรุณาติดต่อ Admin เพื่อขอให้ปลดบล็อกให้ต่อไป
-                        </>
-                    ) : (
-                        <>
-                            บัญชีของคุณถูกเข้าสู่ระบบจากอุปกรณ์ใหม่
-                            <br />
-                            เซสชันนี้ถูกยกเลิกแล้ว
-                        </>
-                    )}
+                    {content.lines.map((line, i) => (
+                        <span key={i}>
+                            {line}
+                            {i < content.lines.length - 1 && <br />}
+                        </span>
+                    ))}
                 </p>
 
                 <div style={warningBoxStyle}>
                     <FiAlertTriangle size={16} color="#ffc107" />
-                    <span>
-                        {forceLogoutReason === 'ACCOUNT_BLOCKED'
-                            ? 'ติดต่อ Admin เพื่อขอความช่วยเหลือ'
-                            : 'หากไม่ใช่คุณที่เข้าสู่ระบบ กรุณาเปลี่ยนรหัสผ่านทันที'}
-                    </span>
+                    <span>{content.warning}</span>
                 </div>
 
                 <button onClick={handleLogout} style={buttonStyle}>
@@ -58,6 +47,37 @@ export default function ForceLogoutOverlay() {
             </div>
         </div>
     )
+}
+
+// Keyed by the reason reported from AuthContext / check_session_valid.
+// Only 'new_device_login' means another device really took over the session —
+// every other reason must NOT claim that, otherwise users get a misleading
+// "logged in from another device" message for an ordinary expired session.
+const LOGOUT_MESSAGES = {
+    ACCOUNT_BLOCKED: {
+        icon: 'alert',
+        title: 'บัญชีของคุณถูกระงับการใช้งาน',
+        lines: ['บัญชีของคุณถูกบล็อกการใช้งาน', 'กรุณาติดต่อ Admin เพื่อขอให้ปลดบล็อกให้ต่อไป'],
+        warning: 'ติดต่อ Admin เพื่อขอความช่วยเหลือ'
+    },
+    new_device_login: {
+        icon: 'device',
+        title: 'มีการเข้าสู่ระบบจากอุปกรณ์อื่น',
+        lines: ['บัญชีของคุณถูกเข้าสู่ระบบจากอุปกรณ์ใหม่', 'เซสชันนี้ถูกยกเลิกแล้ว'],
+        warning: 'หากไม่ใช่คุณที่เข้าสู่ระบบ กรุณาเปลี่ยนรหัสผ่านทันที'
+    },
+    admin_force: {
+        icon: 'alert',
+        title: 'เซสชันถูกยกเลิกโดยผู้ดูแลระบบ',
+        lines: ['ผู้ดูแลระบบได้ยกเลิกเซสชันนี้', 'กรุณาเข้าสู่ระบบใหม่'],
+        warning: 'ติดต่อ Admin หากต้องการข้อมูลเพิ่มเติม'
+    },
+    DEFAULT: {
+        icon: 'alert',
+        title: 'เซสชันหมดอายุ',
+        lines: ['เซสชันการใช้งานของคุณสิ้นสุดลงแล้ว', 'กรุณาเข้าสู่ระบบใหม่อีกครั้ง'],
+        warning: 'หากพบปัญหานี้บ่อยครั้ง กรุณาแจ้ง Admin'
+    }
 }
 
 const overlayStyle = {

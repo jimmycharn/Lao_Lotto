@@ -7,10 +7,20 @@ const SESSION_CHECK_INTERVAL = 60000 // Check every 60 seconds (Realtime handles
  * Get or create a unique device token for this browser
  */
 export function getDeviceToken() {
-    let token = localStorage.getItem(DEVICE_TOKEN_KEY)
+    let token = null
+    try {
+        token = localStorage.getItem(DEVICE_TOKEN_KEY)
+    } catch (e) {
+        // localStorage unavailable (private mode / blocked cookies)
+    }
     if (!token) {
         token = crypto.randomUUID ? crypto.randomUUID() : generateUUID()
-        localStorage.setItem(DEVICE_TOKEN_KEY, token)
+        try {
+            localStorage.setItem(DEVICE_TOKEN_KEY, token)
+        } catch (e) {
+            // Cannot persist the token. Keep it in memory for this page load so
+            // the session check does not throw and force a false logout.
+        }
     }
     return token
 }
@@ -169,12 +179,19 @@ export function subscribeToSessionChanges(userId, onInvalidated) {
                 filter: `user_id=eq.${userId}`
             },
             (payload) => {
-                const newRecord = payload.new
-                // If our session was invalidated
-                if (newRecord.session_token === sessionToken && !newRecord.is_active) {
-                    console.log('Session invalidated:', newRecord.invalidated_reason)
-                    onInvalidated(newRecord.invalidated_reason)
-                }
+                const newRecord = payload?.new
+                if (!newRecord || newRecord.session_token !== sessionToken) return
+
+                // Only react to an explicit deactivation. A partial payload
+                // (missing is_active) must never be read as "invalidated".
+                if (newRecord.is_active !== false) return
+
+                // 'manual_logout' is caused by this device signing itself out —
+                // reacting to it would show a bogus "another device" overlay.
+                if (newRecord.invalidated_reason === 'manual_logout') return
+
+                console.log('Session invalidated:', newRecord.invalidated_reason)
+                onInvalidated(newRecord.invalidated_reason)
             }
         )
         .subscribe()

@@ -144,6 +144,9 @@ export function AuthProvider({ children }) {
                     if (!isMounted) return
                     if (!sessionCheck.valid) {
                         console.warn('Device session invalid on refresh:', sessionCheck.reason)
+                        // Surface the real reason so the overlay does not fall back to
+                        // a generic/misleading message on the next check.
+                        setForceLogoutReason(sessionCheck.reason || 'session_invalidated')
                         clearAllAuthState()
                         try { await supabase.auth.signOut({ scope: 'local' }) } catch (_) {}
                         setLoading(false)
@@ -401,20 +404,24 @@ export function AuthProvider({ children }) {
     }
 
     const signOut = async ({ skipDeviceInvalidation = false } = {}) => {
-        // Invalidate device session before clearing state (unless skipped, e.g. during OTP flow)
         const currentUserId = user?.id
+
+        // Cleanup session monitoring FIRST. invalidateSession() deactivates our own
+        // device_sessions row, which emits a realtime UPDATE event. If the listener
+        // were still attached it would fire the force-logout overlay on our own
+        // logout ("มีการเข้าสู่ระบบจากอุปกรณ์อื่น").
+        if (sessionCleanupRef.current) {
+            sessionCleanupRef.current()
+            sessionCleanupRef.current = null
+        }
+
+        // Invalidate device session (unless skipped, e.g. during OTP flow)
         if (currentUserId && !skipDeviceInvalidation) {
             try {
                 await invalidateSession(currentUserId)
             } catch (e) {
                 console.log('invalidateSession error (ignoring):', e)
             }
-        }
-
-        // Cleanup session monitoring
-        if (sessionCleanupRef.current) {
-            sessionCleanupRef.current()
-            sessionCleanupRef.current = null
         }
 
         // Clear ALL local state immediately
