@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0"
 import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts"
 import { parseMultiLinePaste, ParsedBet, getPermutations, getUnique3DigitPermsFrom4, getUnique3DigitPermsFrom5, extractBuyerNote } from "./pasteParser.ts"
 import { buildBetItems, calculateScenarios, greedyRecommendations } from "./layoffCalculator.ts"
+import { getMemberShortId, isMemberShortIdParam, matchMembersByShortId } from "./memberShortId.ts"
 import { PDFDocument, rgb } from "npm:pdf-lib@1.17.1"
 import fontkit from "npm:@pdf-lib/fontkit@0.0.4"
 
@@ -575,14 +576,14 @@ async function generateIndividualSubmissionsSummaryFlex(roundId: string, lottery
   const typeName = LOTTERY_TYPE_NAMES[lotteryType] || lotteryType.toUpperCase();
   let summaryText = `👥 สมาชิกที่ส่งเลขแล้ว (${typeName})\nงวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
   summaryText += `--------------------------\n`;
-  summaryText += `ชื่อ | ยอดส่ง | ค่าคอม | คงเหลือส่ง\n`;
+  summaryText += `ชื่อ (ไอดี) | ยอดส่ง | ค่าคอม | คงเหลือส่ง\n`;
 
   const bubbleBodyContents: any[] = [
     {
       "type": "box",
       "layout": "horizontal",
       "contents": [
-        { "type": "text", "text": "ชื่อ", "size": "xs", "color": "#888888", "weight": "bold", "flex": 4 },
+        { "type": "text", "text": "ชื่อ (ไอดี)", "size": "xs", "color": "#888888", "weight": "bold", "flex": 4 },
         { "type": "text", "text": "ยอดส่ง (ค่าคอม)", "size": "xs", "color": "#888888", "weight": "bold", "align": "end", "flex": 4 },
         { "type": "text", "text": "สุทธิส่ง", "size": "xs", "color": "#888888", "weight": "bold", "align": "end", "flex": 3 }
       ]
@@ -608,7 +609,10 @@ async function generateIndividualSubmissionsSummaryFlex(roundId: string, lottery
     const roundedComm = Math.round(comm);
     const roundedNet = Math.round(net);
 
-    summaryText += `${index}. คุณ ${name} | ฿${roundedTotal.toLocaleString('th-TH')} | ฿${roundedComm.toLocaleString('th-TH')} | ฿${roundedNet.toLocaleString('th-TH')}\n`;
+    // Short ID lets admins target this member unambiguously via /สรุป [ไอดี]
+    const shortId = getMemberShortId(uid);
+
+    summaryText += `${index}. คุณ ${name} (${shortId}) | ฿${roundedTotal.toLocaleString('th-TH')} | ฿${roundedComm.toLocaleString('th-TH')} | ฿${roundedNet.toLocaleString('th-TH')}\n`;
 
     bubbleBodyContents.push({
       "type": "box",
@@ -616,13 +620,25 @@ async function generateIndividualSubmissionsSummaryFlex(roundId: string, lottery
       "margin": "md",
       "contents": [
         {
-          "type": "text",
-          "text": `${index}. คุณ ${name}`,
-          "size": "sm",
-          "color": "#333333",
-          "weight": "bold",
+          "type": "box",
+          "layout": "vertical",
           "flex": 4,
-          "wrap": true
+          "contents": [
+            {
+              "type": "text",
+              "text": `${index}. คุณ ${name}`,
+              "size": "sm",
+              "color": "#333333",
+              "weight": "bold",
+              "wrap": true
+            },
+            {
+              "type": "text",
+              "text": `ไอดี: ${shortId}`,
+              "size": "xxs",
+              "color": "#888888"
+            }
+          ]
         },
         {
           "type": "box",
@@ -9701,25 +9717,44 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
                 if (memberships && memberships.length > 0) {
                   const searchNormalized = param.trim().toLowerCase();
-                  // Try exact ID match first
-                  let matches = memberships.filter((m: any) => 
+                  const memberIdOf = (m: any) => m.user_id || m.profiles?.id;
+
+                  // 1. Exact full UUID
+                  let matches = memberships.filter((m: any) =>
                     m.user_id === param || m.profiles?.id === param
                   );
-                  // Fallback to name search
+                  let matchedByShortId = false;
+
+                  // 2. Short member ID — 5 hex chars, e.g. /สรุป a3f9c
+                  //    Resolves duplicate display names without typing a full UUID.
+                  if (matches.length === 0 && isMemberShortIdParam(param)) {
+                    const shortIdMatches = matchMembersByShortId(memberships, param, memberIdOf);
+                    if (shortIdMatches.length > 0) {
+                      matches = shortIdMatches;
+                      matchedByShortId = true;
+                    }
+                  }
+
+                  // 3. Fallback to name search
                   if (matches.length === 0) {
-                    matches = memberships.filter((m: any) => 
+                    matches = memberships.filter((m: any) =>
                       m.profiles?.full_name?.toLowerCase().includes(searchNormalized)
                     );
                   }
+
                   if (matches.length === 1) {
                     targetMember = matches[0];
                   } else if (matches.length > 1) {
-                    await sendLineReply(replyToken, `⚠️ พบสมาชิกมากกว่า 1 คนที่สอดคล้องกับ "${param}":\n` + 
-                      matches.map((m: any) => `- ${m.profiles?.full_name} (ID: ${m.user_id})`).join('\n') + 
-                      `\nกรุณาระบุชื่อที่เจาะจงขึ้น หรือใช้ ID แทนค่ะ`);
+                    const list = matches.map((m: any) =>
+                      `- ${m.profiles?.full_name || 'ไม่ทราบชื่อ'}\n   ไอดี: ${getMemberShortId(memberIdOf(m))}`
+                    ).join('\n');
+                    const hint = matchedByShortId
+                      ? `\nไอดี "${param}" ตรงกับหลายคน กรุณาพิมพ์ไอดีให้ยาวขึ้น (6-8 ตัว)`
+                      : `\nกรุณาใช้ไอดี 5 ตัวแทนชื่อ เช่น /สรุป ${getMemberShortId(memberIdOf(matches[0]))}`;
+                    await sendLineReply(replyToken, `⚠️ พบสมาชิกมากกว่า 1 คนที่สอดคล้องกับ "${param}":\n${list}${hint}`);
                     continue;
                   } else {
-                    await sendLineReply(replyToken, `❌ ไม่พบสมาชิกที่มีชื่อหรือ ID สอดคล้องกับ "${param}"`);
+                    await sendLineReply(replyToken, `❌ ไม่พบสมาชิกที่มีชื่อหรือไอดีสอดคล้องกับ "${param}"\nดูไอดี 5 ตัวของสมาชิกได้ที่คำสั่ง /คนส่ง`);
                     continue;
                   }
                 } else {
@@ -12898,9 +12933,11 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                       cmdRow("/สรุป", "สรุปงวดหวย ยอดรับ ยอดส่ง กำไร และยอดเคลียร์ของสมาชิก"),
                       cmdRow("/สรุป [เลขที่ออก]", "ประกาศผลและสรุปงวด เช่น /สรุป 1234"),
                       cmdRow("/สรุป [งวดวันที่]", "ดูสรุปย้อนหลัง เช่น /สรุป 10-6-69"),
+                      cmdRow("/สรุป [ชื่อสมาชิก]", "ดูสรุปรายคน เช่น /สรุป สมชาย"),
+                      cmdRow("/สรุป [ไอดี 5 ตัว]", "ดูสรุปรายคนเมื่อชื่อซ้ำกัน เช่น /สรุป a3f9c (ดูไอดีได้จาก /คนส่ง)"),
                       cmdRow("/ยอดรวม", "รายงานยอดรับรวมแยกตามประเภทเลข"),
                       cmdRow("/กำไร [หวย] [m/w/เดือน-ปี]", "สรุปกำไร/ขาดทุน (ระบุประเภทหวย หรือช่วงเวลาได้)"),
-                      cmdRow("/คนส่ง", "รายงานยอดรับแทงแยกตามสมาชิกแต่ละคน"),
+                      cmdRow("/คนส่ง", "รายงานยอดรับแทงแยกตามสมาชิกแต่ละคน (แสดงไอดี 5 ตัว)"),
                       cmdRow("/สมาชิก [ชื่อ]", "ค้นหายอดคงเหลือและข้อมูลสมาชิก"),
 
                       sectionHeader("📋", "อัตราจ่าย & ค่าอั้น"),
