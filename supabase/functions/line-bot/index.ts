@@ -8178,7 +8178,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               const { error: closeErr } = await supabase
                 .from('lottery_rounds')
-                .update({ status: 'closed', updated_at: new Date().toISOString() })
+                .update({ status: 'closed', temp_open_member_id: null, temp_open_expires_at: null, updated_at: new Date().toISOString() })
                 .eq('id', openRound.id);
 
               if (closeErr) {
@@ -8271,13 +8271,16 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               continue;
             }
 
-            // ─── COMMAND: /เปิด (Re-open Round) ───
-            if (text === '/เปิด') {
+            // ─── COMMAND: /เปิด (Re-open Round) or /เปิด [member_code] (Temp open for specific member) ───
+            if (text === '/เปิด' || text.startsWith('/เปิด ')) {
               if (showOwnOnly) {
                 await sendLineReply(replyToken, `❌ สมาชิกไม่มีสิทธิ์ปิดรับหรือเปิดรับได้`);
                 continue;
               }
 
+              const openParam = text.substring('/เปิด'.length).trim();
+
+              // Find the most recent closed round for this lottery type
               const { data: closedRound } = await supabase
                 .from('lottery_rounds')
                 .select('*')
@@ -8298,17 +8301,60 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 continue;
               }
 
-              const { error: openErr } = await supabase
-                .from('lottery_rounds')
-                .update({ status: 'open', updated_at: new Date().toISOString() })
-                .eq('id', closedRound.id);
+              // If no parameter, re-open for everyone (original behavior)
+              if (!openParam) {
+                const { error: openErr } = await supabase
+                  .from('lottery_rounds')
+                  .update({ status: 'open', temp_open_member_id: null, temp_open_expires_at: null, updated_at: new Date().toISOString() })
+                  .eq('id', closedRound.id);
 
-              if (openErr) {
-                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาด: ${openErr.message}`);
+                if (openErr) {
+                  await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาด: ${openErr.message}`);
+                  continue;
+                }
+
+                await sendLineReply(replyToken, `✅ เปิดรับแทง ${closedRound.lottery_name || groupLink.lottery_type.toUpperCase()} งวดวันที่ ${getRoundDisplayDate(closedRound, false)} เรียบร้อยแล้ว`);
                 continue;
               }
 
-              await sendLineReply(replyToken, `✅ เปิดรับแทง ${closedRound.lottery_name || groupLink.lottery_type.toUpperCase()} งวดวันที่ ${getRoundDisplayDate(closedRound, false)} เรียบร้อยแล้ว`);
+              // /เปิด [member_code] — temp open for a specific member only
+              // Look up member by member_code
+              const { data: memberProfile } = await supabase
+                .from('profiles')
+                .select('id, full_name, member_code')
+                .eq('member_code', openParam)
+                .maybeSingle();
+
+              if (!memberProfile) {
+                await sendLineReply(replyToken, `❌ ไม่พบสมาชิกที่มีรหัส ${openParam}`);
+                continue;
+              }
+
+              // Verify this member belongs to this dealer
+              const { data: membershipCheck } = await supabase
+                .from('user_dealer_memberships')
+                .select('id, status')
+                .eq('user_id', memberProfile.id)
+                .eq('dealer_id', dealerId)
+                .maybeSingle();
+
+              if (!membershipCheck || membershipCheck.status !== 'active') {
+                await sendLineReply(replyToken, `❌ สมาชิก ${memberProfile.full_name} (รหัส ${openParam}) ไม่ได้เป็นสมาชิกที่ใช้งานอยู่กับเจ้ามือค่ะ`);
+                continue;
+              }
+
+              // Set temp_open_member_id on the round (keep status as 'closed')
+              const { error: tempOpenErr } = await supabase
+                .from('lottery_rounds')
+                .update({ temp_open_member_id: memberProfile.id, temp_open_expires_at: null, updated_at: new Date().toISOString() })
+                .eq('id', closedRound.id);
+
+              if (tempOpenErr) {
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาด: ${tempOpenErr.message}`);
+                continue;
+              }
+
+              await sendLineReply(replyToken, `✅ เปิดให้สมาชิก ${memberProfile.full_name} (รหัส ${openParam}) ส่งเลขได้ชั่วคราว\nงวดวันที่ ${getRoundDisplayDate(closedRound, false)}\nℹ️ สมาชิกคนอื่นยังไม่สามารถส่งเลขได้\nพิมพ์ /ปิด เพื่อปิดรับทุกคน หรือ /เปิด เพื่อเปิดให้ทุกคน`);
               continue;
             }
 
@@ -16257,14 +16303,23 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           continue;
         }
 
-        // If round status is closed or past its close time, reject betting with specific message
+        // If round status is closed or past its close time, check temp_open_member_id
         const closeTime = new Date(activeRound.close_time);
         if (activeRound.status === 'closed' || now >= closeTime) {
-          await sendLineReply(
-            replyToken,
-            `❌ ขออภัยค่ะ งวดหวยประเภท ${lotteryType.toUpperCase()} ปิดรับแทงแล้วค่ะ`
-          );
-          continue;
+          // Check if this member has been granted temp open access
+          const tempMemberId = activeRound.temp_open_member_id;
+          const tempExpiry = activeRound.temp_open_expires_at;
+          const isTempExpired = tempExpiry && now >= new Date(tempExpiry);
+          const hasTempAccess = tempMemberId && tempMemberId === profile.id && !isTempExpired;
+
+          if (!hasTempAccess) {
+            await sendLineReply(
+              replyToken,
+              `❌ ขออภัยค่ะ งวดหวยประเภท ${lotteryType.toUpperCase()} ปิดรับแทงแล้วค่ะ`
+            );
+            continue;
+          }
+          // Member has temp access — fall through to allow betting
         }
 
         // Retrieve returnExcessOnOverflow setting for the member
