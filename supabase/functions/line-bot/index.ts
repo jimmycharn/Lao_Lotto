@@ -16235,6 +16235,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           continue;
         }
 
+        console.log(`[LINE BOT BET] text="${text.substring(0, 80)}", isDealer=${isDealer}, isAdmin=${isAdmin}, isManager=${isManager}, groupLink=${!!groupLink}, lotteryType=${lotteryType}, profileId=${profile?.id}`);
+
         const parsedBets = parseMultiLinePaste(text, lotteryType, { 
           x_separator_behavior: xSeparatorBehavior,
           hyphen_separator_behavior: hyphenSeparatorBehavior,
@@ -16243,6 +16245,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
         });
         const isStaffSender = isDealer || isAdmin || isManager;
         let originalSenderId = profile?.id || null;
+
+        console.log(`[LINE BOT BET] parsedBets.length=${parsedBets.length}, isStaffSender=${isStaffSender}, groupLink=${!!groupLink}, allow_staff_bet=${groupLink?.allow_staff_bet}, staff_member_id=${groupLink?.staff_member_id}`);
 
         if (isStaffSender && groupLink) {
           if (parsedBets.length > 0) {
@@ -16359,6 +16363,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
         // If round status is closed/announced or past its close time, check temp_open_member_id
         const closeTime = new Date(activeRound.close_time);
+        console.log(`[LINE BOT BET] round status=${activeRound.status}, closeTime=${closeTime.toISOString()}, now=${now.toISOString()}, profile.id=${profile.id}, temp_open_member_id=${activeRound.temp_open_member_id}`);
         if (activeRound.status !== 'open' || now >= closeTime) {
           // Check if this member has been granted temp open access
           const tempMemberId = activeRound.temp_open_member_id;
