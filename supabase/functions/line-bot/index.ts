@@ -8161,12 +8161,13 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 continue;
               }
 
+              // Find open round, or a closed/announced round with temp_open_member_id set
               const { data: openRound } = await supabase
                 .from('lottery_rounds')
                 .select('*')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
-                .eq('status', 'open')
+                .in('status', ['open', 'closed', 'announced'])
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
@@ -8176,6 +8177,14 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 continue;
               }
 
+              // If round is closed/announced and has no temp_open_member_id, nothing to close
+              if (openRound.status !== 'open' && !openRound.temp_open_member_id) {
+                await sendLineReply(replyToken, `❌ ไม่มีงวดหวย ${groupLink.lottery_type.toUpperCase()} ที่เปิดรับอยู่ในขณะนี้`);
+                continue;
+              }
+
+              const wasAnnounced = openRound.is_result_announced;
+
               const { error: closeErr } = await supabase
                 .from('lottery_rounds')
                 .update({ status: 'closed', temp_open_member_id: null, temp_open_expires_at: null, updated_at: new Date().toISOString() })
@@ -8184,6 +8193,48 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               if (closeErr) {
                 await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาด: ${closeErr.message}`);
                 continue;
+              }
+
+              // If round was already announced, recalculate winners with the new submissions
+              if (wasAnnounced) {
+                // Reset previous winners
+                await supabase
+                  .from('submissions')
+                  .update({ is_winner: false, prize_amount: 0 })
+                  .eq('round_id', openRound.id)
+                  .eq('is_deleted', false);
+
+                // Recalculate winners
+                const { error: rpcErr } = await supabase
+                  .rpc('calculate_round_winners', { p_round_id: openRound.id });
+
+                if (rpcErr) {
+                  console.error('Error recalculating winners after /ปิด:', JSON.stringify(rpcErr));
+                }
+
+                // Re-apply billing
+                try {
+                  const { data: dealerSubs } = await supabase
+                    .from('dealer_subscriptions')
+                    .select('billing_model, subscription_packages(billing_model, profit_percentage_rate)')
+                    .eq('dealer_id', openRound.dealer_id)
+                    .in('status', ['active', 'trial'])
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+
+                  const dealerSub = dealerSubs?.[0];
+                  const billingModel = dealerSub?.subscription_packages?.billing_model || dealerSub?.billing_model;
+
+                  if (billingModel === 'profit_percentage') {
+                    const previousPending = openRound.charged_credit_amount || 0;
+                    await deductProfitBasedCreditDeno(openRound.dealer_id, openRound.id, previousPending);
+                  } else {
+                    const previouslyCharged = openRound.charged_credit_amount || 0;
+                    await deductAdditionalCreditForRoundDeno(openRound.dealer_id, openRound.id, previouslyCharged);
+                  }
+                } catch (billingErr) {
+                  console.error('Billing recalculation failed after /ปิด:', billingErr);
+                }
               }
 
               // Build Flex Message for closing announcement
@@ -8280,13 +8331,13 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               const openParam = text.substring('/เปิด'.length).trim();
 
-              // Find the most recent closed round for this lottery type
+              // Find the most recent closed or announced round for this lottery type
               const { data: closedRound } = await supabase
                 .from('lottery_rounds')
                 .select('*')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
-                .eq('status', 'closed')
+                .in('status', ['closed', 'announced'])
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
@@ -8296,7 +8347,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 continue;
               }
 
-              if (closedRound.is_result_announced) {
+              // /เปิด (no param): block if already announced
+              // /เปิด [member_code]: allow even if announced (for late submissions)
+              if (!openParam && closedRound.is_result_announced) {
                 await sendLineReply(replyToken, `❌ ไม่สามารถเปิดรับแทงได้ เพราะงวดนี้ประกาศผลรางวัลไปแล้ว`);
                 continue;
               }
@@ -8354,7 +8407,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 continue;
               }
 
-              await sendLineReply(replyToken, `✅ เปิดให้สมาชิก ${memberProfile.full_name} (รหัส ${openParam}) ส่งเลขได้ชั่วคราว\nงวดวันที่ ${getRoundDisplayDate(closedRound, false)}\nℹ️ สมาชิกคนอื่นยังไม่สามารถส่งเลขได้\nพิมพ์ /ปิด เพื่อปิดรับทุกคน หรือ /เปิด เพื่อเปิดให้ทุกคน`);
+              const wasAnnouncedMsg = closedRound.is_result_announced ? `\n⚠️ งวดนี้ประกาศผลแล้ว เมื่อกด /ปิด ระบบจะคำนวณผู้ชนะใหม่อัตโนมัติ` : '';
+              await sendLineReply(replyToken, `✅ เปิดให้สมาชิก ${memberProfile.full_name} (รหัส ${openParam}) ส่งเลขได้ชั่วคราว\nงวดวันที่ ${getRoundDisplayDate(closedRound, false)}\nℹ️ สมาชิกคนอื่นยังไม่สามารถส่งเลขได้\nพิมพ์ /ปิด เพื่อปิดรับทุกคน หรือ /เปิด เพื่อเปิดให้ทุกคน${wasAnnouncedMsg}`);
               continue;
             }
 
@@ -16279,13 +16333,13 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           continue;
         }
 
-        // Check active round for this dealer (must be open or closed, is_active=true, and current time is past open time)
+        // Check active round for this dealer (must be open/closed/announced, is_active=true, and current time is past open time)
         const { data: openRounds } = await supabase
           .from('lottery_rounds')
           .select('*')
           .eq('dealer_id', dealerId)
           .eq('lottery_type', lotteryType)
-          .in('status', ['open', 'closed'])
+          .in('status', ['open', 'closed', 'announced'])
           .order('open_time', { ascending: false });
 
         const now = new Date();
@@ -16303,9 +16357,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           continue;
         }
 
-        // If round status is closed or past its close time, check temp_open_member_id
+        // If round status is closed/announced or past its close time, check temp_open_member_id
         const closeTime = new Date(activeRound.close_time);
-        if (activeRound.status === 'closed' || now >= closeTime) {
+        if (activeRound.status !== 'open' || now >= closeTime) {
           // Check if this member has been granted temp open access
           const tempMemberId = activeRound.temp_open_member_id;
           const tempExpiry = activeRound.temp_open_expires_at;
