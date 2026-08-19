@@ -7630,7 +7630,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             text.startsWith('/แจ้งผล') ||
             text.startsWith('/กำไร') ||
             text.startsWith('/สร้าง') ||
-            text === '/เปิด' || text === '/ปิด' || text === '/เริ่มขาย' ||
+            text === '/เปิด' || text.startsWith('/เปิด ') || text === '/ปิด' || text === '/เริ่มขาย' ||
             text.toLowerCase() === 'y' || text === 'ยืนยัน';
 
           if (isManagerCommand) {
