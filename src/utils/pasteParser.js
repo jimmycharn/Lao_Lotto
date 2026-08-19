@@ -33,6 +33,49 @@ function normalizeThreeGroupShorthand(line) {
     return line;
 }
 
+function normalizeFourGroupShorthand(line) {
+    const clean = line.trim();
+
+    const ctxPrefix = '(?<ctx>(?:บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล)\.?\s*)?';
+
+    const hyphenRe = new RegExp(
+        '^' + ctxPrefix + '(?<num>\\d{3})\\s*-\\s*(?<a1>\\d+)\\s*-\\s*(?<a2>\\d+)\\s*-\\s*(?<a3>\\d+)(?<suffix>\\s+.*)?$',
+        'i'
+    );
+    const starRe = new RegExp(
+        '^' + ctxPrefix + '(?<num>\\d{3})\\s*[=*×xX]\\s*(?<a1>\\d+)\\s*[*×xX]\\s*(?<a2>\\d+)\\s*[*×xX]\\s*(?<a3>\\d+)(?<suffix>\\s+.*)?$',
+        'i'
+    );
+
+    const match = clean.match(hyphenRe) || clean.match(starRe);
+    if (!match) return line;
+
+    const { num, a1, a2, a3, suffix } = match.groups;
+    const amount1 = parseInt(a1, 10);
+    const amount2 = parseInt(a2, 10);
+    const amount3 = parseInt(a3, 10);
+
+    if (!isCommonAmount(amount1)) return line;
+
+    const permCount = getPermutationCount(num);
+    if (permCount !== 3) return line;
+
+    const prefixStr = match.groups.ctx ? match.groups.ctx.trim() : '';
+    const suffixStr = suffix ? suffix.trim() : '';
+
+    if (amount1 === amount2 && amount2 === amount3) {
+        const result = `${prefixStr} ${num}=${amount1}*${permCount}`.trim();
+        return suffixStr ? `${result} ${suffixStr}` : result;
+    }
+
+    if (amount2 === amount3 && amount1 !== amount2) {
+        const result = `${prefixStr} ${num}=${amount1}*${amount2} กลับ`.trim();
+        return suffixStr ? `${result} ${suffixStr}` : result;
+    }
+
+    return line;
+}
+
 function preprocessShorthands(line) {
     let s = line.trim();
     s = s.replace(/\/+=?(\d+)\*([ชุดช])$/i, '=$1*$2');
@@ -260,6 +303,7 @@ function expandLines(rawLines, lotteryType = 'lao', settings) {
     const shouldRevert = behavior === 'revert' || (behavior === 'auto' && lotteryType === 'stock');
     rawLines = rawLines.map(line => {
         let s = preprocessShorthands(line);
+        s = normalizeFourGroupShorthand(s);
         s = normalizeThreeGroupShorthand(s);
         return s;
     });

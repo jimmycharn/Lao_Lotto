@@ -1823,6 +1823,104 @@ describe('pasteParser - parseMultiLinePaste', () => {
       });
     });
   })
+
+  describe('4-group shorthand (3-digit + 3 amounts)', () => {
+    it('should parse 688-50-50-50 as คูณชุด (perm=3, all amounts equal)', () => {
+      const result = parseMultiLinePaste('688-50-50-50', 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '688',
+        amount: 50,
+        amount2: 3,
+        betType: '3_top',
+        specialType: 'set3',
+        typeLabel: 'คูณชุด'
+      })
+    })
+
+    it('should parse 688*50*50*50 as คูณชุด (perm=3, all amounts equal)', () => {
+      const result = parseMultiLinePaste('688*50*50*50', 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '688',
+        amount: 50,
+        amount2: 3,
+        betType: '3_top',
+        specialType: 'set3',
+        typeLabel: 'คูณชุด'
+      })
+    })
+
+    it('should parse 688=50*50*50 as คูณชุด (perm=3, all amounts equal)', () => {
+      const result = parseMultiLinePaste('688=50*50*50', 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '688',
+        amount: 50,
+        amount2: 3,
+        betType: '3_top',
+        specialType: 'set3',
+        typeLabel: 'คูณชุด'
+      })
+    })
+
+    it('should parse 688-100-50-50 as กลับ (perm=3, last 2 amounts equal, first different)', () => {
+      const result = parseMultiLinePaste('688-100-50-50', 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '688',
+        amount: 100,
+        amount2: 50,
+        betType: '3_top',
+        specialType: 'reverse',
+        typeLabel: 'กลับ'
+      })
+    })
+
+    it('should parse 688*100*50*50 as กลับ (perm=3, last 2 amounts equal, first different)', () => {
+      const result = parseMultiLinePaste('688*100*50*50', 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '688',
+        amount: 100,
+        amount2: 50,
+        betType: '3_top',
+        specialType: 'reverse',
+        typeLabel: 'กลับ'
+      })
+    })
+
+    it('should parse 688=100*50*50 as กลับ (perm=3, last 2 amounts equal, first different)', () => {
+      const result = parseMultiLinePaste('688=100*50*50', 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '688',
+        amount: 100,
+        amount2: 50,
+        betType: '3_top',
+        specialType: 'reverse',
+        typeLabel: 'กลับ'
+      })
+    })
+
+    it('should not apply 4-group shorthand when permCount != 3 (e.g. 123-50-50-50 has perm=6)', () => {
+      const result = parseMultiLinePaste('123-50-50-50', 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0].specialType).not.toBe('set6')
+    })
+
+    it('should handle 4-group shorthand with context prefix (e.g. บน 688-50-50-50)', () => {
+      const result = parseMultiLinePaste('บน 688-50-50-50', 'lao')
+      expect(result.length).toBe(1)
+      expect(result[0]).toMatchObject({
+        numbers: '688',
+        amount: 50,
+        amount2: 3,
+        betType: '3_top',
+        specialType: 'set3'
+      })
+    })
+  })
 })
 
 
