@@ -936,7 +936,7 @@ export function parseMultiLinePaste(text, lotteryType = 'lao', settings) {
                 }
             }
         }
-        if (lineCtx !== contextMode) {
+        if (lineCtx !== contextMode && lineCtx !== 'reverse') {
             contextMode = lineCtx;
         }
         if (lineCtx === 'both') {

@@ -1087,7 +1087,7 @@ export function parseMultiLinePaste(text: string, lotteryType = 'lao', settings?
             }
         }
 
-        if (lineCtx !== contextMode) {
+        if (lineCtx !== contextMode && lineCtx !== 'reverse') {
             contextMode = lineCtx;
         }
 
