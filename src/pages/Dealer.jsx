@@ -332,7 +332,7 @@ export default function Dealer() {
     const availableHistoryMonths = useMemo(() => {
         const monthSet = new Set()
         roundHistory.forEach(h => {
-            const dateStr = h.round_date || h.created_at || h.open_time
+            const dateStr = h.close_time || h.round_date || h.created_at || h.open_time
             if (dateStr) {
                 const d = new Date(dateStr)
                 if (!isNaN(d.getTime())) {
@@ -362,7 +362,7 @@ export default function Dealer() {
     const filteredRoundHistory = useMemo(() => {
         return roundHistory.filter(h => {
             if (historyMonthFilter !== 'all') {
-                const dateStr = h.round_date || h.created_at || h.open_time
+                const dateStr = h.close_time || h.round_date || h.created_at || h.open_time
                 if (dateStr) {
                     const d = new Date(dateStr)
                     if (!isNaN(d.getTime())) {
@@ -1135,7 +1135,7 @@ export default function Dealer() {
                         round_id: round.id,
                         dealer_id: user.id,
                         lottery_type: round.lottery_type,
-                        round_date: round.draw_date || round.open_time?.split('T')[0],
+                        round_date: round.close_time?.split('T')[0] || round.round_date || round.open_time?.split('T')[0],
                         open_time: round.open_time,
                         close_time: round.close_time,
                         total_entries: totalEntries,
@@ -1152,8 +1152,8 @@ export default function Dealer() {
             }
 
             const combinedHistory = [...activeHistoryItems, ...archivedRounds].sort((a, b) => {
-                const dateA = new Date(a.round_date || a.created_at || a.open_time).getTime()
-                const dateB = new Date(b.round_date || b.created_at || b.open_time).getTime()
+                const dateA = new Date(a.close_time || a.round_date || a.created_at || a.open_time).getTime()
+                const dateB = new Date(b.close_time || b.round_date || b.created_at || b.open_time).getTime()
                 return dateB - dateA
             })
 
@@ -1530,7 +1530,9 @@ export default function Dealer() {
                 .eq('id', member.membership_id)
 
             if (error) throw error
-            fetchData()
+
+            toast.success('บล็อคสมาชิกสำเร็จ')
+            setMembers(prev => prev.map(m => m.id === member.id ? { ...m, membership_status: 'blocked' } : m))
         } catch (error) {
             console.error('Error blocking member:', error)
             toast.error('เกิดข้อผิดพลาดในการบล็อคสมาชิก')
@@ -2116,7 +2118,7 @@ export default function Dealer() {
                         dealer_id: user.id,
                         round_id: roundId,
                         lottery_type: roundData.lottery_type,
-                        round_date: roundData.draw_date || roundData.open_time?.split('T')[0],
+                        round_date: roundData.close_time?.split('T')[0] || roundData.round_date || roundData.open_time?.split('T')[0],
                         open_time: roundData.open_time,
                         close_time: roundData.close_time,
                         total_entries: totalEntries,
@@ -2154,7 +2156,7 @@ export default function Dealer() {
                     dealer_id: user.id,
                     round_id: roundId,
                     lottery_type: roundData.lottery_type,
-                    round_date: roundData.draw_date || roundData.open_time?.split('T')[0],
+                    round_date: roundData.close_time?.split('T')[0] || roundData.round_date || roundData.open_time?.split('T')[0],
                     total_entries: data.entries,
                     total_amount: data.amount,
                     total_commission: data.commission,
@@ -2880,7 +2882,7 @@ export default function Dealer() {
                                                                                 <FiTrash2 size={16} />
                                                                             </button>
                                                                             <span className="round-date" style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginLeft: '0.5rem' }}>
-                                                                                <FiCalendar /> {formatDate(history.round_date)}
+                                                                                <FiCalendar /> {formatDate(history.close_time || history.round_date)}
                                                                             </span>
                                                                         </div>
                                                                     </div>
