@@ -238,18 +238,15 @@ export default function Register() {
                 <div className="auth-header">
                     <FiGift className={`auth-logo ${isDealerRegistration ? 'dealer' : ''}`} />
                     <h1>{isDealerRegistration ? 'สมัครเป็นเจ้ามือ' : 'สมัครสมาชิก'}</h1>
-                    {isDealerRegistration ? (
-                        <div className="referral-info dealer">
-                            <FiUsers />
-                            <span>เริ่มต้นเป็นเจ้ามือในระบบ Big Lotto</span>
-                        </div>
-                    ) : dealerInfo ? (
-                        <div className="referral-info">
-                            <FiUsers />
-                            <span>เจ้ามือ: <strong>{dealerInfo.full_name}</strong></span>
-                        </div>
-                    ) : (
-                        <p>เริ่มต้นเสี่ยงโชคกับเรา</p>
+                    {!isDealerRegistration && (
+                        dealerInfo ? (
+                            <div className="referral-info">
+                                <FiUsers />
+                                <span>เจ้ามือ: <strong>{dealerInfo.full_name}</strong></span>
+                            </div>
+                        ) : (
+                            <p>เริ่มต้นเสี่ยงโชคกับเรา</p>
+                        )
                     )}
                 </div>
 
