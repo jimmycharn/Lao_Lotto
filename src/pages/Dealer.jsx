@@ -55,6 +55,7 @@ import {
     BET_TYPES_BY_LOTTERY,
     DEFAULT_COMMISSIONS,
     DEFAULT_PAYOUTS,
+    normalizeBetType,
     normalizeNumber,
     generateBatchId,
     getDefaultLimitsForType,
@@ -76,6 +77,47 @@ import MemberAccordionItem from '../components/dealer/MemberAccordionItem'
 
 // RoundAccordionItem is now imported from separate file
 
+
+const getFallbackPayout = (betType, lotteryType) => {
+    const normalized = normalizeBetType(betType)
+    const lotteryKey = lotteryType === 'lao' || lotteryType === 'hanoi' ? 'lao' : lotteryType || 'thai'
+    if (lotteryKey === 'lao') {
+        if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(normalized)) {
+            return 70
+        }
+    }
+    return DEFAULT_PAYOUTS[normalized] || DEFAULT_PAYOUTS[betType] || 1
+}
+
+const getSettingsKey = (betType, lotteryKey) => {
+    const normalized = normalizeBetType(betType)
+    const POSITION_MAP = {
+        'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
+        'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
+    }
+    const mapped = POSITION_MAP[normalized] || normalized
+    if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+        const LAO_BET_TYPE_MAP = {
+            '3_top': '3_straight',
+            '3_tod': '3_tod_single'
+        }
+        return LAO_BET_TYPE_MAP[mapped] || mapped
+    }
+    return mapped
+}
+
+function getExpectedSubmissionPayout(sub, lotteryType, userSettings = {}, setPrice = 120) {
+    if (!sub.is_winner) return 0
+    if (sub.bet_type === '4_set') {
+        const numSets = Math.max(1, Math.floor((sub.amount || 0) / setPrice))
+        return (sub.prize_amount || 0) * numSets
+    }
+    const lotteryKey = getLotteryTypeKey(lotteryType)
+    const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
+    const settings = userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
+    if (settings?.payout !== undefined) return (sub.amount || 0) * settings.payout
+    return (sub.amount || 0) * getFallbackPayout(sub.bet_type, lotteryType)
+}
 
 // Helper function to calculate layoff transfer commission (4_set is fixed Baht per set, others are %)
 // Helper to ensure member commission is non-zero
@@ -196,6 +238,16 @@ export default function Dealer() {
 
             // 2.5 Fallback for active closed/announced rounds not yet archived into user_round_history
             if (userHistories.length === 0 && historyItem.round_id) {
+                const { data: memberSettings } = await supabase
+                    .from('user_settings')
+                    .select('*')
+                    .eq('dealer_id', user.id)
+
+                const userSettingsMap = {}
+                if (memberSettings) {
+                    memberSettings.forEach(s => { userSettingsMap[s.user_id] = s })
+                }
+
                 const { data: subData } = await fetchAllRows(
                     (from, to) => supabase
                         .from('submissions')
@@ -223,11 +275,7 @@ export default function Dealer() {
                         userSubmissions[uid].total_entries += 1
                         userSubmissions[uid].total_amount += (s.amount || 0)
                         userSubmissions[uid].total_commission += (s.commission_amount || 0)
-                        const winAmt = s.is_winner 
-                            ? (s.bet_type === '4_set' 
-                                ? (s.prize_amount || 0) * Math.max(1, Math.floor((s.amount || 0) / setPrice))
-                                : (s.prize_amount || 0))
-                            : 0
+                        const winAmt = getExpectedSubmissionPayout(s, historyItem.lottery_type, userSettingsMap, setPrice)
                         userSubmissions[uid].total_winnings += winAmt
                     })
                     userHistories = Object.values(userSubmissions)
@@ -1108,6 +1156,17 @@ export default function Dealer() {
                 .in('status', ['closed', 'announced'])
                 .order('close_time', { ascending: false })
 
+            // Fetch dealer user_settings for accurate payout calculation matching RoundAccordionItem
+            const { data: dealerUserSettings } = await supabase
+                .from('user_settings')
+                .select('*')
+                .eq('dealer_id', user.id)
+
+            const userSettingsMap = {}
+            if (dealerUserSettings) {
+                dealerUserSettings.forEach(s => { userSettingsMap[s.user_id] = s })
+            }
+
             const activeHistoryItems = []
             if (activeClosedRounds && activeClosedRounds.length > 0) {
                 for (const round of activeClosedRounds) {
@@ -1117,7 +1176,7 @@ export default function Dealer() {
                     const { data: submissions } = await fetchAllRows(
                         (from, to) => supabase
                             .from('submissions')
-                            .select('amount, commission_amount, prize_amount, is_winner, bet_type, numbers, is_deleted')
+                            .select('amount, commission_amount, prize_amount, is_winner, bet_type, numbers, is_deleted, user_id')
                             .eq('round_id', round.id)
                             .eq('is_deleted', false)
                             .range(from, to)
@@ -1134,12 +1193,7 @@ export default function Dealer() {
                     const totalCommission = submissions?.reduce((sum, s) => sum + (s.commission_amount || 0), 0) || 0
                     const setPrice = round?.set_prices?.['4_top'] || 120
                     const totalPayout = submissions?.reduce((sum, s) => {
-                        if (!s.is_winner) return sum
-                        if (s.bet_type === '4_set') {
-                            const numSets = Math.max(1, Math.floor((s.amount || 0) / setPrice))
-                            return sum + ((s.prize_amount || 0) * numSets)
-                        }
-                        return sum + (s.prize_amount || 0)
+                        return sum + getExpectedSubmissionPayout(s, round.lottery_type, userSettingsMap, setPrice)
                     }, 0) || 0
 
                     const transferredAmount = transfers?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0
@@ -2119,6 +2173,16 @@ export default function Dealer() {
                                       totalAmount > 0
 
             if (shouldSaveHistory) {
+                const { data: dealerUserSettings } = await supabase
+                    .from('user_settings')
+                    .select('*')
+                    .eq('dealer_id', user.id)
+
+                const userSettingsMap = {}
+                if (dealerUserSettings) {
+                    dealerUserSettings.forEach(s => { userSettingsMap[s.user_id] = s })
+                }
+
                 const { data: transfers } = await supabase
                     .from('bet_transfers')
                     .select('*')
@@ -2128,12 +2192,7 @@ export default function Dealer() {
                 const totalCommission = submissions?.reduce((sum, s) => sum + (s.commission_amount || 0), 0) || 0
                 const setPrice = roundData?.set_prices?.['4_top'] || 120
                 const totalPayout = submissions?.reduce((sum, s) => {
-                    if (!s.is_winner) return sum
-                    if (s.bet_type === '4_set') {
-                        const numSets = Math.max(1, Math.floor((s.amount || 0) / setPrice))
-                        return sum + ((s.prize_amount || 0) * numSets)
-                    }
-                    return sum + (s.prize_amount || 0)
+                    return sum + getExpectedSubmissionPayout(s, roundData.lottery_type, userSettingsMap, setPrice)
                 }, 0) || 0
 
                 const transferredAmount = transfers?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0
@@ -2180,11 +2239,7 @@ export default function Dealer() {
                     userSubmissions[s.user_id].entries += 1
                     userSubmissions[s.user_id].amount += s.amount || 0
                     userSubmissions[s.user_id].commission += s.commission_amount || 0
-                    const winAmt = s.is_winner 
-                        ? (s.bet_type === '4_set' 
-                            ? (s.prize_amount || 0) * Math.max(1, Math.floor((s.amount || 0) / setPrice))
-                            : (s.prize_amount || 0))
-                        : 0
+                    const winAmt = getExpectedSubmissionPayout(s, roundData.lottery_type, userSettingsMap, setPrice)
                     userSubmissions[s.user_id].winnings += winAmt
                 })
 
