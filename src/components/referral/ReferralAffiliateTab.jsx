@@ -156,7 +156,7 @@ export default function ReferralAffiliateTab({ user, profile, isDealer = false }
             setLoading(false)
             setRefreshing(false)
         }
-    }, [user?.id, toast])
+    }, [user?.id])
 
     useEffect(() => {
         fetchData()
@@ -174,20 +174,58 @@ export default function ReferralAffiliateTab({ user, profile, isDealer = false }
         .filter(w => w.status === 'pending')
         .reduce((sum, w) => sum + parseFloat(w.amount || 0), 0)
 
-    const handleCopyLink = () => {
+    const handleCopyLink = async (e) => {
+        e?.preventDefault?.()
+        e?.stopPropagation?.()
         if (!referralLink) return
-        navigator.clipboard.writeText(referralLink)
-        setCopiedLink(true)
-        toast?.success?.('คัดลอกลิงก์แนะนำเรียบร้อยแล้ว')
-        setTimeout(() => setCopiedLink(false), 2500)
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(referralLink)
+            } else {
+                const el = document.createElement('textarea')
+                el.value = referralLink
+                el.setAttribute('readonly', '')
+                el.style.position = 'absolute'
+                el.style.left = '-9999px'
+                document.body.appendChild(el)
+                el.select()
+                document.execCommand('copy')
+                document.body.removeChild(el)
+            }
+            setCopiedLink(true)
+            toast?.success?.('คัดลอกลิงก์แนะนำเรียบร้อยแล้ว')
+            setTimeout(() => setCopiedLink(false), 2500)
+        } catch (err) {
+            console.error('Failed to copy link:', err)
+            toast?.error?.('ไม่สามารถคัดลอกลิงก์ได้')
+        }
     }
 
-    const handleCopyCode = () => {
+    const handleCopyCode = async (e) => {
+        e?.preventDefault?.()
+        e?.stopPropagation?.()
         if (!memberCode) return
-        navigator.clipboard.writeText(memberCode)
-        setCopiedCode(true)
-        toast?.success?.('คัดลอกรหัสแนะนำเรียบร้อยแล้ว')
-        setTimeout(() => setCopiedCode(false), 2500)
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(memberCode)
+            } else {
+                const el = document.createElement('textarea')
+                el.value = memberCode
+                el.setAttribute('readonly', '')
+                el.style.position = 'absolute'
+                el.style.left = '-9999px'
+                document.body.appendChild(el)
+                el.select()
+                document.execCommand('copy')
+                document.body.removeChild(el)
+            }
+            setCopiedCode(true)
+            toast?.success?.('คัดลอกรหัสแนะนำเรียบร้อยแล้ว')
+            setTimeout(() => setCopiedCode(false), 2500)
+        } catch (err) {
+            console.error('Failed to copy code:', err)
+            toast?.error?.('ไม่สามารถคัดลอกรหัสได้')
+        }
     }
 
     // Submit cash withdrawal request
@@ -409,6 +447,7 @@ export default function ReferralAffiliateTab({ user, profile, isDealer = false }
                         <div className="code-display">
                             <strong>{memberCode || '-'}</strong>
                             <button
+                                type="button"
                                 className={`btn-copy ${copiedCode ? 'copied' : ''}`}
                                 onClick={handleCopyCode}
                                 title="คัดลอกรหัส"
@@ -430,6 +469,7 @@ export default function ReferralAffiliateTab({ user, profile, isDealer = false }
                                 onClick={(e) => e.target.select()}
                             />
                             <button
+                                type="button"
                                 className={`btn btn-primary ${copiedLink ? 'btn-success' : ''}`}
                                 onClick={handleCopyLink}
                             >
