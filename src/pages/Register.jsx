@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams, Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { FiMail, FiLock, FiUser, FiEye, FiEyeOff, FiGift, FiUsers, FiShare2, FiCheckCircle } from 'react-icons/fi'
+import { FiMail, FiLock, FiUser, FiEye, FiEyeOff, FiGift, FiUsers, FiShare2, FiCheckCircle, FiLogOut } from 'react-icons/fi'
 import './Auth.css'
 
 export default function Register() {
@@ -15,7 +15,7 @@ export default function Register() {
     const [error, setError] = useState('')
     const [success, setSuccess] = useState(false)
     const [dealerInfo, setDealerInfo] = useState(null)
-    const { signUp, user, loading: authLoading } = useAuth()
+    const { signUp, signOut, user, profile, loading: authLoading } = useAuth()
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
     const dealerId = searchParams.get('ref')
@@ -35,11 +35,16 @@ export default function Register() {
     }, [dealerId, isDealerRegistration])
 
     async function fetchDealerInfo() {
-        const { data } = await supabase
-            .from('profiles')
-            .select('full_name, email')
-            .eq('id', dealerId)
-            .single()
+        const cleanId = dealerId?.trim()
+        if (!cleanId) return
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId)
+        let query = supabase.from('profiles').select('id, full_name, email, member_code').eq('role', 'dealer')
+        if (isUuid) {
+            query = query.eq('id', cleanId)
+        } else {
+            query = query.eq('member_code', cleanId)
+        }
+        const { data } = await query.maybeSingle()
 
         if (data) {
             setDealerInfo(data)
@@ -54,7 +59,7 @@ export default function Register() {
         setCheckingReferrer(true)
         try {
             const cleanCode = code.trim()
-            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanCode)
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanCode)
             let query = supabase.from('profiles').select('id, full_name, member_code, role')
             if (isUuid) {
                 query = query.eq('id', cleanCode)
@@ -73,6 +78,48 @@ export default function Register() {
 
     // Redirect if already logged in (after all hooks)
     if (user && !authLoading) {
+        if (isDealerRegistration) {
+            return (
+                <div className="auth-page">
+                    <div className="auth-container animate-slideUp">
+                        <div className="auth-header">
+                            <FiUsers className="auth-logo dealer" />
+                            <h1>คุณเข้าสู่ระบบอยู่แล้ว</h1>
+                            <p style={{ marginTop: '0.5rem' }}>
+                                ขณะนี้คุณเข้าสู่ระบบในชื่อ <strong>{profile?.full_name || user.email}</strong>
+                            </p>
+                            {referrerInfo && (
+                                <div className="referral-info dealer" style={{ marginTop: '1rem', justifyContent: 'center' }}>
+                                    <FiCheckCircle style={{ color: '#10b981' }} />
+                                    <span>ผู้แนะนำของคุณ: <strong>{referrerInfo.full_name} ({referrerInfo.member_code})</strong></span>
+                                </div>
+                            )}
+                            <p className="text-muted" style={{ fontSize: '0.85rem', marginTop: '1rem', lineHeight: '1.5' }}>
+                                ลิงก์นี้ใช้สำหรับสมัครบัญชีเจ้ามือใหม่<br />
+                                หากต้องการสมัครบัญชีใหม่โดยใช้ลิงก์นี้ กรุณาออกจากระบบก่อน
+                            </p>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1.5rem' }}>
+                            <button
+                                type="button"
+                                className="btn btn-primary btn-lg auth-submit"
+                                onClick={() => signOut()}
+                            >
+                                <FiLogOut style={{ marginRight: '6px' }} /> ออกจากระบบเพื่อสมัครบัญชีใหม่
+                            </button>
+                            <Link
+                                to={profile?.role === 'dealer' ? '/dealer' : '/dashboard'}
+                                className="btn btn-outline btn-lg"
+                                style={{ textAlign: 'center' }}
+                            >
+                                ไปที่หน้าจัดการของคุณ
+                            </Link>
+                        </div>
+                    </div>
+                </div>
+            )
+        }
+
         if (dealerId) {
             return <Navigate to={`/invite?ref=${dealerId}`} replace />
         }
@@ -112,17 +159,22 @@ export default function Register() {
                 // If there's a dealer ref, create a pending membership
                 if (dealerId && data.user && !isDealerRegistration) {
                     try {
-                        const { error: membershipError } = await supabase
-                            .from('user_dealer_memberships')
-                            .insert({
-                                user_id: data.user.id,
-                                dealer_id: dealerId,
-                                status: 'pending'
-                            })
+                        const targetDealerId = dealerInfo?.id || (
+                            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dealerId) ? dealerId : null
+                        )
+                        if (targetDealerId) {
+                            const { error: membershipError } = await supabase
+                                .from('user_dealer_memberships')
+                                .insert({
+                                    user_id: data.user.id,
+                                    dealer_id: targetDealerId,
+                                    status: 'pending'
+                                })
 
-                        if (membershipError) {
-                            console.error('Error creating membership:', membershipError)
-                            // Don't fail registration if membership creation fails
+                            if (membershipError) {
+                                console.error('Error creating membership:', membershipError)
+                                // Don't fail registration if membership creation fails
+                            }
                         }
                     } catch (membershipErr) {
                         console.error('Error creating membership:', membershipErr)

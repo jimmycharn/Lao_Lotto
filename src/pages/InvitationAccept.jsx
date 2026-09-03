@@ -41,13 +41,20 @@ export default function InvitationAccept() {
             const userIsDealer = currentUserProfile?.role === 'dealer'
             setIsCurrentUserDealer(userIsDealer)
 
-            // Fetch target dealer info
-            const { data: dealer, error: dealerError } = await supabase
+            // Fetch target dealer info (support UUID or member_code)
+            const cleanId = dealerId?.trim()
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId)
+            let query = supabase
                 .from('profiles')
-                .select('id, full_name, email')
-                .eq('id', dealerId)
+                .select('id, full_name, email, member_code')
                 .eq('role', 'dealer')
-                .single()
+
+            if (isUuid) {
+                query = query.eq('id', cleanId)
+            } else {
+                query = query.eq('member_code', cleanId)
+            }
+            const { data: dealer, error: dealerError } = await query.maybeSingle()
 
             if (dealerError || !dealer) {
                 setError('ไม่พบเจ้ามือนี้ในระบบ')
@@ -56,7 +63,7 @@ export default function InvitationAccept() {
             }
 
             // Check if trying to link to self
-            if (dealerId === user.id) {
+            if (dealer.id === user.id) {
                 setError('ไม่สามารถเชื่อมต่อกับตัวเองได้')
                 setLoading(false)
                 return
@@ -70,7 +77,7 @@ export default function InvitationAccept() {
                     .from('dealer_upstream_connections')
                     .select('*')
                     .eq('dealer_id', user.id)
-                    .eq('upstream_dealer_id', dealerId)
+                    .eq('upstream_dealer_id', dealer.id)
                     .single()
 
                 if (upstreamLink) {
@@ -82,7 +89,7 @@ export default function InvitationAccept() {
                     .from('user_dealer_memberships')
                     .select('*')
                     .eq('user_id', user.id)
-                    .eq('dealer_id', dealerId)
+                    .eq('dealer_id', dealer.id)
                     .single()
 
                 if (membership) {
@@ -103,13 +110,14 @@ export default function InvitationAccept() {
         setError('')
 
         try {
+            const targetDealerId = dealerInfo?.id || dealerId
             if (isCurrentUserDealer) {
                 // Dealer linking to upstream dealer - status pending until approved
                 const { error } = await supabase
                     .from('dealer_upstream_connections')
                     .insert({
                         dealer_id: user.id,
-                        upstream_dealer_id: dealerId,
+                        upstream_dealer_id: targetDealerId,
                         upstream_name: dealerInfo?.full_name || 'เจ้ามือ',
                         is_linked: true,
                         status: 'pending'
@@ -143,7 +151,7 @@ export default function InvitationAccept() {
                     .from('user_dealer_memberships')
                     .insert({
                         user_id: user.id,
-                        dealer_id: dealerId,
+                        dealer_id: targetDealerId,
                         status: 'pending',
                         member_bank_account_id: defaultBankId
                     })

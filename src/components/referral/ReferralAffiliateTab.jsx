@@ -327,27 +327,31 @@ export default function ReferralAffiliateTab({ user, profile, isDealer = false }
                         <span className="card-label">ยอดเงินในกระเป๋า (พร้อมถอน)</span>
                         <h3 className="card-value highlight">฿{walletBalance.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</h3>
                     </div>
-                    <div className="card-actions">
+                    <div className="referral-wallet-actions">
                         <button
-                            className="btn btn-primary btn-sm action-btn"
+                            type="button"
+                            className="referral-btn referral-btn-withdraw"
                             disabled={walletBalance <= 0}
                             onClick={() => {
                                 setWithdrawForm({ ...withdrawForm, amount: walletBalance.toString() })
                                 setShowWithdrawModal(true)
                             }}
                         >
-                            <FiArrowDownRight /> ขอถอนเงิน
+                            <FiArrowDownRight className="referral-btn-icon" />
+                            <span>ขอถอนเงิน</span>
                         </button>
                         {isDealer && (
                             <button
-                                className="btn btn-outline-success btn-sm action-btn"
+                                type="button"
+                                className="referral-btn referral-btn-convert"
                                 disabled={walletBalance <= 0}
                                 onClick={() => {
                                     setConvertAmount(walletBalance.toString())
                                     setShowConvertModal(true)
                                 }}
                             >
-                                <FiCreditCard /> แปลงเป็นเครดิตร้าน
+                                <FiCreditCard className="referral-btn-icon" />
+                                <span>แปลงเป็นเครดิตร้าน</span>
                             </button>
                         )}
                     </div>
