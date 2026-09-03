@@ -71,6 +71,7 @@ import ChangePasswordModal from '../components/ChangePasswordModal'
 import DealerLineBotTab from '../components/dealer/DealerLineBotTab'
 import DealerAutomationTab from '../components/dealer/DealerAutomationTab'
 import DealerProfileTab from '../components/dealer/DealerProfileTab'
+import ReferralAffiliateTab from '../components/referral/ReferralAffiliateTab'
 import MemberAccordionItem from '../components/dealer/MemberAccordionItem'
 
 // RoundAccordionItem is now imported from separate file
@@ -2637,6 +2638,12 @@ export default function Dealer() {
                     >
                         <FiUser /> โปรไฟล์
                     </button>
+                    <button
+                        className={`tab-btn ${activeTab === 'referral' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('referral')}
+                    >
+                        <FiShare2 /> แนะนำเจ้ามือ (Affiliate)
+                    </button>
                 </div>
 
                 {/* Tab Content */}
@@ -3550,6 +3557,10 @@ export default function Dealer() {
 
                     {activeTab === 'profile' && (
                         <DealerProfileTab user={user} profile={profile} subscription={subscription} formatDate={formatDate} />
+                    )}
+
+                    {activeTab === 'referral' && (
+                        <ReferralAffiliateTab user={user} profile={profile} isDealer={true} />
                     )}
                 </div>
             </div>

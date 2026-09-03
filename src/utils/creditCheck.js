@@ -899,6 +899,21 @@ export async function deductAdditionalCreditForRound(dealerId, roundId, previous
             })
             .eq('id', roundId)
 
+        // Process referral commission if there's actual deduction
+        if (actualDeduction > 0) {
+            try {
+                const { data: rd } = await supabase.from('lottery_rounds').select('lottery_type').eq('id', roundId).maybeSingle()
+                await supabase.rpc('process_dealer_referral_commission', {
+                    p_dealer_id: dealerId,
+                    p_round_id: roundId,
+                    p_lottery_type: rd?.lottery_type || null,
+                    p_system_revenue: actualDeduction
+                })
+            } catch (refErr) {
+                console.error('Error processing referral commission in deductAdditionalCreditForRound:', refErr)
+            }
+        }
+
         return {
             success: true,
             amountDeducted: actualDeduction,
@@ -1273,6 +1288,21 @@ export async function deductProfitBasedCredit(dealerId, roundId, previousPending
             .from('lottery_rounds')
             .update({ charged_credit_amount: profitFee })
             .eq('id', roundId)
+
+        // Process referral commission if there's profit fee
+        if (profitFee > 0) {
+            try {
+                const { data: rd } = await supabase.from('lottery_rounds').select('lottery_type').eq('id', roundId).maybeSingle()
+                await supabase.rpc('process_dealer_referral_commission', {
+                    p_dealer_id: dealerId,
+                    p_round_id: roundId,
+                    p_lottery_type: rd?.lottery_type || null,
+                    p_system_revenue: profitFee
+                })
+            } catch (refErr) {
+                console.error('Error processing referral commission in deductProfitBasedCredit:', refErr)
+            }
+        }
 
         // 12. Clean up round_pending_credits for this round
         await supabase

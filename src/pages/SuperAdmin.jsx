@@ -42,6 +42,7 @@ import ChangePasswordModal from '../components/ChangePasswordModal'
 import CopyButton from '../components/CopyButton'
 import { LOTTERY_TYPES } from '../constants/lotteryTypes'
 import { confirmDialog } from '../utils/confirmDialog'
+import SuperAdminReferralsTab from '../components/superadmin/SuperAdminReferralsTab'
 import './SuperAdmin.css'
 
 const DEFAULT_OPENROUTER_MODELS = [
@@ -133,6 +134,7 @@ export default function SuperAdmin() {
         totalUsers: 0,
         activeSubscriptions: 0,
         pendingPayments: 0,
+        pendingReferralWithdrawals: 0,
         thisMonthRevenue: 0,
         lastMonthRevenue: 0,
         expiringSubscriptions: 0
@@ -1504,12 +1506,19 @@ export default function SuperAdmin() {
                 .not('expires_at', 'is', null)
                 .lte('expires_at', sevenDaysLater.toISOString())
 
+            // Pending referral withdrawals
+            const { count: pendingRefWithdrawals } = await supabase
+                .from('referral_withdrawals')
+                .select('*', { count: 'exact', head: true })
+                .eq('status', 'pending')
+
             setStats({
                 totalDealers: totalDealers || 0,
                 activeDealers: activeDealers || 0,
                 totalUsers: totalUsers || 0,
                 activeSubscriptions: activeSubscriptions || 0,
                 pendingPayments: pendingPayments || 0,
+                pendingReferralWithdrawals: pendingRefWithdrawals || 0,
                 thisMonthRevenue,
                 lastMonthRevenue,
                 expiringSubscriptions: expiringSubscriptions || 0
@@ -4604,6 +4613,7 @@ export default function SuperAdmin() {
                         { id: 'packages', label: 'แพ็คเกจ', icon: <FiPackage /> },
                         { id: 'invoices', label: 'ใบแจ้งหนี้', icon: <FiFileText /> },
                         { id: 'payments', label: 'การชำระเงิน', icon: <FiDollarSign />, badge: stats.pendingPayments },
+                        { id: 'referrals', label: 'ระบบแนะนำเจ้ามือ', icon: <FiShare2 />, badge: stats.pendingReferralWithdrawals },
                         { id: 'billingRecords', label: 'ค่าธรรมเนียม', icon: <FiFileText /> },
                         { id: 'aiCrawler', label: 'AI ค้นหาผลรางวัล', icon: <FiSearch /> },
                         { id: 'settings', label: 'ตั้งค่า', icon: <FiSettings /> }
@@ -4632,6 +4642,7 @@ export default function SuperAdmin() {
                         {activeTab === 'packages' && 'จัดการแพ็คเกจ'}
                         {activeTab === 'invoices' && 'ใบแจ้งหนี้'}
                         {activeTab === 'payments' && 'การชำระเงิน'}
+                        {activeTab === 'referrals' && 'ระบบแนะนำเจ้ามือ (Affiliate)'}
                         {activeTab === 'billingRecords' && 'ค่าธรรมเนียม'}
                         {activeTab === 'aiCrawler' && 'AI ค้นหาผลรางวัล'}
                         {activeTab === 'settings' && 'ตั้งค่าระบบ'}
@@ -4656,6 +4667,7 @@ export default function SuperAdmin() {
                             {activeTab === 'packages' && renderPackages()}
                             {activeTab === 'invoices' && renderInvoices()}
                             {activeTab === 'payments' && renderPayments()}
+                            {activeTab === 'referrals' && <SuperAdminReferralsTab />}
                             {activeTab === 'billingRecords' && renderBillingRecords()}
                             {activeTab === 'aiCrawler' && renderAICrawler()}
                             {activeTab === 'settings' && renderSettings()}

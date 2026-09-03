@@ -37,13 +37,15 @@ import {
     FiTrendingDown,
     FiRotateCcw,
     FiImage,
-    FiAlertCircle
+    FiAlertCircle,
+    FiShare2
 } from 'react-icons/fi'
 import './UserDashboard.css'
 import './ViewToggle.css'
 import WriteSubmissionModal from '../components/WriteSubmissionModal'
 import { BET_TYPES_BY_LOTTERY } from '../constants/lotteryTypes'
 import DealerInfoTab from '../components/user/DealerInfoTab'
+import ReferralAffiliateTab from '../components/referral/ReferralAffiliateTab'
 import UserQRScannerModal from '../components/user/UserQRScannerModal'
 import { createBill } from '../services/submissionService'
 import { formatCopyText, copyToClipboard } from '../utils/copyFormat'
@@ -2976,6 +2978,12 @@ export default function UserDashboard() {
                             >
                                 <FiUser /> เจ้ามือ
                             </button>
+                            <button
+                                className={`tab-btn ${activeTab === 'referral' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('referral')}
+                            >
+                                <FiShare2 /> แนะนำเพื่อน & รายได้
+                            </button>
                         </div>
                     );
                 })()}
@@ -4304,6 +4312,10 @@ export default function UserDashboard() {
 
                     {activeTab === 'dealer' && selectedDealer && (
                         <DealerInfoTab dealer={selectedDealer} userSettings={userSettings} isOwnDealer={isOwnDealer} />
+                    )}
+
+                    {activeTab === 'referral' && (
+                        <ReferralAffiliateTab user={user} profile={profile} isDealer={false} />
                     )}
                 </div>
             </div>

@@ -4431,6 +4431,20 @@ async function deductAdditionalCreditForRoundDeno(dealerId: string, roundId: str
       })
       .eq('id', roundId);
 
+    if (actualDeduction > 0) {
+      try {
+        const { data: rd } = await supabase.from('lottery_rounds').select('lottery_type').eq('id', roundId).maybeSingle();
+        await supabase.rpc('process_dealer_referral_commission', {
+          p_dealer_id: dealerId,
+          p_round_id: roundId,
+          p_lottery_type: rd?.lottery_type || null,
+          p_system_revenue: actualDeduction
+        });
+      } catch (refErr) {
+        console.error('Error processing referral commission in deductAdditionalCreditForRoundDeno:', refErr);
+      }
+    }
+
     return {
       success: true,
       amountDeducted: actualDeduction,
@@ -4687,6 +4701,20 @@ async function deductProfitBasedCreditDeno(dealerId: string, roundId: string, pr
       .from('lottery_rounds')
       .update({ charged_credit_amount: profitFee })
       .eq('id', roundId);
+
+    if (profitFee > 0) {
+      try {
+        const { data: rd } = await supabase.from('lottery_rounds').select('lottery_type').eq('id', roundId).maybeSingle();
+        await supabase.rpc('process_dealer_referral_commission', {
+          p_dealer_id: dealerId,
+          p_round_id: roundId,
+          p_lottery_type: rd?.lottery_type || null,
+          p_system_revenue: profitFee
+        });
+      } catch (refErr) {
+        console.error('Error processing referral commission in deductProfitBasedCreditDeno:', refErr);
+      }
+    }
 
     await supabase
       .from('round_pending_credits')
@@ -12655,13 +12683,20 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               // Reply immediately in current group so Official Bot responds instantly
               await sendLineReply(replyToken, announceMsg);
 
-              // Broadcast push to ALL active groups of this dealer (not filtered by lottery_type)
-              console.log(`[/ประกาศ] dealerId=${dealerId}, currentGroupId=${groupId}`);
-              const { data: rawGroups, error: groupsErr } = await supabase
+              // Broadcast push to active groups of this dealer matching current lottery_type
+              const currentLotteryType = groupLink?.lottery_type || privateSession?.lottery_type;
+              console.log(`[/ประกาศ] dealerId=${dealerId}, currentGroupId=${groupId}, lotteryType=${currentLotteryType}`);
+              let groupsQuery = supabase
                 .from('line_groups')
                 .select('line_group_id')
                 .eq('dealer_id', dealerId)
                 .eq('is_active', true);
+
+              if (currentLotteryType) {
+                groupsQuery = groupsQuery.eq('lottery_type', currentLotteryType);
+              }
+
+              const { data: rawGroups, error: groupsErr } = await groupsQuery;
 
               console.log(`[/ประกาศ] rawGroups count=${rawGroups?.length ?? 0}, err=${groupsErr?.message ?? 'none'}`);
 
@@ -12684,7 +12719,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   })
                 );
               } else {
-                console.log(`[/ประกาศ] No other groups found for dealer ${dealerId}`);
+                console.log(`[/ประกาศ] No other groups found for dealer ${dealerId} with lottery_type ${currentLotteryType}`);
               }
               continue;
             }
@@ -13059,7 +13094,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                       sectionHeader("🎰", "จัดการงวดหวย", "none"),
                       cmdRow("/สร้าง [ประเภทหวย]", "สร้างงวดใหม่ เช่น /สร้าง ไทย, /สร้าง ลาว"),
                       cmdRow("/เริ่มขาย", "ประกาศเปิดรับแทงงวดล่าสุดไปยังทุกกลุ่ม"),
-                      cmdRow("/ประกาศ [ข้อความ]", "ส่งข้อความประกาศแจ้งข่าวสารไปยังทุกกลุ่มแชตของร้าน"),
+                      cmdRow("/ประกาศ [ข้อความ]", "ส่งข้อความประกาศแจ้งข่าวสารไปยังกลุ่มหวยประเภทนี้"),
                       cmdRow("/ปิด", "ปิดรับแทงงวดปัจจุบัน"),
                       cmdRow("/เปิด", "เปิดรับแทงงวดที่ปิดอยู่ (ยังไม่ประกาศผล)"),
                       cmdRow("/แจ้งผล [เลขรางวัล]", "ประกาศผลรางวัลและคำนวณผลได้เสีย"),

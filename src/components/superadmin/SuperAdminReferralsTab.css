@@ -1,0 +1,445 @@
+/* SuperAdmin Referrals Tab Styles */
+
+.admin-referral-container {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding-bottom: 40px;
+}
+
+.admin-referral-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    gap: 16px;
+    color: #94a3b8;
+}
+
+.admin-referral-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.admin-section-heading {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #f8fafc;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+}
+
+.admin-section-subheading {
+    font-size: 0.9rem;
+    color: #94a3b8;
+    margin: 4px 0 0 0;
+}
+
+.admin-topbar-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* KPI Cards */
+.admin-referral-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 16px;
+}
+
+.admin-kpi-card {
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 18px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.admin-kpi-card.highlight-card {
+    border-color: rgba(245, 158, 11, 0.3);
+    background: linear-gradient(135deg, #1e293b 0%, rgba(245, 158, 11, 0.1) 100%);
+}
+
+.kpi-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    flex-shrink: 0;
+}
+
+.kpi-icon.warning { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+.kpi-icon.success { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+.kpi-icon.primary { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+.kpi-icon.info { background: rgba(14, 165, 233, 0.15); color: #0ea5e9; }
+
+.kpi-info {
+    flex: 1;
+}
+
+.kpi-label {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.kpi-value {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: #f8fafc;
+    margin: 2px 0;
+}
+
+.kpi-value .unit {
+    font-size: 0.88rem;
+    color: #94a3b8;
+    font-weight: normal;
+}
+
+.kpi-subtext {
+    font-size: 0.76rem;
+    color: #64748b;
+    display: block;
+}
+
+/* Sub Navigation */
+.admin-referral-nav {
+    display: flex;
+    gap: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 10px;
+    overflow-x: auto;
+}
+
+.nav-tab-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.nav-tab-btn:hover {
+    color: #f8fafc;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.nav-tab-btn.active {
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.12);
+}
+
+.nav-tab-badge {
+    background: #ef4444;
+    color: #fff;
+    font-size: 0.72rem;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-weight: 700;
+}
+
+/* Card Section */
+.admin-card-section {
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+}
+
+.section-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.filter-pill-group {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.pill-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #94a3b8;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pill-btn:hover {
+    color: #f8fafc;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.pill-btn.active {
+    background: #3b82f6;
+    color: #fff;
+    border-color: #3b82f6;
+}
+
+.search-box-wrapper {
+    position: relative;
+    width: 320px;
+    max-width: 100%;
+}
+
+.search-box-wrapper .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #64748b;
+}
+
+.search-box-wrapper .search-input {
+    padding-left: 36px;
+    width: 100%;
+}
+
+/* Table */
+.admin-ref-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+}
+
+.admin-ref-table th {
+    padding: 12px 14px;
+    text-align: left;
+    font-weight: 600;
+    color: #94a3b8;
+    background: rgba(0, 0, 0, 0.2);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-ref-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    color: #cbd5e1;
+    vertical-align: middle;
+}
+
+.admin-ref-table tr:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.user-info-col, .bank-info-col {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.user-info-col strong, .bank-info-col strong {
+    color: #f8fafc;
+    font-size: 0.92rem;
+}
+
+.user-sub {
+    font-size: 0.78rem;
+    color: #94a3b8;
+}
+
+.bank-acc {
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: #38bdf8;
+}
+
+.bank-name-sub {
+    font-size: 0.78rem;
+    color: #94a3b8;
+}
+
+.rate-display-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.rate-badge {
+    background: rgba(139, 92, 246, 0.15);
+    color: #a78bfa;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-weight: 600;
+}
+
+.rate-badge.custom {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+}
+
+.rate-hint {
+    font-size: 0.72rem;
+    color: #64748b;
+}
+
+.amount-text {
+    color: #f8fafc;
+    font-size: 0.98rem;
+}
+
+.action-button-group {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.view-details-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.reject-note {
+    font-size: 0.76rem;
+    color: #ef4444;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Settings Form */
+.admin-settings-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 720px;
+}
+
+.form-row-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 16px 20px;
+    gap: 16px;
+}
+
+.form-row-info h4 {
+    margin: 0 0 4px 0;
+    font-size: 1rem;
+    color: #f8fafc;
+}
+
+.form-row-info p {
+    margin: 0;
+    font-size: 0.84rem;
+    color: #94a3b8;
+}
+
+.rate-control .input-group {
+    display: flex;
+    align-items: center;
+}
+
+.input-addon {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 8px 12px;
+    border-radius: 0 6px 6px 0;
+    color: #cbd5e1;
+    font-weight: 600;
+}
+
+.rate-control input {
+    border-radius: 6px 0 0 6px !important;
+}
+
+/* Modals */
+.admin-modal {
+    max-width: 520px;
+    width: 90%;
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+}
+
+.withdrawal-detail-box, .relationship-summary-box {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 0.88rem;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    color: #cbd5e1;
+}
+
+.amount-highlight {
+    color: #38bdf8;
+    font-size: 1.15rem;
+}
+
+.alert-warning-box {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    color: #fca5a5;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 0.86rem;
+}
+
+.slip-preview-container {
+    margin-top: 10px;
+    text-align: center;
+}
+
+.slip-img-thumb {
+    max-height: 150px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.slip-img-full {
+    max-width: 100%;
+    max-height: 70vh;
+    border-radius: 8px;
+    object-fit: contain;
+}
+
+.admin-empty-box {
+    text-align: center;
+    padding: 40px 20px;
+    color: #94a3b8;
+}

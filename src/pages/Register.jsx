@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams, Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { FiMail, FiLock, FiUser, FiEye, FiEyeOff, FiGift, FiUsers } from 'react-icons/fi'
+import { FiMail, FiLock, FiUser, FiEye, FiEyeOff, FiGift, FiUsers, FiShare2, FiCheckCircle } from 'react-icons/fi'
 import './Auth.css'
 
 export default function Register() {
@@ -21,13 +21,18 @@ export default function Register() {
     const dealerId = searchParams.get('ref')
     const registerRole = searchParams.get('role') // For dealer registration
     const isDealerRegistration = registerRole === 'dealer'
+    const [referralCode, setReferralCode] = useState(dealerId || '')
+    const [referrerInfo, setReferrerInfo] = useState(null)
+    const [checkingReferrer, setCheckingReferrer] = useState(false)
 
-    // Fetch dealer info if ref exists
+    // Fetch dealer info if ref exists (for member registration)
     useEffect(() => {
-        if (dealerId) {
+        if (dealerId && !isDealerRegistration) {
             fetchDealerInfo()
+        } else if (dealerId && isDealerRegistration) {
+            fetchReferrerInfo(dealerId)
         }
-    }, [dealerId])
+    }, [dealerId, isDealerRegistration])
 
     async function fetchDealerInfo() {
         const { data } = await supabase
@@ -38,6 +43,31 @@ export default function Register() {
 
         if (data) {
             setDealerInfo(data)
+        }
+    }
+
+    async function fetchReferrerInfo(code) {
+        if (!code || !code.trim()) {
+            setReferrerInfo(null)
+            return
+        }
+        setCheckingReferrer(true)
+        try {
+            const cleanCode = code.trim()
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanCode)
+            let query = supabase.from('profiles').select('id, full_name, member_code, role')
+            if (isUuid) {
+                query = query.eq('id', cleanCode)
+            } else {
+                query = query.eq('member_code', cleanCode)
+            }
+            const { data } = await query.maybeSingle()
+            setReferrerInfo(data || null)
+        } catch (err) {
+            console.error('Error fetching referrer info:', err)
+            setReferrerInfo(null)
+        } finally {
+            setCheckingReferrer(false)
         }
     }
 
@@ -96,6 +126,18 @@ export default function Register() {
                         }
                     } catch (membershipErr) {
                         console.error('Error creating membership:', membershipErr)
+                    }
+                }
+
+                // If dealer registration with referral code, bind referral
+                if (isDealerRegistration && data.user && referralCode.trim()) {
+                    try {
+                        await supabase.rpc('bind_dealer_referral', {
+                            p_referred_dealer_id: data.user.id,
+                            p_referrer_ref: referralCode.trim()
+                        })
+                    } catch (refErr) {
+                        console.error('Error binding dealer referral:', refErr)
                     }
                 }
 
@@ -232,6 +274,45 @@ export default function Register() {
                             />
                         </div>
                     </div>
+
+                    {isDealerRegistration && (
+                        <div className="form-group">
+                            <label className="form-label">
+                                รหัสผู้แนะนำ (ถ้ามี)
+                                {checkingReferrer && <span style={{ fontSize: '0.8rem', color: '#9ca3af', marginLeft: 8 }}>กำลังตรวจสอบ...</span>}
+                            </label>
+                            <div className="input-wrapper">
+                                <FiShare2 className="input-icon" />
+                                <input
+                                    type="text"
+                                    className="form-input with-icon"
+                                    placeholder="เช่น 10048 (รหัสสมาชิก 5 หลัก)"
+                                    value={referralCode}
+                                    onChange={(e) => {
+                                        const val = e.target.value
+                                        setReferralCode(val)
+                                        fetchReferrerInfo(val)
+                                    }}
+                                />
+                            </div>
+                            {referrerInfo && (
+                                <div style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: 6, 
+                                    marginTop: 6, 
+                                    padding: '6px 10px', 
+                                    borderRadius: 6, 
+                                    backgroundColor: 'rgba(16, 185, 129, 0.15)', 
+                                    color: '#10b981', 
+                                    fontSize: '0.85rem' 
+                                }}>
+                                    <FiCheckCircle />
+                                    <span>ผู้แนะนำ: <strong>{referrerInfo.full_name}</strong> (รหัส: {referrerInfo.member_code})</span>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     <button
                         type="submit"
