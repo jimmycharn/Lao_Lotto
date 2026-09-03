@@ -3,7 +3,7 @@ import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useTheme, DASHBOARDS } from '../contexts/ThemeContext'
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAllRows } from '../lib/supabase'
 import { checkDealerCreditForBet, checkUpstreamDealerCredit, getDealerCreditSummary, updatePendingDeduction } from '../utils/creditCheck'
 import QRCode from 'react-qr-code'
 import { jsPDF } from 'jspdf'
@@ -196,14 +196,18 @@ export default function Dealer() {
 
             // 2.5 Fallback for active closed/announced rounds not yet archived into user_round_history
             if (userHistories.length === 0 && historyItem.round_id) {
-                const { data: subData } = await supabase
-                    .from('submissions')
-                    .select('*, profiles:user_id(id, full_name, email, phone)')
-                    .eq('round_id', historyItem.round_id)
-                    .eq('is_deleted', false)
+                const { data: subData } = await fetchAllRows(
+                    (from, to) => supabase
+                        .from('submissions')
+                        .select('id, user_id, amount, commission_amount, prize_amount, is_winner, bet_type, is_deleted')
+                        .eq('round_id', historyItem.round_id)
+                        .eq('is_deleted', false)
+                        .range(from, to)
+                )
 
                 if (subData && subData.length > 0) {
                     const userSubmissions = {}
+                    const setPrice = historyItem.set_prices?.['4_top'] || 120
                     subData.forEach(s => {
                         const uid = s.user_id
                         if (!userSubmissions[uid]) {
@@ -213,14 +217,18 @@ export default function Dealer() {
                                 total_entries: 0,
                                 total_amount: 0,
                                 total_commission: 0,
-                                total_winnings: 0,
-                                profiles: s.profiles
+                                total_winnings: 0
                             }
                         }
                         userSubmissions[uid].total_entries += 1
                         userSubmissions[uid].total_amount += (s.amount || 0)
                         userSubmissions[uid].total_commission += (s.commission_amount || 0)
-                        userSubmissions[uid].total_winnings += (s.prize_amount || 0)
+                        const winAmt = s.is_winner 
+                            ? (s.bet_type === '4_set' 
+                                ? (s.prize_amount || 0) * Math.max(1, Math.floor((s.amount || 0) / setPrice))
+                                : (s.prize_amount || 0))
+                            : 0
+                        userSubmissions[uid].total_winnings += winAmt
                     })
                     userHistories = Object.values(userSubmissions)
                 }
@@ -258,9 +266,9 @@ export default function Dealer() {
             }
 
             const userHistoriesWithProfiles = userHistories.map(uh => ({
+                ...uh,
                 total_commission: getMemberCommission(uh.total_amount, uh.total_commission),
                 total_winnings: Number(uh.total_winnings || 0),
-                ...uh,
                 profiles: profilesMap[uh.user_id] || null
             }))
 
@@ -1106,11 +1114,14 @@ export default function Dealer() {
                     if (existingRoundIds.has(round.id)) continue
 
                     // Fetch submissions for this active closed round
-                    const { data: submissions } = await supabase
-                        .from('submissions')
-                        .select('amount, commission_amount, prize_amount, is_winner, bet_type, numbers, is_deleted')
-                        .eq('round_id', round.id)
-                        .eq('is_deleted', false)
+                    const { data: submissions } = await fetchAllRows(
+                        (from, to) => supabase
+                            .from('submissions')
+                            .select('amount, commission_amount, prize_amount, is_winner, bet_type, numbers, is_deleted')
+                            .eq('round_id', round.id)
+                            .eq('is_deleted', false)
+                            .range(from, to)
+                    )
 
                     // Fetch transfers for this active closed round
                     const { data: transfers } = await supabase
@@ -1121,7 +1132,15 @@ export default function Dealer() {
                     const totalEntries = submissions?.length || 0
                     const totalAmount = submissions?.reduce((sum, s) => sum + (s.amount || 0), 0) || 0
                     const totalCommission = submissions?.reduce((sum, s) => sum + (s.commission_amount || 0), 0) || 0
-                    const totalPayout = submissions?.reduce((sum, s) => sum + (s.prize_amount || 0), 0) || 0
+                    const setPrice = round?.set_prices?.['4_top'] || 120
+                    const totalPayout = submissions?.reduce((sum, s) => {
+                        if (!s.is_winner) return sum
+                        if (s.bet_type === '4_set') {
+                            const numSets = Math.max(1, Math.floor((s.amount || 0) / setPrice))
+                            return sum + ((s.prize_amount || 0) * numSets)
+                        }
+                        return sum + (s.prize_amount || 0)
+                    }, 0) || 0
 
                     const transferredAmount = transfers?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0
                     const upstreamCommission = transfers?.reduce((sum, t) => sum + calculateTransferCommission(t), 0) || 0
@@ -1139,6 +1158,7 @@ export default function Dealer() {
                         round_date: round.close_time?.split('T')[0] || round.round_date || round.open_time?.split('T')[0],
                         open_time: round.open_time,
                         close_time: round.close_time,
+                        set_prices: round.set_prices,
                         total_entries: totalEntries,
                         total_amount: totalAmount,
                         total_commission: totalCommission,
@@ -2083,11 +2103,14 @@ export default function Dealer() {
                 return
             }
 
-            const { data: submissions } = await supabase
-                .from('submissions')
-                .select('*')
-                .eq('round_id', roundId)
-                .eq('is_deleted', false)
+            const { data: submissions } = await fetchAllRows(
+                (from, to) => supabase
+                    .from('submissions')
+                    .select('*')
+                    .eq('round_id', roundId)
+                    .eq('is_deleted', false)
+                    .range(from, to)
+            )
 
             const totalAmount = submissions?.reduce((sum, s) => sum + (s.amount || 0), 0) || 0
 
@@ -2103,7 +2126,15 @@ export default function Dealer() {
 
                 const totalEntries = submissions?.length || 0
                 const totalCommission = submissions?.reduce((sum, s) => sum + (s.commission_amount || 0), 0) || 0
-                const totalPayout = submissions?.reduce((sum, s) => sum + (s.prize_amount || 0), 0) || 0
+                const setPrice = roundData?.set_prices?.['4_top'] || 120
+                const totalPayout = submissions?.reduce((sum, s) => {
+                    if (!s.is_winner) return sum
+                    if (s.bet_type === '4_set') {
+                        const numSets = Math.max(1, Math.floor((s.amount || 0) / setPrice))
+                        return sum + ((s.prize_amount || 0) * numSets)
+                    }
+                    return sum + (s.prize_amount || 0)
+                }, 0) || 0
 
                 const transferredAmount = transfers?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0
                 const upstreamCommission = transfers?.reduce((sum, t) => sum + calculateTransferCommission(t), 0) || 0
@@ -2149,7 +2180,12 @@ export default function Dealer() {
                     userSubmissions[s.user_id].entries += 1
                     userSubmissions[s.user_id].amount += s.amount || 0
                     userSubmissions[s.user_id].commission += s.commission_amount || 0
-                    userSubmissions[s.user_id].winnings += s.prize_amount || 0
+                    const winAmt = s.is_winner 
+                        ? (s.bet_type === '4_set' 
+                            ? (s.prize_amount || 0) * Math.max(1, Math.floor((s.amount || 0) / setPrice))
+                            : (s.prize_amount || 0))
+                        : 0
+                    userSubmissions[s.user_id].winnings += winAmt
                 })
 
                 const userHistories = Object.entries(userSubmissions).map(([userId, data]) => ({
@@ -4607,12 +4643,15 @@ function SubmissionsModal({ round, onClose }) {
         setLoading(true)
         try {
             // Fetch submissions
-            const { data: subsData } = await supabase
-                .from('submissions')
-                .select(`*, profiles (full_name, email)`)
-                .eq('round_id', round.id)
-                .eq('is_deleted', false)
-                .order('created_at', { ascending: false })
+            const { data: subsData } = await fetchAllRows(
+                (from, to) => supabase
+                    .from('submissions')
+                    .select(`*, profiles (full_name, email)`)
+                    .eq('round_id', round.id)
+                    .eq('is_deleted', false)
+                    .order('created_at', { ascending: false })
+                    .range(from, to)
+            )
 
             setSubmissions(subsData || [])
 
