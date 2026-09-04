@@ -1,6 +1,15 @@
 import { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { supabase, ROLES } from '../lib/supabase'
-import { subscribeToSessionChanges, startSessionCheck, invalidateSession, isSessionValid } from '../utils/deviceSession'
+import { 
+    subscribeToSessionChanges, 
+    startSessionCheck, 
+    invalidateSession, 
+    isSessionValid,
+    subscribeToLoginRequests,
+    approveLoginRequest,
+    rejectLoginRequest,
+    getPendingLoginRequest
+} from '../utils/deviceSession'
 
 const AuthContext = createContext({})
 
@@ -54,6 +63,7 @@ export function AuthProvider({ children }) {
     const [loading, setLoading] = useState(true)
     const [forceLogoutReason, setForceLogoutReason] = useState(null)
     const [pendingOtp, setPendingOtp] = useState(false)
+    const [pendingLoginApproval, setPendingLoginApproval] = useState(null)
     const fetchingRef = useRef(false)
     const loadingTimerRef = useRef(null)
     const sessionCleanupRef = useRef(null)
@@ -101,6 +111,7 @@ export function AuthProvider({ children }) {
         console.warn('Clearing all auth state')
         setUser(null)
         setProfile(null)
+        setPendingLoginApproval(null)
         clearProfileCache()
         clearAuthTokens()
         fetchingRef.current = false
@@ -476,6 +487,28 @@ export function AuthProvider({ children }) {
         })
         cleanups.push(stopCheck)
 
+        // 3. Check for any existing pending login request on mount / reconnect (Device A prompt)
+        getPendingLoginRequest(user.id).then(res => {
+            if (res?.has_pending) {
+                console.log('Pending login request detected:', res)
+                setPendingLoginApproval(res)
+            }
+        }).catch(() => {})
+
+        // 4. Subscribe to login verification requests from other devices (Device A prompt)
+        const unsubLoginRequests = subscribeToLoginRequests(user.id, {
+            onPendingRequest: (req) => {
+                console.log('Incoming login request from other device:', req)
+                setPendingLoginApproval(req)
+            },
+            onStatusChange: (decision) => {
+                if (decision?.status === 'rejected' || decision?.status === 'expired') {
+                    setPendingLoginApproval(null)
+                }
+            }
+        })
+        cleanups.push(unsubLoginRequests)
+
         sessionCleanupRef.current = () => {
             cleanups.forEach(fn => fn())
         }
@@ -487,6 +520,26 @@ export function AuthProvider({ children }) {
             }
         }
     }, [user?.id, profile?.role, pendingOtp])
+
+    // Approve a pending login request from another device (called by Device A)
+    const approvePendingLogin = async (requestId) => {
+        if (!user?.id || !requestId) return { success: false, error: 'ข้อมูลไม่ครบถ้วน' }
+        const result = await approveLoginRequest(requestId, user.id)
+        if (result?.success) {
+            setPendingLoginApproval(null)
+        }
+        return result
+    }
+
+    // Reject a pending login request from another device (called by Device A)
+    const rejectPendingLogin = async (requestId) => {
+        if (!user?.id || !requestId) return { success: false, error: 'ข้อมูลไม่ครบถ้วน' }
+        const result = await rejectLoginRequest(requestId, user.id)
+        if (result?.success) {
+            setPendingLoginApproval(null)
+        }
+        return result
+    }
 
     // When force-logout is triggered, immediately destroy the Supabase auth session
     // so that refreshing the page cannot bypass the logout overlay.
@@ -534,7 +587,11 @@ export function AuthProvider({ children }) {
         dismissForceLogout,
         pendingOtp,
         setPendingOtp,
-        skipAuthEventRef
+        skipAuthEventRef,
+        pendingLoginApproval,
+        setPendingLoginApproval,
+        approvePendingLogin,
+        rejectPendingLogin
     }
 
     return (

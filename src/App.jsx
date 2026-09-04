@@ -6,6 +6,7 @@ import { ThemeProvider } from './contexts/ThemeContext'
 import Navbar from './components/Navbar'
 import ErrorBoundary from './components/ErrorBoundary'
 import ForceLogoutOverlay from './components/ForceLogoutOverlay'
+import LoginApprovalModal from './components/LoginApprovalModal'
 import { ConfirmDialogHost } from './utils/confirmDialog'
 import './index.css'
 
@@ -140,6 +141,7 @@ function AppContent() {
   return (
     <Router>
       <ForceLogoutOverlay />
+      <LoginApprovalModal />
       <ConfirmDialogHost />
       <Navbar />
       <main className="main-content">

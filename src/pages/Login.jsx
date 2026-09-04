@@ -184,6 +184,16 @@ export default function Login() {
         await signOut({ skipDeviceInvalidation: true })
     }
 
+    const handleOtpRejected = async (reason) => {
+        setShowOtpModal(false)
+        setOtpData(null)
+        setPendingOtpUserId(null)
+        setPendingOtp(false)
+        setLoading(false)
+        setError(reason || 'การเข้าสู่ระบบถูกปฏิเสธโดยอุปกรณ์เดิม')
+        await signOut({ skipDeviceInvalidation: true })
+    }
+
     return (
         <div className="auth-page">
             <div className="auth-container">
@@ -258,6 +268,7 @@ export default function Login() {
                     isOpen={showOtpModal}
                     onVerified={handleOtpVerified}
                     onCancel={handleOtpCancel}
+                    onRejected={handleOtpRejected}
                     otpRequestId={otpData.otpRequestId}
                     userId={otpData.userId}
                     email={otpData.email}

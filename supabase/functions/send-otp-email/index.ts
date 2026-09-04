@@ -35,7 +35,7 @@ serve(async (req) => {
       )
     }
 
-    const deviceText = device_info ? `<p style="color: #666; font-size: 13px;">อุปกรณ์ที่พยายามเข้าสู่ระบบ: ${device_info}</p>` : ''
+    const deviceText = device_info ? `<div style="background:#f0f4ff;border-radius:8px;padding:12px;margin:16px 0;font-size:14px;color:#334155;">📱 <strong>อุปกรณ์ที่กำลังพยายามเข้าสู่ระบบ:</strong> ${device_info}</div>` : ''
 
     const htmlBody = `
     <!DOCTYPE html>
@@ -49,7 +49,8 @@ serve(async (req) => {
         .header h1 { color: #1a1a2e; font-size: 24px; margin: 0; }
         .otp-box { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 24px; text-align: center; margin: 24px 0; }
         .otp-code { font-size: 36px; font-weight: 700; color: #fff; letter-spacing: 8px; margin: 0; }
-        .info { color: #555; font-size: 14px; line-height: 1.6; }
+        .info { color: #475569; font-size: 14px; line-height: 1.6; }
+        .highlight { background: #e0f2fe; border-left: 4px solid #0284c7; padding: 12px; border-radius: 4px; margin: 16px 0; font-size: 13px; color: #0369a1; }
         .warning { background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 12px; margin-top: 16px; font-size: 13px; color: #856404; }
         .footer { text-align: center; margin-top: 24px; color: #999; font-size: 12px; }
       </style>
@@ -58,11 +59,19 @@ serve(async (req) => {
       <div class="container">
         <div class="header">
           <h1>🔐 ${APP_NAME}</h1>
-          <p style="color: #666;">รหัสยืนยันการเข้าสู่ระบบ</p>
+          <p style="color: #666;">รหัส PIN ยืนยันการเข้าสู่ระบบจากอุปกรณ์ใหม่</p>
         </div>
         
-        <p class="info">มีการพยายามเข้าสู่ระบบบัญชีของคุณจากอุปกรณ์ใหม่ กรุณาใช้รหัส OTP ด้านล่างเพื่อยืนยัน:</p>
+        <p class="info">ตรวจพบการพยายามเข้าสู่ระบบบัญชีของคุณจากอุปกรณ์อื่น หากเป็นคุณ กรุณายืนยันการเข้าสู่ระบบด้วยวิธีใดวิธีหนึ่งดังนี้:</p>
         
+        ${deviceText}
+
+        <div class="highlight">
+          👉 <strong>วิธีที่ 1:</strong> หากหน้าจออุปกรณ์เดิมยังเปิดอยู่ คุณสามารถกดปุ่ม <strong>[อนุญาต]</strong> ที่หน้าจออุปกรณ์นั้นได้ทันทีโดยไม่ต้องใช้รหัส PIN นี้
+        </div>
+
+        <p class="info"><strong>วิธีที่ 2:</strong> หากไม่ได้อยู่อุปกรณ์เดิม ให้นำรหัส PIN 6 หลักด้านล่างนี้ไปกรอกที่หน้าจออุปกรณ์ใหม่:</p>
+
         <div class="otp-box">
           <p class="otp-code">${otp_code}</p>
         </div>
@@ -72,14 +81,12 @@ serve(async (req) => {
           🔒 สามารถกรอกผิดได้สูงสุด <strong>3 ครั้ง</strong>
         </p>
         
-        ${deviceText}
-        
         <div class="warning">
-          ⚠️ หากคุณไม่ได้เป็นคนเข้าสู่ระบบ กรุณาเปลี่ยนรหัสผ่านทันที
+          ⚠️ หากคุณไม่ได้เป็นผู้เข้าสู่ระบบ กรุณากด <strong>[ปฏิเสธ]</strong> บนอุปกรณ์เดิม หรือเปลี่ยนรหัสผ่านทันที
         </div>
         
         <div class="footer">
-          <p>อีเมลนี้ถูกส่งโดยอัตโนมัติ กรุณาอย่าตอบกลับ</p>
+          <p>อีเมลนี้ถูกส่งโดยอัตโนมัติจากระบบรักษาความปลอดภัย กรุณาอย่าตอบกลับ</p>
         </div>
       </div>
     </body>
@@ -95,7 +102,7 @@ serve(async (req) => {
       body: JSON.stringify({
         from: FROM_EMAIL,
         to: email,
-        subject: `[${APP_NAME}] รหัสยืนยัน OTP: ${otp_code}`,
+        subject: `[${APP_NAME}] รหัส PIN ยืนยันการเข้าสู่ระบบ: ${otp_code}`,
         html: htmlBody,
       }),
     })

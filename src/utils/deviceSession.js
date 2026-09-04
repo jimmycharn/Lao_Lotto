@@ -76,7 +76,175 @@ export async function checkDeviceSession(userId) {
         return { needs_otp: false, session_created: false, error: error.message }
     }
 
+    if (data && data.needs_otp) {
+        // Broadcast to Device A via user_login_sync channel for instant real-time wakeup
+        try {
+            const syncChannel = supabase.channel(`user_login_sync_${userId}`)
+            syncChannel.send({
+                type: 'broadcast',
+                event: 'NEW_LOGIN_ATTEMPT',
+                payload: {
+                    request_id: data.otp_request_id,
+                    device_info: deviceInfo,
+                    sessionToken: sessionToken,
+                    created_at: new Date().toISOString()
+                }
+            })
+        } catch (_) {}
+    }
+
     return data
+}
+
+/**
+ * Approve login request from another device (called by Device A)
+ */
+export async function approveLoginRequest(requestId, userId) {
+    if (!supabase || !requestId || !userId) return { success: false, error: 'Missing parameters' }
+
+    try {
+        const { data, error } = await supabase.rpc('approve_login_request', {
+            p_request_id: requestId,
+            p_user_id: userId
+        })
+
+        if (error) {
+            console.error('approveLoginRequest error:', error)
+            return { success: false, error: error.message }
+        }
+
+        // Broadcast decision to Device B immediately
+        try {
+            const syncChannel = supabase.channel(`user_login_sync_${userId}`)
+            syncChannel.send({
+                type: 'broadcast',
+                event: 'LOGIN_DECISION',
+                payload: { requestId, status: 'approved', timestamp: Date.now() }
+            })
+        } catch (_) {}
+
+        return data || { success: true }
+    } catch (err) {
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Reject login request from another device (called by Device A)
+ */
+export async function rejectLoginRequest(requestId, userId) {
+    if (!supabase || !requestId || !userId) return { success: false, error: 'Missing parameters' }
+
+    try {
+        const { data, error } = await supabase.rpc('reject_login_request', {
+            p_request_id: requestId,
+            p_user_id: userId
+        })
+
+        if (error) {
+            console.error('rejectLoginRequest error:', error)
+            return { success: false, error: error.message }
+        }
+
+        // Broadcast decision to Device B immediately
+        try {
+            const syncChannel = supabase.channel(`user_login_sync_${userId}`)
+            syncChannel.send({
+                type: 'broadcast',
+                event: 'LOGIN_DECISION',
+                payload: { requestId, status: 'rejected', timestamp: Date.now() }
+            })
+        } catch (_) {}
+
+        return data || { success: true }
+    } catch (err) {
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Check if there is an active pending login request for this user
+ */
+export async function getPendingLoginRequest(userId) {
+    if (!supabase || !userId) return { has_pending: false }
+
+    try {
+        const { data, error } = await supabase.rpc('get_pending_login_request', {
+            p_user_id: userId
+        })
+
+        if (error) {
+            console.log('getPendingLoginRequest RPC error (ignoring):', error.message)
+            return { has_pending: false }
+        }
+
+        return data || { has_pending: false }
+    } catch (err) {
+        return { has_pending: false }
+    }
+}
+
+/**
+ * Subscribe to login verification requests and decisions
+ * Used by Device A (to receive approval prompts) and Device B (to receive approval/rejection updates)
+ */
+export function subscribeToLoginRequests(userId, { onPendingRequest, onStatusChange } = {}) {
+    if (!supabase || !userId) return () => {}
+
+    const sessionToken = getDeviceToken()
+
+    const channel = supabase
+        .channel(`user_login_sync_${userId}`)
+        // 1. Postgres changes on login_otp_requests
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'login_otp_requests',
+                filter: `user_id=eq.${userId}`
+            },
+            (payload) => {
+                const req = payload?.new
+                if (!req) return
+                // Only alert Device A if it was initiated by a different device token
+                if (req.new_session_token !== sessionToken && req.status === 'pending') {
+                    if (onPendingRequest) onPendingRequest(req)
+                }
+            }
+        )
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'login_otp_requests',
+                filter: `user_id=eq.${userId}`
+            },
+            (payload) => {
+                const req = payload?.new
+                if (!req) return
+                if (onStatusChange) onStatusChange(req)
+            }
+        )
+        // 2. Broadcast listeners for ultra-fast instant UI wakeup
+        .on('broadcast', { event: 'NEW_LOGIN_ATTEMPT' }, (event) => {
+            const req = event?.payload
+            if (!req) return
+            if (req.sessionToken !== sessionToken) {
+                if (onPendingRequest) onPendingRequest(req)
+            }
+        })
+        .on('broadcast', { event: 'LOGIN_DECISION' }, (event) => {
+            const decision = event?.payload
+            if (!decision) return
+            if (onStatusChange) onStatusChange(decision)
+        })
+        .subscribe()
+
+    return () => {
+        supabase.removeChannel(channel)
+    }
 }
 
 /**
