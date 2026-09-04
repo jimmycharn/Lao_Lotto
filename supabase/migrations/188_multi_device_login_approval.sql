@@ -357,7 +357,7 @@ BEGIN
     IF v_request.status = 'rejected' THEN
         RETURN jsonb_build_object(
             'success', false,
-            'error', 'การเข้าสู่ระบบนี้ถูกปฏิเสธโดยอุปกรณ์เดิมแล้ว',
+            'error', 'ท่านถูกปฏิเสธการใช้งานบัญชี',
             'rejected', true
         );
     END IF;
@@ -404,7 +404,7 @@ BEGIN
 
         RETURN jsonb_build_object(
             'success', false,
-            'error', 'รหัส OTP ไม่ถูกต้อง',
+            'error', 'รหัส PIN ไม่ถูกต้อง',
             'attempts_left', v_request.max_attempts - (v_request.attempts + 1)
         );
     END IF;

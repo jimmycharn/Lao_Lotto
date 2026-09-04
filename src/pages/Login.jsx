@@ -16,15 +16,16 @@ export default function Login() {
     const [showOtpModal, setShowOtpModal] = useState(false)
     const [otpData, setOtpData] = useState(null) // { otpRequestId, userId, email, blockedUntil }
     const [pendingOtpUserId, setPendingOtpUserId] = useState(null) // userId waiting for OTP
-    const { signIn, signOut, user, profile, loading: authLoading, isDealer, isSuperAdmin, setPendingOtp } = useAuth()
+    const { signIn, signOut, user, profile, loading: authLoading, isDealer, isSuperAdmin, setPendingOtp, pendingOtp } = useAuth()
     const navigate = useNavigate()
 
     const loadingTimerRef = useRef(null)
+    const isSubmittingRef = useRef(false)
 
     // Reset local loading state if authLoading finishes
-    // But NOT if we're in the OTP modal flow
+    // But NOT if we're in the middle of submitting or OTP verification
     useEffect(() => {
-        if (!authLoading && !showOtpModal) {
+        if (!authLoading && !showOtpModal && !isSubmittingRef.current) {
             setLoading(false)
         }
     }, [authLoading, showOtpModal])
@@ -34,6 +35,7 @@ export default function Login() {
         if (loading) {
             loadingTimerRef.current = setTimeout(() => {
                 console.warn('Login safety timeout: forcing loading=false')
+                isSubmittingRef.current = false
                 setLoading(false)
                 setError('การเข้าสู่ระบบใช้เวลานาน กรุณาลองใหม่อีกครั้ง')
             }, 12000)
@@ -49,9 +51,16 @@ export default function Login() {
     }, [loading])
 
     // If user is already logged in and profile is loaded, redirect based on role
-    // But NOT if we're showing OTP modal (pending verification)
-    // Also NOT if we have a pending OTP userId (modal might still be mounting)
-    if (user && profile && !authLoading && !showOtpModal && !pendingOtpUserId) {
+    // But NEVER redirect if we are currently submitting, checking device, or showing OTP modal!
+    const isChallengedOrSubmitting = 
+        loading || 
+        showOtpModal || 
+        pendingOtpUserId || 
+        pendingOtp || 
+        otpData || 
+        isSubmittingRef.current
+
+    if (user && profile && !authLoading && !isChallengedOrSubmitting) {
         // Super Admin goes to Super Admin dashboard
         if (isSuperAdmin) {
             return <Navigate to="/superadmin" replace />
@@ -68,10 +77,8 @@ export default function Login() {
         e.preventDefault()
         setError('')
         setLoading(true)
-
-        // Tell AuthContext to skip session monitoring during the entire login flow.
-        // This prevents a race condition where monitoring detects "no active session"
-        // before checkDeviceSession() has created the session row in the DB.
+        isSubmittingRef.current = true
+        setPendingOtpUserId(true) // Immediately block redirect before ANY await!
         setPendingOtp(true)
 
         try {
@@ -82,6 +89,8 @@ export default function Login() {
                 if (msg === 'Invalid login credentials') msg = 'อีเมลหรือรหัสผ่านไม่ถูกต้อง'
                 else if (msg.includes('Email not confirmed')) msg = 'กรุณายืนยันอีเมลในกล่องข้อความของคุณก่อนเข้าสู่ระบบ'
                 setError(msg)
+                isSubmittingRef.current = false
+                setPendingOtpUserId(null)
                 setPendingOtp(false)
                 setLoading(false)
                 return
@@ -98,6 +107,7 @@ export default function Login() {
 
                 if (profileCheck && profileCheck.is_active === false) {
                     setError('บัญชีนี้ถูกระงับการใช้งาน (โดนบล็อก) กรุณาติดต่อ Admin เพื่อขอให้ปลดบล็อกให้')
+                    isSubmittingRef.current = false
                     setPendingOtpUserId(null)
                     setPendingOtp(false)
                     await signOut()
@@ -107,7 +117,6 @@ export default function Login() {
 
                 try {
                     console.log('Checking device session for user:', userId)
-                    // Block redirect immediately while we check
                     setPendingOtpUserId(userId)
                     const sessionResult = await checkDeviceSession(userId)
                     console.log('Device session result:', sessionResult)
@@ -116,6 +125,7 @@ export default function Login() {
                         // Need OTP verification - user has active session on another device
                         if (sessionResult.blocked) {
                             setError(`ถูกบล็อคเนื่องจากกรอก OTP ผิดหลายครั้ง ลองใหม่ได้ในอีกสักครู่`)
+                            isSubmittingRef.current = false
                             setPendingOtpUserId(null)
                             setPendingOtp(false)
                             await signOut({ skipDeviceInvalidation: true })
@@ -124,8 +134,7 @@ export default function Login() {
                         }
 
                         // Store OTP data and show modal
-                        // DO NOT sign out - keep user authenticated so modal stays visible
-                        // pendingOtp stays true — monitoring remains paused until OTP verified/cancelled
+                        // Keep user on Login page with OTP modal
                         setOtpData({
                             otpRequestId: sessionResult.otp_request_id,
                             userId: userId,
@@ -136,61 +145,66 @@ export default function Login() {
                         })
                         setShowOtpModal(true)
                         setLoading(false)
-                        console.log('OTP modal shown, user stays authenticated')
+                        console.log('OTP modal shown, user stays on login page to verify')
                         return
                     }
 
-                    // No OTP needed - session created, proceed normally
+                    // No OTP needed (first device login or superadmin)
+                    isSubmittingRef.current = false
                     setPendingOtpUserId(null)
                     setPendingOtp(false)
+                    setLoading(false)
                     console.log('No OTP needed, session created')
                 } catch (sessionErr) {
                     console.error('Device session check failed:', sessionErr)
+                    isSubmittingRef.current = false
                     setPendingOtpUserId(null)
                     setPendingOtp(false)
-                    // If session check fails, allow login anyway (graceful degradation)
+                    setLoading(false)
                 }
             } else {
+                isSubmittingRef.current = false
+                setPendingOtpUserId(null)
                 setPendingOtp(false)
+                setLoading(false)
             }
-
-            // Login successful - onAuthStateChange will handle profile fetching
-            // Keep loading=true until authLoading becomes false (handled by useEffect)
         } catch (err) {
             setError('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง')
+            isSubmittingRef.current = false
+            setPendingOtpUserId(null)
             setPendingOtp(false)
             setLoading(false)
         }
     }
 
     const handleOtpVerified = async () => {
-        // OTP verified successfully
-        // User is still authenticated (we never signed out)
-        // Just close modal and clear pending state → redirect will happen automatically
-        setShowOtpModal(false)
-        setOtpData(null)
-        setPendingOtpUserId(null)
-        setPendingOtp(false)
-        // The redirect guard will now allow redirect since showOtpModal=false and pendingOtpUserId=null
-    }
-
-    const handleOtpCancel = async () => {
+        // OTP verified successfully (either via Device A approval or PIN entered)
+        isSubmittingRef.current = false
         setShowOtpModal(false)
         setOtpData(null)
         setPendingOtpUserId(null)
         setPendingOtp(false)
         setLoading(false)
-        // Sign out since user cancelled OTP - don't invalidate device session of old device
+    }
+
+    const handleOtpCancel = async () => {
+        isSubmittingRef.current = false
+        setShowOtpModal(false)
+        setOtpData(null)
+        setPendingOtpUserId(null)
+        setPendingOtp(false)
+        setLoading(false)
         await signOut({ skipDeviceInvalidation: true })
     }
 
     const handleOtpRejected = async (reason) => {
+        isSubmittingRef.current = false
         setShowOtpModal(false)
         setOtpData(null)
         setPendingOtpUserId(null)
         setPendingOtp(false)
         setLoading(false)
-        setError(reason || 'การเข้าสู่ระบบถูกปฏิเสธโดยอุปกรณ์เดิม')
+        setError(reason || 'ท่านถูกปฏิเสธการใช้งานบัญชี')
         await signOut({ skipDeviceInvalidation: true })
     }
 

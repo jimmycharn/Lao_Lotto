@@ -37,7 +37,7 @@ function PageLoader() {
 
 // Protected Route Component
 function ProtectedRoute({ children, requireAuth = false, requireDealer = false, requireAdmin = false }) {
-  const { user, loading, isDealer, isSuperAdmin, profile } = useAuth()
+  const { user, loading, isDealer, isSuperAdmin, profile, pendingOtp } = useAuth()
   const [profileTimeout, setProfileTimeout] = useState(false)
 
   // Timeout for waiting on profile - prevent infinite spinner
@@ -59,7 +59,8 @@ function ProtectedRoute({ children, requireAuth = false, requireDealer = false, 
     )
   }
 
-  if (requireAuth && !user) {
+  // Not authenticated or currently challenging for OTP verification -> go to login
+  if ((requireAuth && !user) || pendingOtp) {
     return <Navigate to="/login" replace />
   }
 
@@ -91,7 +92,7 @@ function ProtectedRoute({ children, requireAuth = false, requireDealer = false, 
 
 // Home Redirect Component - Redirects Super Admin/Dealer/User to their respective dashboards
 function HomeRedirect() {
-  const { user, profile, loading, isDealer, isSuperAdmin } = useAuth()
+  const { user, profile, loading, isDealer, isSuperAdmin, pendingOtp } = useAuth()
   const [profileTimeout, setProfileTimeout] = useState(false)
 
   // Timeout for waiting on profile
@@ -102,6 +103,11 @@ function HomeRedirect() {
     }
     if (profile) setProfileTimeout(false)
   }, [user, profile, loading])
+
+  // If pending OTP verification -> must stay on login
+  if (pendingOtp) {
+    return <Navigate to="/login" replace />
+  }
 
   // Show loading if auth is still loading OR we have user but no profile yet (waiting for role)
   if (loading || (user && !profile && !profileTimeout)) {

@@ -99,7 +99,7 @@ export default function OtpVerificationModal({
                 setRemoteRejected(true)
                 setTimeout(() => {
                     if (onRejected) {
-                        onRejected('การเข้าสู่ระบบถูกปฏิเสธโดยอุปกรณ์เดิม')
+                        onRejected('ท่านถูกปฏิเสธการใช้งานบัญชี')
                     } else {
                         onCancel()
                     }
@@ -224,13 +224,17 @@ export default function OtpVerificationModal({
                 setRemoteRejected(true)
                 setTimeout(() => {
                     if (onRejected) {
-                        onRejected(result.error || 'การเข้าสู่ระบบถูกปฏิเสธโดยอุปกรณ์เดิม')
+                        onRejected(result.error || 'ท่านถูกปฏิเสธการใช้งานบัญชี')
                     } else {
                         onCancel()
                     }
                 }, 1500)
             } else {
-                setError(result.error || 'รหัส PIN ไม่ถูกต้อง')
+                let errMsg = result.error || 'รหัส PIN ไม่ถูกต้อง'
+                if (errMsg.includes('OTP')) {
+                    errMsg = errMsg.replace(/OTP/gi, 'PIN')
+                }
+                setError(errMsg)
                 setOtp(['', '', '', '', '', ''])
                 inputRefs.current[0]?.focus()
 
@@ -286,10 +290,10 @@ export default function OtpVerificationModal({
                         <FiXCircle size={28} color="#ef4444" />
                         <div>
                             <strong style={{ display: 'block', fontSize: '15px', color: '#ef4444' }}>
-                                การเข้าสู่ระบบถูกปฏิเสธ
+                                ท่านถูกปฏิเสธการใช้งานบัญชี
                             </strong>
                             <span style={{ fontSize: '13px', color: '#cbd5e1' }}>
-                                อุปกรณ์เดิมไม่อนุญาตให้เข้าใช้งาน
+                                อุปกรณ์เดิมไม่อนุญาตให้เข้าใช้งานบัญชีนี้
                             </span>
                         </div>
                     </div>
