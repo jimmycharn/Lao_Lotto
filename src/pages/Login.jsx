@@ -140,7 +140,6 @@ export default function Login() {
                             userId: userId,
                             email: sessionResult.email,
                             blockedUntil: sessionResult.blocked_until || null,
-                            otpHint: sessionResult.otp_code,
                             emailSent: sessionResult.email_sent === true
                         })
                         setShowOtpModal(true)
@@ -287,7 +286,6 @@ export default function Login() {
                     userId={otpData.userId}
                     email={otpData.email}
                     blockedUntil={otpData.blockedUntil}
-                    otpHint={otpData.otpHint}
                     emailSent={otpData.emailSent}
                 />
             )}

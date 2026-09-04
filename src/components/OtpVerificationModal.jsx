@@ -330,12 +330,6 @@ export default function OtpVerificationModal({
                             </span>
                         </div>
 
-                        {/* OTP Hint - shown for dev testing when Resend API isn't set */}
-                        {otpHint && (
-                            <div style={otpHintStyle}>
-                                <span>🔑 รหัส PIN สำหรับทดสอบ: <strong style={{ letterSpacing: '4px', fontSize: '18px' }}>{otpHint}</strong></span>
-                            </div>
-                        )}
 
                         {/* Countdown */}
                         <div style={countdownStyle}>
@@ -580,16 +574,6 @@ const emailInfoStyle = {
     marginBottom: '10px'
 }
 
-const otpHintStyle = {
-    padding: '10px 14px',
-    background: 'rgba(255, 193, 7, 0.1)',
-    border: '1px dashed rgba(255, 193, 7, 0.4)',
-    borderRadius: '10px',
-    fontSize: '13px',
-    color: '#ffc107',
-    marginBottom: '10px',
-    textAlign: 'center'
-}
 
 const countdownStyle = {
     display: 'flex',

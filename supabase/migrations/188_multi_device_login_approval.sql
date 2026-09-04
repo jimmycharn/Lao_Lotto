@@ -234,7 +234,6 @@ BEGIN
         'needs_otp', true,
         'blocked', false,
         'otp_request_id', v_otp_id,
-        'otp_code', v_otp_code,
         'email', v_user_email,
         'device_info', p_device_info,
         'session_created', false,
