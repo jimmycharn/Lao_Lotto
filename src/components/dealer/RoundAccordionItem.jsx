@@ -23,7 +23,8 @@ import {
     FiRefreshCw,
     FiChevronRight,
     FiChevronDown,
-    FiPower
+    FiPower,
+    FiSlash
 } from 'react-icons/fi'
 import {
     LOTTERY_TYPES,
@@ -278,6 +279,7 @@ export default function RoundAccordionItem({
     const [showWriteBetModal, setShowWriteBetModal] = useState(false)
     const [selectedMemberForBet, setSelectedMemberForBet] = useState(null)
     const [editingBillData, setEditingBillData] = useState(null)
+    const [billActionModal, setBillActionModal] = useState(null)
 
     // Inline excess transfer states
     const [selectedExcessItems, setSelectedExcessItems] = useState({})
@@ -1177,6 +1179,12 @@ export default function RoundAccordionItem({
 
     // Edit bill - open WriteSubmissionModal with existing data
     const handleEditBill = (billId, billItems, userId) => {
+        // Prevent editing cancelled bill
+        if (billItems.length > 0 && billItems.every(i => i.is_deleted)) {
+            toast.error('ไม่สามารถแก้ไขใบโพยที่ยกเลิกแล้วได้')
+            return
+        }
+
         // Find the member object
         const member = allMembers.find(m => m.id === userId)
         if (!member) {
@@ -2129,24 +2137,82 @@ export default function RoundAccordionItem({
         }
     }
 
-    // Delete entire bill
-    const handleDeleteBill = async (billItems) => {
-        if (!(await confirmDialog({ title: 'ยืนยันการลบ', message: `ต้องการลบใบโพยนี้ (${billItems.length} รายการ)?`, confirmText: 'ลบเลย' }))) return
-
+    // Cancel entire bill (soft delete: set is_deleted = true so it displays as cancelled dashed red)
+    const handleCancelBillConfirm = async (billItems) => {
+        setBillActionModal(null)
         setDeletingItems(true)
         try {
             const ids = billItems.map(i => i.id)
             await chunkedUpdate('submissions', { is_deleted: true }, ids)
 
-            toast.success(`ลบใบโพย ${billItems.length} รายการสำเร็จ`)
+            toast.success(`ยกเลิกใบโพย ${billItems.length} รายการสำเร็จ`)
             await fetchInlineSubmissions(true)
             if (onCreditUpdate) onCreditUpdate()
         } catch (error) {
-            console.error('Error deleting bill:', error)
+            console.error('Error cancelling bill:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
         } finally {
             setDeletingItems(false)
         }
+    }
+
+    // Permanently delete entire bill from database
+    const handlePermanentDeleteBillConfirm = async (billItems) => {
+        setBillActionModal(null)
+        setDeletingItems(true)
+        try {
+            const ids = billItems.map(i => i.id)
+            await chunkedDelete('submissions', ids)
+
+            toast.success(`ลบใบโพย ${billItems.length} รายการออกจากฐานข้อมูลสำเร็จ`)
+            await fetchInlineSubmissions(true)
+            if (onCreditUpdate) onCreditUpdate()
+        } catch (error) {
+            console.error('Error permanently deleting bill:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        } finally {
+            setDeletingItems(false)
+        }
+    }
+
+    // Delete or cancel bill
+    const handleDeleteBill = async (billItems, bill) => {
+        const isCancelled = billItems.length > 0 && billItems.every(i => i.is_deleted)
+        if (isCancelled) {
+            // Bill is already cancelled (red dashed border): confirm permanent removal from database
+            if (!(await confirmDialog({
+                title: 'ยืนยันการลบถาวร',
+                message: `ต้องการลบใบโพยที่ยกเลิกนี้ (${billItems.length} รายการ) ออกจากฐานข้อมูลอย่างถาวรหรือไม่?\n(ข้อมูลจะถูกลบออกจากฐานข้อมูลและไม่สามารถกู้คืนได้)`,
+                confirmText: 'ลบถาวร',
+                variant: 'danger'
+            }))) return
+
+            setDeletingItems(true)
+            try {
+                const ids = billItems.map(i => i.id)
+                await chunkedDelete('submissions', ids)
+
+                toast.success(`ลบใบโพย ${billItems.length} รายการออกจากฐานข้อมูลสำเร็จ`)
+                await fetchInlineSubmissions(true)
+                if (onCreditUpdate) onCreditUpdate()
+            } catch (error) {
+                console.error('Error permanently deleting bill:', error)
+                toast.error('เกิดข้อผิดพลาด: ' + error.message)
+            } finally {
+                setDeletingItems(false)
+            }
+            return
+        }
+
+        // Active bill: show choice modal to Cancel (soft delete) or Delete (hard delete)
+        setBillActionModal({
+            billId: bill?.bill_id,
+            items: billItems,
+            billNote: bill?.bill_note,
+            billTime: bill?.created_at ? new Date(bill.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '',
+            billDate: bill?.created_at ? new Date(bill.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }) : '',
+            totalAmount: bill?.originalTotal ?? billItems.reduce((sum, item) => sum + (item.amount || 0), 0)
+        })
     }
 
     // Delete multiple items by IDs (for deleting all user submissions)
@@ -4253,24 +4319,26 @@ export default function RoundAccordionItem({
                                                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                                                                                             {(isOpen || canEditBillForUser(bill.user_id)) && (
                                                                                                 <>
-                                                                                                    <button 
-                                                                                                        className="btn btn-icon btn-sm"
-                                                                                                        onClick={(e) => {
-                                                                                                            e.stopPropagation()
-                                                                                                            handleEditBill(bill.bill_id, bill.items, bill.user_id)
-                                                                                                        }}
-                                                                                                        title="แก้ไขใบโพย"
-                                                                                                        style={{ padding: '0.25rem 0.4rem', color: 'var(--color-primary)' }}
-                                                                                                    >
-                                                                                                        <FiEdit2 size={14} />
-                                                                                                    </button>
+                                                                                                    {!isBillAllCancelled && (
+                                                                                                        <button 
+                                                                                                            className="btn btn-icon btn-sm"
+                                                                                                            onClick={(e) => {
+                                                                                                                e.stopPropagation()
+                                                                                                                handleEditBill(bill.bill_id, bill.items, bill.user_id)
+                                                                                                            }}
+                                                                                                            title="แก้ไขใบโพย"
+                                                                                                            style={{ padding: '0.25rem 0.4rem', color: 'var(--color-primary)' }}
+                                                                                                        >
+                                                                                                            <FiEdit2 size={14} />
+                                                                                                        </button>
+                                                                                                    )}
                                                                                                     <button 
                                                                                                         className="btn btn-icon btn-sm btn-danger"
                                                                                                         onClick={(e) => {
                                                                                                             e.stopPropagation()
-                                                                                                            handleDeleteBill(bill.items)
+                                                                                                            handleDeleteBill(bill.items, bill)
                                                                                                         }}
-                                                                                                        title="ลบใบโพย"
+                                                                                                        title={isBillAllCancelled ? "ลบใบโพยออกจากฐานข้อมูล" : "ลบหรือยกเลิกใบโพย"}
                                                                                                         style={{ padding: '0.25rem 0.4rem' }}
                                                                                                     >
                                                                                                         <FiTrash2 size={14} />
@@ -4438,20 +4506,6 @@ export default function RoundAccordionItem({
                                                                                                                 <span style={{ width: '45px', textAlign: 'right', fontSize: '0.75rem', color: 'var(--color-danger)', flexShrink: 0 }}>
                                                                                                                     {item.actual_payout_percent != null && item.actual_payout_percent < 100 ? `${item.actual_payout_percent}%` : ''}
                                                                                                                 </span>
-                                                                                                            )}
-                                                                                                            {/* Allow delete for: 1) open rounds, or 2) closed/announced rounds if user hasn't changed password */}
-                                                                                                            {(isOpen || canEditBillForUser(bill.user_id)) && billDisplayMode === 'summary' && (
-                                                                                                                <button 
-                                                                                                                    className="btn btn-icon btn-sm"
-                                                                                                                    onClick={(e) => {
-                                                                                                                        e.stopPropagation()
-                                                                                                                        handleDeleteSingleItem(item.ids || [item.id])
-                                                                                                                    }}
-                                                                                                                    title="ลบ"
-                                                                                                                    style={{ padding: '0.15rem', color: 'var(--color-danger)' }}
-                                                                                                                >
-                                                                                                                    <FiTrash2 size={12} />
-                                                                                                                </button>
                                                                                                             )}
                                                                                                         </div>
                                                                                                     </div>
@@ -5268,6 +5322,125 @@ export default function RoundAccordionItem({
                     }}
                     editingData={editingBillData}
                 />
+            )}
+
+            {/* Modal ยืนยันการลบหรือยกเลิกใบโพย */}
+            {billActionModal && (
+                <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); setBillActionModal(null); }} style={{ zIndex: 9999 }}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', borderRadius: '12px' }}>
+                        <div className="modal-header" style={{ borderBottom: '1px solid var(--color-border)', padding: '1rem 1.25rem' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text)' }}>
+                                <FiTrash2 style={{ color: 'var(--color-danger)' }} /> จัดการใบโพย
+                            </h3>
+                            <button className="modal-close" onClick={() => setBillActionModal(null)}><FiX /></button>
+                        </div>
+                        <div className="modal-body" style={{ padding: '1.25rem' }}>
+                            <p style={{ margin: '0 0 1rem 0', fontSize: '0.95rem', color: 'var(--color-text-secondary)' }}>
+                                คุณต้องการ <strong style={{ color: 'var(--color-text)' }}>ลบ</strong> หรือ <strong style={{ color: 'var(--color-text)' }}>ยกเลิก</strong> ใบโพยนี้?
+                            </p>
+                            
+                            {/* Bill Info Card */}
+                            <div style={{ 
+                                padding: '0.75rem 1rem', 
+                                borderRadius: '8px', 
+                                background: 'rgba(255,255,255,0.03)', 
+                                border: '1px solid var(--color-border)', 
+                                marginBottom: '1.25rem',
+                                fontSize: '0.85rem'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                                    <span style={{ color: 'var(--color-text-muted)' }}>ใบโพย:</span>
+                                    <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
+                                        {billActionModal.billNote || 'ไม่มีบันทึกช่วยจำ'} ({billActionModal.billDate} {billActionModal.billTime})
+                                    </span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: 'var(--color-text-muted)' }}>จำนวนรายการ / ยอดรวม:</span>
+                                    <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
+                                        {billActionModal.items.length} รายการ ({round.currency_symbol}{billActionModal.totalAmount.toLocaleString()})
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Option 1: ยกเลิกใบโพย */}
+                            <button
+                                type="button"
+                                onClick={() => handleCancelBillConfirm(billActionModal.items)}
+                                disabled={deletingItems}
+                                style={{
+                                    width: '100%',
+                                    display: 'flex',
+                                    alignItems: 'flex-start',
+                                    gap: '0.75rem',
+                                    padding: '0.85rem 1rem',
+                                    marginBottom: '0.75rem',
+                                    background: 'rgba(239, 68, 68, 0.08)',
+                                    border: '1.5px dashed #ef4444',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    textAlign: 'left',
+                                    transition: 'all 0.2s ease',
+                                    color: 'var(--color-text)'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.16)'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
+                            >
+                                <FiSlash style={{ color: '#ef4444', fontSize: '1.3rem', flexShrink: 0, marginTop: '2px' }} />
+                                <div>
+                                    <div style={{ fontWeight: 600, color: '#ef4444', fontSize: '0.95rem', marginBottom: '2px' }}>
+                                        ยกเลิกใบโพย
+                                    </div>
+                                    <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', lineHeight: '1.3' }}>
+                                        แสดงเป็นกรอบเส้นประสีแดง ไม่นำยอดมาคำนวณเงิน/รางวัล (ยังคงบันทึกไว้ในประวัติ)
+                                    </div>
+                                </div>
+                            </button>
+
+                            {/* Option 2: ลบใบโพยถาวร */}
+                            <button
+                                type="button"
+                                onClick={() => handlePermanentDeleteBillConfirm(billActionModal.items)}
+                                disabled={deletingItems}
+                                style={{
+                                    width: '100%',
+                                    display: 'flex',
+                                    alignItems: 'flex-start',
+                                    gap: '0.75rem',
+                                    padding: '0.85rem 1rem',
+                                    background: 'rgba(220, 38, 38, 0.15)',
+                                    border: '1.5px solid var(--color-danger)',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    textAlign: 'left',
+                                    transition: 'all 0.2s ease',
+                                    color: 'var(--color-text)'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(220, 38, 38, 0.25)'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(220, 38, 38, 0.15)'}
+                            >
+                                <FiTrash2 style={{ color: 'var(--color-danger)', fontSize: '1.3rem', flexShrink: 0, marginTop: '2px' }} />
+                                <div>
+                                    <div style={{ fontWeight: 600, color: 'var(--color-danger)', fontSize: '0.95rem', marginBottom: '2px' }}>
+                                        ลบใบโพย (ลบถาวร)
+                                    </div>
+                                    <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', lineHeight: '1.3' }}>
+                                        ลบข้อมูลทั้งหมดออกจากฐานข้อมูลอย่างถาวร (ข้อมูลจะถูกลบจริง ไม่สามารถกู้คืนได้)
+                                    </div>
+                                </div>
+                            </button>
+                        </div>
+                        <div className="modal-footer" style={{ borderTop: '1px solid var(--color-border)', padding: '0.75rem 1.25rem', justifyContent: 'flex-end' }}>
+                            <button 
+                                type="button" 
+                                className="btn btn-outline" 
+                                onClick={() => setBillActionModal(null)}
+                                disabled={deletingItems}
+                            >
+                                ปิดหน้าต่าง
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* AI Analysis Modal */}

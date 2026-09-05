@@ -2014,6 +2014,10 @@ export default function UserDashboard() {
 
     // Edit bill - open WriteSubmissionModal with existing data
     function handleEditBill(billId, billItems) {
+        if (billItems?.length > 0 && billItems.every(item => item.is_deleted)) {
+            toast.warning('ไม่สามารถแก้ไขใบโพยที่ยกเลิกแล้วได้')
+            return
+        }
         if (!canDelete(billItems?.[0])) {
             toast.warning('ไม่สามารถแก้ไขได้ เนื่องจากเลยเวลาที่กำหนด')
             return
@@ -3642,31 +3646,33 @@ export default function UserDashboard() {
                                                                                                     padding: '0.5rem 0.75rem',
                                                                                                     borderTop: '1px solid rgba(128, 128, 128, 0.2)'
                                                                                                 }}>
-                                                                                                    <button
-                                                                                                        className="bill-action-btn edit"
-                                                                                                        onClick={(e) => {
-                                                                                                            e.stopPropagation()
-                                                                                                            handleEditBill(billId, billItems)
-                                                                                                        }}
-                                                                                                        title="แก้ไขโพย"
-                                                                                                        style={{
-                                                                                                            padding: '0.5rem 1.2rem',
-                                                                                                            minWidth: '80px',
-                                                                                                            border: '1.5px solid var(--color-warning)',
-                                                                                                            borderRadius: '6px',
-                                                                                                            background: 'transparent',
-                                                                                                            color: 'var(--color-warning)',
-                                                                                                            fontWeight: '500',
-                                                                                                            fontSize: '0.85rem',
-                                                                                                            cursor: 'pointer',
-                                                                                                            display: 'flex',
-                                                                                                            alignItems: 'center',
-                                                                                                            justifyContent: 'center',
-                                                                                                            gap: '0.4rem'
-                                                                                                        }}
-                                                                                                    >
-                                                                                                        <FiEdit2 /> แก้ไข
-                                                                                                    </button>
+                                                                                                    {!isBillAllCancelled && (
+                                                                                                        <button
+                                                                                                            className="bill-action-btn edit"
+                                                                                                            onClick={(e) => {
+                                                                                                                e.stopPropagation()
+                                                                                                                handleEditBill(billId, billItems)
+                                                                                                            }}
+                                                                                                            title="แก้ไขโพย"
+                                                                                                            style={{
+                                                                                                                padding: '0.5rem 1.2rem',
+                                                                                                                minWidth: '80px',
+                                                                                                                border: '1.5px solid var(--color-warning)',
+                                                                                                                borderRadius: '6px',
+                                                                                                                background: 'transparent',
+                                                                                                                color: 'var(--color-warning)',
+                                                                                                                fontWeight: '500',
+                                                                                                                fontSize: '0.85rem',
+                                                                                                                cursor: 'pointer',
+                                                                                                                display: 'flex',
+                                                                                                                alignItems: 'center',
+                                                                                                                justifyContent: 'center',
+                                                                                                                gap: '0.4rem'
+                                                                                                            }}
+                                                                                                        >
+                                                                                                            <FiEdit2 /> แก้ไข
+                                                                                                        </button>
+                                                                                                    )}
                                                                                                     <button
                                                                                                         className="bill-action-btn delete"
                                                                                                         onClick={(e) => {
