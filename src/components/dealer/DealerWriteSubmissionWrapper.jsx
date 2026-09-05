@@ -251,15 +251,31 @@ export default function DealerWriteSubmissionWrapper({
 
         // Permission is now controlled by user's dealerCanSubmit setting (enforced at UI layer in RoundAccordionItem).
 
-        // Soft delete old entries
+        // Permanently delete old entries being replaced by this edit
         if (originalItems && originalItems.length > 0) {
-            const oldIds = originalItems.map(item => item.id)
-            const { error: deleteError } = await supabase
-                .from('submissions')
-                .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-                .in('id', oldIds)
-            
-            if (deleteError) throw deleteError
+            const oldIds = originalItems.map(item => item.id).filter(Boolean)
+            if (oldIds.length > 0) {
+                try {
+                    const { data: rpcData, error: rpcError } = await supabase.rpc('delete_submissions_permanently', {
+                        p_submission_ids: oldIds
+                    })
+                    if (rpcError) {
+                        console.warn('[handleEditSubmit] RPC error, fallback to direct delete:', rpcError)
+                        const { error: directError } = await supabase
+                            .from('submissions')
+                            .delete()
+                            .in('id', oldIds)
+                        if (directError) throw directError
+                    }
+                } catch (delErr) {
+                    console.warn('[handleEditSubmit] Delete exception, fallback to direct delete:', delErr)
+                    const { error: directError } = await supabase
+                        .from('submissions')
+                        .delete()
+                        .in('id', oldIds)
+                    if (directError) throw directError
+                }
+            }
         }
 
         // Calculate total amount

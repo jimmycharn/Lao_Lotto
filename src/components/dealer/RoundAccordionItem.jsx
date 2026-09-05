@@ -88,6 +88,21 @@ async function chunkedUpdate(table, updateData, ids) {
     }
 }
 async function chunkedDelete(table, ids) {
+    if (table === 'submissions') {
+        try {
+            const { data, error } = await supabase.rpc('delete_submissions_permanently', {
+                p_submission_ids: ids
+            })
+            if (!error && data?.success) {
+                return data
+            }
+            if (error) {
+                console.warn('[chunkedDelete] RPC delete_submissions_permanently error, fallback to direct delete:', error)
+            }
+        } catch (rpcErr) {
+            console.warn('[chunkedDelete] RPC exception, fallback to direct delete:', rpcErr)
+        }
+    }
     for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
         const chunk = ids.slice(i, i + CHUNK_SIZE)
         const { error } = await supabase
@@ -1192,8 +1207,9 @@ export default function RoundAccordionItem({
             return
         }
 
-        // Sort items by created_at to maintain original order
-        const sortedItems = [...billItems].sort((a, b) => 
+        // Sort items by created_at to maintain original order (only active items for lines reconstruction)
+        const activeItems = billItems.filter(item => !item.is_deleted)
+        const sortedItems = [...activeItems].sort((a, b) => 
             new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         )
 
@@ -1227,13 +1243,14 @@ export default function RoundAccordionItem({
         })
 
         // Set editing data and open WriteSubmissionModal
+        // Pass billItems (all items in this bill) so any previous duplicate/stale rows are completely replaced
         setSelectedMemberForBet(member)
         setEditingBillData({
             billId,
-            billNote: sortedItems[0]?.bill_note || '',
-            isPaid: sortedItems[0]?.is_paid || false,
+            billNote: (sortedItems[0] || billItems[0])?.bill_note || '',
+            isPaid: (sortedItems[0] || billItems[0])?.is_paid || false,
             originalLines,
-            originalItems: sortedItems
+            originalItems: billItems
         })
         setShowWriteBetModal(true)
     }
@@ -2143,10 +2160,11 @@ export default function RoundAccordionItem({
         setDeletingItems(true)
         try {
             const ids = billItems.map(i => i.id)
-            await chunkedUpdate('submissions', { is_deleted: true }, ids)
+            await chunkedUpdate('submissions', { is_deleted: true, deleted_at: new Date().toISOString() }, ids)
 
             toast.success(`ยกเลิกใบโพย ${billItems.length} รายการสำเร็จ`)
             await fetchInlineSubmissions(true)
+            fetchSummaryData()
             if (onCreditUpdate) onCreditUpdate()
         } catch (error) {
             console.error('Error cancelling bill:', error)
@@ -2162,14 +2180,19 @@ export default function RoundAccordionItem({
         setDeletingItems(true)
         try {
             const ids = billItems.map(i => i.id)
+            // Optimistically remove from inline list immediately
+            setInlineSubmissions(prev => prev.filter(s => !ids.includes(s.id)))
+
             await chunkedDelete('submissions', ids)
 
             toast.success(`ลบใบโพย ${billItems.length} รายการออกจากฐานข้อมูลสำเร็จ`)
             await fetchInlineSubmissions(true)
+            fetchSummaryData()
             if (onCreditUpdate) onCreditUpdate()
         } catch (error) {
             console.error('Error permanently deleting bill:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
+            await fetchInlineSubmissions(true)
         } finally {
             setDeletingItems(false)
         }
@@ -2190,14 +2213,19 @@ export default function RoundAccordionItem({
             setDeletingItems(true)
             try {
                 const ids = billItems.map(i => i.id)
+                // Optimistically remove from inline list immediately
+                setInlineSubmissions(prev => prev.filter(s => !ids.includes(s.id)))
+
                 await chunkedDelete('submissions', ids)
 
                 toast.success(`ลบใบโพย ${billItems.length} รายการออกจากฐานข้อมูลสำเร็จ`)
                 await fetchInlineSubmissions(true)
+                fetchSummaryData()
                 if (onCreditUpdate) onCreditUpdate()
             } catch (error) {
                 console.error('Error permanently deleting bill:', error)
                 toast.error('เกิดข้อผิดพลาด: ' + error.message)
+                await fetchInlineSubmissions(true)
             } finally {
                 setDeletingItems(false)
             }
@@ -4145,8 +4173,12 @@ export default function RoundAccordionItem({
                                                             let filteredTotal = 0
                                                             let filteredCommission = 0
                                                             const totalItems = userGroup.bills.reduce((sum, bill) => {
+                                                                const isBillCancelled = bill.items.length > 0 && bill.items.every(i => i.is_deleted)
                                                                 // Filter items by bet type if selected
                                                                 let filteredItems = bill.items
+                                                                if (!isBillCancelled) {
+                                                                    filteredItems = filteredItems.filter(item => !item.is_deleted)
+                                                                }
                                                                 if (inlineBetTypeFilter !== 'all') {
                                                                     filteredItems = filteredItems.filter(item => item.bet_type === inlineBetTypeFilter)
                                                                 }
@@ -4299,25 +4331,28 @@ export default function RoundAccordionItem({
                                                                                             </span>
                                                                                             <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
                                                                                                 ({(() => {
-                                                                                                    let filteredItems = bill.items
-                                                                                                    if (inlineBetTypeFilter !== 'all') {
-                                                                                                        filteredItems = filteredItems.filter(item => item.bet_type === inlineBetTypeFilter)
-                                                                                                    }
-                                                                                                    if (billDisplayMode === 'summary') {
-                                                                                                        const byEntry = {}
-                                                                                                        filteredItems.forEach(item => {
-                                                                                                            const entryId = item.entry_id || item.id
-                                                                                                            if (!byEntry[entryId]) byEntry[entryId] = true
-                                                                                                        })
-                                                                                                        return Object.keys(byEntry).length
-                                                                                                    }
-                                                                                                    return filteredItems.length
-                                                                                                })()})
+                                                                                                     let filteredItems = bill.items
+                                                                                                     if (!isBillAllCancelled) {
+                                                                                                         filteredItems = filteredItems.filter(item => !item.is_deleted)
+                                                                                                     }
+                                                                                                     if (inlineBetTypeFilter !== 'all') {
+                                                                                                         filteredItems = filteredItems.filter(item => item.bet_type === inlineBetTypeFilter)
+                                                                                                     }
+                                                                                                     if (billDisplayMode === 'summary') {
+                                                                                                         const byEntry = {}
+                                                                                                         filteredItems.forEach(item => {
+                                                                                                             const entryId = item.entry_id || item.id
+                                                                                                             if (!byEntry[entryId]) byEntry[entryId] = true
+                                                                                                         })
+                                                                                                         return Object.keys(byEntry).length
+                                                                                                     }
+                                                                                                     return filteredItems.length
+                                                                                                 })()})
                                                                                             </span>
                                                                                             {bill.is_paid && <span title="ชำระเงินแล้ว" style={{ color: 'var(--color-success)', fontSize: '0.85rem', fontWeight: '700' }}>฿✓</span>}
                                                                                         </div>
                                                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                                                                                            {(isOpen || canEditBillForUser(bill.user_id)) && (
+                                                                                            {(isOpen || canEditBillForUser(bill.user_id) || isBillAllCancelled) && (
                                                                                                 <>
                                                                                                     {!isBillAllCancelled && (
                                                                                                         <button 
@@ -4352,14 +4387,14 @@ export default function RoundAccordionItem({
                                                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                                                                             <span style={{ fontWeight: '600', fontSize: '0.95rem', textDecoration: isBillAllCancelled ? 'line-through' : 'none', color: isBillAllCancelled ? '#ef4444' : 'inherit' }}>
                                                                                                 {round.currency_symbol}{(() => {
-                                                                                                    if (inlineBetTypeFilter === 'all') return bill.originalTotal.toLocaleString()
-                                                                                                    return bill.items.filter(item => item.bet_type === inlineBetTypeFilter).reduce((sum, item) => sum + item.amount, 0).toLocaleString()
+                                                                                                    if (inlineBetTypeFilter === 'all') return (isBillAllCancelled ? bill.originalTotal : bill.activeTotal).toLocaleString()
+                                                                                                    return bill.items.filter(item => (isBillAllCancelled || !item.is_deleted) && item.bet_type === inlineBetTypeFilter).reduce((sum, item) => sum + item.amount, 0).toLocaleString()
                                                                                                 })()}
                                                                                             </span>
                                                                                             <span style={{ fontSize: '0.8rem', color: isBillAllCancelled ? '#ef4444' : 'var(--color-warning)', textDecoration: isBillAllCancelled ? 'line-through' : 'none' }}>
                                                                                                 คอม {round.currency_symbol}{(() => {
-                                                                                                    if (inlineBetTypeFilter === 'all') return Math.round(bill.items.reduce((sum, item) => sum + getCommission(item), 0)).toLocaleString()
-                                                                                                    return Math.round(bill.items.filter(item => item.bet_type === inlineBetTypeFilter).reduce((sum, item) => sum + getCommission(item), 0)).toLocaleString()
+                                                                                                    if (inlineBetTypeFilter === 'all') return Math.round(bill.items.filter(item => isBillAllCancelled || !item.is_deleted).reduce((sum, item) => sum + getCommission(item), 0)).toLocaleString()
+                                                                                                    return Math.round(bill.items.filter(item => (isBillAllCancelled || !item.is_deleted) && item.bet_type === inlineBetTypeFilter).reduce((sum, item) => sum + getCommission(item), 0)).toLocaleString()
                                                                                                 })()}
                                                                                             </span>
                                                                                         </div>
@@ -4397,9 +4432,11 @@ export default function RoundAccordionItem({
                                                                                         </div>
                                                                                         {(() => {
                                                                                             // Sort items by created_at first to ensure correct order
-                                                                                            let displayItems = [...bill.items].sort((a, b) => 
-                                                                                                new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                                                                                            )
+                                                                                            let displayItems = [...bill.items]
+                                                                                                .filter(item => isBillAllCancelled || !item.is_deleted)
+                                                                                                .sort((a, b) => 
+                                                                                                    new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                                                                                                )
                                                                                             // Filter items by bet type if selected
                                                                                             if (inlineBetTypeFilter !== 'all') {
                                                                                                 displayItems = displayItems.filter(item => item.bet_type === inlineBetTypeFilter)

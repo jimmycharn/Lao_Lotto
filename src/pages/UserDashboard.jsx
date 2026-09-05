@@ -1667,15 +1667,29 @@ export default function UserDashboard() {
             throw new Error('ไม่มีข้อมูลที่จะบันทึก')
         }
 
-        // Delete original submissions first
+        // Permanently delete original submissions being replaced by this edit
         const originalIds = originalItems.map(item => item.id).filter(Boolean)
         if (originalIds.length > 0) {
-            const { error: deleteError } = await supabase
-                .from('submissions')
-                .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-                .in('id', originalIds)
-
-            if (deleteError) throw deleteError
+            try {
+                const { error: rpcError } = await supabase.rpc('delete_submissions_permanently', {
+                    p_submission_ids: originalIds
+                })
+                if (rpcError) {
+                    console.warn('[handleEditBillSubmit] RPC delete error, fallback to direct delete:', rpcError)
+                    const { error: directError } = await supabase
+                        .from('submissions')
+                        .delete()
+                        .in('id', originalIds)
+                    if (directError) throw directError
+                }
+            } catch (delErr) {
+                console.warn('[handleEditBillSubmit] Delete exception, fallback to direct delete:', delErr)
+                const { error: directError } = await supabase
+                    .from('submissions')
+                    .delete()
+                    .in('id', originalIds)
+                if (directError) throw directError
+            }
         }
 
         // Check number limits (after soft delete so totals are recalculated)
@@ -1961,6 +1975,56 @@ export default function UserDashboard() {
 
     // Delete entire bill (all submissions with the same bill_id)
     async function handleDeleteBill(billId, billItems) {
+        const isCancelled = billItems?.length > 0 && billItems.every(item => item.is_deleted)
+
+        if (isCancelled) {
+            if (!(await confirmDialog({
+                title: 'ยืนยันการลบถาวร',
+                message: `ต้องการลบใบโพยที่ยกเลิกนี้ (${billItems.length} รายการ) ออกจากฐานข้อมูลอย่างถาวรหรือไม่?\n(ข้อมูลจะถูกลบออกจากฐานข้อมูลและไม่สามารถกู้คืนได้)`,
+                confirmText: 'ลบถาวร',
+                variant: 'danger'
+            }))) return
+
+            try {
+                const ids = billItems.map(i => i.id)
+                setSubmissions(prev => prev.filter(s => !ids.includes(s.id)))
+
+                let deletedViaRpc = false
+                try {
+                    const { data: rpcData, error: rpcError } = await supabase.rpc('delete_submissions_permanently', {
+                        p_submission_ids: ids
+                    })
+                    if (!rpcError && rpcData?.success) {
+                        deletedViaRpc = true
+                    }
+                } catch (rpcErr) {
+                    console.warn('RPC delete error, fallback to direct delete:', rpcErr)
+                }
+
+                if (!deletedViaRpc) {
+                    const { error } = await supabase
+                        .from('submissions')
+                        .delete()
+                        .in('id', ids)
+                    if (error) throw error
+                }
+
+                if (selectedDealer?.id) {
+                    updatePendingDeduction(selectedDealer.id).catch(err =>
+                        console.error('Error updating pending deduction:', err)
+                    )
+                }
+
+                fetchSubmissions()
+                toast.success('ลบใบโพยออกจากฐานข้อมูลสำเร็จ')
+            } catch (error) {
+                console.error('Error permanently deleting bill:', error)
+                toast.error('เกิดข้อผิดพลาด: ' + error.message)
+                fetchSubmissions()
+            }
+            return
+        }
+
         if (!canDelete(billItems?.[0])) {
             toast.warning('ไม่สามารถลบได้ เนื่องจากเลยเวลาที่กำหนด')
             return
@@ -3639,7 +3703,7 @@ export default function UserDashboard() {
                                                                                             )}
 
                                                                                             {/* Bill Actions - For editing/deleting */}
-                                                                                            {isExpandedBill && canDelete(billItems[0]) && billId !== 'no-bill' && (
+                                                                                            {isExpandedBill && (canDelete(billItems[0]) || isBillAllCancelled) && billId !== 'no-bill' && (
                                                                                                 <div className="bill-card-actions" style={{ 
                                                                                                     display: 'flex', 
                                                                                                     gap: '0.5rem', 
@@ -3679,7 +3743,7 @@ export default function UserDashboard() {
                                                                                                             e.stopPropagation()
                                                                                                             handleDeleteBill(billId, billItems)
                                                                                                         }}
-                                                                                                        title="ลบโพยทั้งหมด"
+                                                                                                        title={isBillAllCancelled ? "ลบใบโพยออกจากฐานข้อมูล" : "ลบโพยทั้งหมด"}
                                                                                                         style={{
                                                                                                             padding: '0.5rem 1.2rem',
                                                                                                             minWidth: '80px',
