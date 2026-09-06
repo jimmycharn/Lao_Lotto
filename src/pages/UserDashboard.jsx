@@ -3737,7 +3737,9 @@ export default function UserDashboard() {
                                                                                                             title="แก้ไขโพย"
                                                                                                             style={{
                                                                                                                 padding: '0.5rem 1.2rem',
-                                                                                                                minWidth: '80px',
+                                                                                                                width: 'auto',
+                                                                                                                minWidth: 'fit-content',
+                                                                                                                whiteSpace: 'nowrap',
                                                                                                                 border: '1.5px solid var(--color-warning)',
                                                                                                                 borderRadius: '6px',
                                                                                                                 background: 'transparent',
@@ -3745,10 +3747,11 @@ export default function UserDashboard() {
                                                                                                                 fontWeight: '500',
                                                                                                                 fontSize: '0.85rem',
                                                                                                                 cursor: 'pointer',
-                                                                                                                display: 'flex',
+                                                                                                                display: 'inline-flex',
                                                                                                                 alignItems: 'center',
                                                                                                                 justifyContent: 'center',
-                                                                                                                gap: '0.4rem'
+                                                                                                                gap: '0.4rem',
+                                                                                                                flexShrink: 0
                                                                                                             }}
                                                                                                         >
                                                                                                             <FiEdit2 /> แก้ไข
@@ -3764,7 +3767,9 @@ export default function UserDashboard() {
                                                                                                             title="เอากลับมาเป็นใบโพยปกติ"
                                                                                                             style={{
                                                                                                                 padding: '0.5rem 1.2rem',
-                                                                                                                minWidth: '80px',
+                                                                                                                width: 'auto',
+                                                                                                                minWidth: 'fit-content',
+                                                                                                                whiteSpace: 'nowrap',
                                                                                                                 border: '1.5px solid #10b981',
                                                                                                                 borderRadius: '6px',
                                                                                                                 background: 'rgba(16, 185, 129, 0.1)',
@@ -3772,10 +3777,11 @@ export default function UserDashboard() {
                                                                                                                 fontWeight: '500',
                                                                                                                 fontSize: '0.85rem',
                                                                                                                 cursor: 'pointer',
-                                                                                                                display: 'flex',
+                                                                                                                display: 'inline-flex',
                                                                                                                 alignItems: 'center',
                                                                                                                 justifyContent: 'center',
-                                                                                                                gap: '0.4rem'
+                                                                                                                gap: '0.4rem',
+                                                                                                                flexShrink: 0
                                                                                                             }}
                                                                                                         >
                                                                                                             <FiRotateCcw /> เอากลับ
@@ -3790,7 +3796,9 @@ export default function UserDashboard() {
                                                                                                             title="ยกเลิกใบโพยนี้"
                                                                                                             style={{
                                                                                                                 padding: '0.5rem 1.2rem',
-                                                                                                                minWidth: '80px',
+                                                                                                                width: 'auto',
+                                                                                                                minWidth: 'fit-content',
+                                                                                                                whiteSpace: 'nowrap',
                                                                                                                 border: '1.5px solid var(--color-danger)',
                                                                                                                 borderRadius: '6px',
                                                                                                                 background: 'transparent',
@@ -3798,10 +3806,11 @@ export default function UserDashboard() {
                                                                                                                 fontWeight: '500',
                                                                                                                 fontSize: '0.85rem',
                                                                                                                 cursor: 'pointer',
-                                                                                                                display: 'flex',
+                                                                                                                display: 'inline-flex',
                                                                                                                 alignItems: 'center',
                                                                                                                 justifyContent: 'center',
-                                                                                                                gap: '0.4rem'
+                                                                                                                gap: '0.4rem',
+                                                                                                                flexShrink: 0
                                                                                                             }}
                                                                                                         >
                                                                                                             <FiTrash2 /> ยกเลิกใบโพยนี้

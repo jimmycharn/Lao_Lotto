@@ -4043,15 +4043,21 @@
 }
 
 .bill-card-actions .bill-action-btn {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
-    padding: 0.5rem 0.75rem;
+    justify-content: center;
+    gap: 0.4rem;
+    width: auto;
+    height: auto;
+    min-width: fit-content;
+    white-space: nowrap;
+    padding: 0.5rem 1.2rem;
     border: none;
     border-radius: var(--radius-sm);
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     cursor: pointer;
     transition: all 0.2s ease;
+    flex-shrink: 0;
 }
 
 .bill-card-actions .bill-action-btn.edit {
@@ -4071,6 +4077,16 @@
 
 .bill-card-actions .bill-action-btn.delete:hover {
     background: var(--color-danger);
+    color: #fff;
+}
+
+.bill-card-actions .bill-action-btn.restore {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+}
+
+.bill-card-actions .bill-action-btn.restore:hover {
+    background: #10b981;
     color: #fff;
 }
 
