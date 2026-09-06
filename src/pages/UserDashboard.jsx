@@ -2752,10 +2752,11 @@ export default function UserDashboard() {
         return `เหลือ ${minutes} นาที`
     }
 
-    // Calculate totals
-    const totalAmount = submissions.reduce((sum, s) => sum + (s.amount || 0), 0)
+    // Calculate totals (active uncancelled submissions only)
+    const activeSubmissions = submissions.filter(s => !s.is_deleted)
+    const totalAmount = activeSubmissions.reduce((sum, s) => sum + (s.amount || 0), 0)
     const totalCommission = selectedRound 
-        ? submissions.reduce((sum, s) => sum + calculateCommissionAmount(s.amount || 0, s.bet_type, selectedRound), 0)
+        ? activeSubmissions.reduce((sum, s) => sum + calculateCommissionAmount(s.amount || 0, s.bet_type, selectedRound), 0)
         : 0
 
     // Default payout rates per bet type
@@ -3166,11 +3167,12 @@ export default function UserDashboard() {
                                                     <div className="submissions-summary">
                                                         <div className="summary-card" style={{ display: 'flex', flexDirection: 'column' }}>
                                                             {(() => {
-                                                                const uniqueBills = new Set(submissions.map(s => s.bill_id).filter(Boolean)).size;
+                                                                const activeSubs = submissions.filter(s => !s.is_deleted);
+                                                                const uniqueBills = new Set(activeSubs.map(s => s.bill_id).filter(Boolean)).size;
                                                                 return (
                                                                     <>
                                                                         <span className="summary-value" style={{ fontSize: '1.2rem', lineHeight: '1.2' }}>
-                                                                            {uniqueBills > 0 ? `${uniqueBills} ใบโพย` : ''} {submissions.length} รายการ
+                                                                            {uniqueBills > 0 ? `${uniqueBills} ใบโพย` : ''} {activeSubs.length} รายการ
                                                                         </span>
                                                                         <span className="summary-label">จำนวนที่ป้อน</span>
                                                                     </>
@@ -3502,7 +3504,7 @@ export default function UserDashboard() {
                                                                         return sortedItems.reduce((acc, sub) => {
                                                                             const subCommission = calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)
                                                                             if (sub.entry_id) {
-                                                                                const existing = acc.find(a => a.entry_id === sub.entry_id)
+                                                                                const existing = acc.find(a => a.entry_id === sub.entry_id && Boolean(a.is_deleted) === Boolean(sub.is_deleted))
                                                                                 if (existing) {
                                                                                     existing.amount += sub.amount
                                                                                     existing._calc_commission = (existing._calc_commission || 0) + subCommission
@@ -3602,22 +3604,34 @@ export default function UserDashboard() {
                                                                                                 onClick={() => toggleBill(billId)}
                                                                                                 style={{ padding: '0.6rem 0.75rem', cursor: 'pointer', background: isBillAllCancelled ? 'rgba(239, 68, 68, 0.12)' : undefined }}
                                                                                             >
-                                                                                                {/* Line 1: [note] date time (N items) ฿✓ */}
-                                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
-                                                                                                    {billItems[0]?.bill_note && (
-                                                                                                        <span style={{ fontWeight: '600', color: 'var(--color-text)', textDecoration: isBillAllCancelled ? 'line-through' : 'none' }}>{billItems[0].bill_note}</span>
-                                                                                                    )}
-                                                                                                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', textDecoration: isBillAllCancelled ? 'line-through' : 'none' }}>
-                                                                                                        {billDate} {billTime}
-                                                                                                    </span>
-                                                                                                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
-                                                                                                        ({actualLineCount})
-                                                                                                    </span>
-                                                                                                    {billItems[0]?.is_paid && <span title="ชำระเงินแล้ว" style={{ color: 'var(--color-success)', fontSize: '0.85rem', fontWeight: '700' }}>฿✓</span>}
-                                                                                                    {isBillAllCancelled && (
-                                                                                                        <span className="status-badge cancelled" style={{ background: '#ef4444', color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', padding: '0.15rem 0.4rem', borderRadius: '4px', marginLeft: '0.4rem' }}>
-                                                                                                            🚫 ยกเลิกแล้ว
+                                                                                                {/* Line 1: [note] date time (N items) ฿✓ + bill number */}
+                                                                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.15rem' }}>
+                                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
+                                                                                                        {billItems[0]?.bill_note && (
+                                                                                                            <span style={{ fontWeight: '600', color: 'var(--color-text)', textDecoration: isBillAllCancelled ? 'line-through' : 'none' }}>{billItems[0].bill_note}</span>
+                                                                                                        )}
+                                                                                                        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', textDecoration: isBillAllCancelled ? 'line-through' : 'none' }}>
+                                                                                                            {billDate} {billTime}
                                                                                                         </span>
+                                                                                                        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
+                                                                                                            ({actualLineCount})
+                                                                                                        </span>
+                                                                                                        {billItems[0]?.is_paid && <span title="ชำระเงินแล้ว" style={{ color: 'var(--color-success)', fontSize: '0.85rem', fontWeight: '700' }}>฿✓</span>}
+                                                                                                        {isBillAllCancelled && (
+                                                                                                            <span className="status-badge cancelled" style={{ background: '#ef4444', color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', padding: '0.15rem 0.4rem', borderRadius: '4px', marginLeft: '0.4rem' }}>
+                                                                                                                🚫 ยกเลิกแล้ว
+                                                                                                            </span>
+                                                                                                        )}
+                                                                                                    </div>
+                                                                                                    {billId && billId !== 'no-bill' && (
+                                                                                                        <div style={{
+                                                                                                            fontSize: '0.75rem',
+                                                                                                            color: isBillAllCancelled ? '#ef4444' : '#94a3b8',
+                                                                                                            fontWeight: '500',
+                                                                                                            textDecoration: isBillAllCancelled ? 'line-through' : 'none'
+                                                                                                        }}>
+                                                                                                            เลขที่ใบโพย: <span style={{ color: isBillAllCancelled ? '#ef4444' : 'var(--color-primary, #f59e0b)', fontWeight: '600', fontFamily: "'Monaco', 'Menlo', monospace" }}>{billId}</span>
+                                                                                                        </div>
                                                                                                     )}
                                                                                                 </div>
                                                                                                 {/* Line 2: amount, commission, copy */}
@@ -3665,31 +3679,32 @@ export default function UserDashboard() {
                                                                                                         >
                                                                                                             {displayMode === 'summary' && sub.display_numbers ? (
                                                                                                                 <>
-                                                                                                                    <span className="bill-display-text" style={{ flex: 1, textDecoration: sub.is_deleted ? 'line-through' : 'none' }}>
+                                                                                                                    <span className="bill-display-text" style={{ flex: 1, textDecoration: sub.is_deleted ? 'line-through' : 'none', color: sub.is_deleted ? '#ef4444' : 'inherit' }}>
                                                                                                                         {sub.display_numbers}
-                                                                                                                        {sub.is_deleted && <span style={{ color: '#ef4444', fontSize: '0.75rem', marginLeft: '0.4rem', fontWeight: 600 }}>[🚫 ยกเลิก]</span>}
+                                                                                                                        {sub.is_deleted && <span style={{ color: '#ef4444', fontSize: '0.75rem', marginLeft: '0.4rem', fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}>[🚫 ยกเลิก]</span>}
                                                                                                                     </span>
-                                                                                                                    <span className="bill-item-commission" style={{ color: 'var(--color-warning)', fontSize: '0.8rem', width: '60px', textAlign: 'right', flexShrink: 0, textDecoration: sub.is_deleted ? 'line-through' : 'none' }}>
+                                                                                                                    <span className="bill-item-commission" style={{ color: sub.is_deleted ? '#ef4444' : 'var(--color-warning)', fontSize: '0.8rem', width: '60px', textAlign: 'right', flexShrink: 0, textDecoration: sub.is_deleted ? 'line-through' : 'none' }}>
                                                                                                                         {round.currency_symbol}{Math.round(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)).toLocaleString()}
                                                                                                                     </span>
-                                                                                                                    <span className="bill-item-amount" style={{ width: '60px', textAlign: 'right', flexShrink: 0 }}>
+                                                                                                                    <span className="bill-item-amount" style={{ width: '60px', textAlign: 'right', flexShrink: 0, color: sub.is_deleted ? '#ef4444' : 'inherit', textDecoration: sub.is_deleted ? 'line-through' : 'none' }}>
                                                                                                                         {round.currency_symbol}{sub.amount?.toLocaleString()}
                                                                                                                     </span>
                                                                                                                 </>
                                                                                                             ) : (
                                                                                                                 <>
                                                                                                                     <div className="bill-item-left" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.1rem' }}>
-                                                                                                                        <span className="bill-number" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
+                                                                                                                        <span className="bill-number" style={{ color: sub.is_deleted ? '#ef4444' : 'var(--color-primary)', fontWeight: '600', textDecoration: sub.is_deleted ? 'line-through' : 'none' }}>
                                                                                                                             {sub.numbers}
+                                                                                                                            {sub.is_deleted && <span style={{ color: '#ef4444', fontSize: '0.75rem', marginLeft: '0.4rem', fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}>[🚫 ยกเลิก]</span>}
                                                                                                                         </span>
-                                                                                                                        <span className="bill-bet-type">
+                                                                                                                        <span className="bill-bet-type" style={{ color: sub.is_deleted ? '#ef4444' : undefined, textDecoration: sub.is_deleted ? 'line-through' : 'none', opacity: sub.is_deleted ? 0.8 : undefined }}>
                                                                                                                             {BET_TYPES[sub.bet_type]?.label}
                                                                                                                         </span>
                                                                                                                     </div>
-                                                                                                                    <span className="bill-item-commission" style={{ color: 'var(--color-warning)', fontSize: '0.8rem', width: '60px', textAlign: 'right', flexShrink: 0 }}>
+                                                                                                                    <span className="bill-item-commission" style={{ color: sub.is_deleted ? '#ef4444' : 'var(--color-warning)', fontSize: '0.8rem', width: '60px', textAlign: 'right', flexShrink: 0, textDecoration: sub.is_deleted ? 'line-through' : 'none' }}>
                                                                                                                         {round.currency_symbol}{Math.round(calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)).toLocaleString()}
                                                                                                                     </span>
-                                                                                                                    <span className="bill-item-amount" style={{ width: '60px', textAlign: 'right', flexShrink: 0 }}>
+                                                                                                                    <span className="bill-item-amount" style={{ width: '60px', textAlign: 'right', flexShrink: 0, color: sub.is_deleted ? '#ef4444' : 'inherit', textDecoration: sub.is_deleted ? 'line-through' : 'none' }}>
                                                                                                                         {round.currency_symbol}{sub.amount?.toLocaleString()}
                                                                                                                     </span>
                                                                                                                     <span style={{ width: '45px', textAlign: 'right', flexShrink: 0, fontSize: '0.75rem', color: 'var(--color-danger)' }}>
@@ -3796,46 +3811,87 @@ export default function UserDashboard() {
                                                                                     </tr>
                                                                                 </thead>
                                                                                 <tbody>
-                                                                                    {displayItems.map(sub => (
-                                                                                        <tr
-                                                                                            key={sub.id || sub.entry_id}
-                                                                                            className={`${sub.is_winner ? 'winner' : ''} clickable-row ${canDelete(sub) ? 'editable' : ''}`}
-                                                                                            onClick={() => handleEditSubmission(sub)}
-                                                                                        >
-                                                                                            <td className="number-cell">
-                                                                                                {displayMode === 'summary' ? (
-                                                                                                    <div className="number-display">
-                                                                                                        <span className="main-number">
-                                                                                                            {sub.display_numbers || sub.numbers}
-                                                                                                        </span>
-                                                                                                        <span className="sub-type">
-                                                                                                            {sub.display_bet_type && sub.display_bet_type !== sub.display_numbers
-                                                                                                                ? sub.display_bet_type
-                                                                                                                : BET_TYPES[sub.bet_type]?.label}
-                                                                                                        </span>
-                                                                                                    </div>
-                                                                                                ) : (
-                                                                                                    <div className="number-display">
-                                                                                                        <span className="main-number" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
-                                                                                                            {sub.numbers}
-                                                                                                        </span>
-                                                                                                        <span className="sub-type">
-                                                                                                            {BET_TYPES[sub.bet_type]?.label}
-                                                                                                        </span>
-                                                                                                    </div>
-                                                                                                )}
-                                                                                            </td>
-                                                                                            <td className="commission-cell" style={{ color: 'var(--color-warning)' }}>
-                                                                                                {round.currency_symbol}{Math.round(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)).toLocaleString()}
-                                                                                            </td>
-                                                                                            <td>{round.currency_symbol}{sub.amount?.toLocaleString()}</td>
-                                                                                            {displayMode === 'detailed' && (
-                                                                                                <td style={{ fontSize: '0.8rem', color: 'var(--color-danger)' }}>
-                                                                                                    {sub.actual_payout_percent != null && sub.actual_payout_percent < 100 ? `${sub.actual_payout_percent}%` : ''}
+                                                                                    {displayItems.map(sub => {
+                                                                                        const isCancelled = Boolean(sub.is_deleted)
+                                                                                        return (
+                                                                                            <tr
+                                                                                                key={sub.id || sub.entry_id}
+                                                                                                className={`${sub.is_winner ? 'winner' : ''} ${!isCancelled ? 'clickable-row' : ''} ${canDelete(sub) && !isCancelled ? 'editable' : ''} ${isCancelled ? 'cancelled-row' : ''}`}
+                                                                                                onClick={() => !isCancelled && handleEditSubmission(sub)}
+                                                                                                style={{
+                                                                                                    opacity: isCancelled ? 0.75 : 1,
+                                                                                                    background: isCancelled ? 'rgba(239, 68, 68, 0.08)' : undefined,
+                                                                                                    cursor: isCancelled ? 'default' : 'pointer'
+                                                                                                }}
+                                                                                            >
+                                                                                                <td className="number-cell">
+                                                                                                    {displayMode === 'summary' ? (
+                                                                                                        <div className="number-display">
+                                                                                                            <span className="main-number" style={{
+                                                                                                                color: isCancelled ? '#ef4444' : 'inherit',
+                                                                                                                textDecoration: isCancelled ? 'line-through' : 'none'
+                                                                                                            }}>
+                                                                                                                {sub.display_numbers || sub.numbers}
+                                                                                                                {isCancelled && (
+                                                                                                                    <span style={{ color: '#ef4444', fontSize: '0.75rem', marginLeft: '0.4rem', fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}>
+                                                                                                                        [🚫 ยกเลิก]
+                                                                                                                    </span>
+                                                                                                                )}
+                                                                                                            </span>
+                                                                                                            <span className="sub-type" style={{
+                                                                                                                color: isCancelled ? '#ef4444' : undefined,
+                                                                                                                textDecoration: isCancelled ? 'line-through' : 'none',
+                                                                                                                opacity: isCancelled ? 0.8 : undefined
+                                                                                                            }}>
+                                                                                                                {sub.display_bet_type && sub.display_bet_type !== sub.display_numbers
+                                                                                                                    ? sub.display_bet_type
+                                                                                                                    : BET_TYPES[sub.bet_type]?.label}
+                                                                                                            </span>
+                                                                                                        </div>
+                                                                                                    ) : (
+                                                                                                        <div className="number-display">
+                                                                                                            <span className="main-number" style={{ 
+                                                                                                                color: isCancelled ? '#ef4444' : 'var(--color-primary)', 
+                                                                                                                fontWeight: '600',
+                                                                                                                textDecoration: isCancelled ? 'line-through' : 'none'
+                                                                                                            }}>
+                                                                                                                {sub.numbers}
+                                                                                                                {isCancelled && (
+                                                                                                                    <span style={{ color: '#ef4444', fontSize: '0.75rem', marginLeft: '0.4rem', fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}>
+                                                                                                                        [🚫 ยกเลิก]
+                                                                                                                    </span>
+                                                                                                                )}
+                                                                                                            </span>
+                                                                                                            <span className="sub-type" style={{
+                                                                                                                color: isCancelled ? '#ef4444' : undefined,
+                                                                                                                textDecoration: isCancelled ? 'line-through' : 'none',
+                                                                                                                opacity: isCancelled ? 0.8 : undefined
+                                                                                                            }}>
+                                                                                                                {BET_TYPES[sub.bet_type]?.label}
+                                                                                                            </span>
+                                                                                                        </div>
+                                                                                                    )}
                                                                                                 </td>
-                                                                                            )}
-                                                                                        </tr>
-                                                                                    ))}
+                                                                                                <td className="commission-cell" style={{ 
+                                                                                                    color: isCancelled ? '#ef4444' : 'var(--color-warning)',
+                                                                                                    textDecoration: isCancelled ? 'line-through' : 'none'
+                                                                                                }}>
+                                                                                                    {round.currency_symbol}{Math.round(sub._calc_commission ?? calculateCommissionAmount(sub.amount || 0, sub.bet_type, round)).toLocaleString()}
+                                                                                                </td>
+                                                                                                <td style={{
+                                                                                                    color: isCancelled ? '#ef4444' : 'inherit',
+                                                                                                    textDecoration: isCancelled ? 'line-through' : 'none'
+                                                                                                }}>
+                                                                                                    {round.currency_symbol}{sub.amount?.toLocaleString()}
+                                                                                                </td>
+                                                                                                {displayMode === 'detailed' && (
+                                                                                                    <td style={{ fontSize: '0.8rem', color: isCancelled ? '#ef4444' : 'var(--color-danger)', textDecoration: isCancelled ? 'line-through' : 'none' }}>
+                                                                                                        {sub.actual_payout_percent != null && sub.actual_payout_percent < 100 ? `${sub.actual_payout_percent}%` : ''}
+                                                                                                    </td>
+                                                                                                )}
+                                                                                            </tr>
+                                                                                        )
+                                                                                    })}
                                                                                 </tbody>
                                                                             </table>
                                                                         )
