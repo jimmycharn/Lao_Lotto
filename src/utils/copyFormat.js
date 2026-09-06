@@ -145,12 +145,16 @@ function buildCopyEntries(submissions) {
 export function formatCopyText({ submissions, round, userName, billName, bonusSettings }) {
     if (!submissions || submissions.length === 0) return ''
 
+    // Only include active submissions (exclude cancelled/deleted items)
+    const activeSubmissions = submissions.filter(s => !s.is_deleted)
+    if (activeSubmissions.length === 0) return ''
+
     const lotteryType = round.lottery_type
     const currencySymbol = round.currency_symbol || '฿'
 
     // Group individual submissions by bet_type (full/expanded — one line per submission)
     const groupedByType = {}
-    submissions.forEach(sub => {
+    activeSubmissions.forEach(sub => {
         const bt = sub.bet_type
         if (!groupedByType[bt]) groupedByType[bt] = []
         groupedByType[bt].push(sub)
@@ -164,7 +168,7 @@ export function formatCopyText({ submissions, round, userName, billName, bonusSe
     })
 
     // Calculate total actual amount from all submissions
-    const totalAmount = submissions.reduce((sum, s) => sum + s.amount, 0)
+    const totalAmount = activeSubmissions.reduce((sum, s) => sum + (s.amount || 0), 0)
 
     /**
      * Reconstruct base amount (before bonus) mathematically using the exact bonus settings.
@@ -199,7 +203,7 @@ export function formatCopyText({ submissions, round, userName, billName, bonusSe
         return base
     }
 
-    const baseAmount = submissions.reduce((sum, s) => sum + getBaseAmountForSub(s), 0)
+    const baseAmount = activeSubmissions.reduce((sum, s) => sum + getBaseAmountForSub(s), 0)
     const bonusAmount = totalAmount - baseAmount
 
     // Format close time (date only, no time)
@@ -215,7 +219,7 @@ export function formatCopyText({ submissions, round, userName, billName, bonusSe
     }
     text += `📅 งวดวันที่: ${closeDateStr}\n`
     text += `👤 ผู้ขาย: ${userName || '-'}\n`
-    text += `📊 ทั้งหมด (${submissions.length} รายการ)\n`
+    text += `📊 ทั้งหมด (${activeSubmissions.length} รายการ)\n`
     if (bonusAmount > 0) {
         text += `💰 ยอดแทง: ${currencySymbol}${baseAmount.toLocaleString()}\n`
         text += `🎁 ยอดแถม: ${currencySymbol}${bonusAmount.toLocaleString()}\n`

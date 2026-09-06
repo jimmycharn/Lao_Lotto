@@ -3533,12 +3533,21 @@ export default function UserDashboard() {
                                                                 <button
                                                                     className="bill-copy-btn"
                                                                     onClick={async () => {
+                                                                        const activeSubs = submissions.filter(s => !s.is_deleted)
+                                                                        if (activeSubs.length === 0) {
+                                                                            toast.warning('ไม่มีรายการที่ส่ง (รายการทั้งหมดถูกยกเลิกแล้ว)')
+                                                                            return
+                                                                        }
                                                                         const text = formatCopyText({
-                                                                            submissions,
+                                                                            submissions: activeSubs,
                                                                             round,
                                                                             userName: profile?.full_name || profile?.email || '-',
                                                                             bonusSettings: getBonusSettingsForRound(round)
                                                                         })
+                                                                        if (!text) {
+                                                                            toast.warning('ไม่มีรายการที่จะคัดลอก')
+                                                                            return
+                                                                        }
                                                                         await copyToClipboard(text)
                                                                         toast.success('คัดลอกแล้ว!')
                                                                     }}
@@ -3629,6 +3638,30 @@ export default function UserDashboard() {
                                                                                     const billTotal = billItems.reduce((sum, item) => sum + (item.amount || 0), 0)
                                                                                     const billCommission = billItems.reduce((sum, item) => sum + calculateCommissionAmount(item.amount || 0, item.bet_type, round), 0)
                                                                                     const isBillAllCancelled = billItems.length > 0 && billItems.every(item => item.is_deleted)
+                                                                                    
+                                                                                    // Copy bill function (use raw billItems for full/expanded format)
+                                                                                    const handleCopyBill = async (e) => {
+                                                                                        e.stopPropagation()
+                                                                                        const activeBillSubs = billItems.filter(s => !s.is_deleted)
+                                                                                        if (activeBillSubs.length === 0) {
+                                                                                            toast.warning('ไม่สามารถคัดลอกได้ เนื่องจากใบโพยนี้ถูกยกเลิกแล้ว')
+                                                                                            return
+                                                                                        }
+                                                                                        const text = formatCopyText({
+                                                                                            submissions: activeBillSubs,
+                                                                                            round,
+                                                                                            userName: profile?.full_name || profile?.email || '-',
+                                                                                            billName: billItems[0]?.bill_note || billId,
+                                                                                            bonusSettings: getBonusSettingsForRound(round)
+                                                                                        })
+                                                                                        if (!text) {
+                                                                                            toast.warning('ไม่มีรายการที่จะคัดลอก')
+                                                                                            return
+                                                                                        }
+                                                                                        await copyToClipboard(text)
+                                                                                        toast.success('คัดลอกแล้ว!')
+                                                                                    }
+                                                                                    
                                                                                     const billTime = new Date(billItems[0].created_at).toLocaleTimeString('th-TH', {
                                                                                         hour: '2-digit',
                                                                                         minute: '2-digit'
@@ -3668,19 +3701,6 @@ export default function UserDashboard() {
                                                                                     })()
                                                                                     const isDealerSubmitted = billItems[0]?.submitted_by_type === 'dealer'
 
-                                                                                    // Copy bill function (use raw billItems for full/expanded format)
-                                                                                    const handleCopyBill = async (e) => {
-                                                                                        e.stopPropagation()
-                                                                                        const text = formatCopyText({
-                                                                                            submissions: billItems.filter(s => !s.is_deleted),
-                                                                                            round,
-                                                                                            userName: profile?.full_name || profile?.email || '-',
-                                                                                            billName: billItems[0]?.bill_note || billId,
-                                                                                            bonusSettings: getBonusSettingsForRound(round)
-                                                                                        })
-                                                                                        await copyToClipboard(text)
-                                                                                        toast.success('คัดลอกแล้ว!')
-                                                                                    }
 
                                                                                     return (
                                                                                         <div key={billId} className={`bill-card-new ${isExpandedBill ? 'expanded' : ''} ${isDealerSubmitted ? 'dealer-submitted' : ''} ${isBillAllCancelled ? 'is-cancelled' : ''}`} style={isBillAllCancelled ? { background: 'rgba(239, 68, 68, 0.05)', border: '1.5px dashed #ef4444' } : {}}>
