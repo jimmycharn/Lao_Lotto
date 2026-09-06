@@ -3,7 +3,7 @@ import { FiX, FiTrash2, FiEdit2, FiPlus, FiCheck, FiRefreshCw, FiVolume2, FiVolu
 import { getPermutations } from '../constants/lotteryTypes'
 import { parseMultiLinePaste, get3DigitPermCount, normalizeUnicode, extractInlineContext } from '../utils/pasteParser'
 import { useDragReorder } from '../utils/useDragReorder'
-import { fetchNumberLimits, fetchCurrentTotals, findMatchingLimit, getEffectivePayoutPercent } from '../utils/numberLimits'
+import { fetchNumberLimits, findMatchingLimit, getEffectivePayoutPercent } from '../utils/numberLimits'
 import { useModalBackButton } from '../utils/useModalBackButton'
 import { useAuth } from '../contexts/AuthContext'
 import './WriteSubmissionModal.css'
@@ -482,10 +482,42 @@ export default function WriteSubmissionModal({
         }
     }, [soundEnabled])
 
+    // Number limits in-memory cache
+    const cachedLimitsRef = useRef(null)
+
+    // Load number limits once when modal opens or roundInfo changes
+    useEffect(() => {
+        if (!isOpen || !roundInfo?.id) {
+            cachedLimitsRef.current = null
+            return
+        }
+
+        let isMounted = true
+        const loadLimits = async () => {
+            try {
+                const limits = await fetchNumberLimits(roundInfo.id)
+                if (isMounted) {
+                    cachedLimitsRef.current = limits || []
+                }
+            } catch (err) {
+                console.error('[WriteModal] Error loading number limits:', err)
+            }
+        }
+
+        loadLimits()
+
+        // Background refresh every 45 seconds while modal is open
+        const interval = setInterval(loadLimits, 45000)
+        return () => {
+            isMounted = false
+            clearInterval(interval)
+        }
+    }, [isOpen, roundInfo?.id])
+
     // Check a parsed line against number limits
-    // Accepts optional pre-fetched cachedLimits/cachedTotals to avoid redundant DB queries in batch operations
+    // Uses in-memory cached limits to avoid redundant DB queries on every keystroke
     // Returns: { allowed: boolean, blocked: string[], limitedInfo: string[] }
-    const checkLineAgainstLimits = useCallback(async (lineStr, cachedLimits = null, cachedTotals = null) => {
+    const checkLineAgainstLimits = useCallback(async (lineStr, explicitLimits = null) => {
         if (!roundInfo?.id) return { allowed: true, blocked: [], limitedInfo: [] }
 
         const parsed = parseLine(lineStr)
@@ -495,9 +527,12 @@ export default function WriteSubmissionModal({
         if (entries.length === 0) return { allowed: true, blocked: [], limitedInfo: [] }
 
         try {
-            // Use cached data if provided (batch mode), otherwise fetch fresh
-            const limits = cachedLimits ?? await fetchNumberLimits(roundInfo.id)
-            const totals = cachedTotals ?? await fetchCurrentTotals(roundInfo.id)
+            // Use explicitLimits if passed, or in-memory cachedLimitsRef if loaded, or fetch once as fallback
+            let limits = explicitLimits ?? cachedLimitsRef.current
+            if (limits === null) {
+                limits = await fetchNumberLimits(roundInfo.id)
+                cachedLimitsRef.current = limits || []
+            }
 
             if (!limits || limits.length === 0) return { allowed: true, blocked: [], limitedInfo: [] }
 
@@ -1954,15 +1989,12 @@ export default function WriteSubmissionModal({
         // Convert parsed entries to formatted line strings (compatible with parseLine)
         const newLines = parsed.map(p => p.formattedLine)
 
-        // Fetch limits & totals ONCE before processing all lines (batch optimization)
-        let cachedLimits = null
-        let cachedTotals = null
-        if (roundInfo?.id) {
+        // Use in-memory cached limits if available, otherwise fetch once
+        let cachedLimits = cachedLimitsRef.current
+        if (!cachedLimits && roundInfo?.id) {
             try {
-                ;[cachedLimits, cachedTotals] = await Promise.all([
-                    fetchNumberLimits(roundInfo.id),
-                    fetchCurrentTotals(roundInfo.id)
-                ])
+                cachedLimits = await fetchNumberLimits(roundInfo.id)
+                cachedLimitsRef.current = cachedLimits
             } catch (err) {
                 console.error('[WriteModal] Error pre-fetching limits for paste:', err)
             }
@@ -1973,7 +2005,7 @@ export default function WriteSubmissionModal({
         const blockedNums = []
         const limitedInfoAll = []
         for (const nl of newLines) {
-            const { allowed, blocked, limitedInfo } = await checkLineAgainstLimits(nl, cachedLimits, cachedTotals)
+            const { allowed, blocked, limitedInfo } = await checkLineAgainstLimits(nl, cachedLimits)
             if (allowed) {
                 allowedLines.push(nl)
                 limitedInfoAll.push(...limitedInfo)
@@ -3017,15 +3049,12 @@ export default function WriteSubmissionModal({
                                                 }
                                                 const newLines = parsed.map(p => p.formattedLine)
                                                 ;(async () => {
-                                                    // Fetch limits & totals ONCE for all lines (batch optimization)
-                                                    let cachedLimits = null
-                                                    let cachedTotals = null
-                                                    if (roundInfo?.id) {
+                                                    // Use in-memory cached limits if available, otherwise fetch once
+                                                    let cachedLimits = cachedLimitsRef.current
+                                                    if (!cachedLimits && roundInfo?.id) {
                                                         try {
-                                                            ;[cachedLimits, cachedTotals] = await Promise.all([
-                                                                fetchNumberLimits(roundInfo.id),
-                                                                fetchCurrentTotals(roundInfo.id)
-                                                            ])
+                                                            cachedLimits = await fetchNumberLimits(roundInfo.id)
+                                                            cachedLimitsRef.current = cachedLimits
                                                         } catch (err) {
                                                             console.error('[WriteModal] Error pre-fetching limits for auto-paste:', err)
                                                         }
@@ -3034,7 +3063,7 @@ export default function WriteSubmissionModal({
                                                     const blockedNums = []
                                                     const limitedInfoAll = []
                                                     for (const nl of newLines) {
-                                                        const { allowed, blocked, limitedInfo } = await checkLineAgainstLimits(nl, cachedLimits, cachedTotals)
+                                                        const { allowed, blocked, limitedInfo } = await checkLineAgainstLimits(nl, cachedLimits)
                                                         if (allowed) {
                                                             allowedLines.push(nl)
                                                             limitedInfoAll.push(...limitedInfo)
