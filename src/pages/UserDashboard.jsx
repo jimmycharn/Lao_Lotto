@@ -1807,14 +1807,17 @@ export default function UserDashboard() {
             const lineHeight = 6
             let y = 15
 
-            // Calculate totals
-            const totalAmount = submissions.reduce((sum, s) => sum + (s.amount || 0), 0)
-            const totalCommission = submissions.reduce((sum, s) => sum + calculateCommissionAmount(s.amount || 0, s.bet_type, selectedRound), 0)
+            // Calculate totals (active uncancelled submissions only)
+            const activeSubs = submissions.filter(s => !s.is_deleted)
+            const cancelledSubs = submissions.filter(s => s.is_deleted)
+            const totalAmount = activeSubs.reduce((sum, s) => sum + (s.amount || 0), 0)
+            const totalCommission = activeSubs.reduce((sum, s) => sum + calculateCommissionAmount(s.amount || 0, s.bet_type, selectedRound), 0)
             const netAmount = totalAmount - totalCommission
             const currencySymbol = selectedRound?.currency_symbol || '฿'
 
             // Title
             doc.setFontSize(14)
+            doc.setTextColor(0, 0, 0)
             doc.text(`${selectedRound.lottery_name || 'หวย'}`, pageWidth / 2, y, { align: 'center' })
             y += lineHeight
             
@@ -1828,19 +1831,27 @@ export default function UserDashboard() {
             }
             y += lineHeight * 1.5
 
-            // Summary section
+            // Summary section (excluding cancelled slips from totals)
             doc.setFontSize(11)
-            doc.text(`ส่งเลข: ${submissions.length} รายการ`, 15, y)
+            doc.setTextColor(0, 0, 0)
+            const uniqueActiveBills = new Set(activeSubs.map(s => s.bill_id).filter(Boolean)).size
+            let countText = `ส่งเลข: ${uniqueActiveBills > 0 ? `${uniqueActiveBills} ใบโพย ` : ''}${activeSubs.length} รายการ`
+            if (cancelledSubs.length > 0) {
+                const uniqueCancelledBills = new Set(cancelledSubs.map(s => s.bill_id).filter(Boolean)).size
+                countText += ` (ยกเลิก ${uniqueCancelledBills > 0 ? `${uniqueCancelledBills} ใบโพย ` : ''}${cancelledSubs.length} รายการ)`
+            }
+            doc.text(countText, 15, y)
             y += lineHeight
             doc.text(`ยอดส่ง: ${totalAmount.toLocaleString()} ${currencySymbol === '฿' ? 'บาท' : currencySymbol}`, 15, y)
             y += lineHeight
-            doc.text(`ค่าคอม: ${totalCommission.toLocaleString()} ${currencySymbol === '฿' ? 'บาท' : currencySymbol}`, 15, y)
+            doc.text(`ค่าคอม: ${Math.round(totalCommission).toLocaleString()} ${currencySymbol === '฿' ? 'บาท' : currencySymbol}`, 15, y)
             y += lineHeight
-            doc.text(`ส่งสุทธิ: ${netAmount.toLocaleString()} ${currencySymbol === '฿' ? 'บาท' : currencySymbol}`, 15, y)
+            doc.text(`ส่งสุทธิ: ${Math.round(netAmount).toLocaleString()} ${currencySymbol === '฿' ? 'บาท' : currencySymbol}`, 15, y)
             y += lineHeight * 1.5
 
             // Separator line
             doc.setLineWidth(0.3)
+            doc.setDrawColor(0, 0, 0)
             doc.line(15, y, pageWidth - 15, y)
             y += lineHeight
 
@@ -1860,7 +1871,6 @@ export default function UserDashboard() {
             })
 
             // Output each bill
-            doc.setFontSize(10)
             for (const [billId, items] of sortedBills) {
                 // Check if need new page
                 if (y > 270) {
@@ -1868,10 +1878,47 @@ export default function UserDashboard() {
                     y = 15
                 }
 
-                // Bill header (note or bill_id)
-                const billNote = items[0]?.bill_note || billId
+                const isBillAllCancelled = items.length > 0 && items.every(item => item.is_deleted)
+                const firstBillItem = items[0]
+                const billTime = firstBillItem?.created_at
+                    ? new Date(firstBillItem.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+                    : ''
+                const billDate = firstBillItem?.created_at
+                    ? new Date(firstBillItem.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
+                    : ''
+
+                const rawNote = firstBillItem?.bill_note
+                let billHeader = ''
+                if (rawNote && billId && billId !== 'no-bill' && rawNote !== billId) {
+                    billHeader = `${rawNote} (${billDate} ${billTime}) เลขที่ใบโพย: ${billId}`
+                } else if (billId && billId !== 'no-bill') {
+                    billHeader = `เลขที่ใบโพย: ${billId} (${billDate} ${billTime})`
+                } else if (rawNote) {
+                    billHeader = `${rawNote} (${billDate} ${billTime})`
+                } else {
+                    billHeader = `รายการ (${billDate} ${billTime})`
+                }
+
+                if (isBillAllCancelled) {
+                    billHeader += ' [ยกเลิกแล้ว]'
+                }
+
+                // Bill header (note or bill_id) with strikethrough if cancelled
                 doc.setFontSize(11)
-                doc.text(billNote, 15, y)
+                if (isBillAllCancelled) {
+                    doc.setTextColor(220, 38, 38)
+                    doc.setDrawColor(220, 38, 38)
+                    doc.setLineWidth(0.35)
+                } else {
+                    doc.setTextColor(0, 0, 0)
+                }
+                doc.text(billHeader, 15, y)
+                if (isBillAllCancelled) {
+                    const headerWidth = doc.getTextWidth(billHeader)
+                    doc.line(15, y - 1.2, 15 + headerWidth, y - 1.2)
+                    doc.setTextColor(0, 0, 0)
+                    doc.setDrawColor(0, 0, 0)
+                }
                 y += lineHeight * 0.8
 
                 // Group items by entry_id to show original input format
@@ -1890,6 +1937,7 @@ export default function UserDashboard() {
                     }
 
                     const firstItem = entryItems[0]
+                    const isEntryCancelled = entryItems.every(i => Boolean(i.is_deleted))
                     
                     // display_numbers contains the full original line (e.g., "25=20*20 ถ่างกลับ")
                     // If it contains "=" it's the full line, use it directly
@@ -1908,15 +1956,53 @@ export default function UserDashboard() {
                         lineText = `${numbers}=${displayAmt} ${betTypeLabel}`.trim()
                     }
 
+                    if (isEntryCancelled) {
+                        lineText = `${lineText} [ยกเลิก]`
+                        doc.setTextColor(220, 38, 38)
+                        doc.setDrawColor(220, 38, 38)
+                        doc.setLineWidth(0.35)
+                    } else {
+                        doc.setTextColor(0, 0, 0)
+                    }
+
                     doc.text(lineText, 20, y)
+                    if (isEntryCancelled) {
+                        const textWidth = doc.getTextWidth(lineText)
+                        doc.line(20, y - 1.1, 20 + textWidth, y - 1.1)
+                        doc.setTextColor(0, 0, 0)
+                        doc.setDrawColor(0, 0, 0)
+                    }
                     y += lineHeight * 0.7
                 }
 
                 // Bill total - only show if bill has more than 1 entry
                 const entryCount = Object.keys(entryGroups).length
                 if (entryCount > 1) {
-                    const billTotal = items.reduce((sum, item) => sum + (item.amount || 0), 0)
-                    doc.text(`รวม ${billTotal.toLocaleString()} ${currencySymbol === '฿' ? 'บาท' : currencySymbol}`, 20, y)
+                    const activeBillItems = items.filter(item => !item.is_deleted)
+                    const billItemsToSum = isBillAllCancelled ? items : activeBillItems
+                    const billTotal = billItemsToSum.reduce((sum, item) => sum + (item.amount || 0), 0)
+                    const billComm = billItemsToSum.reduce((sum, item) => sum + calculateCommissionAmount(item.amount || 0, item.bet_type, selectedRound), 0)
+
+                    let billTotalText = `รวม ${billTotal.toLocaleString()} ${currencySymbol === '฿' ? 'บาท' : currencySymbol}`
+                    if (billComm > 0) {
+                        billTotalText += ` (ค่าคอม ${Math.round(billComm).toLocaleString()} ${currencySymbol === '฿' ? 'บาท' : currencySymbol})`
+                    }
+                    if (isBillAllCancelled) {
+                        billTotalText += ' [ยกเลิกแล้ว]'
+                        doc.setTextColor(220, 38, 38)
+                        doc.setDrawColor(220, 38, 38)
+                        doc.setLineWidth(0.35)
+                    } else {
+                        doc.setTextColor(0, 0, 0)
+                    }
+
+                    doc.text(billTotalText, 20, y)
+                    if (isBillAllCancelled) {
+                        const totalWidth = doc.getTextWidth(billTotalText)
+                        doc.line(20, y - 1.1, 20 + totalWidth, y - 1.1)
+                        doc.setTextColor(0, 0, 0)
+                        doc.setDrawColor(0, 0, 0)
+                    }
                     y += lineHeight * 0.5
                 }
                 y += lineHeight * 0.8
