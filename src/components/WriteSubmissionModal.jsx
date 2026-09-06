@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { FiX, FiTrash2, FiEdit2, FiPlus, FiCheck, FiRefreshCw, FiVolume2, FiVolumeX } from 'react-icons/fi'
+import { FiX, FiTrash2, FiEdit2, FiPlus, FiCheck, FiRefreshCw, FiVolume2, FiVolumeX, FiClipboard } from 'react-icons/fi'
 import { getPermutations } from '../constants/lotteryTypes'
 import { parseMultiLinePaste, get3DigitPermCount, normalizeUnicode, extractInlineContext } from '../utils/pasteParser'
 import { useDragReorder } from '../utils/useDragReorder'
@@ -423,6 +423,18 @@ export default function WriteSubmissionModal({
     const [showCloseConfirm, setShowCloseConfirm] = useState(false)
     const [showPasteModal, setShowPasteModal] = useState(false)
     const [pasteText, setPasteText] = useState('')
+    const [isManualPasteInput, setIsManualPasteInput] = useState(false)
+    const pasteTextareaRef = useRef(null)
+
+    // Auto-focus textarea when paste modal opens
+    useEffect(() => {
+        if (showPasteModal) {
+            const timer = setTimeout(() => {
+                pasteTextareaRef.current?.focus()
+            }, 60)
+            return () => clearTimeout(timer)
+        }
+    }, [showPasteModal])
     const [focusedTypeIndex, setFocusedTypeIndex] = useState(-1) // -1 = not focused on type buttons
     const [soundEnabled, setSoundEnabled] = useState(() => {
         // Load sound preference from localStorage
@@ -922,6 +934,26 @@ export default function WriteSubmissionModal({
         if (!isOpen) return
 
         const handleKeyDown = (e) => {
+            // If paste modal is open, let user use Escape to close it, and ignore all other global keypad shortcuts
+            if (showPasteModal) {
+                if (e.key === 'Escape') {
+                    e.preventDefault()
+                    setShowPasteModal(false)
+                    setPasteText('')
+                    setIsManualPasteInput(false)
+                }
+                return
+            }
+
+            // If close confirmation dialog is open, ignore
+            if (showCloseConfirm) return
+
+            // Ignore if active element is any input or textarea
+            const activeEl = document.activeElement
+            if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+                return
+            }
+
             // F10 - Save/Submit (same as clicking บันทึก button)
             if (e.key === 'F10') {
                 e.preventDefault()
@@ -941,9 +973,6 @@ export default function WriteSubmissionModal({
                 }
                 return
             }
-            
-            // Ignore if typing in note input
-            if (document.activeElement === noteInputRef.current) return
             
             // Get current type buttons
             const currentTypeButtons = typeButtons
@@ -1197,11 +1226,18 @@ export default function WriteSubmissionModal({
                 playSound('click')
                 setTopBottomToggle(prev => prev === 'top' ? 'bottom' : 'top')
             }
+            // Plus key (+) - Open paste numbers modal (from main keyboard or numpad)
+            else if (e.key === '+' || e.code === 'NumpadAdd') {
+                e.preventDefault()
+                setShowPasteModal(true)
+                setPasteText('')
+                setIsManualPasteInput(false)
+            }
         }
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [isOpen, currentInput, isLocked, lockedAmount, focusedTypeIndex, topBottomToggle])
+    }, [isOpen, showPasteModal, showCloseConfirm, currentInput, isLocked, lockedAmount, focusedTypeIndex, topBottomToggle])
 
     // Prevent body scroll when modal is open
     useEffect(() => {
@@ -1968,14 +2004,15 @@ export default function WriteSubmissionModal({
         }
     }
 
-    // Handle paste numbers - parse multi-line text with auto bet type detection
-    const handlePasteNumbers = async () => {
-        if (!pasteText.trim()) {
-            setError('กรุณาวางข้อมูลก่อน')
+    // Handle paste/manual numbers - parse multi-line text with auto bet type detection
+    const handlePasteNumbers = async (overrideText = null) => {
+        const textToProcess = (typeof overrideText === 'string' ? overrideText : pasteText).trim()
+        if (!textToProcess) {
+            setError('กรุณาวางหรือป้อนข้อมูลก่อน')
             return
         }
 
-        const parsed = parseMultiLinePaste(pasteText, lotteryType, { 
+        const parsed = parseMultiLinePaste(textToProcess, lotteryType, { 
             x_separator_behavior: profile?.x_separator_behavior,
             hyphen_separator_behavior: profile?.hyphen_separator_behavior,
             three_digit_perm_mode: profile?.three_digit_perm_mode,
@@ -2025,6 +2062,58 @@ export default function WriteSubmissionModal({
         }
         setShowPasteModal(false)
         setPasteText('')
+        setIsManualPasteInput(false)
+    }
+
+    // Direct clipboard paste handler
+    const handlePasteFromClipboard = async () => {
+        try {
+            if (navigator.clipboard && navigator.clipboard.readText) {
+                const text = await navigator.clipboard.readText()
+                if (text && text.trim()) {
+                    // Condition 1: If empty, process immediately
+                    if (!pasteText.trim()) {
+                        setPasteText(text)
+                        await handlePasteNumbers(text)
+                        return
+                    }
+
+                    // Condition 2: If text already exists, append/insert at cursor and wait for [ตกลง]
+                    const textarea = pasteTextareaRef.current
+                    let newText = ''
+                    let newCursorPos = 0
+                    if (textarea) {
+                        const start = textarea.selectionStart ?? pasteText.length
+                        const end = textarea.selectionEnd ?? pasteText.length
+                        const prefix = pasteText.slice(0, start)
+                        const suffix = pasteText.slice(end)
+                        const separator = (start === pasteText.length && prefix.length > 0 && !prefix.endsWith('\n') && !prefix.endsWith(' ')) ? '\n' : ''
+                        newText = prefix + separator + text + suffix
+                        newCursorPos = start + separator.length + text.length
+                    } else {
+                        const separator = (pasteText.length > 0 && !pasteText.endsWith('\n')) ? '\n' : ''
+                        newText = pasteText + separator + text
+                        newCursorPos = newText.length
+                    }
+                    setPasteText(newText)
+                    setIsManualPasteInput(true)
+                    setTimeout(() => {
+                        if (pasteTextareaRef.current) {
+                            pasteTextareaRef.current.selectionStart = newCursorPos
+                            pasteTextareaRef.current.selectionEnd = newCursorPos
+                            pasteTextareaRef.current.focus()
+                        }
+                    }, 0)
+                    return
+                } else {
+                    setError('ไม่พบข้อความในคลิปบอร์ด')
+                    return
+                }
+            }
+        } catch (err) {
+            console.warn('[WriteModal] Clipboard read warning:', err)
+        }
+        pasteTextareaRef.current?.focus()
     }
 
     // Handle submit
@@ -2526,8 +2615,13 @@ export default function WriteSubmissionModal({
                 <div className="write-modal-note-row">
                     <button 
                         className="paste-btn-inline"
-                        onClick={() => setShowPasteModal(true)}
-                        title="วางเลข 4 ตัว"
+                        onClick={() => {
+                            setShowPasteModal(true)
+                            setPasteText('')
+                            setIsManualPasteInput(false)
+                        }}
+                        title="วางเลขจากคลิปบอร์ด (กด + บนคีย์บอร์ด)"
+                        aria-label="วางเลขจากคลิปบอร์ด (กด + บนคีย์บอร์ด)"
                     >
                         <FiPlus />
                     </button>
@@ -3012,84 +3106,106 @@ export default function WriteSubmissionModal({
 
                 {/* Paste Numbers Modal */}
                 {showPasteModal && (
-                    <div className="confirm-dialog-overlay" onClick={() => setShowPasteModal(false)}>
+                    <div className="confirm-dialog-overlay" onClick={() => {
+                        setShowPasteModal(false)
+                        setPasteText('')
+                        setIsManualPasteInput(false)
+                    }}>
                         <div className="paste-modal" onClick={e => e.stopPropagation()}>
                             <div className="paste-modal-header">
                                 <h3>วางเลข</h3>
-                                <button className="close-btn" onClick={() => { setShowPasteModal(false); setPasteText('') }}>
+                                <button className="close-btn" onClick={() => {
+                                    setShowPasteModal(false)
+                                    setPasteText('')
+                                    setIsManualPasteInput(false)
+                                }}>
                                     <FiX />
                                 </button>
                             </div>
                             <div className="paste-modal-body">
-                                <p className="paste-hint">วางข้อความที่มีเลข ระบบจะวิเคราะห์ประเภทอัตโนมัติ</p>
+                                <div className="paste-modal-hint-row">
+                                    <p className="paste-hint">วางข้อความที่มีเลข ระบบจะวิเคราะห์ประเภทอัตโนมัติ</p>
+                                    <button
+                                        type="button"
+                                        className="paste-clipboard-action-btn"
+                                        onClick={handlePasteFromClipboard}
+                                        title="วางข้อความจากคลิปบอร์ดทันที"
+                                    >
+                                        <FiClipboard /> วางจากคลิปบอร์ด
+                                    </button>
+                                </div>
                                 <textarea
+                                    ref={pasteTextareaRef}
                                     className="paste-textarea"
                                     rows={6}
-                                    placeholder={'วางข้อความที่นี่ (Ctrl+V)...'}
+                                    placeholder={'วางข้อความที่นี่ (Ctrl+V) หรือป้อนตัวเลข...'}
                                     autoFocus
                                     value={pasteText}
                                     onPaste={async (e) => {
-                                        e.preventDefault()
-                                        const text = e.clipboardData.getData('text')
-                                        if (text.trim()) {
+                                        const text = e.clipboardData?.getData('text')
+                                        if (!text || !text.trim()) return
+
+                                        // Condition 1: If empty, process immediately
+                                        if (!pasteText.trim()) {
+                                            e.preventDefault()
                                             setPasteText(text)
-                                            // Auto-submit after a tick so state updates
-                                            setTimeout(() => {
-                                                const parsed = parseMultiLinePaste(text, lotteryType, { 
-                                                    x_separator_behavior: profile?.x_separator_behavior,
-                                                    hyphen_separator_behavior: profile?.hyphen_separator_behavior,
-                                                    three_digit_perm_mode: profile?.three_digit_perm_mode,
-                                                    asterisk_separator_behavior: profile?.asterisk_separator_behavior
-                                                })
-                                                if (parsed.length === 0) {
-                                                    setError('ไม่พบรายการเลขในข้อความ')
-                                                    setShowPasteModal(false)
-                                                    setPasteText('')
-                                                    return
-                                                }
-                                                const newLines = parsed.map(p => p.formattedLine)
-                                                ;(async () => {
-                                                    // Use in-memory cached limits if available, otherwise fetch once
-                                                    let cachedLimits = cachedLimitsRef.current
-                                                    if (!cachedLimits && roundInfo?.id) {
-                                                        try {
-                                                            cachedLimits = await fetchNumberLimits(roundInfo.id)
-                                                            cachedLimitsRef.current = cachedLimits
-                                                        } catch (err) {
-                                                            console.error('[WriteModal] Error pre-fetching limits for auto-paste:', err)
-                                                        }
-                                                    }
-                                                    const allowedLines = []
-                                                    const blockedNums = []
-                                                    const limitedInfoAll = []
-                                                    for (const nl of newLines) {
-                                                        const { allowed, blocked, limitedInfo } = await checkLineAgainstLimits(nl, cachedLimits)
-                                                        if (allowed) {
-                                                            allowedLines.push(nl)
-                                                            limitedInfoAll.push(...limitedInfo)
-                                                        } else {
-                                                            blockedNums.push(...blocked)
-                                                        }
-                                                    }
-                                                    if (allowedLines.length > 0) {
-                                                        setLines(prev => [...prev, ...allowedLines])
-                                                        playSound('success')
-                                                    }
-                                                    if (blockedNums.length > 0) {
-                                                        setError(`🔴 เลขปิดรับ: ${[...new Set(blockedNums)].join(', ')}`)
-                                                    }
-                                                    if (limitedInfoAll.length > 0) {
-                                                        setLimitInfo(`⚠️ เลขอั้น: ${[...new Set(limitedInfoAll)].join(', ')}`)
-                                                    }
-                                                    setShowPasteModal(false)
-                                                    setPasteText('')
-                                                })()
-                                            }, 0)
+                                            await handlePasteNumbers(text)
+                                            return
+                                        }
+
+                                        // Condition 2: If text already exists, insert at cursor and wait for [ตกลง]
+                                        e.preventDefault()
+                                        const textarea = e.target
+                                        const start = textarea.selectionStart ?? pasteText.length
+                                        const end = textarea.selectionEnd ?? pasteText.length
+                                        const prefix = pasteText.slice(0, start)
+                                        const suffix = pasteText.slice(end)
+                                        const newText = prefix + text + suffix
+                                        const newPos = start + text.length
+                                        setPasteText(newText)
+                                        setIsManualPasteInput(true)
+                                        setTimeout(() => {
+                                            if (pasteTextareaRef.current) {
+                                                pasteTextareaRef.current.selectionStart = newPos
+                                                pasteTextareaRef.current.selectionEnd = newPos
+                                                pasteTextareaRef.current.focus()
+                                            }
+                                        }, 0)
+                                    }}
+                                    onChange={e => {
+                                        setPasteText(e.target.value)
+                                        setIsManualPasteInput(true)
+                                    }}
+                                    onKeyDown={e => {
+                                        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                                            e.preventDefault()
+                                            handlePasteNumbers()
                                         }
                                     }}
-                                    onChange={e => setPasteText(e.target.value)}
                                 />
                             </div>
+                            {pasteText.trim().length > 0 && (
+                                <div className="paste-modal-footer">
+                                    <button
+                                        type="button"
+                                        className="paste-btn-cancel"
+                                        onClick={() => {
+                                            setShowPasteModal(false)
+                                            setPasteText('')
+                                            setIsManualPasteInput(false)
+                                        }}
+                                    >
+                                        ยกเลิก
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="paste-btn-submit"
+                                        onClick={() => handlePasteNumbers()}
+                                    >
+                                        <FiCheck /> ตกลง
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}

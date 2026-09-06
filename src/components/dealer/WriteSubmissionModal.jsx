@@ -329,6 +329,12 @@ export default function WriteSubmissionModal({
                     onClose()
                 }
             }
+            // Plus key (+) - Open paste numbers modal
+            else if ((e.key === '+' || e.code === 'NumpadAdd') && !isTyping) {
+                e.preventDefault()
+                setShowPasteModal(true)
+                setPasteText('')
+            }
         }
 
         window.addEventListener('keydown', handleKeyDown)
