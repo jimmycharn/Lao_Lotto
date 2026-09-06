@@ -1973,63 +1973,18 @@ export default function UserDashboard() {
         }
     }
 
-    // Delete entire bill (all submissions with the same bill_id)
-    async function handleDeleteBill(billId, billItems) {
-        const isCancelled = billItems?.length > 0 && billItems.every(item => item.is_deleted)
-
-        if (isCancelled) {
-            if (!(await confirmDialog({
-                title: 'ยืนยันการลบถาวร',
-                message: `ต้องการลบใบโพยที่ยกเลิกนี้ (${billItems.length} รายการ) ออกจากฐานข้อมูลอย่างถาวรหรือไม่?\n(ข้อมูลจะถูกลบออกจากฐานข้อมูลและไม่สามารถกู้คืนได้)`,
-                confirmText: 'ลบถาวร',
-                variant: 'danger'
-            }))) return
-
-            try {
-                const ids = billItems.map(i => i.id)
-                setSubmissions(prev => prev.filter(s => !ids.includes(s.id)))
-
-                let deletedViaRpc = false
-                try {
-                    const { data: rpcData, error: rpcError } = await supabase.rpc('delete_submissions_permanently', {
-                        p_submission_ids: ids
-                    })
-                    if (!rpcError && rpcData?.success) {
-                        deletedViaRpc = true
-                    }
-                } catch (rpcErr) {
-                    console.warn('RPC delete error, fallback to direct delete:', rpcErr)
-                }
-
-                if (!deletedViaRpc) {
-                    const { error } = await supabase
-                        .from('submissions')
-                        .delete()
-                        .in('id', ids)
-                    if (error) throw error
-                }
-
-                if (selectedDealer?.id) {
-                    updatePendingDeduction(selectedDealer.id).catch(err =>
-                        console.error('Error updating pending deduction:', err)
-                    )
-                }
-
-                fetchSubmissions()
-                toast.success('ลบใบโพยออกจากฐานข้อมูลสำเร็จ')
-            } catch (error) {
-                console.error('Error permanently deleting bill:', error)
-                toast.error('เกิดข้อผิดพลาด: ' + error.message)
-                fetchSubmissions()
-            }
-            return
-        }
-
+    // Cancel entire bill (soft delete: is_deleted = true)
+    async function handleCancelBill(billId, billItems) {
         if (!canDelete(billItems?.[0])) {
-            toast.warning('ไม่สามารถลบได้ เนื่องจากเลยเวลาที่กำหนด')
+            toast.warning('ไม่สามารถยกเลิกได้ เนื่องจากเลยเวลาที่กำหนด')
             return
         }
-        if (!(await confirmDialog({ title: 'ยืนยันการลบโพย', message: `ต้องการลบโพยใบที่ ${billId} ทั้งหมด?`, confirmText: 'ลบเลย' }))) return
+        if (!(await confirmDialog({
+            title: 'ยืนยันการยกเลิกใบโพย',
+            message: `ต้องการยกเลิกใบโพย ${billId} ทั้งหมดหรือไม่?`,
+            confirmText: 'ยกเลิกใบโพยนี้',
+            variant: 'danger'
+        }))) return
 
         try {
             const { error } = await supabase
@@ -2048,12 +2003,57 @@ export default function UserDashboard() {
             }
 
             fetchSubmissions()
-            toast.success(`ลบโพยใบ ${billId} สำเร็จ`)
+            toast.success(`ยกเลิกใบโพย ${billId} สำเร็จ`)
         } catch (error) {
-            console.error('Error deleting bill:', error)
+            console.error('Error cancelling bill:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
         }
     }
+
+    // Restore cancelled bill back to normal active bill (is_deleted = false)
+    async function handleRestoreBill(billId, billItems) {
+        if (!selectedRound || selectedRound.status !== 'open') {
+            toast.warning('ไม่สามารถเอากลับคืนได้ เนื่องจากงวดนี้ปิดรับแล้ว')
+            return
+        }
+        const now = new Date()
+        if (selectedRound.close_time && now >= new Date(selectedRound.close_time)) {
+            toast.warning('ไม่สามารถเอากลับคืนได้ เนื่องจากเลยเวลาปิดรับแล้ว')
+            return
+        }
+
+        if (!(await confirmDialog({
+            title: 'ยืนยันการเอากลับคืน',
+            message: `ต้องการนำใบโพย ${billId} กลับมาเป็นโพยปกติเพื่อส่งยอดตามเดิมหรือไม่?`,
+            confirmText: 'เอากลับ',
+            variant: 'primary'
+        }))) return
+
+        try {
+            const { error } = await supabase
+                .from('submissions')
+                .update({ is_deleted: false, deleted_at: null })
+                .eq('bill_id', billId)
+                .eq('round_id', selectedRound.id)
+
+            if (error) throw error
+
+            // Update pending deduction for dealer's credit
+            if (selectedDealer?.id) {
+                updatePendingDeduction(selectedDealer.id).catch(err =>
+                    console.error('Error updating pending deduction:', err)
+                )
+            }
+
+            fetchSubmissions()
+            toast.success(`นำใบโพย ${billId} กลับมาเป็นปกติเรียบร้อยแล้ว`)
+        } catch (error) {
+            console.error('Error restoring bill:', error)
+            toast.error('เกิดข้อผิดพลาด: ' + error.message)
+        }
+    }
+
+    const handleDeleteBill = handleCancelBill
 
     // Toggle paid status for entire bill
     async function handleToggleBillPaid(billId, billItems) {
@@ -3636,12 +3636,14 @@ export default function UserDashboard() {
                                                                                                 </div>
                                                                                                 {/* Line 2: amount, commission, copy */}
                                                                                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.75rem' }}>
-                                                                                                    <span style={{ fontWeight: '600', fontSize: '0.95rem', textDecoration: isBillAllCancelled ? 'line-through' : 'none', color: isBillAllCancelled ? '#ef4444' : 'inherit' }}>
-                                                                                                        {round.currency_symbol}{billTotal.toLocaleString()}
-                                                                                                    </span>
-                                                                                                    <span style={{ fontSize: '0.8rem', color: isBillAllCancelled ? '#ef4444' : 'var(--color-warning)', textDecoration: isBillAllCancelled ? 'line-through' : 'none' }}>
-                                                                                                        คอม {round.currency_symbol}{Math.round(billCommission).toLocaleString()}
-                                                                                                    </span>
+                                                                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.15rem', textAlign: 'right' }}>
+                                                                                                        <span style={{ fontWeight: '600', fontSize: '0.85rem', textDecoration: isBillAllCancelled ? 'line-through' : 'none', color: isBillAllCancelled ? '#ef4444' : 'inherit', lineHeight: 1.2 }}>
+                                                                                                            จำนวน {round.currency_symbol}{billTotal.toLocaleString()}
+                                                                                                        </span>
+                                                                                                        <span style={{ fontSize: '0.8rem', color: isBillAllCancelled ? '#ef4444' : 'var(--color-warning)', textDecoration: isBillAllCancelled ? 'line-through' : 'none', lineHeight: 1.2 }}>
+                                                                                                            ค่าคอม {round.currency_symbol}{Math.round(billCommission).toLocaleString()}
+                                                                                                        </span>
+                                                                                                    </div>
                                                                                                     <button
                                                                                                         className="bill-copy-btn"
                                                                                                         onClick={handleCopyBill}
@@ -3752,31 +3754,59 @@ export default function UserDashboard() {
                                                                                                             <FiEdit2 /> แก้ไข
                                                                                                         </button>
                                                                                                     )}
-                                                                                                    <button
-                                                                                                        className="bill-action-btn delete"
-                                                                                                        onClick={(e) => {
-                                                                                                            e.stopPropagation()
-                                                                                                            handleDeleteBill(billId, billItems)
-                                                                                                        }}
-                                                                                                        title={isBillAllCancelled ? "ลบใบโพยออกจากฐานข้อมูล" : "ลบโพยทั้งหมด"}
-                                                                                                        style={{
-                                                                                                            padding: '0.5rem 1.2rem',
-                                                                                                            minWidth: '80px',
-                                                                                                            border: '1.5px solid var(--color-danger)',
-                                                                                                            borderRadius: '6px',
-                                                                                                            background: 'transparent',
-                                                                                                            color: 'var(--color-danger)',
-                                                                                                            fontWeight: '500',
-                                                                                                            fontSize: '0.85rem',
-                                                                                                            cursor: 'pointer',
-                                                                                                            display: 'flex',
-                                                                                                            alignItems: 'center',
-                                                                                                            justifyContent: 'center',
-                                                                                                            gap: '0.4rem'
-                                                                                                        }}
-                                                                                                    >
-                                                                                                        <FiTrash2 /> ลบ
-                                                                                                    </button>
+                                                                                                    {isBillAllCancelled ? (
+                                                                                                        <button
+                                                                                                            className="bill-action-btn restore"
+                                                                                                            onClick={(e) => {
+                                                                                                                e.stopPropagation()
+                                                                                                                handleRestoreBill(billId, billItems)
+                                                                                                            }}
+                                                                                                            title="เอากลับมาเป็นใบโพยปกติ"
+                                                                                                            style={{
+                                                                                                                padding: '0.5rem 1.2rem',
+                                                                                                                minWidth: '80px',
+                                                                                                                border: '1.5px solid #10b981',
+                                                                                                                borderRadius: '6px',
+                                                                                                                background: 'rgba(16, 185, 129, 0.1)',
+                                                                                                                color: '#10b981',
+                                                                                                                fontWeight: '500',
+                                                                                                                fontSize: '0.85rem',
+                                                                                                                cursor: 'pointer',
+                                                                                                                display: 'flex',
+                                                                                                                alignItems: 'center',
+                                                                                                                justifyContent: 'center',
+                                                                                                                gap: '0.4rem'
+                                                                                                            }}
+                                                                                                        >
+                                                                                                            <FiRotateCcw /> เอากลับ
+                                                                                                        </button>
+                                                                                                    ) : (
+                                                                                                        <button
+                                                                                                            className="bill-action-btn delete"
+                                                                                                            onClick={(e) => {
+                                                                                                                e.stopPropagation()
+                                                                                                                handleCancelBill(billId, billItems)
+                                                                                                            }}
+                                                                                                            title="ยกเลิกใบโพยนี้"
+                                                                                                            style={{
+                                                                                                                padding: '0.5rem 1.2rem',
+                                                                                                                minWidth: '80px',
+                                                                                                                border: '1.5px solid var(--color-danger)',
+                                                                                                                borderRadius: '6px',
+                                                                                                                background: 'transparent',
+                                                                                                                color: 'var(--color-danger)',
+                                                                                                                fontWeight: '500',
+                                                                                                                fontSize: '0.85rem',
+                                                                                                                cursor: 'pointer',
+                                                                                                                display: 'flex',
+                                                                                                                alignItems: 'center',
+                                                                                                                justifyContent: 'center',
+                                                                                                                gap: '0.4rem'
+                                                                                                            }}
+                                                                                                        >
+                                                                                                            <FiTrash2 /> ยกเลิกใบโพยนี้
+                                                                                                        </button>
+                                                                                                    )}
                                                                                                 </div>
                                                                                             )}
                                                                                         </div>
