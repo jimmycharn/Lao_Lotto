@@ -289,17 +289,17 @@ export default function EditMemberModal({ isOpen, user, onClose, onUpdated }) {
 
                             <div className="form-group">
                                 <label>สถานะบัญชี</label>
-                                <div className="status-toggle-wrapper">
-                                    <label className="toggle-switch-label">
+                                <div className="member-status-toggle-container">
+                                    <label className="member-status-toggle">
                                         <input
                                             type="checkbox"
                                             checked={isActive}
                                             onChange={(e) => setIsActive(e.target.checked)}
                                             disabled={submitting}
                                         />
-                                        <span className="toggle-slider"></span>
-                                        <span className="status-text">
-                                            {isActive ? '🟢 ใช้งานปกติ (Active)' : '🔴 ระงับการใช้งาน (Blocked)'}
+                                        <span className="member-status-slider"></span>
+                                        <span className={`member-status-badge ${isActive ? 'active' : 'blocked'}`}>
+                                            {isActive ? 'ใช้งานปกติ (Active)' : 'ระงับการใช้งาน (Blocked)'}
                                         </span>
                                     </label>
                                 </div>
