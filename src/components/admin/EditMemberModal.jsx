@@ -57,7 +57,7 @@ export default function EditMemberModal({ isOpen, user, onClose, onUpdated }) {
             setIsActive(user.is_active !== false)
             setBankName(user.bank_name || '')
             setBankAccountName(user.bank_account_name || '')
-            setBankAccountNumber(user.bank_account_number || '')
+            setBankAccountNumber(user.bank_account_number || user.bank_account || '')
             setError('')
             setCopiedPassword(false)
         }
