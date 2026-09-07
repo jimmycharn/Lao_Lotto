@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { FiX, FiUser, FiMail, FiLock, FiPhone, FiCreditCard, FiEye, FiEyeOff, FiRefreshCw, FiCheck, FiShield } from 'react-icons/fi'
-import { supabase } from '../../supabase'
+import { supabase } from '../../lib/supabase'
 import { useToast } from '../../contexts/ToastContext'
 import './EditMemberModal.css'
 

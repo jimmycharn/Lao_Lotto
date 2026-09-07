@@ -5,6 +5,7 @@ import { useToast } from '../contexts/ToastContext'
 import { supabase } from '../lib/supabase'
 import { confirmDialog } from '../utils/confirmDialog'
 import MemberTreeView from '../components/admin/MemberTreeView'
+import EditMemberModal from '../components/admin/EditMemberModal'
 import {
     FiSettings,
     FiUsers,
@@ -39,6 +40,13 @@ export default function Admin() {
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
     const [editingDraw, setEditingDraw] = useState(null)
+    const [editingUser, setEditingUser] = useState(null)
+    const [showEditUserModal, setShowEditUserModal] = useState(false)
+
+    const handleEditUser = (userToEdit) => {
+        setEditingUser(userToEdit)
+        setShowEditUserModal(true)
+    }
 
     const filteredUsers = users.filter(user => {
         // 1. Role Filter
@@ -488,6 +496,7 @@ export default function Admin() {
                                     searchTerm={searchTerm}
                                     onToggleBlock={handleToggleBlockUser}
                                     onDeleteUser={handleDeleteUser}
+                                    onEditUser={handleEditUser}
                                     currentUserId={currentUser?.id}
                                 />
                             ) : filteredUsers.length === 0 ? (
@@ -547,7 +556,14 @@ export default function Admin() {
                                                         </td>
                                                         <td>
                                                             <div className="action-buttons" style={{ justifyContent: 'center' }}>
-                                                                {!isSelf ? (
+                                                                <button
+                                                                    className="action-btn edit"
+                                                                    title="แก้ไขข้อมูลสมาชิก"
+                                                                    onClick={() => handleEditUser(user)}
+                                                                >
+                                                                    <FiEdit2 />
+                                                                </button>
+                                                                {!isSelf && (
                                                                     <>
                                                                         <button
                                                                             className={`action-btn ${user.is_active === false ? 'unblock' : 'block'}`}
@@ -564,8 +580,6 @@ export default function Admin() {
                                                                             <FiTrash2 />
                                                                         </button>
                                                                     </>
-                                                                ) : (
-                                                                    <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>-</span>
                                                                 )}
                                                             </div>
                                                         </td>
@@ -678,6 +692,17 @@ export default function Admin() {
                     </div>
                 </div>
             )}
+
+            {/* Edit Member Modal */}
+            <EditMemberModal
+                isOpen={showEditUserModal}
+                user={editingUser}
+                onClose={() => {
+                    setShowEditUserModal(false)
+                    setEditingUser(null)
+                }}
+                onUpdated={fetchUsers}
+            />
         </div>
     )
 }

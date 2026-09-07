@@ -9,7 +9,8 @@ import {
     FiMinimize2,
     FiSlash,
     FiUnlock,
-    FiTrash2
+    FiTrash2,
+    FiEdit2
 } from 'react-icons/fi'
 import './MemberTreeView.css'
 
@@ -19,6 +20,7 @@ export default function MemberTreeView({
     searchTerm = '',
     onToggleBlock,
     onDeleteUser,
+    onEditUser,
     currentUserId
 }) {
     const [perspective, setPerspective] = useState('dealer') // 'dealer' (Dealer -> Members) or 'member' (Member -> Dealers)
@@ -215,6 +217,15 @@ export default function MemberTreeView({
                                                 ? `สมาชิก ${children.length} คน`
                                                 : `สังกัด ${children.length} เจ้ามือ`}
                                         </span>
+                                        {onEditUser && (
+                                            <button
+                                                className="tree-action-icon-btn edit"
+                                                title="แก้ไขข้อมูลสมาชิก"
+                                                onClick={(e) => { e.stopPropagation(); onEditUser(node); }}
+                                            >
+                                                <FiEdit2 />
+                                            </button>
+                                        )}
                                         {!isSelfNode && onToggleBlock && (
                                             <button
                                                 className={`tree-action-icon-btn ${node.is_active === false ? 'unblock' : 'block'}`}
@@ -265,6 +276,15 @@ export default function MemberTreeView({
                                                             <span className={`role-badge ${getRoleBadgeClass(child.role)}`}>
                                                                 {getRoleLabel(child.role)}
                                                             </span>
+                                                            {onEditUser && (
+                                                                <button
+                                                                    className="tree-action-icon-btn edit"
+                                                                    title="แก้ไขข้อมูลสมาชิก"
+                                                                    onClick={(e) => { e.stopPropagation(); onEditUser(child); }}
+                                                                >
+                                                                    <FiEdit2 />
+                                                                </button>
+                                                            )}
                                                             {!isSelfChild && onToggleBlock && (
                                                                 <button
                                                                     className={`tree-action-icon-btn ${child.is_active === false ? 'unblock' : 'block'}`}

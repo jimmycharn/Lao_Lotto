@@ -294,9 +294,14 @@ tr.row-blocked {
     color: var(--text-primary);
 }
 
+.action-btn.edit {
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.12);
+}
+
 .action-btn.edit:hover {
-    background: rgba(212, 175, 55, 0.2);
-    color: var(--color-primary);
+    background: rgba(56, 189, 248, 0.25);
+    color: #38bdf8;
 }
 
 .action-btn.block:hover {

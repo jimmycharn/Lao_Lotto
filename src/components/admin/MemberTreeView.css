@@ -190,6 +190,16 @@
     color: var(--text-primary);
 }
 
+.tree-action-icon-btn.edit {
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.12);
+}
+
+.tree-action-icon-btn.edit:hover {
+    background: rgba(56, 189, 248, 0.25);
+    color: #38bdf8;
+}
+
 .tree-action-icon-btn.block:hover {
     background: rgba(245, 158, 11, 0.2);
     color: var(--color-warning);
