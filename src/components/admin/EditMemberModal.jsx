@@ -31,7 +31,7 @@ export const validateEmailFormat = (email) => {
 }
 
 export default function EditMemberModal({ isOpen, user, onClose, onUpdated }) {
-    const toast = useToast()
+    const { toast } = useToast()
     const [fullName, setFullName] = useState('')
     const [email, setEmail] = useState('')
     const [newPassword, setNewPassword] = useState('')
@@ -84,10 +84,10 @@ export default function EditMemberModal({ isOpen, user, onClose, onUpdated }) {
         if (navigator.clipboard) {
             navigator.clipboard.writeText(pwd).then(() => {
                 setCopiedPassword(true)
-                toast.success(`สร้างรหัสผ่าน "${pwd}" และคัดลอกลงคลิปบอร์ดแล้ว`)
+                toast?.success(`สร้างรหัสผ่าน "${pwd}" และคัดลอกลงคลิปบอร์ดแล้ว`)
                 setTimeout(() => setCopiedPassword(false), 3000)
             }).catch(() => {
-                toast.success(`สร้างรหัสผ่าน: ${pwd}`)
+                toast?.success(`สร้างรหัสผ่าน: ${pwd}`)
             })
         }
     }
@@ -140,7 +140,7 @@ export default function EditMemberModal({ isOpen, user, onClose, onUpdated }) {
                 throw rpcError
             }
 
-            toast.success(`อัปเดตข้อมูลคุณ ${cleanName} เรียบร้อยแล้ว`)
+            toast?.success(`อัปเดตข้อมูลคุณ ${cleanName} เรียบร้อยแล้ว`)
             if (onUpdated) {
                 onUpdated()
             }
@@ -149,7 +149,7 @@ export default function EditMemberModal({ isOpen, user, onClose, onUpdated }) {
             console.error('Error updating member by superadmin:', err)
             const msg = err.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล'
             setError(msg)
-            toast.error(msg)
+            toast?.error(msg)
         } finally {
             setSubmitting(false)
         }
