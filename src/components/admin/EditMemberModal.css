@@ -31,15 +31,17 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    padding: 0 !important;
 }
 
 .edit-member-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 1.25rem 1.5rem;
+    padding: 1.15rem 1.5rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(102, 126, 234, 0.08);
+    flex-shrink: 0;
 }
 
 .edit-member-title {
@@ -99,12 +101,20 @@
 }
 
 .edit-member-form {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex: 1;
+    min-height: 0;
+}
+
+.edit-member-body {
     padding: 1.25rem 1.5rem;
     overflow-y: auto;
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 1.25rem;
+    gap: 1.15rem;
 }
 
 .form-section {
@@ -128,12 +138,6 @@
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 1rem;
-}
-
-@media (max-width: 640px) {
-    .form-grid {
-        grid-template-columns: 1fr;
-    }
 }
 
 .form-group {
@@ -341,9 +345,10 @@
     align-items: center;
     justify-content: flex-end;
     gap: 0.75rem;
-    padding: 1.25rem 1.5rem;
+    padding: 1rem 1.5rem;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(0, 0, 0, 0.2);
+    background: rgba(15, 15, 28, 0.75);
+    flex-shrink: 0;
 }
 
 /* Light Mode Overrides */
@@ -379,6 +384,11 @@ html.theme-light .btn-close-modal {
 html.theme-light .btn-close-modal:hover {
     color: #0f172a !important;
     background: #f1f5f9 !important;
+}
+
+[data-theme="light"] .edit-member-body,
+html.theme-light .edit-member-body {
+    background: transparent;
 }
 
 [data-theme="light"] .form-section,
@@ -435,4 +445,174 @@ html.theme-light .member-status-badge.blocked {
 html.theme-light .edit-member-footer {
     background: #f8fafc !important;
     border-color: #e2e8f0 !important;
+}
+
+/* ==========================================================================
+   Mobile Responsive Adjustments
+   Reduces wasted margins and maximizes working area on small screens
+   ========================================================================== */
+@media (max-width: 640px) {
+    .edit-member-overlay {
+        padding: 0.5rem 0.35rem;
+        align-items: center;
+    }
+
+    .edit-member-modal {
+        max-width: 100%;
+        max-height: 94vh;
+        border-radius: 12px;
+        border-color: rgba(255, 255, 255, 0.18);
+    }
+
+    .edit-member-header {
+        padding: 0.75rem 0.85rem;
+    }
+
+    .edit-member-title {
+        gap: 0.5rem;
+    }
+
+    .edit-member-title .title-icon {
+        font-size: 1.25rem;
+        padding: 5px;
+    }
+
+    .edit-member-title h3 {
+        font-size: 1.05rem;
+    }
+
+    .edit-member-title .user-subtitle {
+        font-size: 0.75rem;
+    }
+
+    .edit-member-error {
+        margin: 0.5rem 0.65rem 0;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.8rem;
+    }
+
+    .edit-member-body {
+        padding: 0.65rem 0.6rem;
+        gap: 0.65rem;
+    }
+
+    .form-section {
+        padding: 0.65rem 0.65rem;
+        border-radius: 10px;
+    }
+
+    .section-title {
+        margin: 0 0 0.55rem 0;
+        font-size: 0.88rem;
+        gap: 0.4rem;
+    }
+
+    .form-grid {
+        grid-template-columns: 1fr;
+        gap: 0.65rem;
+    }
+
+    .form-group {
+        gap: 0.25rem;
+    }
+
+    .form-group label {
+        font-size: 0.8rem;
+    }
+
+    .form-group input,
+    .form-group select {
+        padding: 0.45rem 0.65rem;
+        font-size: 0.85rem;
+        min-height: 36px;
+    }
+
+    .input-with-icon .field-icon {
+        left: 0.65rem;
+        font-size: 0.9rem;
+    }
+
+    .input-with-icon input {
+        padding-left: 2rem;
+    }
+
+    .password-input-group {
+        gap: 0.35rem;
+    }
+
+    .btn-generate-password {
+        padding: 0.45rem 0.6rem;
+        font-size: 0.75rem;
+        min-height: 36px;
+        gap: 0.25rem;
+    }
+
+    .field-hint {
+        font-size: 0.7rem;
+        line-height: 1.25;
+    }
+
+    .member-status-toggle-container {
+        min-height: 34px;
+    }
+
+    .member-status-toggle {
+        gap: 0.65rem;
+    }
+
+    .member-status-slider {
+        width: 44px;
+        height: 24px;
+    }
+
+    .member-status-slider::after {
+        top: 2px;
+        left: 2px;
+        width: 20px;
+        height: 20px;
+    }
+
+    .member-status-toggle input[type="checkbox"]:checked + .member-status-slider::after {
+        transform: translateX(20px);
+    }
+
+    .member-status-badge {
+        font-size: 0.8rem;
+        padding: 0.2rem 0.5rem;
+    }
+
+    .edit-member-footer {
+        padding: 0.65rem 0.65rem;
+        gap: 0.5rem;
+    }
+
+    .edit-member-footer .btn {
+        flex: 1;
+        justify-content: center;
+        padding: 0.55rem 0.75rem;
+        font-size: 0.875rem;
+    }
+}
+
+@media (max-width: 380px) {
+    .edit-member-overlay {
+        padding: 0.35rem 0.2rem;
+    }
+
+    .edit-member-header {
+        padding: 0.65rem 0.5rem;
+    }
+
+    .edit-member-body {
+        padding: 0.5rem 0.45rem;
+        gap: 0.5rem;
+    }
+
+    .form-section {
+        padding: 0.55rem 0.5rem;
+    }
+
+    .edit-member-footer {
+        padding: 0.55rem 0.5rem;
+    }
 }

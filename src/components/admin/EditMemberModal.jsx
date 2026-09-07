@@ -157,7 +157,7 @@ export default function EditMemberModal({ isOpen, user, onClose, onUpdated }) {
 
     return (
         <div className="edit-member-overlay" onClick={(e) => { if (e.target === e.currentTarget && !submitting) onClose() }}>
-            <div className="edit-member-modal card">
+            <div className="edit-member-modal">
                 <div className="edit-member-header">
                     <div className="edit-member-title">
                         <FiUser className="title-icon" />
@@ -178,7 +178,8 @@ export default function EditMemberModal({ isOpen, user, onClose, onUpdated }) {
                 )}
 
                 <form onSubmit={handleSubmit} className="edit-member-form">
-                    {/* Section 1: ข้อมูลบัญชีผู้ใช้ (Credentials) */}
+                    <div className="edit-member-body">
+                        {/* Section 1: ข้อมูลบัญชีผู้ใช้ (Credentials) */}
                     <div className="form-section">
                         <h4 className="section-title">
                             <FiMail /> ข้อมูลการเข้าสู่ระบบ (Credentials)
@@ -350,6 +351,7 @@ export default function EditMemberModal({ isOpen, user, onClose, onUpdated }) {
                                 />
                             </div>
                         </div>
+                    </div>
                     </div>
 
                     {/* Modal Footer */}
