@@ -435,6 +435,96 @@ export default function WriteSubmissionModal({
             return () => clearTimeout(timer)
         }
     }, [showPasteModal])
+    // Member combobox state for Dealer mode
+    const [isMemberDropdownOpen, setIsMemberDropdownOpen] = useState(false)
+    const [memberSearchQuery, setMemberSearchQuery] = useState('')
+    const [highlightedMemberIndex, setHighlightedMemberIndex] = useState(0)
+    const memberComboboxRef = useRef(null)
+    const memberSearchInputRef = useRef(null)
+    const memberDropdownListRef = useRef(null)
+
+    // Filter members by query
+    const filteredMembers = useMemo(() => {
+        if (!allMembers || allMembers.length === 0) return []
+        if (!memberSearchQuery.trim()) return allMembers
+        const q = memberSearchQuery.toLowerCase().trim()
+        return allMembers.filter(m => {
+            const name = (m.full_name || '').toLowerCase()
+            const email = (m.email || '').toLowerCase()
+            const phone = (m.phone || '').toLowerCase()
+            const id = (m.id || '').toLowerCase()
+            return name.includes(q) || email.includes(q) || phone.includes(q) || id.includes(q)
+        })
+    }, [allMembers, memberSearchQuery])
+
+    // Close member dropdown on click outside
+    useEffect(() => {
+        if (!isMemberDropdownOpen) return
+        const handleClickOutside = (e) => {
+            if (memberComboboxRef.current && !memberComboboxRef.current.contains(e.target)) {
+                setIsMemberDropdownOpen(false)
+                setMemberSearchQuery('')
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [isMemberDropdownOpen])
+
+    // Auto-scroll highlighted member into view
+    useEffect(() => {
+        if (isMemberDropdownOpen && memberDropdownListRef.current) {
+            const list = memberDropdownListRef.current
+            const activeItem = list.children[highlightedMemberIndex]
+            if (activeItem) {
+                activeItem.scrollIntoView({ block: 'nearest' })
+            }
+        }
+    }, [highlightedMemberIndex, isMemberDropdownOpen])
+
+    const handleSelectMember = useCallback((member) => {
+        if (!member) return
+        if (onMemberChange) {
+            onMemberChange(member)
+        }
+        playSound('click')
+        setIsMemberDropdownOpen(false)
+        setMemberSearchQuery('')
+        memberSearchInputRef.current?.blur()
+    }, [onMemberChange])
+
+    const handleMemberInputKeyDown = useCallback((e) => {
+        // Isolate all key events from reaching global keypad handlers
+        e.stopPropagation()
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault()
+            if (filteredMembers.length > 0) {
+                setHighlightedMemberIndex(prev => (prev + 1) % filteredMembers.length)
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault()
+            if (filteredMembers.length > 0) {
+                setHighlightedMemberIndex(prev => (prev - 1 + filteredMembers.length) % filteredMembers.length)
+            }
+        } else if (e.key === 'Enter') {
+            e.preventDefault()
+            if (filteredMembers.length > 0 && filteredMembers[highlightedMemberIndex]) {
+                handleSelectMember(filteredMembers[highlightedMemberIndex])
+            }
+        } else if (e.key === 'Tab') {
+            if (filteredMembers.length > 0 && filteredMembers[highlightedMemberIndex]) {
+                handleSelectMember(filteredMembers[highlightedMemberIndex])
+            } else {
+                setIsMemberDropdownOpen(false)
+            }
+        } else if (e.key === 'Escape' || e.key === 'F4') {
+            e.preventDefault()
+            setIsMemberDropdownOpen(false)
+            setMemberSearchQuery('')
+            memberSearchInputRef.current?.blur()
+        }
+    }, [filteredMembers, highlightedMemberIndex, handleSelectMember])
+
     const [focusedTypeIndex, setFocusedTypeIndex] = useState(-1) // -1 = not focused on type buttons
     const [soundEnabled, setSoundEnabled] = useState(() => {
         // Load sound preference from localStorage
@@ -948,6 +1038,25 @@ export default function WriteSubmissionModal({
             // If close confirmation dialog is open, ignore
             if (showCloseConfirm) return
 
+            // F4 - Open Searchable Member Combobox (Dealer mode only)
+            if (e.key === 'F4') {
+                if (isDealerMode && allMembers.length > 0 && onMemberChange) {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setIsMemberDropdownOpen(true)
+                    setMemberSearchQuery('')
+                    const currentIndex = allMembers.findIndex(m => m.id === selectedMember?.id)
+                    setHighlightedMemberIndex(currentIndex >= 0 ? currentIndex : 0)
+                    setTimeout(() => {
+                        if (memberSearchInputRef.current) {
+                            memberSearchInputRef.current.focus()
+                            memberSearchInputRef.current.select()
+                        }
+                    }, 50)
+                    return
+                }
+            }
+
             // Ignore if active element is any input or textarea
             const activeEl = document.activeElement
             if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
@@ -1237,7 +1346,7 @@ export default function WriteSubmissionModal({
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [isOpen, showPasteModal, showCloseConfirm, currentInput, isLocked, lockedAmount, focusedTypeIndex, topBottomToggle])
+    }, [isOpen, showPasteModal, showCloseConfirm, currentInput, isLocked, lockedAmount, focusedTypeIndex, topBottomToggle, isDealerMode, allMembers, onMemberChange, selectedMember, isMemberDropdownOpen])
 
     // Prevent body scroll when modal is open
     useEffect(() => {
@@ -2711,22 +2820,65 @@ export default function WriteSubmissionModal({
                 {isDealerMode && allMembers.length > 0 && onMemberChange && (
                     <div className="write-modal-member-row">
                         <label>สมาชิก:</label>
-                        <select
-                            value={selectedMember?.id || ''}
-                            onChange={(e) => {
-                                const member = allMembers.find(m => m.id === e.target.value)
-                                if (member && onMemberChange) {
-                                    onMemberChange(member)
-                                }
-                            }}
-                            className="member-select"
-                        >
-                            {allMembers.map(member => (
-                                <option key={member.id} value={member.id}>
-                                    {member.full_name || member.email || member.id}
-                                </option>
-                            ))}
-                        </select>
+                        <div className="member-combobox-wrapper" ref={memberComboboxRef}>
+                            {!isMemberDropdownOpen ? (
+                                <button
+                                    type="button"
+                                    className="member-combobox-trigger"
+                                    onClick={() => {
+                                        setIsMemberDropdownOpen(true)
+                                        setMemberSearchQuery('')
+                                        const currentIndex = allMembers.findIndex(m => m.id === selectedMember?.id)
+                                        setHighlightedMemberIndex(currentIndex >= 0 ? currentIndex : 0)
+                                        setTimeout(() => {
+                                            if (memberSearchInputRef.current) {
+                                                memberSearchInputRef.current.focus()
+                                                memberSearchInputRef.current.select()
+                                            }
+                                        }, 50)
+                                    }}
+                                    title="กด F4 หรือคลิกเพื่อค้นหาสมาชิก"
+                                >
+                                    <span className="member-selected-name">
+                                        {selectedMember?.full_name || selectedMember?.email || selectedMember?.id || 'เลือกสมาชิก'}
+                                    </span>
+                                    <span className="member-shortcut-badge">F4</span>
+                                    <span className="member-dropdown-arrow">▼</span>
+                                </button>
+                            ) : (
+                                <div className="member-combobox-active">
+                                    <input
+                                        ref={memberSearchInputRef}
+                                        type="text"
+                                        className="member-search-input"
+                                        placeholder="พิมพ์ค้นหาชื่อ / เบอร์โทร..."
+                                        value={memberSearchQuery}
+                                        onChange={(e) => {
+                                            setMemberSearchQuery(e.target.value)
+                                            setHighlightedMemberIndex(0)
+                                        }}
+                                        onKeyDown={handleMemberInputKeyDown}
+                                    />
+                                    <div className="member-dropdown-list" ref={memberDropdownListRef}>
+                                        {filteredMembers.length > 0 ? (
+                                            filteredMembers.map((member, idx) => (
+                                                <div
+                                                    key={member.id}
+                                                    className={`member-dropdown-item ${idx === highlightedMemberIndex ? 'highlighted' : ''} ${member.id === selectedMember?.id ? 'selected' : ''}`}
+                                                    onMouseEnter={() => setHighlightedMemberIndex(idx)}
+                                                    onClick={() => handleSelectMember(member)}
+                                                >
+                                                    <span className="member-item-name">{member.full_name || member.email || member.id}</span>
+                                                    {member.phone && <span className="member-item-phone">{member.phone}</span>}
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="member-dropdown-empty">ไม่พบรายชื่อสมาชิก</div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                         {!success && (
                             <button 
                                 className="save-btn-inline"
