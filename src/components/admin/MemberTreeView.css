@@ -2,6 +2,55 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    width: 100%;
+    min-width: 0;
+}
+
+.tree-scroll-hint {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #93c5fd;
+    background: rgba(59, 130, 246, 0.08);
+    border: 1px dashed rgba(59, 130, 246, 0.3);
+    border-radius: var(--radius-sm);
+    padding: 0.4rem 0.75rem;
+    margin-bottom: 0.25rem;
+    user-select: none;
+}
+
+.tree-scroll-hint svg {
+    font-size: 0.9rem;
+}
+
+.tree-scroll-container {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.5rem;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.tree-scroll-container::-webkit-scrollbar {
+    height: 6px;
+}
+
+.tree-scroll-container::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+}
+
+.tree-scroll-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.tree-scroll-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.35);
 }
 
 .tree-toolbar {
@@ -233,4 +282,135 @@
     width: 0.75rem;
     height: 2px;
     background: rgba(255, 255, 255, 0.1);
+}
+
+/* ==========================================================================
+   Mobile Responsive Adjustments
+   Reduces wasted margins and enables smooth horizontal scrolling
+   ========================================================================== */
+@media (max-width: 640px) {
+    .tree-scroll-hint {
+        display: flex;
+    }
+
+    .tree-toolbar {
+        padding: 0.5rem 0.65rem;
+        gap: 0.5rem;
+    }
+
+    .tree-mode-toggle {
+        width: 100%;
+    }
+
+    .tree-mode-btn {
+        flex: 1;
+        justify-content: center;
+        padding: 0.35rem 0.5rem;
+        font-size: 0.75rem;
+        text-align: center;
+    }
+
+    .tree-action-btns {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .tree-action-btn {
+        flex: 1;
+        text-align: center;
+        padding: 0.35rem 0.5rem;
+        font-size: 0.75rem;
+    }
+
+    .tree-nodes-wrap {
+        min-width: 520px;
+        width: 100%;
+    }
+
+    .tree-node-card {
+        border-radius: var(--radius-sm);
+    }
+
+    .tree-node-header {
+        padding: 0.75rem 0.65rem;
+        gap: 0.5rem;
+    }
+
+    .tree-node-left {
+        gap: 0.5rem;
+    }
+
+    .tree-node-title {
+        font-size: 0.875rem;
+    }
+
+    .tree-node-sub {
+        font-size: 0.7rem;
+    }
+
+    .tree-node-right {
+        gap: 0.4rem;
+        flex-shrink: 0;
+    }
+
+    .tree-count-badge {
+        font-size: 0.7rem;
+        padding: 0.15rem 0.45rem;
+        white-space: nowrap;
+    }
+
+    .role-badge {
+        font-size: 0.7rem;
+        padding: 0.15rem 0.45rem;
+        white-space: nowrap;
+    }
+
+    .tree-action-icon-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 0.8125rem;
+        flex-shrink: 0;
+    }
+
+    .tree-children-list {
+        padding: 0.4rem 0.5rem 0.65rem 1.25rem;
+        gap: 0.4rem;
+    }
+
+    .tree-children-list::before {
+        left: 0.7rem;
+    }
+
+    .tree-child-item {
+        padding: 0.5rem 0.65rem;
+        gap: 0.5rem;
+    }
+
+    .tree-child-item::before {
+        left: -0.55rem;
+        width: 0.55rem;
+    }
+
+    .tree-child-right {
+        gap: 0.35rem !important;
+        flex-shrink: 0;
+    }
+}
+
+/* Light Mode Overrides */
+[data-theme="light"] .tree-scroll-container,
+html.theme-light .tree-scroll-container {
+    scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+[data-theme="light"] .tree-scroll-container::-webkit-scrollbar-thumb,
+html.theme-light .tree-scroll-container::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="light"] .tree-scroll-hint,
+html.theme-light .tree-scroll-hint {
+    background: rgba(59, 130, 246, 0.08);
+    border-color: rgba(59, 130, 246, 0.25);
+    color: #2563eb;
 }

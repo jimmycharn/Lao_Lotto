@@ -10,7 +10,8 @@ import {
     FiSlash,
     FiUnlock,
     FiTrash2,
-    FiEdit2
+    FiEdit2,
+    FiMove
 } from 'react-icons/fi'
 import './MemberTreeView.css'
 
@@ -171,7 +172,12 @@ export default function MemberTreeView({
             </div>
 
             {/* Tree Nodes */}
-            <div className="tree-nodes-wrap">
+            <div className="tree-scroll-hint">
+                <FiMove />
+                <span>เลื่อนซ้าย-ขวา ในผัง เพื่อดูข้อมูลหรือกดปุ่ม</span>
+            </div>
+            <div className="tree-scroll-container">
+                <div className="tree-nodes-wrap">
                 {rootNodes.length === 0 ? (
                     <div className="empty-state">
                         <FiUsers className="empty-icon" />
@@ -314,6 +320,7 @@ export default function MemberTreeView({
                         )
                     })
                 )}
+            </div>
             </div>
         </div>
     )

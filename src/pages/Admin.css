@@ -444,12 +444,67 @@ tr.row-blocked {
 
 /* Responsive */
 @media (max-width: 768px) {
+    .admin-page {
+        padding: 0.75rem 0 2rem;
+    }
+
+    .admin-page .container {
+        padding: 0 0.35rem;
+    }
+
+    .page-header {
+        margin-bottom: 1rem;
+    }
+
+    .page-header h1 {
+        font-size: 1.5rem;
+    }
+
     .admin-tabs {
+        margin-bottom: 0.75rem;
+        gap: 0.35rem;
         overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 4px;
     }
 
     .admin-tab {
+        padding: 0.55rem 0.85rem;
+        font-size: 0.8125rem;
         white-space: nowrap;
+    }
+
+    .admin-content {
+        padding: 0.75rem 0.45rem;
+        border-radius: var(--radius-md);
+    }
+
+    .content-header {
+        margin-bottom: 0.75rem;
+    }
+
+    .content-header.users-header {
+        gap: 0.65rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .content-header.users-header > div:first-child {
+        width: 100%;
+        justify-content: space-between;
+        gap: 0.5rem !important;
+    }
+
+    .user-filter-controls {
+        gap: 0.5rem;
+    }
+
+    .search-input-wrap {
+        min-width: 100%;
+    }
+
+    .search-input-wrap input {
+        padding: 0.45rem 2rem 0.45rem 2.25rem;
+        font-size: 0.8125rem;
     }
 
     .form-row {
