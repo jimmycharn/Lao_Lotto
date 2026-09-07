@@ -26,7 +26,7 @@
 - Produces RPC function:
   - `update_user_by_superadmin(target_user_id UUID, new_full_name TEXT, new_phone TEXT, new_email TEXT, new_password TEXT, new_role TEXT, new_bank_name TEXT, new_bank_account_name TEXT, new_bank_account_number TEXT, new_is_active BOOLEAN) RETURNS JSONB`
 
-- [ ] **Step 1: Write migration `191_superadmin_update_user_function.sql`**
+- [x] **Step 1: Write migration `191_superadmin_update_user_function.sql`**
 
 ```sql
 -- Migration: 191_superadmin_update_user_function.sql
@@ -136,12 +136,12 @@ END;
 $$;
 ```
 
-- [ ] **Step 2: Deploy migration to remote Supabase database**
+- [x] **Step 2: Deploy migration to remote Supabase database**
 
 Run: `cmd /c npx supabase db push`
 Expected: Migration applied successfully.
 
-- [ ] **Step 3: Commit migration file**
+- [x] **Step 3: Commit migration file**
 
 ```bash
 git add supabase/migrations/191_superadmin_update_user_function.sql
@@ -163,7 +163,7 @@ git commit -m "feat(db): add 191_superadmin_update_user_function.sql"
   - `onClose`: () => void
   - `onUpdated`: () => void
 
-- [ ] **Step 1: Create `src/components/admin/EditMemberModal.jsx`**
+- [x] **Step 1: Create `src/components/admin/EditMemberModal.jsx`**
 
 Features:
 - Form state initialized from `user` prop: `fullName`, `email`, `newPassword`, `phone`, `role`, `bankName`, `bankAccountName`, `bankAccountNumber`, `isActive`.
@@ -173,19 +173,19 @@ Features:
 - Form submission calling `supabase.rpc('update_user_by_superadmin', { ... })`.
 - Handles duplicate email error or validation error with clear toast.
 
-- [ ] **Step 2: Create `src/components/admin/EditMemberModal.css`**
+- [x] **Step 2: Create `src/components/admin/EditMemberModal.css`**
 
 Features:
 - Premium modal design matching Big Lotto aesthetic: glassmorphic header, card sections, clean inputs, badges.
 - Full Light Theme & Dark Theme support.
 - Responsive for mobile and desktop.
 
-- [ ] **Step 3: Verify build**
+- [x] **Step 3: Verify build**
 
 Run: `cmd /c npm run build`
 Expected: Build succeeds with 0 errors.
 
-- [ ] **Step 4: Commit EditMemberModal component**
+- [x] **Step 4: Commit EditMemberModal component**
 
 ```bash
 git add src/components/admin/EditMemberModal.jsx src/components/admin/EditMemberModal.css
@@ -206,7 +206,7 @@ git commit -m "feat: add EditMemberModal component for superadmin"
 - Consumes: `EditMemberModal`
 - Produces: Edit user flow triggered from Table View and Tree View
 
-- [ ] **Step 1: Update `src/pages/Admin.jsx`**
+- [x] **Step 1: Update `src/pages/Admin.jsx`**
   - Import `EditMemberModal` and `FiEdit2`.
   - Add state: `const [editingUser, setEditingUser] = useState(null)` and `const [showEditModal, setShowEditModal] = useState(false)`.
   - Add `handleEditUser = (user) => { setEditingUser(user); setShowEditModal(true); }`.
@@ -214,21 +214,21 @@ git commit -m "feat: add EditMemberModal component for superadmin"
   - Pass `onEditUser={handleEditUser}` to `<MemberTreeView />`.
   - Render `<EditMemberModal isOpen={showEditModal} user={editingUser} onClose={() => { setShowEditModal(false); setEditingUser(null); }} onUpdated={fetchUsers} />`.
 
-- [ ] **Step 2: Update `src/components/admin/MemberTreeView.jsx`**
+- [x] **Step 2: Update `src/components/admin/MemberTreeView.jsx`**
   - Add `onEditUser` to props.
   - In both parent nodes and child nodes, add `<button className="tree-action-icon-btn edit" title="แก้ไขข้อมูลสมาชิก" onClick={() => onEditUser(node)}><FiEdit2 /></button>`.
 
-- [ ] **Step 3: Update CSS styles in `Admin.css` and `MemberTreeView.css`**
+- [x] **Step 3: Update CSS styles in `Admin.css` and `MemberTreeView.css`**
   - Style `.action-btn.edit`: blue/cyan accent (`color: #38bdf8; background: rgba(56, 189, 248, 0.15);`).
   - Style `.tree-action-icon-btn.edit`.
 
-- [ ] **Step 4: Verify build and tests**
+- [x] **Step 4: Verify build and tests**
 
 Run: `cmd /c npm test`
 Run: `cmd /c npm run build`
 Expected: All pass with 0 errors.
 
-- [ ] **Step 5: Commit integration**
+- [x] **Step 5: Commit integration**
 
 ```bash
 git add src/pages/Admin.jsx src/pages/Admin.css src/components/admin/MemberTreeView.jsx src/components/admin/MemberTreeView.css
@@ -242,7 +242,7 @@ git commit -m "feat: integrate edit member button in Admin table view and tree v
 **Files:**
 - Create: `src/components/admin/__tests__/EditMemberModal.test.js`
 
-- [ ] **Step 1: Write unit test testing password generation and validation helpers**
+- [x] **Step 1: Write unit test testing password generation and validation helpers**
 
 ```javascript
 import { describe, it, expect } from 'vitest'
@@ -275,17 +275,17 @@ describe('EditMemberModal Helpers', () => {
 })
 ```
 
-- [ ] **Step 2: Run test suite**
+- [x] **Step 2: Run test suite**
 
 Run: `cmd /c npm test`
 Expected: All tests pass.
 
-- [ ] **Step 3: Run production build**
+- [x] **Step 3: Run production build**
 
 Run: `cmd /c npm run build`
 Expected: Build succeeds with 0 errors.
 
-- [ ] **Step 4: Commit test file**
+- [x] **Step 4: Commit test file**
 
 ```bash
 git add src/components/admin/__tests__/EditMemberModal.test.js
