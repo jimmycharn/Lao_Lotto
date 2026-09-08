@@ -168,8 +168,24 @@ export default function DealerRoundsAdminTab({ currentUser }) {
     const [selectedDealerId, setSelectedDealerId] = useState('all')
     const [statusFilter, setStatusFilter] = useState('all')
     const [searchTerm, setSearchTerm] = useState('')
+    const [dateFilterType, setDateFilterType] = useState('all') // 'all' | 'before' | 'exact'
+    const [dateFilterValue, setDateFilterValue] = useState('')
     const [loading, setLoading] = useState(true)
     const [refreshing, setRefreshing] = useState(false)
+
+    // Handle date filter type change
+    const handleDateFilterTypeChange = (newType) => {
+        setDateFilterType(newType)
+        if (newType !== 'all' && !dateFilterValue) {
+            setDateFilterValue(getTodayDateString())
+        }
+    }
+
+    const selectedDealerObj = useMemo(() => {
+        return dealers.find(d => d.id === selectedDealerId)
+    }, [dealers, selectedDealerId])
+
+    const selectedDealerName = selectedDealerObj ? selectedDealerObj.full_name : 'ทุก Dealer'
 
     // Modal states
     const [deletingRound, setDeletingRound] = useState(null)
@@ -319,9 +335,6 @@ export default function DealerRoundsAdminTab({ currentUser }) {
             setIsCleaning(false)
         }
     }
-
-    const selectedDealerObj = dealers.find(d => d.id === selectedDealerId)
-    const selectedDealerName = selectedDealerObj ? selectedDealerObj.full_name : 'ทุก Dealer'
 
     return (
         <div className="dealer-rounds-admin-container">
