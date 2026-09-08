@@ -94,6 +94,13 @@ Returns a comprehensive list of rounds with aggregated stats:
    }
    ```
 
+#### D. Handling the Supabase Free Tier 1,000-Row Limit
+In Supabase PostgREST, direct client-side queries (`supabase.from('submissions').select('*')`) are capped at 1,000 rows per request (`max-rows = 1000`). If a round contains 12,020 submissions, client-side queries without pagination would truncate the data.
+To guarantee 100% data integrity and overcome this limit:
+1. **Server-Side Aggregation (Zero Truncation)**: All `COUNT(s.id)`, `SUM(s.amount)`, and financial aggregation logic run directly inside the PostgreSQL RPC functions (`superadmin_get_dealer_rounds`, `superadmin_delete_round`). Inside PostgreSQL, there is no 1,000-row limit; it seamlessly aggregates across tens of thousands of rows.
+2. **Bandwidth & Memory Efficiency**: The client only receives round metadata with pre-calculated aggregate numbers (1 row per round, e.g. `submission_count: 12020`), without transferring heavy submission payloads over the network.
+3. **Atomic DB-Side Archiving & Cleanup**: Archiving into `round_history` and `user_round_history` executes entirely within the database transaction before deletion, guaranteeing that all 12,020+ submission entries are accounted for and cleanly wiped without hitting network limits.
+
 ---
 
 ### 3.2 Frontend Component Architecture
