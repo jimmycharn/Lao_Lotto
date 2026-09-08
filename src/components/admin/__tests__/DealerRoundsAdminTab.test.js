@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { filterRounds, computeOverviewStats, formatRoundDate } from '../DealerRoundsAdminTab'
+import {
+    filterRounds,
+    computeOverviewStats,
+    formatRoundDate,
+    getRoundDateISO,
+    formatDateValueThai,
+    getTodayDateString
+} from '../DealerRoundsAdminTab'
 
 describe('DealerRoundsAdminTab Helpers', () => {
     const mockRounds = [
@@ -10,6 +17,8 @@ describe('DealerRoundsAdminTab Helpers', () => {
             dealer_email: 'game@gmail.com',
             lottery_type: 'lao',
             lottery_name: 'หวยลาวพัฒนา',
+            round_date: '2026-09-08',
+            close_time: '2026-09-08T16:59:00Z',
             status: 'open',
             is_result_announced: false,
             submission_count: 10,
@@ -22,6 +31,8 @@ describe('DealerRoundsAdminTab Helpers', () => {
             dealer_email: 'game@gmail.com',
             lottery_type: 'thai',
             lottery_name: 'หวยไทย',
+            round_date: '2026-09-01',
+            close_time: '2026-09-01T16:59:00Z',
             status: 'announced',
             is_result_announced: true,
             submission_count: 12020,
@@ -34,6 +45,8 @@ describe('DealerRoundsAdminTab Helpers', () => {
             dealer_email: 'jimmy@gmail.com',
             lottery_type: 'thai',
             lottery_name: 'หวยไทย',
+            round_date: '2026-09-05',
+            close_time: '2026-09-05T16:59:00Z',
             status: 'closed',
             is_result_announced: false,
             submission_count: 61,
@@ -46,6 +59,8 @@ describe('DealerRoundsAdminTab Helpers', () => {
             dealer_email: 'jimmy@gmail.com',
             lottery_type: 'lao',
             lottery_name: 'หวยลาว',
+            round_date: '2026-08-25',
+            close_time: '2026-08-25T16:59:00Z',
             status: 'announced',
             is_result_announced: true,
             submission_count: 1251,
@@ -111,6 +126,54 @@ describe('DealerRoundsAdminTab Helpers', () => {
             const searchJimmy = filterRounds(mockRounds, { dealerId: 'all', statusFilter: 'all', searchTerm: 'จิมมี่' })
             expect(searchJimmy).toHaveLength(2)
         })
+
+        it('filters by dateFilterType: all (shows all dates)', () => {
+            const allDates = filterRounds(mockRounds, {
+                dealerId: 'all',
+                statusFilter: 'all',
+                searchTerm: '',
+                dateFilterType: 'all',
+                dateFilterValue: '2026-09-05'
+            })
+            expect(allDates).toHaveLength(4)
+        })
+
+        it('filters by dateFilterType: before (shows rounds strictly before given date)', () => {
+            // Given date: 2026-09-05
+            // Rounds strictly before 2026-09-05 are r2 (2026-09-01) and r4 (2026-08-25)
+            const beforeRounds = filterRounds(mockRounds, {
+                dealerId: 'all',
+                statusFilter: 'all',
+                searchTerm: '',
+                dateFilterType: 'before',
+                dateFilterValue: '2026-09-05'
+            })
+            expect(beforeRounds).toHaveLength(2)
+            expect(beforeRounds.map(r => r.id)).toEqual(['r2', 'r4'])
+        })
+
+        it('filters by dateFilterType: exact (shows only rounds matching given date)', () => {
+            const exactRounds = filterRounds(mockRounds, {
+                dealerId: 'all',
+                statusFilter: 'all',
+                searchTerm: '',
+                dateFilterType: 'exact',
+                dateFilterValue: '2026-09-08'
+            })
+            expect(exactRounds).toHaveLength(1)
+            expect(exactRounds[0].id).toBe('r1')
+        })
+
+        it('returns empty list if exact date has no matches', () => {
+            const exactRounds = filterRounds(mockRounds, {
+                dealerId: 'all',
+                statusFilter: 'all',
+                searchTerm: '',
+                dateFilterType: 'exact',
+                dateFilterValue: '2026-01-01'
+            })
+            expect(exactRounds).toHaveLength(0)
+        })
     })
 
     describe('formatRoundDate', () => {
@@ -139,4 +202,26 @@ describe('DealerRoundsAdminTab Helpers', () => {
             expect(formatRoundDate({})).toBe('-')
         })
     })
+
+    describe('Date Helpers', () => {
+        it('getRoundDateISO formats dates to YYYY-MM-DD in Asia/Bangkok', () => {
+            const round = {
+                close_time: '2026-09-07T16:59:00Z' // 23:59 Bangkok on 2026-09-07
+            }
+            expect(getRoundDateISO(round)).toBe('2026-09-07')
+            expect(getRoundDateISO(null)).toBe('')
+            expect(getRoundDateISO({})).toBe('')
+        })
+
+        it('formatDateValueThai formats YYYY-MM-DD string into Thai date', () => {
+            expect(formatDateValueThai('2026-09-07')).toContain('7 ก.ย. 2569')
+            expect(formatDateValueThai('')).toBe('')
+        })
+
+        it('getTodayDateString returns a valid YYYY-MM-DD string', () => {
+            const today = getTodayDateString()
+            expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+        })
+    })
 })
+

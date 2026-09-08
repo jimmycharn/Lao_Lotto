@@ -30,6 +30,45 @@ export function formatRoundDate(round) {
     })
 }
 
+export function getRoundDateISO(round) {
+    if (!round) return ''
+    const dateVal = round.close_time || round.round_date
+    if (!dateVal) return ''
+    const d = new Date(dateVal)
+    if (isNaN(d.getTime())) return ''
+
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Bangkok',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    })
+    return formatter.format(d)
+}
+
+export function getTodayDateString() {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Bangkok',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    })
+    return formatter.format(new Date())
+}
+
+export function formatDateValueThai(dateStr) {
+    if (!dateStr) return ''
+    const parts = dateStr.split('-').map(Number)
+    if (parts.length !== 3 || parts.some(isNaN)) return dateStr
+    const [y, m, d] = parts
+    const dateObj = new Date(y, m - 1, d)
+    return dateObj.toLocaleDateString('th-TH', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+    })
+}
+
 export function computeOverviewStats(rounds = []) {
     let totalRounds = rounds.length
     let openRounds = 0
@@ -62,7 +101,16 @@ export function computeOverviewStats(rounds = []) {
     }
 }
 
-export function filterRounds(rounds = [], { dealerId = 'all', statusFilter = 'all', searchTerm = '' }) {
+export function filterRounds(
+    rounds = [],
+    {
+        dealerId = 'all',
+        statusFilter = 'all',
+        searchTerm = '',
+        dateFilterType = 'all',
+        dateFilterValue = ''
+    } = {}
+) {
     return rounds.filter(r => {
         // 1. Filter by Dealer
         if (dealerId !== 'all' && r.dealer_id !== dealerId) {
@@ -79,7 +127,21 @@ export function filterRounds(rounds = [], { dealerId = 'all', statusFilter = 'al
             if (!isAnnounced) return false
         }
 
-        // 3. Filter by Search Term
+        // 3. Filter by Round Date (based on close_time, fallback to round_date)
+        if (dateFilterType !== 'all' && dateFilterValue) {
+            const roundDateISO = getRoundDateISO(r)
+            if (roundDateISO) {
+                if (dateFilterType === 'before') {
+                    if (roundDateISO >= dateFilterValue) return false
+                } else if (dateFilterType === 'exact') {
+                    if (roundDateISO !== dateFilterValue) return false
+                }
+            } else {
+                return false
+            }
+        }
+
+        // 4. Filter by Search Term
         if (searchTerm.trim() !== '') {
             const term = searchTerm.toLowerCase().trim()
             const matchName = (r.lottery_name || '').toLowerCase().includes(term)
@@ -163,21 +225,42 @@ export default function DealerRoundsAdminTab({ currentUser }) {
         return filterRounds(rounds, {
             dealerId: selectedDealerId,
             statusFilter,
-            searchTerm
+            searchTerm,
+            dateFilterType,
+            dateFilterValue
         })
-    }, [rounds, selectedDealerId, statusFilter, searchTerm])
+    }, [rounds, selectedDealerId, statusFilter, searchTerm, dateFilterType, dateFilterValue])
 
     // Announced rounds count in current scope (for bulk clean)
     const announcedInScope = useMemo(() => {
         return rounds.filter(r => {
             if (selectedDealerId !== 'all' && r.dealer_id !== selectedDealerId) return false
+            if (dateFilterType !== 'all' && dateFilterValue) {
+                const rDate = getRoundDateISO(r)
+                if (rDate) {
+                    if (dateFilterType === 'before' && rDate >= dateFilterValue) return false
+                    if (dateFilterType === 'exact' && rDate !== dateFilterValue) return false
+                } else {
+                    return false
+                }
+            }
             return r.status === 'announced' || r.is_result_announced === true
         })
-    }, [rounds, selectedDealerId])
+    }, [rounds, selectedDealerId, dateFilterType, dateFilterValue])
 
     const totalAnnouncedSubsInScope = useMemo(() => {
         return announcedInScope.reduce((sum, r) => sum + (Number(r.submission_count) || 0), 0)
     }, [announcedInScope])
+
+    const dateScopeText = useMemo(() => {
+        if (dateFilterType === 'before' && dateFilterValue) {
+            return `ก่อนวันที่ ${formatDateValueThai(dateFilterValue)}`
+        }
+        if (dateFilterType === 'exact' && dateFilterValue) {
+            return `เฉพาะวันที่ ${formatDateValueThai(dateFilterValue)}`
+        }
+        return ''
+    }, [dateFilterType, dateFilterValue])
 
     // Handle single round deletion
     const handleConfirmDelete = async () => {
@@ -324,6 +407,45 @@ export default function DealerRoundsAdminTab({ currentUser }) {
                         </select>
                     </div>
 
+                    {/* Date Filter Dropdown & Input */}
+                    <div className="date-filter-group">
+                        <div className="date-filter-wrap">
+                            <FiCalendar className="select-icon" />
+                            <select
+                                className="date-filter-dropdown"
+                                value={dateFilterType}
+                                onChange={e => handleDateFilterTypeChange(e.target.value)}
+                            >
+                                <option value="all">📅 แสดงทุกงวด</option>
+                                <option value="before">⏳ ก่อนงวดวันที่</option>
+                                <option value="exact">🎯 เฉพาะงวดวันที่</option>
+                            </select>
+                        </div>
+
+                        {dateFilterType !== 'all' && (
+                            <div className="date-input-wrap">
+                                <input
+                                    type="date"
+                                    className="date-picker-input"
+                                    value={dateFilterValue}
+                                    onChange={e => setDateFilterValue(e.target.value)}
+                                    title={dateFilterType === 'before' ? 'แสดงงวดที่ปิดก่อนวันที่นี้' : 'แสดงงวดที่ปิดในวันที่นี้'}
+                                />
+                                <button
+                                    type="button"
+                                    className="clear-date-btn"
+                                    onClick={() => {
+                                        setDateFilterType('all')
+                                        setDateFilterValue('')
+                                    }}
+                                    title="ล้างตัวกรองวันที่ (แสดงทุกงวด)"
+                                >
+                                    <FiX />
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
                     {/* Status Tabs */}
                     <div className="status-pills-bar">
                         <button
@@ -414,7 +536,11 @@ export default function DealerRoundsAdminTab({ currentUser }) {
                 <div className="rounds-empty-state">
                     <FiLayers className="empty-icon" />
                     <h4>ไม่พบงวดหวยตามเงื่อนไขที่เลือก</h4>
-                    <p>ลองเปลี่ยนตัวกรองเจ้ามือ หรือสถานะงวดหวย</p>
+                    <p>
+                        {dateFilterType === 'before' && dateFilterValue && `ไม่มีงวดหวยก่อนวันที่ ${formatDateValueThai(dateFilterValue)} • `}
+                        {dateFilterType === 'exact' && dateFilterValue && `ไม่มีงวดหวยเฉพาะวันที่ ${formatDateValueThai(dateFilterValue)} • `}
+                        ลองเปลี่ยนตัวกรองเจ้ามือ, สถานะ หรือปรับเงื่อนไขวันที่ใหม่
+                    </p>
                 </div>
             ) : (
                 <div className="rounds-cards-grid">
@@ -563,6 +689,7 @@ export default function DealerRoundsAdminTab({ currentUser }) {
                 dealerName={selectedDealerName}
                 roundCount={announcedInScope.length}
                 totalSubmissions={totalAnnouncedSubsInScope}
+                dateScopeText={dateScopeText}
             />
         </div>
     )

@@ -8,7 +8,8 @@ export default function BulkCleanupConfirmModal({
     isCleaning = false,
     dealerName = 'ทุก Dealer',
     roundCount = 0,
-    totalSubmissions = 0
+    totalSubmissions = 0,
+    dateScopeText = ''
 }) {
     const [isConfirmed, setIsConfirmed] = useState(false)
 
@@ -47,6 +48,14 @@ export default function BulkCleanupConfirmModal({
                             <span className="summary-label">ขอบเขตเจ้ามือ:</span>
                             <span className="summary-value highlight-name">{dealerName}</span>
                         </div>
+                        {dateScopeText && (
+                            <div className="summary-row">
+                                <span className="summary-label">ขอบเขตงวดวันที่:</span>
+                                <span className="summary-value" style={{ color: '#38bdf8', fontWeight: 600 }}>
+                                    {dateScopeText}
+                                </span>
+                            </div>
+                        )}
                         <div className="summary-row">
                             <span className="summary-label">จำนวนงวดที่ประกาศผลแล้ว:</span>
                             <span className="summary-value" style={{ fontWeight: 'bold' }}>
@@ -85,7 +94,7 @@ export default function BulkCleanupConfirmModal({
                             disabled={isCleaning}
                         />
                         <span>
-                            ข้าพเจ้ายืนยันที่จะจัดเก็บสรุปประวัติและลบข้อมูลโพยของงวดที่ประกาศผลแล้วจำนวน <strong>{roundCount} งวด</strong> ออกจากระบบ
+                            ข้าพเจ้ายืนยันที่จะจัดเก็บสรุปประวัติและลบข้อมูลโพยของงวดที่ประกาศผลแล้วจำนวน <strong>{roundCount} งวด</strong> {dateScopeText ? `(${dateScopeText}) ` : ''}ออกจากระบบ
                         </span>
                     </label>
                 </div>
