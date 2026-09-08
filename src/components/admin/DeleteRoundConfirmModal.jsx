@@ -24,6 +24,17 @@ export function getDeletionWarningType(round) {
     return 'danger'
 }
 
+export function formatRoundDate(round) {
+    if (!round) return '-'
+    const dateVal = round.close_time || round.round_date
+    if (!dateVal) return '-'
+    return new Date(dateVal).toLocaleDateString('th-TH', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+    })
+}
+
 export default function DeleteRoundConfirmModal({
     round,
     isOpen,
@@ -73,9 +84,9 @@ export default function DeleteRoundConfirmModal({
                             </span>
                         </div>
                         <div className="summary-row">
-                            <span className="summary-label">วันที่งวด:</span>
+                            <span className="summary-label">งวดวันที่ (ปิดรับ):</span>
                             <span className="summary-value">
-                                {round.round_date ? new Date(round.round_date).toLocaleDateString('th-TH', { dateStyle: 'medium' }) : '-'}
+                                {formatRoundDate(round)}
                             </span>
                         </div>
                         <div className="summary-row">

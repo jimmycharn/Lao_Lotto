@@ -19,6 +19,17 @@ import {
 } from 'react-icons/fi'
 import './DealerRoundsAdminTab.css'
 
+export function formatRoundDate(round) {
+    if (!round) return '-'
+    const dateVal = round.close_time || round.round_date
+    if (!dateVal) return '-'
+    return new Date(dateVal).toLocaleDateString('th-TH', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+    })
+}
+
 export function computeOverviewStats(rounds = []) {
     let totalRounds = rounds.length
     let openRounds = 0
@@ -81,6 +92,10 @@ export function filterRounds(rounds = [], { dealerId = 'all', statusFilter = 'al
         }
 
         return true
+    }).sort((a, b) => {
+        const timeA = new Date(a.close_time || a.round_date).getTime() || 0
+        const timeB = new Date(b.close_time || b.round_date).getTime() || 0
+        return timeB - timeA
     })
 }
 
@@ -443,18 +458,12 @@ export default function DealerRoundsAdminTab({ currentUser }) {
                                         </div>
                                     </div>
 
-                                    {/* Round date and close time */}
+                                    {/* Round date (close date) and close time */}
                                     <div className="card-info-row time-row">
                                         <div className="time-item">
                                             <FiCalendar className="time-icon" />
                                             <span>
-                                                {round.round_date
-                                                    ? new Date(round.round_date).toLocaleDateString('th-TH', {
-                                                          day: 'numeric',
-                                                          month: 'short',
-                                                          year: 'numeric'
-                                                      })
-                                                    : '-'}
+                                                {formatRoundDate(round)}
                                             </span>
                                         </div>
                                         {round.close_time && (

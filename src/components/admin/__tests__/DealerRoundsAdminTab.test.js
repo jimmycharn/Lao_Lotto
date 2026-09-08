@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { filterRounds, computeOverviewStats } from '../DealerRoundsAdminTab'
+import { filterRounds, computeOverviewStats, formatRoundDate } from '../DealerRoundsAdminTab'
 
 describe('DealerRoundsAdminTab Helpers', () => {
     const mockRounds = [
@@ -110,6 +110,33 @@ describe('DealerRoundsAdminTab Helpers', () => {
 
             const searchJimmy = filterRounds(mockRounds, { dealerId: 'all', statusFilter: 'all', searchTerm: 'จิมมี่' })
             expect(searchJimmy).toHaveLength(2)
+        })
+    })
+
+    describe('formatRoundDate', () => {
+        it('prioritizes close_time date over round_date', () => {
+            const round = {
+                round_date: '2026-08-31',
+                close_time: '2026-09-01T16:59:59.000Z'
+            }
+            const formatted = formatRoundDate(round)
+            expect(formatted).toContain('2569')
+            expect(formatted).toContain('ก.ย.')
+        })
+
+        it('falls back to round_date if close_time is missing', () => {
+            const round = {
+                round_date: '2026-08-31',
+                close_time: null
+            }
+            const formatted = formatRoundDate(round)
+            expect(formatted).toContain('2569')
+            expect(formatted).toContain('ส.ค.')
+        })
+
+        it('returns "-" if round or date fields are missing', () => {
+            expect(formatRoundDate(null)).toBe('-')
+            expect(formatRoundDate({})).toBe('-')
         })
     })
 })

@@ -63,7 +63,7 @@ BEGIN
         GROUP BY submissions.round_id
     ) s ON s.round_id = lr.id
     WHERE (p_dealer_id IS NULL OR lr.dealer_id = p_dealer_id)
-    ORDER BY lr.round_date DESC, lr.created_at DESC;
+    ORDER BY lr.close_time DESC, lr.round_date DESC, lr.created_at DESC;
 END;
 $$;
 
