@@ -356,6 +356,21 @@ export function AuthProvider({ children }) {
                     return
                 }
                 console.log('Profile loaded:', data.role)
+                
+                // Touch last_login_at if null or older than 1 hour (throttled to avoid redundant writes)
+                const now = Date.now()
+                const lastLoginTime = data.last_login_at ? new Date(data.last_login_at).getTime() : 0
+                if (!lastLoginTime || (now - lastLoginTime > 60 * 60 * 1000)) {
+                    const nowIso = new Date().toISOString()
+                    data.last_login_at = nowIso
+                    supabase
+                        .from('profiles')
+                        .update({ last_login_at: nowIso })
+                        .eq('id', userId)
+                        .then(() => {})
+                        .catch(err => console.warn('Silent update last_login_at failed:', err))
+                }
+
                 setProfile(data)
                 setCachedProfile(userId, data)
             }
