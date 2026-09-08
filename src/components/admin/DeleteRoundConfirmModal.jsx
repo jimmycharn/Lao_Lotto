@@ -1,11 +1,12 @@
 import React from 'react'
 import { FiTrash2, FiAlertTriangle, FiCheckCircle, FiX, FiDatabase, FiArchive } from 'react-icons/fi'
 
-export function getRoundStatusLabel(status, isAnnounced) {
+export function getRoundStatusLabel(status, isAnnounced, closeTime) {
     if (status === 'announced' || isAnnounced === true) {
         return 'ประกาศผลแล้ว'
     }
-    if (status === 'closed') {
+    const isClosedByTime = closeTime ? new Date() > new Date(closeTime) : false
+    if (status === 'closed' || isClosedByTime) {
         return 'ปิดรับแทง (รอผล)'
     }
     return 'เปิดรับแทง'
@@ -91,8 +92,8 @@ export default function DeleteRoundConfirmModal({
                         </div>
                         <div className="summary-row">
                             <span className="summary-label">สถานะงวด:</span>
-                            <span className={`status-badge-inline ${isAnnounced ? 'announced' : round.status === 'closed' ? 'closed' : 'open'}`}>
-                                {getRoundStatusLabel(round.status, round.is_result_announced)}
+                            <span className={`status-badge-inline ${isAnnounced ? 'announced' : (round.status === 'closed' || (round.close_time && new Date() > new Date(round.close_time))) ? 'closed' : 'open'}`}>
+                                {getRoundStatusLabel(round.status, round.is_result_announced, round.close_time)}
                             </span>
                         </div>
                         <div className="summary-row highlight-sub">
@@ -128,7 +129,7 @@ export default function DeleteRoundConfirmModal({
                                 <strong>คำเตือน: งวดนี้ยังไม่ประกาศผลรางวัล</strong>
                             </div>
                             <p>
-                                งวดนี้มีสถานะ <strong>{getRoundStatusLabel(round.status, round.is_result_announced)}</strong> หากลบตอนนี้
+                                งวดนี้มีสถานะ <strong>{getRoundStatusLabel(round.status, round.is_result_announced, round.close_time)}</strong> หากลบตอนนี้
                                 ข้อมูลรายการแทงทั้งหมด <strong>{formatSubmissionCount(subCount)}</strong> จะถูกยกเลิก และสมาชิกจะไม่สามารถตรวจผลรางวัลได้
                             </p>
                             <p className="sub-note">

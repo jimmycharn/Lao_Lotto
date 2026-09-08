@@ -1,14 +1,26 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import {
     filterRounds,
     computeOverviewStats,
     formatRoundDate,
     getRoundDateISO,
     formatDateValueThai,
-    getTodayDateString
+    getTodayDateString,
+    isEffectiveRoundAnnounced,
+    isEffectiveRoundClosed,
+    isEffectiveRoundOpen
 } from '../DealerRoundsAdminTab'
 
 describe('DealerRoundsAdminTab Helpers', () => {
+    beforeEach(() => {
+        vi.useFakeTimers()
+        vi.setSystemTime(new Date('2026-09-08T12:00:00+07:00'))
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
     const mockRounds = [
         {
             id: 'r1',
@@ -221,6 +233,32 @@ describe('DealerRoundsAdminTab Helpers', () => {
         it('getTodayDateString returns a valid YYYY-MM-DD string', () => {
             const today = getTodayDateString()
             expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+        })
+    })
+
+    describe('Effective Round Status Helpers', () => {
+        it('identifies announced rounds correctly', () => {
+            expect(isEffectiveRoundAnnounced({ status: 'announced' })).toBe(true)
+            expect(isEffectiveRoundAnnounced({ is_result_announced: true })).toBe(true)
+            expect(isEffectiveRoundAnnounced({ status: 'open', is_result_announced: false })).toBe(false)
+        })
+
+        it('identifies closed rounds by status or past close_time', () => {
+            // Closed by status
+            expect(isEffectiveRoundClosed({ status: 'closed' })).toBe(true)
+            // Closed by past close_time even if status is open
+            expect(isEffectiveRoundClosed({ status: 'open', close_time: '2020-01-01T00:00:00Z' })).toBe(true)
+            // Still open if close_time is in the future
+            expect(isEffectiveRoundClosed({ status: 'open', close_time: '2099-01-01T00:00:00Z' })).toBe(false)
+            // Announced takes precedence (not closed tab)
+            expect(isEffectiveRoundClosed({ status: 'announced', close_time: '2020-01-01T00:00:00Z' })).toBe(false)
+        })
+
+        it('identifies open rounds correctly', () => {
+            expect(isEffectiveRoundOpen({ status: 'open', close_time: '2099-01-01T00:00:00Z' })).toBe(true)
+            expect(isEffectiveRoundOpen({ status: 'open', close_time: '2020-01-01T00:00:00Z' })).toBe(false)
+            expect(isEffectiveRoundOpen({ status: 'closed' })).toBe(false)
+            expect(isEffectiveRoundOpen({ status: 'announced' })).toBe(false)
         })
     })
 })

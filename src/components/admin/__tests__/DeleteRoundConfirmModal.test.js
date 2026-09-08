@@ -17,8 +17,12 @@ describe('DeleteRoundConfirmModal Helpers', () => {
             expect(getRoundStatusLabel('closed', false)).toBe('ปิดรับแทง (รอผล)')
         })
 
-        it('returns "เปิดรับแทง" when status is open', () => {
-            expect(getRoundStatusLabel('open', false)).toBe('เปิดรับแทง')
+        it('returns "ปิดรับแทง (รอผล)" when status is open but closeTime is in the past', () => {
+            expect(getRoundStatusLabel('open', false, '2020-01-01T00:00:00Z')).toBe('ปิดรับแทง (รอผล)')
+        })
+
+        it('returns "เปิดรับแทง" when status is open and closeTime is in the future', () => {
+            expect(getRoundStatusLabel('open', false, '2099-01-01T00:00:00Z')).toBe('เปิดรับแทง')
         })
     })
 

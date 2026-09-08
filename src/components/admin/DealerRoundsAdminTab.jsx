@@ -69,6 +69,27 @@ export function formatDateValueThai(dateStr) {
     })
 }
 
+export function isEffectiveRoundAnnounced(round) {
+    if (!round) return false
+    return round.status === 'announced' || round.is_result_announced === true
+}
+
+export function isEffectiveRoundClosed(round) {
+    if (!round) return false
+    if (isEffectiveRoundAnnounced(round)) return false
+    if (round.status === 'closed') return true
+    if (round.close_time) {
+        return new Date() > new Date(round.close_time)
+    }
+    return false
+}
+
+export function isEffectiveRoundOpen(round) {
+    if (!round) return false
+    if (isEffectiveRoundAnnounced(round)) return false
+    return !isEffectiveRoundClosed(round)
+}
+
 export function computeOverviewStats(rounds = []) {
     let totalRounds = rounds.length
     let openRounds = 0
@@ -78,10 +99,10 @@ export function computeOverviewStats(rounds = []) {
     let totalAmount = 0
 
     rounds.forEach(r => {
-        const isAnnounced = r.status === 'announced' || r.is_result_announced === true
+        const isAnnounced = isEffectiveRoundAnnounced(r)
         if (isAnnounced) {
             announcedRounds++
-        } else if (r.status === 'closed') {
+        } else if (isEffectiveRoundClosed(r)) {
             closedRounds++
         } else {
             openRounds++
@@ -118,11 +139,12 @@ export function filterRounds(
         }
 
         // 2. Filter by Status
-        const isAnnounced = r.status === 'announced' || r.is_result_announced === true
+        const isAnnounced = isEffectiveRoundAnnounced(r)
+        const isClosed = isEffectiveRoundClosed(r)
         if (statusFilter === 'open') {
-            if (isAnnounced || r.status !== 'open') return false
+            if (isAnnounced || isClosed) return false
         } else if (statusFilter === 'closed') {
-            if (isAnnounced || r.status !== 'closed') return false
+            if (isAnnounced || !isClosed) return false
         } else if (statusFilter === 'announced') {
             if (!isAnnounced) return false
         }
@@ -558,14 +580,15 @@ export default function DealerRoundsAdminTab({ currentUser }) {
             ) : (
                 <div className="rounds-cards-grid">
                     {filteredRounds.map(round => {
-                        const isAnnounced = round.status === 'announced' || round.is_result_announced === true
+                        const isAnnounced = isEffectiveRoundAnnounced(round)
+                        const isClosed = isEffectiveRoundClosed(round)
                         const subCount = Number(round.submission_count) || 0
                         const totalAmt = Number(round.total_amount) || 0
 
                         return (
                             <div
                                 key={round.id}
-                                className={`round-card-item ${isAnnounced ? 'is-announced' : round.status === 'closed' ? 'is-closed' : 'is-open'}`}
+                                className={`round-card-item ${isAnnounced ? 'is-announced' : isClosed ? 'is-closed' : 'is-open'}`}
                             >
                                 {/* Card Header */}
                                 <div className="card-top-header">
@@ -577,8 +600,8 @@ export default function DealerRoundsAdminTab({ currentUser }) {
                                             {round.lottery_type}
                                         </span>
                                     </div>
-                                    <span className={`status-tag ${isAnnounced ? 'announced' : round.status === 'closed' ? 'closed' : 'open'}`}>
-                                        {isAnnounced ? 'ประกาศผลแล้ว' : round.status === 'closed' ? 'ปิดรับแทง' : 'เปิดรับแทง'}
+                                    <span className={`status-tag ${isAnnounced ? 'announced' : isClosed ? 'closed' : 'open'}`}>
+                                        {isAnnounced ? 'ประกาศผลแล้ว' : isClosed ? 'ปิดรอผล' : 'เปิดรับแทง'}
                                     </span>
                                 </div>
 
