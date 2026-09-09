@@ -8,7 +8,8 @@ import {
     getTodayDateString,
     isEffectiveRoundAnnounced,
     isEffectiveRoundClosed,
-    isEffectiveRoundOpen
+    isEffectiveRoundOpen,
+    getRoundFinancialMetrics
 } from '../DealerRoundsAdminTab'
 
 describe('DealerRoundsAdminTab Helpers', () => {
@@ -259,6 +260,94 @@ describe('DealerRoundsAdminTab Helpers', () => {
             expect(isEffectiveRoundOpen({ status: 'open', close_time: '2020-01-01T00:00:00Z' })).toBe(false)
             expect(isEffectiveRoundOpen({ status: 'closed' })).toBe(false)
             expect(isEffectiveRoundOpen({ status: 'announced' })).toBe(false)
+        })
+    })
+
+    describe('getRoundFinancialMetrics', () => {
+        it('handles announced round with net profit > 0', () => {
+            const round = {
+                status: 'announced',
+                is_result_announced: true,
+                total_amount: 10000,
+                total_commission: 1500,
+                total_payout: 4000,
+                net_profit: 4500
+            }
+            const metrics = getRoundFinancialMetrics(round)
+            expect(metrics.totalAmt).toBe(10000)
+            expect(metrics.totalComm).toBe(1500)
+            expect(metrics.totalPayout).toBe(4000)
+            expect(metrics.netProfit).toBe(4500)
+            expect(metrics.isProfit).toBe(true)
+            expect(metrics.isLoss).toBe(false)
+            expect(metrics.isNeutral).toBe(false)
+        })
+
+        it('handles announced round with loss (net_profit < 0)', () => {
+            const round = {
+                status: 'announced',
+                is_result_announced: true,
+                total_amount: 5000,
+                total_commission: 800,
+                total_payout: 9000,
+                net_profit: -4800
+            }
+            const metrics = getRoundFinancialMetrics(round)
+            expect(metrics.netProfit).toBe(-4800)
+            expect(metrics.isProfit).toBe(false)
+            expect(metrics.isLoss).toBe(true)
+            expect(metrics.isNeutral).toBe(false)
+        })
+
+        it('handles break-even round (net_profit === 0)', () => {
+            const round = {
+                status: 'announced',
+                total_amount: 1000,
+                total_commission: 200,
+                total_payout: 800,
+                net_profit: 0
+            }
+            const metrics = getRoundFinancialMetrics(round)
+            expect(metrics.netProfit).toBe(0)
+            expect(metrics.isProfit).toBe(false)
+            expect(metrics.isLoss).toBe(false)
+            expect(metrics.isNeutral).toBe(true)
+        })
+
+        it('calculates net pending for unannounced round as total_amount - total_commission', () => {
+            const round = {
+                status: 'open',
+                is_result_announced: false,
+                total_amount: 730,
+                total_commission: 100
+            }
+            const metrics = getRoundFinancialMetrics(round)
+            expect(metrics.netPending).toBe(630)
+            expect(metrics.totalComm).toBe(100)
+        })
+
+        it('calculates net_profit fallback if net_profit is not precomputed in round object', () => {
+            const round = {
+                total_amount: 1000,
+                total_commission: 100,
+                total_payout: 300,
+                transferred_amount: 200,
+                upstream_commission: 42
+                // net_profit omitted -> fallback formula: (1000 - 100 - 300) + (-200 + 42) = 600 - 158 = 442
+            }
+            const metrics = getRoundFinancialMetrics(round)
+            expect(metrics.netProfit).toBe(442)
+            expect(metrics.isProfit).toBe(true)
+        })
+
+        it('safely handles null and empty input', () => {
+            const metrics = getRoundFinancialMetrics(null)
+            expect(metrics.totalAmt).toBe(0)
+            expect(metrics.totalComm).toBe(0)
+            expect(metrics.totalPayout).toBe(0)
+            expect(metrics.netProfit).toBe(0)
+            expect(metrics.netPending).toBe(0)
+            expect(metrics.isNeutral).toBe(true)
         })
     })
 })

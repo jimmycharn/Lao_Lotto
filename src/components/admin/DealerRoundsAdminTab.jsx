@@ -90,6 +90,45 @@ export function isEffectiveRoundOpen(round) {
     return !isEffectiveRoundClosed(round)
 }
 
+export function getRoundFinancialMetrics(round) {
+    if (!round) {
+        return {
+            totalAmt: 0,
+            totalComm: 0,
+            totalPayout: 0,
+            transferredAmt: 0,
+            upstreamComm: 0,
+            netProfit: 0,
+            netPending: 0,
+            isProfit: false,
+            isLoss: false,
+            isNeutral: true
+        }
+    }
+    const totalAmt = Number(round.total_amount) || 0
+    const totalComm = Number(round.total_commission) || 0
+    const totalPayout = Number(round.total_payout) || 0
+    const transferredAmt = Number(round.transferred_amount) || 0
+    const upstreamComm = Number(round.upstream_commission) || 0
+    const netProfit = round.net_profit !== undefined && round.net_profit !== null
+        ? Number(round.net_profit)
+        : ((totalAmt - totalComm - totalPayout) + (-transferredAmt + upstreamComm))
+    const netPending = (totalAmt - totalComm) + (-transferredAmt + upstreamComm)
+
+    return {
+        totalAmt,
+        totalComm,
+        totalPayout,
+        transferredAmt,
+        upstreamComm,
+        netProfit,
+        netPending,
+        isProfit: netProfit > 0,
+        isLoss: netProfit < 0,
+        isNeutral: netProfit === 0
+    }
+}
+
 export function computeOverviewStats(rounds = []) {
     let totalRounds = rounds.length
     let openRounds = 0
@@ -584,6 +623,14 @@ export default function DealerRoundsAdminTab({ currentUser }) {
                         const isClosed = isEffectiveRoundClosed(round)
                         const subCount = Number(round.submission_count) || 0
                         const totalAmt = Number(round.total_amount) || 0
+                        const {
+                            totalComm,
+                            totalPayout,
+                            netProfit,
+                            netPending,
+                            isProfit,
+                            isLoss
+                        } = getRoundFinancialMetrics(round)
 
                         return (
                             <div
@@ -657,6 +704,45 @@ export default function DealerRoundsAdminTab({ currentUser }) {
                                                 ฿{totalAmt.toLocaleString('th-TH', { maximumFractionDigits: 0 })}
                                             </span>
                                         </div>
+                                    </div>
+
+                                    {/* Financial metric box: Profit/Loss or Net Pending */}
+                                    <div className="financial-metric-box">
+                                        {isAnnounced ? (
+                                            <>
+                                                <div className="metric-col">
+                                                    <span className="metric-label">ยอดจ่ายรางวัล</span>
+                                                    <span className="metric-value payout-amount">
+                                                        ฿{totalPayout.toLocaleString('th-TH', { maximumFractionDigits: 0 })}
+                                                    </span>
+                                                </div>
+                                                <div className="metric-col right">
+                                                    <span className="metric-label">
+                                                        {isProfit ? 'กำไรสุทธิ' : isLoss ? 'ขาดทุน' : 'เสมอตัว'}
+                                                    </span>
+                                                    <span className={`metric-value profit-amount ${isProfit ? 'profit-positive' : isLoss ? 'profit-negative' : 'profit-neutral'}`}>
+                                                        {isProfit ? `+฿${netProfit.toLocaleString('th-TH', { maximumFractionDigits: 0 })}` : isLoss ? `-฿${Math.abs(netProfit).toLocaleString('th-TH', { maximumFractionDigits: 0 })}` : '฿0'}
+                                                    </span>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="metric-col">
+                                                    <span className="metric-label">คอมมิชชั่น</span>
+                                                    <span className="metric-value comm-amount">
+                                                        ฿{totalComm.toLocaleString('th-TH', { maximumFractionDigits: 0 })}
+                                                    </span>
+                                                </div>
+                                                <div className="metric-col right">
+                                                    <span className="metric-label">
+                                                        ยอดแทง - คอม <span className="pending-badge">รอผลรางวัล</span>
+                                                    </span>
+                                                    <span className="metric-value pending-amount">
+                                                        ฿{netPending.toLocaleString('th-TH', { maximumFractionDigits: 0 })}
+                                                    </span>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
 
                                     {/* Winning numbers if announced */}
