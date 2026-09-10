@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import {
     FiZap,
@@ -17,15 +17,20 @@ import {
     getUpstreamSettlementStatus,
     getUpstreamPaymentPresetAmount
 } from '../../utils/memberSettlementCalculator'
+import { findUpstreamPastUnpaidRounds } from '../../utils/crossRoundOffsetCalculator'
+import CrossRoundOffsetModal from './CrossRoundOffsetModal'
 import './UpstreamSettlementInline.css'
 
 export default function UpstreamSettlementInline({
     transfer,
     round,
     payments = [],
+    settlementOverview,
+    roundHistory = [],
     onSavePayment,
     onUpdatePayment,
     onDeletePayment,
+    onCrossRoundOffset,
     onClose
 }) {
     const [showForm, setShowForm] = useState(false)
@@ -85,6 +90,24 @@ export default function UpstreamSettlementInline({
         return null
     }
     const roundDateIso = getRoundDateIso(round)
+
+    // Cross-round offset detection
+    const [showOffsetModal, setShowOffsetModal] = useState(false)
+
+    const pastUnpaidRounds = useMemo(() => {
+        const dealerName = transfer?.target_dealer_name || transfer?.upstream_dealer_name || transfer?.dealerName
+        return findUpstreamPastUnpaidRounds({
+            dealerName,
+            currentRoundId: round?.round_id || round?.id,
+            currentRoundDate: roundDateIso,
+            transfers: settlementOverview?.transfers || [],
+            upstreamPayments: settlementOverview?.upstreamPayments || []
+        })
+    }, [transfer, round, roundDateIso, settlementOverview])
+
+    const pastDebtTotal = useMemo(() => {
+        return pastUnpaidRounds.reduce((sum, r) => sum + (Number(r.debt) || 0), 0)
+    }, [pastUnpaidRounds])
 
     // Open form with prefilled defaults
     const handleOpenForm = (type, isTabSwitch = false) => {
@@ -273,6 +296,31 @@ export default function UpstreamSettlementInline({
                     </span>
                 </div>
             </div>
+
+            {/* Smart Detection Banner for Cross-Round Offset */}
+            {pastUnpaidRounds.length > 0 && totalWinnings > 0 && (
+                <div className="cross-round-smart-banner">
+                    <div className="banner-left">
+                        <span className="banner-icon"><FiZap color="#facc15" size={18} /></span>
+                        <div className="banner-text">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                <strong>ตรวจพบยอดค้างชำระจากงวดก่อนหน้า</strong>
+                                <span className="banner-count-badge">{pastUnpaidRounds.length} งวด</span>
+                            </div>
+                            <span>
+                                เรามียอดค้างชำระรวม <strong style={{ color: '#ef4444' }}>฿{pastDebtTotal.toLocaleString()}</strong> สามารถนำยอดถูกรางวัลงวดนี้ (฿{totalWinnings.toLocaleString()}) ไปหักล้างได้
+                            </span>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        className="btn-cross-offset"
+                        onClick={() => setShowOffsetModal(true)}
+                    >
+                        ⚡ หักล้างยอดข้ามงวด
+                    </button>
+                </div>
+            )}
 
             {/* 2. Action Buttons Header */}
             <div className="upstream-settlement-actions-header">
@@ -987,6 +1035,24 @@ export default function UpstreamSettlementInline({
                     </div>
                 </div>,
                 document.body
+            )}
+
+            {showOffsetModal && (
+                <CrossRoundOffsetModal
+                    isOpen={showOffsetModal}
+                    onClose={() => setShowOffsetModal(false)}
+                    onConfirmOffset={async (allocations) => {
+                        if (onCrossRoundOffset) {
+                            await onCrossRoundOffset(allocations)
+                        }
+                    }}
+                    currentRound={round}
+                    member={transfer}
+                    pastUnpaidRounds={pastUnpaidRounds}
+                    currentWinnings={totalWinnings}
+                    isUpstream={true}
+                    upstreamDealerName={transfer?.target_dealer_name || transfer?.upstream_dealer_name || transfer?.dealerName}
+                />
             )}
         </div>
     )
