@@ -82,7 +82,8 @@ import {
     getMemberSettlementStatus,
     calculateUpstreamInitialBalance,
     calculateUpstreamCurrentBalance,
-    getUpstreamSettlementStatus
+    getUpstreamSettlementStatus,
+    isRoundFullySettled
 } from '../utils/memberSettlementCalculator'
 
 // RoundAccordionItem is now imported from separate file
@@ -209,6 +210,12 @@ export default function Dealer() {
     const [deletingHistory, setDeletingHistory] = useState(false)
     const [expandedMemberSettlementId, setExpandedMemberSettlementId] = useState(null)
     const [expandedUpstreamSettlementId, setExpandedUpstreamSettlementId] = useState(null)
+    const [settlementOverview, setSettlementOverview] = useState({
+        userHistories: [],
+        memberPayments: [],
+        upstreamPayments: [],
+        transfers: []
+    })
 
     // Fetch details for an expanded history round
     async function fetchHistoryDetails(historyItem) {
@@ -477,6 +484,11 @@ export default function Dealer() {
                 }
             }
         })
+
+        setSettlementOverview(prev => ({
+            ...prev,
+            memberPayments: [...prev.memberPayments, newPayment]
+        }))
     }
 
     async function handleDeleteMemberPayment({ historyItem, paymentId }) {
@@ -506,6 +518,11 @@ export default function Dealer() {
                 }
             }
         })
+
+        setSettlementOverview(prev => ({
+            ...prev,
+            memberPayments: prev.memberPayments.filter(p => p.id !== paymentId)
+        }))
     }
 
     async function handleSaveUpstreamPayment({ historyItem, transfer, paymentData }) {
@@ -556,6 +573,11 @@ export default function Dealer() {
                 }
             }
         })
+
+        setSettlementOverview(prev => ({
+            ...prev,
+            upstreamPayments: [...prev.upstreamPayments, newPayment]
+        }))
     }
 
     async function handleDeleteUpstreamPayment({ historyItem, paymentId }) {
@@ -585,6 +607,11 @@ export default function Dealer() {
                 }
             }
         })
+
+        setSettlementOverview(prev => ({
+            ...prev,
+            upstreamPayments: prev.upstreamPayments.filter(p => p.id !== paymentId)
+        }))
     }
 
     const toggleExpandHistory = (historyItem) => {
@@ -681,6 +708,48 @@ export default function Dealer() {
             profit: 0
         })
     }, [filteredRoundHistory])
+
+    const getRoundSettlementStatus = (history) => {
+        if (!history) return false
+        const targetRoundId = history.round_id || history.id
+        const histDate = history.round_date || (history.close_time ? history.close_time.split('T')[0] : null)
+        const details = historyDetails[history.id]
+
+        let uHist = []
+        let mPay = []
+        let trf = []
+        let upPay = []
+
+        if (details?.loaded) {
+            uHist = details.userHistories || []
+            mPay = details.payments || []
+            trf = details.transfers || []
+            upPay = details.upstreamPayments || []
+        } else {
+            uHist = settlementOverview.userHistories.filter(uh =>
+                (targetRoundId && uh.round_id === targetRoundId) ||
+                (history.round_id && uh.round_id === history.round_id) ||
+                (uh.lottery_type === history.lottery_type && histDate && uh.round_date === histDate)
+            )
+            mPay = settlementOverview.memberPayments.filter(p =>
+                p.round_id === targetRoundId || p.round_id === history.id || (history.round_id && p.round_id === history.round_id)
+            )
+            trf = settlementOverview.transfers.filter(t =>
+                (targetRoundId && t.round_id === targetRoundId) || (history.round_id && t.round_id === history.round_id)
+            )
+            upPay = settlementOverview.upstreamPayments.filter(p =>
+                p.round_id === targetRoundId || p.round_id === history.id || (history.round_id && p.round_id === history.round_id)
+            )
+        }
+
+        return isRoundFullySettled({
+            history,
+            userHistories: uHist,
+            memberPayments: mPay,
+            transfers: trf,
+            upstreamPayments: upPay
+        })
+    }
     const [upstreamDealers, setUpstreamDealers] = useState([])
     const [loadingUpstream, setLoadingUpstream] = useState(false)
     const [downstreamDealers, setDownstreamDealers] = useState([]) // Dealers who send bets TO us
@@ -1443,6 +1512,42 @@ export default function Dealer() {
             })
 
             setRoundHistory(combinedHistory)
+
+            // 3. Fetch settlement overview data to calculate settled status for all history rounds
+            const [
+                { data: allUserHistories },
+                { data: allMemberPayments },
+                { data: allUpstreamPayments },
+                { data: allTransfers }
+            ] = await Promise.all([
+                supabase
+                    .from('user_round_history')
+                    .select('round_id, user_id, total_amount, total_commission, total_winnings, lottery_type, round_date')
+                    .eq('dealer_id', user.id)
+                    .limit(5000),
+                supabase
+                    .from('member_round_payments')
+                    .select('round_id, user_id, amount, direction')
+                    .eq('dealer_id', user.id)
+                    .limit(5000),
+                supabase
+                    .from('upstream_round_payments')
+                    .select('round_id, upstream_dealer_name, amount, direction')
+                    .eq('dealer_id', user.id)
+                    .limit(5000),
+                supabase
+                    .from('bet_transfers')
+                    .select('round_id, upstream_dealer_id, target_dealer_name, amount, winnings, lottery_type, bet_type, upstream_dealer:upstream_dealer_id(full_name)')
+                    .eq('dealer_id', user.id)
+                    .limit(5000)
+            ])
+
+            setSettlementOverview({
+                userHistories: allUserHistories || [],
+                memberPayments: allMemberPayments || [],
+                upstreamPayments: allUpstreamPayments || [],
+                transfers: allTransfers || []
+            })
         } catch (error) {
             console.error('Error fetching round history:', error)
         } finally {
@@ -3145,13 +3250,39 @@ export default function Dealer() {
 
                                                          const hOutProfit = -hOutAmt + hOutComm + hOutWin
                                                          const cardProfit = hInProfit + hOutProfit
+                                                         const isSettled = getRoundSettlementStatus(history)
+                                                         const hasActivity = (Number(history.total_entries || 0) > 0) || (Number(history.total_amount || 0) > 0) || (Number(history.transferred_amount || 0) > 0)
                                                         return (
-                                                            <div key={history.id} className={`round-accordion-item ${history.lottery_type}`} style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
+                                                            <div 
+                                                                key={history.id} 
+                                                                className={`round-accordion-item ${history.lottery_type} ${isSettled ? 'settled-round' : ''}`} 
+                                                                style={{ 
+                                                                    borderRadius: '10px', 
+                                                                    overflow: 'hidden', 
+                                                                    border: isSettled ? '1px solid rgba(16, 185, 129, 0.45)' : '1px solid var(--color-border)', 
+                                                                    borderLeft: isSettled ? '4px solid #10b981' : undefined,
+                                                                    background: isSettled ? 'rgba(6, 78, 59, 0.12)' : 'var(--color-surface)',
+                                                                    boxShadow: isSettled ? '0 4px 18px -4px rgba(16, 185, 129, 0.18)' : undefined,
+                                                                    transition: 'all 0.25s ease'
+                                                                }}
+                                                            >
                                                                 {/* Accordion Header - Clickable */}
                                                                 <div 
-                                                                    className="round-accordion-header" 
+                                                                    className={`round-accordion-header ${isSettled ? 'settled-header' : ''}`} 
                                                                     onClick={() => toggleExpandHistory(history)}
-                                                                    style={{ cursor: 'pointer', padding: '0.85rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}
+                                                                    style={{ 
+                                                                        cursor: 'pointer', 
+                                                                        padding: '0.85rem 1rem', 
+                                                                        display: 'flex', 
+                                                                        alignItems: 'center', 
+                                                                        justifyContent: 'space-between', 
+                                                                        flexWrap: 'wrap', 
+                                                                        gap: '0.75rem',
+                                                                        background: isSettled 
+                                                                            ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(6, 78, 59, 0.22) 100%)' 
+                                                                            : undefined,
+                                                                        borderBottom: isSettled && isExpanded ? '1px solid rgba(16, 185, 129, 0.25)' : undefined
+                                                                    }}
                                                                 >
                                                                     <div className="round-info" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                                                         <span style={{ color: 'var(--color-text-muted)', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-flex' }}>
@@ -3192,6 +3323,22 @@ export default function Dealer() {
                                                                             <span className="round-date" style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginLeft: '0.5rem' }}>
                                                                                 <FiCalendar /> {formatDate(history.close_time || history.round_date)}
                                                                             </span>
+                                                                            {isSettled ? (
+                                                                                <span 
+                                                                                    className="settled-status-badge settled" 
+                                                                                    title="งวดนี้ยอดคงค้างเป็น 0 ทุกรายการแล้ว (เคลียร์ครบเรียบร้อย)"
+                                                                                >
+                                                                                    <FiCheck size={12} />
+                                                                                    <span>เคลียร์ครบแล้ว</span>
+                                                                                </span>
+                                                                            ) : hasActivity ? (
+                                                                                <span 
+                                                                                    className="settled-status-badge pending" 
+                                                                                    title="งวดนี้ยังมีรายการค้างชำระ"
+                                                                                >
+                                                                                    <span>มียอดค้าง</span>
+                                                                                </span>
+                                                                            ) : null}
                                                                         </div>
                                                                     </div>
                                                                     <div className="history-stats" style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>

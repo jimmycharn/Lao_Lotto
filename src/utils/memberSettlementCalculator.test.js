@@ -7,7 +7,8 @@ import {
     calculateUpstreamInitialBalance,
     calculateUpstreamCurrentBalance,
     getUpstreamSettlementStatus,
-    getUpstreamPaymentPresetAmount
+    getUpstreamPaymentPresetAmount,
+    isRoundFullySettled
 } from './memberSettlementCalculator'
 
 describe('memberSettlementCalculator', () => {
@@ -158,6 +159,88 @@ describe('upstreamSettlementCalculator', () => {
         // If 1000 prize already collected
         const pPrize = [{ payment_type: 'prize_collection', amount: 1000 }]
         expect(getUpstreamPaymentPresetAmount(t, pPrize, 'prize_collection')).toBe(1000)
+    })
+})
+
+describe('isRoundFullySettled', () => {
+    it('returns false for empty round with no activity', () => {
+        expect(isRoundFullySettled({ history: { total_entries: 0, total_amount: 0, transferred_amount: 0 } })).toBe(false)
+        expect(isRoundFullySettled({})).toBe(false)
+    })
+
+    it('returns true when all members and upstream transfers have 0 outstanding balance', () => {
+        const history = {
+            id: 'round-1',
+            total_entries: 10,
+            total_amount: 5000,
+            transferred_amount: 2000
+        }
+        const userHistories = [
+            { user_id: 'u1', total_amount: 3000, total_commission: 600, total_winnings: 0 }, // init: 2400
+            { user_id: 'u2', total_amount: 2000, total_commission: 400, total_winnings: 5000 } // init: -3400
+        ]
+        const memberPayments = [
+            { user_id: 'u1', amount: 2400, direction: 'member_to_dealer' },
+            { user_id: 'u2', amount: 3400, direction: 'dealer_to_member' }
+        ]
+        const transfers = [
+            { dealerName: 'DealerA', amount: 2000, commission_earned: 500, winnings: 0 } // init: 1500
+        ]
+        const upstreamPayments = [
+            { upstream_dealer_name: 'DealerA', amount: 1500, direction: 'dealer_to_upstream' }
+        ]
+
+        expect(isRoundFullySettled({
+            history,
+            userHistories,
+            memberPayments,
+            transfers,
+            upstreamPayments
+        })).toBe(true)
+    })
+
+    it('returns false if any member has an outstanding balance', () => {
+        const history = {
+            id: 'round-1',
+            total_entries: 5,
+            total_amount: 3000,
+            transferred_amount: 0
+        }
+        const userHistories = [
+            { user_id: 'u1', total_amount: 3000, total_commission: 600, total_winnings: 0 } // init: 2400
+        ]
+        // Member only paid 2000, 400 still pending
+        const memberPayments = [
+            { user_id: 'u1', amount: 2000, direction: 'member_to_dealer' }
+        ]
+
+        expect(isRoundFullySettled({
+            history,
+            userHistories,
+            memberPayments
+        })).toBe(false)
+    })
+
+    it('returns false if upstream dealer has an outstanding balance', () => {
+        const history = {
+            id: 'round-1',
+            total_entries: 2,
+            total_amount: 1000,
+            transferred_amount: 8600
+        }
+        const userHistories = [
+            { user_id: 'u1', total_amount: 1000, total_commission: 200, total_winnings: 800 } // balance 0
+        ]
+        const transfers = [
+            { dealerName: 'UpstreamX', amount: 8600, commission_earned: 2570, winnings: 0 } // init: 6030
+        ]
+        // No upstream payments recorded yet
+        expect(isRoundFullySettled({
+            history,
+            userHistories,
+            transfers,
+            upstreamPayments: []
+        })).toBe(false)
     })
 })
 

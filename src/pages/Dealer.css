@@ -1813,6 +1813,51 @@
     background: rgba(255, 255, 255, 0.05);
 }
 
+/* ==========================================================================
+   Settled History Round Card - Soothing Emerald Green Theme
+   ========================================================================== */
+.dealer-page .round-accordion-item.settled-round {
+    border-color: rgba(16, 185, 129, 0.45) !important;
+    border-left: 4px solid #10b981 !important;
+    background: rgba(6, 78, 59, 0.12) !important;
+    box-shadow: 0 4px 18px -4px rgba(16, 185, 129, 0.18) !important;
+}
+
+.dealer-page .round-accordion-item.settled-round .round-accordion-header,
+.dealer-page .round-accordion-header.settled-header {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(6, 78, 59, 0.22) 100%) !important;
+}
+
+.dealer-page .round-accordion-item.settled-round .round-accordion-header:hover,
+.dealer-page .round-accordion-header.settled-header:hover {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.22) 0%, rgba(6, 78, 59, 0.28) 100%) !important;
+}
+
+.dealer-page .settled-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.15rem 0.55rem;
+    border-radius: 9999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    margin-left: 0.5rem;
+    transition: all 0.2s ease;
+}
+
+.dealer-page .settled-status-badge.settled {
+    background: rgba(16, 185, 129, 0.2) !important;
+    color: #34d399 !important;
+    border: 1px solid rgba(16, 185, 129, 0.45) !important;
+    box-shadow: 0 1px 4px rgba(16, 185, 129, 0.15);
+}
+
+.dealer-page .settled-status-badge.pending {
+    background: rgba(245, 158, 11, 0.12) !important;
+    color: #fbbf24 !important;
+    border: 1px solid rgba(245, 158, 11, 0.3) !important;
+}
+
 /* Mobile responsive */
 @media (max-width: 768px) {
     .dealer-page .round-accordion-header {

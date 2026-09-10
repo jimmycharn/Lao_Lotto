@@ -193,3 +193,102 @@ export function getUpstreamPaymentPresetAmount(transfer, payments = [], paymentT
     return Math.abs(current)
 }
 
+/**
+ * Determines whether an entire lottery round is fully settled (no outstanding balances).
+ * A round is fully settled if:
+ * 1. It has activity (total_entries > 0, total_amount > 0, transferred_amount > 0, or non-empty users/transfers).
+ * 2. ALL members in the round have current balance = 0.
+ * 3. ALL upstream layoff transfers in the round have current balance = 0.
+ * If any member or upstream dealer has non-zero debt (|bal| > 0.01), returns false.
+ */
+export function isRoundFullySettled({
+    history,
+    userHistories = [],
+    memberPayments = [],
+    transfers = [],
+    upstreamPayments = []
+} = {}) {
+    if (!history) return false
+
+    const hasActivity = (
+        Number(history?.total_entries || 0) > 0 ||
+        Number(history?.total_amount || 0) > 0 ||
+        Number(history?.transferred_amount || 0) > 0 ||
+        userHistories.length > 0 ||
+        transfers.length > 0
+    )
+
+    if (!hasActivity) return false
+
+    // 1. Check member balances
+    if (userHistories.length > 0) {
+        for (const uh of userHistories) {
+            const mPayments = memberPayments.filter(p => p.user_id === uh.user_id)
+            const comm = uh.total_commission !== undefined && uh.total_commission !== null && Number(uh.total_commission) > 0
+                ? Number(uh.total_commission)
+                : (Number(uh.total_amount || 0) > 0 ? Math.round(Number(uh.total_amount) * 0.20) : 0)
+            const initBal = calculateMemberInitialBalance({ ...uh, total_commission: comm })
+            const currBal = calculateMemberCurrentBalance(initBal, mPayments)
+            if (Math.abs(currBal) > 0.01) {
+                return false
+            }
+        }
+    } else if (Number(history?.total_amount || 0) > 0) {
+        // Round had total amount, but individual user histories are not present
+        return false
+    }
+
+    // 2. Check upstream transfers
+    const groupedMap = {}
+    if (transfers.length > 0) {
+        transfers.forEach(t => {
+            const dName = t.upstream_dealer?.full_name || t.target_dealer_name || t.dealerName || "เจ้ามือ"
+            if (!groupedMap[dName]) {
+                groupedMap[dName] = {
+                    dealerName: dName,
+                    amount: 0,
+                    commission_earned: 0,
+                    winnings: 0
+                }
+            }
+            groupedMap[dName].amount += Number(t.amount || 0)
+            const comm = t.commission_earned !== undefined && t.commission_earned !== null
+                ? Number(t.commission_earned)
+                : Math.round(Number(t.amount || 0) * 0.25)
+            groupedMap[dName].commission_earned += comm
+            groupedMap[dName].winnings += Number(t.winnings || 0)
+        })
+    }
+
+    const outAmt = Number(history?.transferred_amount || 0)
+    const outComm = Number(history?.upstream_commission || 0) > 0
+        ? Number(history.upstream_commission)
+        : Math.round(outAmt * (25 / 120))
+    const outWin = Number(history?.upstream_winnings || 0)
+
+    const effectiveTransfers = Object.values(groupedMap).length > 0
+        ? Object.values(groupedMap)
+        : (outAmt > 0 ? [{
+            dealerName: "เจ้ามือ (สรุปในประวัติ)",
+            amount: outAmt,
+            commission_earned: outComm,
+            winnings: outWin
+        }] : [])
+
+    if (effectiveTransfers.length > 0) {
+        for (const t of effectiveTransfers) {
+            const upstreamName = t.dealerName || "เจ้ามือ"
+            const upPayments = upstreamPayments.filter(p => p.upstream_dealer_name === upstreamName)
+            const initBal = calculateUpstreamInitialBalance(t)
+            const currBal = calculateUpstreamCurrentBalance(initBal, upPayments)
+            if (Math.abs(currBal) > 0.01) {
+                return false
+            }
+        }
+    } else if (outAmt > 0) {
+        return false
+    }
+
+    return true
+}
+
