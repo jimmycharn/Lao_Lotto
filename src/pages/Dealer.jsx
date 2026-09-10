@@ -830,6 +830,100 @@ export default function Dealer() {
         return true
     }
 
+    async function handleSaveMemberCrossRoundOffset(allocations) {
+        if (!allocations) return
+        const { currentRoundPayment, pastRoundPayments } = allocations
+        const recordsToInsert = [
+            currentRoundPayment,
+            ...pastRoundPayments
+        ].filter(r => r && Number(r.amount) > 0)
+
+        if (recordsToInsert.length === 0) return
+
+        const { data: inserted, error } = await supabase
+            .from('member_round_payments')
+            .insert(recordsToInsert)
+            .select()
+
+        if (error) {
+            console.error('Error in member cross-round offset:', error)
+            toast.error('บันทึกหักล้างยอดไม่สำเร็จ: ' + error.message)
+            throw error
+        }
+
+        toast.success(`บันทึกหักล้างยอดข้ามงวดสำเร็จ (${recordsToInsert.length} รายการ)`)
+
+        setHistoryDetails(prev => {
+            let updated = { ...prev }
+            inserted.forEach(rec => {
+                const foundKey = Object.keys(updated).find(k => {
+                    const item = updated[k]
+                    return (item.round_id === rec.round_id || k === rec.round_id || item.id === rec.round_id)
+                })
+                if (foundKey && updated[foundKey]) {
+                    const existing = updated[foundKey].payments || []
+                    updated[foundKey] = {
+                        ...updated[foundKey],
+                        payments: [...existing, rec]
+                    }
+                }
+            })
+            return updated
+        })
+
+        setSettlementOverview(prev => ({
+            ...prev,
+            memberPayments: [...(prev.memberPayments || []), ...inserted]
+        }))
+    }
+
+    async function handleSaveUpstreamCrossRoundOffset(allocations) {
+        if (!allocations) return
+        const { currentRoundPayment, pastRoundPayments } = allocations
+        const recordsToInsert = [
+            currentRoundPayment,
+            ...pastRoundPayments
+        ].filter(r => r && Number(r.amount) > 0)
+
+        if (recordsToInsert.length === 0) return
+
+        const { data: inserted, error } = await supabase
+            .from('upstream_round_payments')
+            .insert(recordsToInsert)
+            .select()
+
+        if (error) {
+            console.error('Error in upstream cross-round offset:', error)
+            toast.error('บันทึกหักล้างยอดไม่สำเร็จ: ' + error.message)
+            throw error
+        }
+
+        toast.success(`บันทึกหักล้างยอดข้ามงวดสำเร็จ (${recordsToInsert.length} รายการ)`)
+
+        setHistoryDetails(prev => {
+            let updated = { ...prev }
+            inserted.forEach(rec => {
+                const foundKey = Object.keys(updated).find(k => {
+                    const item = updated[k]
+                    return (item.round_id === rec.round_id || k === rec.round_id || item.id === rec.round_id)
+                })
+                if (foundKey && updated[foundKey]) {
+                    const existing = updated[foundKey].upstreamPayments || []
+                    updated[foundKey] = {
+                        ...updated[foundKey],
+                        upstreamPayments: [...existing, rec]
+                    }
+                }
+            })
+            return updated
+        })
+
+        setSettlementOverview(prev => ({
+            ...prev,
+            upstreamPayments: [...(prev.upstreamPayments || []), ...inserted]
+        }))
+    }
+
     const toggleExpandHistory = (historyItem) => {
         if (expandedHistoryId === historyItem.id) {
             setExpandedHistoryId(null)
@@ -3962,6 +4056,8 @@ export default function Dealer() {
                                                                                                                                         member={uh}
                                                                                                                                         round={history}
                                                                                                                                         payments={memberPayments}
+                                                                                                                                        settlementOverview={settlementOverview}
+                                                                                                                                        roundHistory={roundHistory}
                                                                                                                                         onSavePayment={(paymentData) => handleSaveMemberPayment({
                                                                                                                                             historyItem: history,
                                                                                                                                             member: uh,
@@ -3976,6 +4072,7 @@ export default function Dealer() {
                                                                                                                                             historyItem: history,
                                                                                                                                             paymentId
                                                                                                                                         })}
+                                                                                                                                        onCrossRoundOffset={handleSaveMemberCrossRoundOffset}
                                                                                                                                         onClose={() => setExpandedMemberSettlementId(null)}
                                                                                                                                     />
                                                                                                                                 </td>
@@ -4082,6 +4179,8 @@ export default function Dealer() {
                                                                                                                                         transfer={t}
                                                                                                                                         round={history}
                                                                                                                                         payments={upstreamPayments}
+                                                                                                                                        settlementOverview={settlementOverview}
+                                                                                                                                        roundHistory={roundHistory}
                                                                                                                                         onSavePayment={(paymentData) => handleSaveUpstreamPayment({
                                                                                                                                             historyItem: history,
                                                                                                                                             transfer: t,
@@ -4096,6 +4195,7 @@ export default function Dealer() {
                                                                                                                                             historyItem: history,
                                                                                                                                             paymentId
                                                                                                                                         })}
+                                                                                                                                        onCrossRoundOffset={handleSaveUpstreamCrossRoundOffset}
                                                                                                                                         onClose={() => setExpandedUpstreamSettlementId(null)}
                                                                                                                                     />
                                                                                                                                 </td>
