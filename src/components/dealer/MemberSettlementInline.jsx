@@ -52,28 +52,6 @@ export default function MemberSettlementInline({
         .filter(p => p.direction === 'dealer_to_member')
         .reduce((sum, p) => sum + Number(p.amount || 0), 0)
 
-    // Open form with prefilled defaults
-    const handleOpenForm = (type = 'net_settlement') => {
-        setPaymentType(type)
-        if (type === 'prize_payout') {
-            setDirection('dealer_to_member')
-            const presetPrize = getPaymentPresetAmount(member, payments, 'prize_payout', 'dealer_to_member')
-            setAmount(presetPrize > 0 ? String(presetPrize) : '')
-        } else {
-            // Net settlement: default direction based on current balance
-            const defDir = currentBalance >= 0 ? 'member_to_dealer' : 'dealer_to_member'
-            setDirection(defDir)
-            const presetNet = Math.abs(currentBalance)
-            setAmount(presetNet > 0 ? String(presetNet) : '')
-        }
-        setShowForm(true)
-    }
-
-    // Quick Settle Modal states
-    const [showQuickSettleModal, setShowQuickSettleModal] = useState(false)
-    const [quickPaidAt, setQuickPaidAt] = useState(() => new Date().toISOString().split('T')[0])
-    const [quickNotes, setQuickNotes] = useState('เคลียร์ยอดครบจำนวน')
-
     const todayStr = new Date().toISOString().split('T')[0]
     const getRoundDateIso = (r) => {
         const raw = r?.round_date || r?.close_time || r?.created_at
@@ -95,6 +73,39 @@ export default function MemberSettlementInline({
         return null
     }
     const roundDateIso = getRoundDateIso(round)
+
+    // Open form with prefilled defaults
+    const handleOpenForm = (type, isTabSwitch = false) => {
+        const targetType = type || (totalWinnings > 0 ? 'prize_payout' : 'net_settlement')
+        setPaymentType(targetType)
+
+        if (!isTabSwitch) {
+            setPaidAt(roundDateIso || todayStr)
+            setNotes('โอนแล้ว')
+        } else {
+            if (!paidAt) setPaidAt(roundDateIso || todayStr)
+            if (!notes) setNotes('โอนแล้ว')
+        }
+
+        if (targetType === 'prize_payout') {
+            setDirection('dealer_to_member')
+            const presetPrize = getPaymentPresetAmount(member, payments, 'prize_payout', 'dealer_to_member')
+            const prizeVal = presetPrize > 0 ? presetPrize : totalWinnings
+            setAmount(prizeVal > 0 ? String(prizeVal) : '')
+        } else {
+            // Net settlement: default direction based on current balance
+            const defDir = currentBalance >= 0 ? 'member_to_dealer' : 'dealer_to_member'
+            setDirection(defDir)
+            const presetNet = Math.abs(currentBalance)
+            setAmount(presetNet > 0 ? String(presetNet) : '')
+        }
+        setShowForm(true)
+    }
+
+    // Quick Settle Modal states
+    const [showQuickSettleModal, setShowQuickSettleModal] = useState(false)
+    const [quickPaidAt, setQuickPaidAt] = useState(() => new Date().toISOString().split('T')[0])
+    const [quickNotes, setQuickNotes] = useState('เคลียร์ยอดครบจำนวน')
 
     // Open Quick full settlement modal
     const handleOpenQuickSettle = () => {
@@ -230,7 +241,7 @@ export default function MemberSettlementInline({
                             if (showForm) {
                                 setShowForm(false)
                             } else {
-                                handleOpenForm('net_settlement')
+                                handleOpenForm()
                             }
                         }}
                     >
@@ -257,7 +268,7 @@ export default function MemberSettlementInline({
                                         color: paymentType === 'net_settlement' ? '#000' : undefined,
                                         fontWeight: paymentType === 'net_settlement' ? 700 : 400
                                     }}
-                                    onClick={() => handleOpenForm('net_settlement')}
+                                    onClick={() => handleOpenForm('net_settlement', true)}
                                 >
                                     เคลียร์ยอดสุทธิ
                                 </button>
@@ -269,7 +280,7 @@ export default function MemberSettlementInline({
                                         color: paymentType === 'prize_payout' ? '#fff' : undefined,
                                         fontWeight: paymentType === 'prize_payout' ? 700 : 400
                                     }}
-                                    onClick={() => handleOpenForm('prize_payout')}
+                                    onClick={() => handleOpenForm('prize_payout', true)}
                                 >
                                     จ่ายเฉพาะเงินรางวัล
                                 </button>
@@ -316,7 +327,7 @@ export default function MemberSettlementInline({
                                 {Math.abs(currentBalance) > 0 && (
                                     <button
                                         type="button"
-                                        className="preset-pill-btn"
+                                        className={`preset-pill-btn ${Number(amount) === Math.abs(currentBalance) ? 'active' : ''}`}
                                         onClick={() => setAmount(String(Math.abs(currentBalance)))}
                                     >
                                         ยอดคงค้าง ฿{Math.abs(currentBalance).toLocaleString()}
@@ -325,7 +336,7 @@ export default function MemberSettlementInline({
                                 {totalWinnings > 0 && (
                                     <button
                                         type="button"
-                                        className="preset-pill-btn"
+                                        className={`preset-pill-btn ${Number(amount) === totalWinnings ? 'active' : ''}`}
                                         onClick={() => setAmount(String(totalWinnings))}
                                     >
                                         เงินรางวัล ฿{totalWinnings.toLocaleString()}
