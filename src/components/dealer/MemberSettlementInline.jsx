@@ -562,7 +562,13 @@ export default function MemberSettlementInline({
             {showQuickSettleModal && typeof document !== 'undefined' && createPortal(
                 <div 
                     className="modal-overlay nested" 
-                    style={{ zIndex: 99999 }}
+                    style={{ 
+                        zIndex: 99999,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '0.75rem'
+                    }}
                     onClick={() => setShowQuickSettleModal(false)}
                 >
                     <div className="modal modal-sm quick-settle-modal" onClick={e => e.stopPropagation()}>
@@ -735,7 +741,13 @@ export default function MemberSettlementInline({
             {editingPayment && typeof document !== 'undefined' && createPortal(
                 <div 
                     className="modal-overlay nested" 
-                    style={{ zIndex: 99999 }}
+                    style={{ 
+                        zIndex: 99999,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '0.75rem'
+                    }}
                     onClick={() => setEditingPayment(null)}
                 >
                     <div className="modal modal-sm quick-settle-modal" onClick={e => e.stopPropagation()}>
@@ -747,160 +759,171 @@ export default function MemberSettlementInline({
                                 <FiX />
                             </button>
                         </div>
-                        <form onSubmit={handleConfirmEditPayment}>
-                            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                {/* Member Info */}
+                        <form onSubmit={handleConfirmEditPayment} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                            <div className="modal-body" style={{ overflowY: 'auto', flex: 1, minHeight: 0, padding: '0.75rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                                {/* Member Info Bar */}
                                 <div style={{
                                     background: 'rgba(0, 0, 0, 0.35)',
                                     border: '1px solid rgba(255, 255, 255, 0.08)',
-                                    borderRadius: '8px',
-                                    padding: '0.65rem 0.85rem',
+                                    borderRadius: '6px',
+                                    padding: '0.45rem 0.75rem',
                                     display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '0.35rem'
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    fontSize: '0.82rem'
                                 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
-                                        <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>สมาชิก:</span>
-                                        <span style={{ fontWeight: 600 }}>{memberName}</span>
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
-                                        <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>ประเภท:</span>
-                                        <span style={{ fontWeight: 600, color: editPaymentType === 'prize_payout' ? 'var(--color-danger)' : 'var(--color-primary)' }}>
-                                            {editPaymentType === 'prize_payout' ? '🏆 จ่ายเงินรางวัล' : 'เคลียร์ยอดสุทธิ'}
-                                        </span>
+                                    <div><span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>สมาชิก: </span><strong>{memberName}</strong></div>
+                                    <div style={{ fontWeight: 600, color: editPaymentType === 'prize_payout' ? 'var(--color-danger)' : 'var(--color-primary)' }}>
+                                        {editPaymentType === 'prize_payout' ? '🏆 จ่ายเงินรางวัล' : 'เคลียร์ยอดสุทธิ'}
                                     </div>
                                 </div>
 
-                                {/* Payment Type Switcher (if winnings > 0) */}
-                                {totalWinnings > 0 && (
-                                    <div className="settlement-form-field">
-                                        <label style={{ fontSize: '0.78rem' }}>ประเภทรายการ</label>
-                                        <div style={{ display: 'flex', gap: '0.35rem' }}>
-                                            <button
-                                                type="button"
-                                                className="preset-pill-btn"
-                                                style={{
-                                                    background: editPaymentType === 'net_settlement' ? 'var(--color-primary)' : undefined,
-                                                    color: editPaymentType === 'net_settlement' ? '#000' : undefined,
-                                                    fontWeight: editPaymentType === 'net_settlement' ? 700 : 400
-                                                }}
-                                                onClick={() => {
-                                                    setEditPaymentType('net_settlement')
-                                                    if (editDirection === 'dealer_to_member' && currentBalance >= 0) {
-                                                        setEditDirection('member_to_dealer')
-                                                    }
-                                                }}
-                                            >
-                                                เคลียร์ยอดสุทธิ
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="preset-pill-btn"
-                                                style={{
-                                                    background: editPaymentType === 'prize_payout' ? 'var(--color-danger)' : undefined,
-                                                    color: editPaymentType === 'prize_payout' ? '#fff' : undefined,
-                                                    fontWeight: editPaymentType === 'prize_payout' ? 700 : 400
-                                                }}
-                                                onClick={() => {
-                                                    setEditPaymentType('prize_payout')
-                                                    setEditDirection('dealer_to_member')
-                                                }}
-                                            >
-                                                จ่ายเฉพาะเงินรางวัล
-                                            </button>
+                                {/* Type & Direction (Compact grid if winnings > 0) */}
+                                {totalWinnings > 0 ? (
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem' }}>
+                                        <div className="settlement-form-field">
+                                            <label style={{ fontSize: '0.78rem' }}>ประเภทรายการ</label>
+                                            <div style={{ display: 'flex', gap: '0.35rem' }}>
+                                                <button
+                                                    type="button"
+                                                    className="preset-pill-btn"
+                                                    style={{
+                                                        background: editPaymentType === 'net_settlement' ? 'var(--color-primary)' : undefined,
+                                                        color: editPaymentType === 'net_settlement' ? '#000' : undefined,
+                                                        fontWeight: editPaymentType === 'net_settlement' ? 700 : 400
+                                                    }}
+                                                    onClick={() => {
+                                                        setEditPaymentType('net_settlement')
+                                                        if (editDirection === 'dealer_to_member' && currentBalance >= 0) {
+                                                            setEditDirection('member_to_dealer')
+                                                        }
+                                                    }}
+                                                >
+                                                    เคลียร์ยอดสุทธิ
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="preset-pill-btn"
+                                                    style={{
+                                                        background: editPaymentType === 'prize_payout' ? 'var(--color-danger)' : undefined,
+                                                        color: editPaymentType === 'prize_payout' ? '#fff' : undefined,
+                                                        fontWeight: editPaymentType === 'prize_payout' ? 700 : 400
+                                                    }}
+                                                    onClick={() => {
+                                                        setEditPaymentType('prize_payout')
+                                                        setEditDirection('dealer_to_member')
+                                                    }}
+                                                >
+                                                    จ่ายเฉพาะเงินรางวัล
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
 
-                                {/* Direction selector */}
-                                {editPaymentType === 'net_settlement' ? (
+                                        {editPaymentType === 'net_settlement' ? (
+                                            <div className="settlement-form-field">
+                                                <label style={{ fontSize: '0.78rem' }}>ทิศทางการเงิน</label>
+                                                <select
+                                                    value={editDirection}
+                                                    onChange={(e) => setEditDirection(e.target.value)}
+                                                    style={{ padding: '0.38rem 0.55rem', fontSize: '0.82rem' }}
+                                                >
+                                                    <option value="member_to_dealer">🟢 คนส่งจ่ายเจ้ามือ (รับชำระ)</option>
+                                                    <option value="dealer_to_member">🔴 เจ้ามือจ่ายคนส่ง (เคลียร์ยอด)</option>
+                                                </select>
+                                            </div>
+                                        ) : (
+                                            <div className="settlement-form-field">
+                                                <label style={{ fontSize: '0.78rem' }}>ทิศทางการเงิน</label>
+                                                <div style={{ fontSize: '0.82rem', color: 'var(--color-danger)', fontWeight: 600, paddingTop: '0.3rem' }}>
+                                                    🔴 เจ้ามือจ่ายคนส่ง (เงินรางวัล)
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
                                     <div className="settlement-form-field">
                                         <label style={{ fontSize: '0.78rem' }}>ทิศทางการเงิน</label>
                                         <select
                                             value={editDirection}
                                             onChange={(e) => setEditDirection(e.target.value)}
-                                            style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
+                                            style={{ padding: '0.38rem 0.55rem', fontSize: '0.82rem' }}
                                         >
-                                            <option value="member_to_dealer">🟢 คนส่งเลขจ่ายให้เจ้ามือ (รับชำระ)</option>
-                                            <option value="dealer_to_member">🔴 เจ้ามือจ่ายให้คนส่งเลข (เคลียร์ยอด)</option>
+                                            <option value="member_to_dealer">🟢 คนส่งจ่ายเจ้ามือ (รับชำระ)</option>
+                                            <option value="dealer_to_member">🔴 เจ้ามือจ่ายคนส่ง (เคลียร์ยอด)</option>
                                         </select>
-                                    </div>
-                                ) : (
-                                    <div className="settlement-form-field">
-                                        <label style={{ fontSize: '0.78rem' }}>ทิศทางการเงิน</label>
-                                        <div style={{ fontSize: '0.85rem', color: 'var(--color-danger)', fontWeight: 600 }}>
-                                            🔴 เจ้ามือจ่ายให้คนส่ง (เงินรางวัล)
-                                        </div>
                                     </div>
                                 )}
 
-                                {/* Amount */}
-                                <div className="settlement-form-field">
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
-                                        <FiDollarSign /> จำนวนเงิน (บาท) *
-                                    </label>
-                                    <input
-                                        type="number"
-                                        min="0.01"
-                                        step="any"
-                                        required
-                                        placeholder="0.00"
-                                        value={editAmount}
-                                        onChange={(e) => setEditAmount(e.target.value)}
-                                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
-                                    />
-                                    <div className="settlement-presets">
-                                        {Math.abs(currentBalance) > 0 && (
-                                            <button
-                                                type="button"
-                                                className={`preset-pill-btn ${Number(editAmount) === Math.abs(currentBalance) ? 'active' : ''}`}
-                                                onClick={() => setEditAmount(String(Math.abs(currentBalance)))}
-                                            >
-                                                ยอดคงค้าง ฿{Math.abs(currentBalance).toLocaleString()}
-                                            </button>
-                                        )}
-                                        {totalWinnings > 0 && (
-                                            <button
-                                                type="button"
-                                                className={`preset-pill-btn ${Number(editAmount) === totalWinnings ? 'active' : ''}`}
-                                                onClick={() => setEditAmount(String(totalWinnings))}
-                                            >
-                                                เงินรางวัล ฿{totalWinnings.toLocaleString()}
-                                            </button>
-                                        )}
+                                {/* Amount & Date (2-column grid) */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem' }}>
+                                    {/* Amount */}
+                                    <div className="settlement-form-field">
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
+                                            <FiDollarSign /> จำนวนเงิน (บาท) *
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="0.01"
+                                            step="any"
+                                            required
+                                            placeholder="0.00"
+                                            value={editAmount}
+                                            onChange={(e) => setEditAmount(e.target.value)}
+                                            style={{ padding: '0.38rem 0.55rem', fontSize: '0.85rem' }}
+                                        />
+                                        <div className="settlement-presets">
+                                            {Math.abs(currentBalance) > 0 && (
+                                                <button
+                                                    type="button"
+                                                    className={`preset-pill-btn ${Number(editAmount) === Math.abs(currentBalance) ? 'active' : ''}`}
+                                                    onClick={() => setEditAmount(String(Math.abs(currentBalance)))}
+                                                >
+                                                    ยอดคงค้าง ฿{Math.abs(currentBalance).toLocaleString()}
+                                                </button>
+                                            )}
+                                            {totalWinnings > 0 && (
+                                                <button
+                                                    type="button"
+                                                    className={`preset-pill-btn ${Number(editAmount) === totalWinnings ? 'active' : ''}`}
+                                                    onClick={() => setEditAmount(String(totalWinnings))}
+                                                >
+                                                    เงินรางวัล ฿{totalWinnings.toLocaleString()}
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
 
-                                {/* Date */}
-                                <div className="settlement-form-field">
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
-                                        <FiCalendar /> วันที่ชำระ
-                                    </label>
-                                    <input
-                                        type="date"
-                                        value={editPaidAt}
-                                        onChange={(e) => setEditPaidAt(e.target.value)}
-                                        required
-                                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
-                                    />
-                                    <div className="settlement-presets">
-                                        <button
-                                            type="button"
-                                            className={`preset-pill-btn ${editPaidAt === todayStr ? 'active' : ''}`}
-                                            onClick={() => setEditPaidAt(todayStr)}
-                                        >
-                                            วันนี้
-                                        </button>
-                                        {roundDateIso && (
+                                    {/* Date */}
+                                    <div className="settlement-form-field">
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
+                                            <FiCalendar /> วันที่ชำระ
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={editPaidAt}
+                                            onChange={(e) => setEditPaidAt(e.target.value)}
+                                            required
+                                            style={{ padding: '0.38rem 0.55rem', fontSize: '0.85rem' }}
+                                        />
+                                        <div className="settlement-presets">
                                             <button
                                                 type="button"
-                                                className={`preset-pill-btn ${editPaidAt === roundDateIso ? 'active' : ''}`}
-                                                onClick={() => setEditPaidAt(roundDateIso)}
-                                                title={`วันที่งวดหวย (${roundDateIso})`}
+                                                className={`preset-pill-btn ${editPaidAt === todayStr ? 'active' : ''}`}
+                                                onClick={() => setEditPaidAt(todayStr)}
                                             >
-                                                วันที่งวดหวย
+                                                วันนี้
                                             </button>
-                                        )}
+                                            {roundDateIso && (
+                                                <button
+                                                    type="button"
+                                                    className={`preset-pill-btn ${editPaidAt === roundDateIso ? 'active' : ''}`}
+                                                    onClick={() => setEditPaidAt(roundDateIso)}
+                                                    title={`วันที่งวดหวย (${roundDateIso})`}
+                                                >
+                                                    วันที่งวดหวย
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -914,7 +937,7 @@ export default function MemberSettlementInline({
                                         placeholder="เช่น โอน SCB, เงินสด"
                                         value={editNotes}
                                         onChange={(e) => setEditNotes(e.target.value)}
-                                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
+                                        style={{ padding: '0.38rem 0.55rem', fontSize: '0.85rem' }}
                                     />
                                     <div className="settlement-presets">
                                         <button
@@ -946,9 +969,10 @@ export default function MemberSettlementInline({
                                 display: 'flex', 
                                 justifyContent: 'flex-end', 
                                 gap: '0.5rem', 
-                                padding: '0.75rem 1.15rem', 
+                                padding: '0.65rem 1.15rem', 
                                 borderTop: '1px solid rgba(255,255,255,0.08)',
-                                background: 'rgba(0,0,0,0.2)' 
+                                background: 'rgba(0,0,0,0.25)',
+                                flexShrink: 0
                             }}>
                                 <button
                                     type="button"

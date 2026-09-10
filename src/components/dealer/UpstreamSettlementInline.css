@@ -176,7 +176,8 @@
     margin-top: 0.3rem;
 }
 
-.upstream-preset-pill-btn {
+.upstream-preset-pill-btn,
+.preset-pill-btn {
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.12);
     color: var(--color-text-muted, #94a3b8);
@@ -187,13 +188,15 @@
     transition: all 0.15s;
 }
 
-.upstream-preset-pill-btn:hover {
+.upstream-preset-pill-btn:hover,
+.preset-pill-btn:hover {
     background: rgba(250, 204, 21, 0.15);
     color: #facc15;
     border-color: rgba(250, 204, 21, 0.4);
 }
 
-.upstream-preset-pill-btn.active {
+.upstream-preset-pill-btn.active,
+.preset-pill-btn.active {
     background: rgba(250, 204, 21, 0.2);
     color: #facc15;
     border-color: #facc15;
@@ -299,20 +302,29 @@
     }
 }
 
-/* Quick Settle Confirmation Modal */
+/* Quick Settle Confirmation & Edit Modal */
 .upstream-quick-settle-modal {
     background: #0f172a;
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 12px;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 10px 20px -5px rgba(0, 0, 0, 0.5);
     color: #f8fafc;
-    width: 90%;
-    max-width: 440px;
-    max-height: min(90vh, 560px);
+    width: 95%;
+    max-width: 480px;
+    max-height: min(88vh, 560px);
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    margin: auto;
     animation: quickModalFadeIn 0.2s ease-out;
+}
+
+.upstream-quick-settle-modal form {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
 }
 
 @keyframes quickModalFadeIn {
@@ -363,9 +375,32 @@
 }
 
 .upstream-quick-settle-modal .modal-body {
-    padding: 0.9rem 1.15rem;
+    padding: 0.8rem 1.15rem;
     overflow-y: auto;
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.6rem;
+}
+
+.upstream-quick-settle-modal .modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.upstream-quick-settle-modal .modal-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.upstream-quick-settle-modal .modal-body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+}
+
+.upstream-quick-settle-modal .modal-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.upstream-quick-settle-modal .modal-footer {
+    flex-shrink: 0;
 }
