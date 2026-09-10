@@ -1887,6 +1887,30 @@
     .round-meta span {
         font-size: 0.8rem;
     }
+
+    .dealer-page .history-stats-column {
+        width: 100%;
+        align-items: flex-start !important;
+        padding-top: 0.4rem;
+        border-top: 1px dashed rgba(255, 255, 255, 0.08);
+    }
+}
+
+/* History Header Stats & Outstanding Badge */
+.dealer-page .history-stats-column {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.35rem;
+}
+
+.dealer-page .history-outstanding-badge {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    user-select: none;
+}
+
+.dealer-page .history-outstanding-badge:hover {
+    transform: scale(1.02);
 }
 
 /* Header summary display */

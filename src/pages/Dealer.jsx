@@ -84,6 +84,7 @@ import {
     calculateUpstreamCurrentBalance,
     getUpstreamSettlementStatus,
     calculateTransferCommission,
+    calculateRoundOutstandingDetails,
     isRoundFullySettled
 } from '../utils/memberSettlementCalculator'
 
@@ -283,6 +284,30 @@ export default function Dealer() {
         upstreamPayments: [],
         transfers: []
     })
+    const [upstreamDealers, setUpstreamDealers] = useState([])
+    const [loadingUpstream, setLoadingUpstream] = useState(false)
+
+    const upstreamSettingsMap = useMemo(() => {
+        const map = {}
+        if (!upstreamDealers || upstreamDealers.length === 0) return map
+        upstreamDealers.forEach(d => {
+            if (!d) return
+            const settings = d.lottery_settings
+            if (settings) {
+                if (d.upstream_name) {
+                    map[d.upstream_name.trim()] = settings
+                    map[d.upstream_name] = settings
+                }
+                if (d.upstream_dealer_id) map[d.upstream_dealer_id] = settings
+                if (d.id) map[d.id] = settings
+                if (d.upstream_profile?.full_name) {
+                    map[d.upstream_profile.full_name.trim()] = settings
+                    map[d.upstream_profile.full_name] = settings
+                }
+            }
+        })
+        return map
+    }, [upstreamDealers])
 
     // Fetch details for an expanded history round
     async function fetchHistoryDetails(historyItem) {
@@ -391,9 +416,31 @@ export default function Dealer() {
                     .select('*, upstream_dealer:upstream_dealer_id(full_name, email, phone)')
                     .eq('round_id', historyItem.round_id)
                 if (transData) {
+                    let activeSettings = upstreamSettingsMap
+                    if (Object.keys(activeSettings).length === 0) {
+                        const { data: directUpstream } = await supabase
+                            .from('dealer_upstream_connections')
+                            .select('*')
+                            .eq('dealer_id', user.id)
+                        if (directUpstream && directUpstream.length > 0) {
+                            const fallbackMap = {}
+                            directUpstream.forEach(d => {
+                                if (d.lottery_settings) {
+                                    if (d.upstream_name) {
+                                        fallbackMap[d.upstream_name.trim()] = d.lottery_settings
+                                        fallbackMap[d.upstream_name] = d.lottery_settings
+                                    }
+                                    if (d.upstream_dealer_id) fallbackMap[d.upstream_dealer_id] = d.lottery_settings
+                                    if (d.id) fallbackMap[d.id] = d.lottery_settings
+                                }
+                            })
+                            activeSettings = fallbackMap
+                        }
+                    }
+
                     transfers = transData.map(t => ({
                         ...t,
-                        commission_earned: calculateTransferCommission(t),
+                        commission_earned: calculateTransferCommission(t, 120, activeSettings, historyItem.lottery_type),
                         winnings: t.winnings || 0
                     }))
                 }
@@ -746,9 +793,25 @@ export default function Dealer() {
             const inPay = h.total_payout || 0
             const inProfit = inAmt - inComm - inPay
 
-            const outAmt = h.transferred_amount || 0
-            const outComm = Number(h.upstream_commission || 0) > 0 ? Number(h.upstream_commission) : Math.round(outAmt * (25 / 120))
-            const outWin = h.upstream_winnings || 0
+            let outAmt = h.transferred_amount || 0
+            let outComm = Number(h.upstream_commission || 0) > 0 ? Number(h.upstream_commission) : 0
+            let outWin = h.upstream_winnings || 0
+
+            // If history record had 0 transferred_amount, check if there are transfers in settlementOverview
+            if (outAmt === 0 && settlementOverview?.transfers?.length > 0) {
+                const roundTransfers = settlementOverview.transfers.filter(t =>
+                    (h.round_id && String(t.round_id) === String(h.round_id)) ||
+                    (h.id && String(t.round_id) === String(h.id))
+                )
+                if (roundTransfers.length > 0) {
+                    outAmt = roundTransfers.reduce((sum, t) => sum + (t.amount || 0), 0)
+                    outComm = roundTransfers.reduce((sum, t) => sum + calculateTransferCommission(t, 120, upstreamSettingsMap, h.lottery_type), 0)
+                    outWin = roundTransfers.reduce((sum, t) => sum + (t.winnings || 0), 0)
+                }
+            } else if (!outComm && outAmt > 0) {
+                outComm = Math.round(outAmt * (25 / 120))
+            }
+
             const outProfit = -outAmt + outComm + outWin
 
             acc.total_amount += inAmt
@@ -774,10 +837,18 @@ export default function Dealer() {
             outgoing_profit: 0,
             profit: 0
         })
-    }, [filteredRoundHistory])
+    }, [filteredRoundHistory, settlementOverview, upstreamSettingsMap])
 
-    const getRoundSettlementStatus = (history) => {
-        if (!history) return false
+    const getRoundSettlementDetails = (history) => {
+        if (!history) return {
+            isSettled: false,
+            netOutstanding: 0,
+            memberOwesDealer: 0,
+            dealerOwesMember: 0,
+            dealerOwesUpstream: 0,
+            upstreamOwesDealer: 0,
+            hasActivity: false
+        }
         const targetRoundId = history.round_id || history.id
         const histDate = (history.round_date ? String(history.round_date).split('T')[0] : null) || 
                          (history.close_time ? String(history.close_time).split('T')[0] : null)
@@ -793,25 +864,28 @@ export default function Dealer() {
             mPay = details.payments || []
             trf = details.transfers || []
             upPay = details.upstreamPayments || []
-        } else {
-            // First match userHistories by round_id
+        }
+
+        // Fallback to settlementOverview if not loaded or empty
+        if (uHist.length === 0) {
             if (targetRoundId || history.round_id || history.id) {
                 uHist = settlementOverview.userHistories.filter(uh =>
-                    (targetRoundId && uh.round_id === targetRoundId) ||
-                    (history.round_id && uh.round_id === history.round_id) ||
-                    (history.id && uh.round_id === history.id)
+                    (targetRoundId && String(uh.round_id) === String(targetRoundId)) ||
+                    (history.round_id && String(uh.round_id) === String(history.round_id)) ||
+                    (history.id && String(uh.round_id) === String(history.id))
                 )
             }
-            // Fallback to lottery_type + round_date only if no records matched by round_id
             if (uHist.length === 0 && histDate) {
                 uHist = settlementOverview.userHistories.filter(uh =>
                     uh.lottery_type === history.lottery_type && 
                     (uh.round_date ? String(uh.round_date).split('T')[0] : null) === histDate
                 )
             }
+        }
 
+        if (mPay.length === 0) {
             mPay = settlementOverview.memberPayments.filter(p =>
-                p.round_id === targetRoundId || p.round_id === history.id || (history.round_id && p.round_id === history.round_id)
+                String(p.round_id) === String(targetRoundId) || String(p.round_id) === String(history.id) || (history.round_id && String(p.round_id) === String(history.round_id))
             )
             if (mPay.length === 0 && histDate) {
                 mPay = settlementOverview.memberPayments.filter(p =>
@@ -819,15 +893,19 @@ export default function Dealer() {
                     (p.round_date ? String(p.round_date).split('T')[0] : null) === histDate
                 )
             }
+        }
 
+        if (trf.length === 0) {
             trf = settlementOverview.transfers.filter(t =>
-                (targetRoundId && t.round_id === targetRoundId) || 
-                (history.round_id && t.round_id === history.round_id) ||
-                (history.id && t.round_id === history.id)
+                (targetRoundId && String(t.round_id) === String(targetRoundId)) || 
+                (history.round_id && String(t.round_id) === String(history.round_id)) ||
+                (history.id && String(t.round_id) === String(history.id))
             )
+        }
 
+        if (upPay.length === 0) {
             upPay = settlementOverview.upstreamPayments.filter(p =>
-                p.round_id === targetRoundId || p.round_id === history.id || (history.round_id && p.round_id === history.round_id)
+                String(p.round_id) === String(targetRoundId) || String(p.round_id) === String(history.id) || (history.round_id && String(p.round_id) === String(history.round_id))
             )
             if (upPay.length === 0 && histDate) {
                 upPay = settlementOverview.upstreamPayments.filter(p =>
@@ -837,16 +915,17 @@ export default function Dealer() {
             }
         }
 
-        return isRoundFullySettled({
+        return calculateRoundOutstandingDetails({
             history,
             userHistories: uHist,
             memberPayments: mPay,
             transfers: trf,
-            upstreamPayments: upPay
+            upstreamPayments: upPay,
+            upstreamSettings: upstreamSettingsMap
         })
     }
-    const [upstreamDealers, setUpstreamDealers] = useState([])
-    const [loadingUpstream, setLoadingUpstream] = useState(false)
+
+    const getRoundSettlementStatus = (history) => getRoundSettlementDetails(history).isSettled
     const [downstreamDealers, setDownstreamDealers] = useState([]) // Dealers who send bets TO us
     const [memberTypeFilter, setMemberTypeFilter] = useState('all') // 'all' | 'member' | 'dealer'
     const [memberSearchQuery, setMemberSearchQuery] = useState('')
@@ -1541,6 +1620,28 @@ export default function Dealer() {
                 dealerUserSettings.forEach(s => { userSettingsMap[s.user_id] = s })
             }
 
+            let activeUpstreamSettings = upstreamSettingsMap
+            if (Object.keys(activeUpstreamSettings).length === 0) {
+                const { data: directUpstream } = await supabase
+                    .from('dealer_upstream_connections')
+                    .select('*')
+                    .eq('dealer_id', user.id)
+                if (directUpstream && directUpstream.length > 0) {
+                    const fallbackMap = {}
+                    directUpstream.forEach(d => {
+                        if (d.lottery_settings) {
+                            if (d.upstream_name) {
+                                fallbackMap[d.upstream_name.trim()] = d.lottery_settings
+                                fallbackMap[d.upstream_name] = d.lottery_settings
+                            }
+                            if (d.upstream_dealer_id) fallbackMap[d.upstream_dealer_id] = d.lottery_settings
+                            if (d.id) fallbackMap[d.id] = d.lottery_settings
+                        }
+                    })
+                    activeUpstreamSettings = fallbackMap
+                }
+            }
+
             const activeHistoryItems = []
             const activeRoundUserHistories = []
             const activeRoundTransfers = []
@@ -1562,13 +1663,13 @@ export default function Dealer() {
                     // Fetch transfers for this active closed round
                     const { data: transfers } = await supabase
                         .from('bet_transfers')
-                        .select('id, round_id, upstream_dealer_id, target_dealer_name, amount, winnings, bet_type, upstream_dealer:upstream_dealer_id(full_name)')
+                        .select('*, upstream_dealer:upstream_dealer_id(full_name)')
                         .eq('round_id', round.id)
 
                     if (transfers && transfers.length > 0) {
                         activeRoundTransfers.push(...transfers.map(t => ({
                             ...t,
-                            commission_earned: calculateTransferCommission(t),
+                            commission_earned: calculateTransferCommission(t, 120, activeUpstreamSettings, round.lottery_type),
                             winnings: Number(t.winnings || 0)
                         })))
                     }
@@ -1608,7 +1709,7 @@ export default function Dealer() {
                     }
 
                     const transferredAmount = transfers?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0
-                    const upstreamCommission = transfers?.reduce((sum, t) => sum + calculateTransferCommission(t), 0) || 0
+                    const upstreamCommission = transfers?.reduce((sum, t) => sum + calculateTransferCommission(t, 120, activeUpstreamSettings, round.lottery_type), 0) || 0
                     const upstreamWinnings = transfers?.reduce((sum, t) => sum + (t.winnings || 0), 0) || 0
 
                     const memberProfit = totalAmount - totalCommission - totalPayout
@@ -1665,7 +1766,7 @@ export default function Dealer() {
             setRoundHistory(combinedHistory)
 
             // 3. Fetch settlement overview data to calculate settled status for all history rounds
-            const allRoundIds = Array.from(new Set(combinedHistory.map(h => h.round_id || h.id).filter(Boolean)))
+            const allRoundIds = Array.from(new Set(combinedHistory.flatMap(h => [h.round_id, h.id]).filter(Boolean)))
 
             let fetchedTransfers = []
             if (allRoundIds.length > 0) {
@@ -1674,7 +1775,7 @@ export default function Dealer() {
                     const chunk = allRoundIds.slice(i, i + chunkSize)
                     const { data: chunkTransfers, error: transErr } = await supabase
                         .from('bet_transfers')
-                        .select('id, round_id, upstream_dealer_id, target_dealer_name, amount, winnings, bet_type, upstream_dealer:upstream_dealer_id(full_name)')
+                        .select('*, upstream_dealer:upstream_dealer_id(full_name)')
                         .in('round_id', chunk)
                     if (transErr) {
                         console.error('Error fetching bet_transfers for history overview:', transErr)
@@ -1711,15 +1812,22 @@ export default function Dealer() {
             if (upErr) console.error('Error fetching upstream_round_payments overview:', upErr)
 
             // Combine fetched transfers with activeRoundTransfers (deduplicating by transfer id or key)
+            const roundLotteryTypeMap = {}
+            combinedHistory.forEach(h => {
+                if (h.round_id) roundLotteryTypeMap[h.round_id] = h.lottery_type
+                if (h.id) roundLotteryTypeMap[h.id] = h.lottery_type
+            })
+
             const seenTransferKeys = new Set()
             const allTransfersCombined = []
             for (const t of [...activeRoundTransfers, ...fetchedTransfers]) {
                 const key = t.id || `${t.round_id}_${t.amount}_${t.bet_type}_${t.target_dealer_name || ''}`
                 if (!seenTransferKeys.has(key)) {
                     seenTransferKeys.add(key)
+                    const lType = t.lottery_type || roundLotteryTypeMap[t.round_id] || 'thai'
                     allTransfersCombined.push({
                         ...t,
-                        commission_earned: calculateTransferCommission(t),
+                        commission_earned: calculateTransferCommission(t, 120, activeUpstreamSettings, lType),
                         winnings: Number(t.winnings || 0)
                     })
                 }
@@ -2694,7 +2802,7 @@ export default function Dealer() {
                 }, 0) || 0
 
                 const transferredAmount = transfers?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0
-                const upstreamCommission = transfers?.reduce((sum, t) => sum + calculateTransferCommission(t), 0) || 0
+                const upstreamCommission = transfers?.reduce((sum, t) => sum + calculateTransferCommission(t, 120, upstreamSettingsMap, roundData.lottery_type), 0) || 0
                 const upstreamWinnings = transfers?.reduce((sum, t) => sum + (t.winnings || 0), 0) || 0
 
                 const memberProfit = totalAmount - totalCommission - totalPayout
@@ -3405,38 +3513,49 @@ export default function Dealer() {
                                                     {filteredRoundHistory.map(history => {
                                                         const isExpanded = expandedHistoryId === history.id
                                                         const details = historyDetails[history.id]
-                                                         const userHistories = details?.userHistories || []
-                                                         const rawTransfers = details?.transfers || []
+                                                        const userHistories = (details?.userHistories && details.userHistories.length > 0)
+                                                            ? details.userHistories
+                                                            : settlementOverview.userHistories.filter(uh =>
+                                                                (history.round_id && String(uh.round_id) === String(history.round_id)) ||
+                                                                (history.id && String(uh.round_id) === String(history.id))
+                                                            )
+                                                        const rawTransfers = (details?.transfers && details.transfers.length > 0)
+                                                            ? details.transfers
+                                                            : settlementOverview.transfers.filter(t =>
+                                                                (history.round_id && String(t.round_id) === String(history.round_id)) ||
+                                                                (history.id && String(t.round_id) === String(history.id))
+                                                            )
 
-                                                         const hInAmt = history.total_amount || 0
-                                                         let hInComm = history.total_commission || 0
-                                                         let hInPay = history.total_payout || 0
+                                                        const hInAmt = history.total_amount || 0
+                                                        let hInComm = history.total_commission || 0
+                                                        let hInPay = history.total_payout || 0
 
-                                                         if (userHistories.length > 0) {
-                                                             hInComm = userHistories.reduce((sum, u) => sum + (u.total_commission || 0), 0)
-                                                             hInPay = userHistories.reduce((sum, u) => sum + (u.total_winnings || 0), 0)
-                                                         } else if (!hInComm && hInAmt > 0) {
-                                                             hInComm = Math.round(hInAmt * 0.20)
-                                                         }
+                                                        if (userHistories.length > 0) {
+                                                            hInComm = userHistories.reduce((sum, u) => sum + (u.total_commission || 0), 0)
+                                                            hInPay = userHistories.reduce((sum, u) => sum + (u.total_winnings || 0), 0)
+                                                        } else if (!hInComm && hInAmt > 0) {
+                                                            hInComm = Math.round(hInAmt * 0.20)
+                                                        }
 
-                                                         const hInProfit = hInAmt - hInComm - hInPay
+                                                        const hInProfit = hInAmt - hInComm - hInPay
 
-                                                         let hOutAmt = history.transferred_amount || 0
-                                                         let hOutComm = history.upstream_commission || 0
-                                                         let hOutWin = history.upstream_winnings || 0
+                                                        let hOutAmt = history.transferred_amount || 0
+                                                        let hOutComm = history.upstream_commission || 0
+                                                        let hOutWin = history.upstream_winnings || 0
 
-                                                         if (rawTransfers.length > 0) {
-                                                             hOutAmt = rawTransfers.reduce((sum, t) => sum + (t.amount || 0), 0)
-                                                             hOutComm = rawTransfers.reduce((sum, t) => sum + calculateTransferCommission(t), 0)
-                                                             hOutWin = rawTransfers.reduce((sum, t) => sum + (t.winnings || 0), 0)
-                                                         } else if (!hOutComm && hOutAmt > 0) {
-                                                             hOutComm = Number(history.upstream_commission || 0) > 0 ? Number(history.upstream_commission) : Math.round(hOutAmt * (25 / 120))
-                                                         }
+                                                        if (rawTransfers.length > 0) {
+                                                            hOutAmt = rawTransfers.reduce((sum, t) => sum + (t.amount || 0), 0)
+                                                            hOutComm = rawTransfers.reduce((sum, t) => sum + calculateTransferCommission(t, 120, upstreamSettingsMap, history.lottery_type), 0)
+                                                            hOutWin = rawTransfers.reduce((sum, t) => sum + (t.winnings || 0), 0)
+                                                        } else if (!hOutComm && hOutAmt > 0) {
+                                                            hOutComm = Number(history.upstream_commission || 0) > 0 ? Number(history.upstream_commission) : Math.round(hOutAmt * (25 / 120))
+                                                        }
 
-                                                         const hOutProfit = -hOutAmt + hOutComm + hOutWin
-                                                         const cardProfit = hInProfit + hOutProfit
-                                                         const isSettled = getRoundSettlementStatus(history)
-                                                         const hasActivity = (Number(history.total_entries || 0) > 0) || (Number(history.total_amount || 0) > 0) || (Number(history.transferred_amount || 0) > 0)
+                                                        const hOutProfit = -hOutAmt + hOutComm + hOutWin
+                                                        const cardProfit = hInProfit + hOutProfit
+                                                        const settlementDetails = getRoundSettlementDetails(history)
+                                                        const isSettled = settlementDetails.isSettled
+                                                        const hasActivity = settlementDetails.hasActivity || (Number(history.total_entries || 0) > 0) || (Number(history.total_amount || 0) > 0) || (Number(history.transferred_amount || 0) > 0) || (rawTransfers.length > 0)
                                                         return (
                                                             <div 
                                                                 key={history.id} 
@@ -3529,25 +3648,57 @@ export default function Dealer() {
                                                                             {renderHistoryWinningPills(history)}
                                                                         </div>
                                                                     </div>
-                                                                    <div className="history-stats" style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
-                                                                        <div style={{ textAlign: 'center' }}>
-                                                                            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ยอดรวม</div>
-                                                                            <div style={{ fontWeight: '600' }}>฿{history.total_amount?.toLocaleString()}</div>
-                                                                        </div>
-                                                                        <div style={{ textAlign: 'center' }}>
-                                                                            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ค่าคอม</div>
-                                                                            <div style={{ fontWeight: '600' }}>฿{Math.round(hInComm || 0).toLocaleString()}</div>
-                                                                        </div>
-                                                                        <div style={{ textAlign: 'center' }}>
-                                                                            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>จ่าย</div>
-                                                                            <div style={{ fontWeight: '600', color: 'var(--color-danger)' }}>฿{Math.round(hInPay || 0).toLocaleString()}</div>
-                                                                        </div>
-                                                                        <div style={{ textAlign: 'center' }}>
-                                                                            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>กำไร</div>
-                                                                            <div style={{ fontWeight: '600', color: cardProfit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                                                                                {cardProfit >= 0 ? '+' : ''}฿{Math.round(cardProfit).toLocaleString()}
+                                                                    <div className="history-stats-column" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
+                                                                        <div className="history-stats" style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+                                                                            <div style={{ textAlign: 'center' }}>
+                                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ยอดรวม</div>
+                                                                                <div style={{ fontWeight: '600' }}>฿{history.total_amount?.toLocaleString()}</div>
+                                                                            </div>
+                                                                            <div style={{ textAlign: 'center' }}>
+                                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ค่าคอม</div>
+                                                                                <div style={{ fontWeight: '600' }}>฿{Math.round(hInComm || 0).toLocaleString()}</div>
+                                                                            </div>
+                                                                            <div style={{ textAlign: 'center' }}>
+                                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>จ่าย</div>
+                                                                                <div style={{ fontWeight: '600', color: 'var(--color-danger)' }}>฿{Math.round(hInPay || 0).toLocaleString()}</div>
+                                                                            </div>
+                                                                            <div style={{ textAlign: 'center' }}>
+                                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>กำไร</div>
+                                                                                <div style={{ fontWeight: '600', color: cardProfit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                                                                    {cardProfit >= 0 ? '+' : ''}฿{Math.round(cardProfit).toLocaleString()}
+                                                                                </div>
                                                                             </div>
                                                                         </div>
+                                                                        {hasActivity && (
+                                                                            <div 
+                                                                                className="history-outstanding-badge"
+                                                                                title={`ยอดคงค้างสุทธิ:\n• คนส่งค้างเจ้ามือ: +฿${settlementDetails.memberOwesDealer.toLocaleString()}\n• เจ้ามือค้างคนส่ง: -฿${settlementDetails.dealerOwesMember.toLocaleString()}\n• เราค้างเจ้ามือรับตีออก: -฿${settlementDetails.dealerOwesUpstream.toLocaleString()}\n• เจ้ามือรับตีออกค้างเรา: +฿${settlementDetails.upstreamOwesDealer.toLocaleString()}`}
+                                                                                style={{
+                                                                                    display: 'inline-flex',
+                                                                                    alignItems: 'center',
+                                                                                    gap: '0.35rem',
+                                                                                    fontSize: '0.82rem',
+                                                                                    padding: '0.15rem 0.6rem',
+                                                                                    borderRadius: '6px',
+                                                                                    background: isSettled 
+                                                                                        ? 'rgba(16, 185, 129, 0.12)' 
+                                                                                        : (settlementDetails.netOutstanding < 0 ? 'rgba(239, 68, 68, 0.12)' : 'rgba(245, 158, 11, 0.12)'),
+                                                                                    color: isSettled 
+                                                                                        ? 'var(--color-success, #10b981)' 
+                                                                                        : (settlementDetails.netOutstanding < 0 ? 'var(--color-danger, #ef4444)' : 'var(--color-warning, #f59e0b)'),
+                                                                                    border: `1px solid ${isSettled 
+                                                                                        ? 'rgba(16, 185, 129, 0.25)' 
+                                                                                        : (settlementDetails.netOutstanding < 0 ? 'rgba(239, 68, 68, 0.25)' : 'rgba(245, 158, 11, 0.25)')}`
+                                                                                }}
+                                                                            >
+                                                                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem', fontWeight: 500 }}>คงค้าง :</span>
+                                                                                <span style={{ fontWeight: 700 }}>
+                                                                                    {isSettled 
+                                                                                        ? '฿0' 
+                                                                                        : `${settlementDetails.netOutstanding > 0 ? '+' : (settlementDetails.netOutstanding < 0 ? '-' : '')}฿${Math.abs(settlementDetails.netOutstanding).toLocaleString()}`}
+                                                                                </span>
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 </div>
 
@@ -3561,8 +3712,18 @@ export default function Dealer() {
                                                                             </div>
                                                                         ) : (
                                                                             (() => {
-                                                                                const userHistories = details?.userHistories || []
-                                                                                const rawTransfers = details?.transfers || []
+                                                                                const userHistories = (details?.userHistories && details.userHistories.length > 0)
+                                                                                    ? details.userHistories
+                                                                                    : settlementOverview.userHistories.filter(uh =>
+                                                                                        (history.round_id && String(uh.round_id) === String(history.round_id)) ||
+                                                                                        (history.id && String(uh.round_id) === String(history.id))
+                                                                                    )
+                                                                                const rawTransfers = (details?.transfers && details.transfers.length > 0)
+                                                                                    ? details.transfers
+                                                                                    : settlementOverview.transfers.filter(t =>
+                                                                                        (history.round_id && String(t.round_id) === String(history.round_id)) ||
+                                                                                        (history.id && String(t.round_id) === String(history.id))
+                                                                                    )
                                                                                 
                                                                                 const groupedMap = {}
                                                                                 if (rawTransfers.length > 0) {
@@ -3579,7 +3740,7 @@ export default function Dealer() {
                                                                                             }
                                                                                         }
                                                                                         const amt = Number(t.amount || 0)
-                                                                                        const comm = calculateTransferCommission(t)
+                                                                                        const comm = calculateTransferCommission(t, 120, upstreamSettingsMap, history.lottery_type)
                                                                                         const win = Number(t.winnings || 0)
 
                                                                                         groupedMap[dName].entriesCount += 1
@@ -3619,12 +3780,12 @@ export default function Dealer() {
                                                                                                         <thead>
                                                                                                             <tr style={{ borderBottom: "1px solid var(--color-border)", color: "var(--color-text-muted)", textAlign: "left" }}>
                                                                                                                 <th style={{ padding: "0.4rem 0.5rem" }}>สมาชิก</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>จำนวนรายการ</th>
+                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>รายการ</th>
                                                                                                                 <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>ยอดส่ง</th>
                                                                                                                 <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>ค่าคอม</th>
                                                                                                                 <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>ถูกรางวัล</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>กำไรเจ้ามือ</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>สถานะ / ยอดคงค้าง</th>
+                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>กำไร</th>
+                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>คงค้าง</th>
                                                                                                             </tr>
                                                                                                         </thead>
                                                                                                         <tbody>
@@ -3733,12 +3894,12 @@ export default function Dealer() {
                                                                                                         <thead>
                                                                                                             <tr style={{ borderBottom: "1px solid var(--color-border)", color: "var(--color-text-muted)", textAlign: "left" }}>
                                                                                                                 <th style={{ padding: "0.4rem 0.5rem" }}>เจ้ามือรับตีออก</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>จำนวนรายการ</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>ยอดตีออก</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>ค่าคอมได้รับ</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>รับคืนรางวัล</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>กำไรจากการตีออก</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>สถานะ / ยอดคงค้าง</th>
+                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>รายการ</th>
+                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>ตีออก</th>
+                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>ค่าคอม</th>
+                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>ถูกรางวัล</th>
+                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>กำไร</th>
+                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>คงค้าง</th>
                                                                                                             </tr>
                                                                                                         </thead>
                                                                                                         <tbody>

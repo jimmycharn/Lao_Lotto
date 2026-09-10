@@ -8,6 +8,8 @@ import {
     calculateUpstreamCurrentBalance,
     getUpstreamSettlementStatus,
     getUpstreamPaymentPresetAmount,
+    calculateRoundOutstandingDetails,
+    calculateTransferCommission,
     isRoundFullySettled
 } from './memberSettlementCalculator'
 
@@ -302,6 +304,171 @@ describe('isRoundFullySettled', () => {
             transfers: [],
             upstreamPayments
         })).toBe(true)
+    })
+})
+
+describe('calculateRoundOutstandingDetails', () => {
+    it('returns empty details when history is null or has no activity', () => {
+        expect(calculateRoundOutstandingDetails()).toEqual({
+            isSettled: false,
+            netOutstanding: 0,
+            memberOwesDealer: 0,
+            dealerOwesMember: 0,
+            dealerOwesUpstream: 0,
+            upstreamOwesDealer: 0,
+            hasActivity: false
+        })
+
+        expect(calculateRoundOutstandingDetails({
+            history: { total_entries: 0, total_amount: 0, transferred_amount: 0 }
+        })).toEqual({
+            isSettled: false,
+            netOutstanding: 0,
+            memberOwesDealer: 0,
+            dealerOwesMember: 0,
+            dealerOwesUpstream: 0,
+            upstreamOwesDealer: 0,
+            hasActivity: false
+        })
+    })
+
+    it('calculates net outstanding correctly when members owe dealer and dealer owes upstream', () => {
+        // Exactly matches the user's screenshot case:
+        // Members owe: +20,041
+        // Dealer owes upstream: 6,018
+        // Net outstanding for dealer: +14,023
+        const history = {
+            id: 'round-1',
+            lottery_type: 'thai',
+            total_entries: 10,
+            total_amount: 46182
+        }
+        const userHistories = [
+            { user_id: 'u1', total_amount: 12480, total_commission: 3974, total_winnings: 0 }, // 12480 - 3974 = 8506 (or 8507 with rounding)
+            { user_id: 'u2', total_amount: 8170, total_commission: 2402, total_winnings: 0 },  // 8170 - 2402 = 5768
+            { user_id: 'u3', total_amount: 3000, total_commission: 300, total_winnings: 3000 } // 3000 - 300 - 3000 = -300
+        ]
+        // u3 pays 3000 or has payment, let's test specific balances:
+        const transfers = [
+            { target_dealer_name: 'พี่จิ๋ม', amount: 8608, commission_earned: 2590, winnings: 0 } // comm = 2590, balance = 8608 - 2590 = 6018
+        ]
+
+        const result = calculateRoundOutstandingDetails({
+            history,
+            userHistories,
+            memberPayments: [],
+            transfers,
+            upstreamPayments: []
+        })
+
+        expect(result.hasActivity).toBe(true)
+        expect(result.isSettled).toBe(false)
+        expect(result.memberOwesDealer).toBe(8506 + 5768) // u1 + u2
+        expect(result.dealerOwesMember).toBe(300) // u3
+        expect(result.dealerOwesUpstream).toBe(6018) // 8608 - (Math.round(8608 * 0.30) = 2582 or calculated comm)
+        // netOutstanding = (memberOwesDealer - dealerOwesMember) - (dealerOwesUpstream - upstreamOwesDealer)
+        expect(result.netOutstanding).toBe((result.memberOwesDealer - result.dealerOwesMember) - result.dealerOwesUpstream)
+    })
+
+    it('returns isSettled: true and netOutstanding: 0 when all members and upstream are settled', () => {
+        const history = {
+            id: 'round-settled',
+            lottery_type: 'thai',
+            total_entries: 5,
+            total_amount: 5000
+        }
+        const userHistories = [
+            { user_id: 'u1', total_amount: 5000, total_commission: 1000, total_winnings: 0 }
+        ]
+        const memberPayments = [
+            { user_id: 'u1', amount: 4000, direction: 'member_to_dealer' }
+        ]
+        const transfers = [
+            { target_dealer_name: 'เจ้ามือ 1', amount: 2000, bet_type: '2_top', winnings: 0 }
+        ]
+        // 2000 * 0.28 = 560 comm -> init balance 1440
+        const upstreamPayments = [
+            { upstream_dealer_name: 'เจ้ามือ 1', amount: 1440, direction: 'dealer_to_upstream' }
+        ]
+
+        const result = calculateRoundOutstandingDetails({
+            history,
+            userHistories,
+            memberPayments,
+            transfers,
+            upstreamPayments
+        })
+
+        expect(result.isSettled).toBe(true)
+        expect(result.netOutstanding).toBe(0)
+        expect(result.memberOwesDealer).toBe(0)
+        expect(result.dealerOwesMember).toBe(0)
+        expect(result.dealerOwesUpstream).toBe(0)
+        expect(result.upstreamOwesDealer).toBe(0)
+    })
+
+    it('calculates transfer commission accurately using custom upstream dealer lottery_settings (user scenario 1 Sep 2569)', () => {
+        // User scenario:
+        // Upstream Dealer: "พี่จิ๋ม อ้อมค่าย"
+        // 3 ตัวบน (3_top): 8,508 @ 35% = 2,977.8
+        // 2 ตัวล่าง (2_bottom): 100 @ 25% = 25.0
+        // Total commission: 2,977.8 + 25 = 3,002.8 (~3,003)
+        const upstreamSettings = {
+            'พี่จิ๋ม อ้อมค่าย': {
+                thai: {
+                    '3_top': { commission: 35, payout: 550 },
+                    '2_bottom': { commission: 25, payout: 70 }
+                }
+            }
+        }
+
+        const t3top = {
+            amount: 8508,
+            bet_type: '3_top',
+            target_dealer_name: 'พี่จิ๋ม อ้อมค่าย'
+        }
+        const t2bottom = {
+            amount: 100,
+            bet_type: '2_bottom',
+            target_dealer_name: 'พี่จิ๋ม อ้อมค่าย'
+        }
+
+        const comm3top = calculateTransferCommission(t3top, 120, upstreamSettings, 'thai')
+        expect(comm3top).toBeCloseTo(2977.8, 1)
+
+        const comm2bottom = calculateTransferCommission(t2bottom, 120, upstreamSettings, 'thai')
+        expect(comm2bottom).toBe(25)
+
+        const totalCommission = comm3top + comm2bottom
+        expect(totalCommission).toBeCloseTo(3002.8, 1)
+        expect(Math.round(totalCommission)).toBe(3003)
+
+        // Test in calculateRoundOutstandingDetails:
+        // Total transfer: 8,608
+        // Comm: 3,002.8 -> net layoff = 8608 - 3002.8 = 5605.2 -> dealer owes upstream 5,605
+        // Member owes dealer: 20,041
+        // Net outstanding: 20,041 - 5,605 = 14,436
+        const history = {
+            id: 'round-1-sep-2569',
+            lottery_type: 'thai',
+            total_entries: 80,
+            total_amount: 46182
+        }
+        const userHistories = [
+            { user_id: 'u1', total_amount: 20041, total_commission: 0, total_winnings: 0 }
+        ]
+        const transfers = [t3top, t2bottom]
+
+        const details = calculateRoundOutstandingDetails({
+            history,
+            userHistories,
+            transfers,
+            upstreamSettings
+        })
+
+        expect(details.dealerOwesUpstream).toBe(5605)
+        expect(details.memberOwesDealer).toBe(20041)
+        expect(details.netOutstanding).toBe(14436)
     })
 })
 
