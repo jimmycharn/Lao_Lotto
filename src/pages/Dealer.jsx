@@ -417,7 +417,7 @@ export default function Dealer() {
             user_id: member.user_id,
             round_id: roundId,
             lottery_type: historyItem.lottery_type,
-            round_date: historyItem.round_date || (historyItem.close_time ? historyItem.close_time.split('T')[0] : null),
+            round_date: paymentData.round_date || historyItem.round_date || (historyItem.close_time ? historyItem.close_time.split('T')[0] : null),
             payment_type: paymentData.payment_type,
             direction: paymentData.direction,
             amount: Number(paymentData.amount),

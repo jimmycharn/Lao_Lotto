@@ -116,14 +116,16 @@ export default function MemberSettlementInline({
                 user_id: member.user_id,
                 round_id: round.round_id || round.id,
                 lottery_type: round.lottery_type,
-                round_date: roundDate,
+                round_date: roundDateIso,
                 payment_type: 'net_settlement',
                 direction: defDir,
                 amount: settleAmount,
-                paid_at: quickPaidAt || new Date().toISOString().split('T')[0],
+                paid_at: quickPaidAt || todayStr,
                 notes: quickNotes.trim() || 'เคลียร์ยอดครบจำนวน'
             })
             setShowQuickSettleModal(false)
+        } catch (err) {
+            console.error('Error in handleConfirmQuickSettle:', err)
         } finally {
             setSaving(false)
         }
@@ -140,16 +142,18 @@ export default function MemberSettlementInline({
                 user_id: member.user_id,
                 round_id: round.round_id || round.id,
                 lottery_type: round.lottery_type,
-                round_date: round.round_date || round.close_time?.split('T')[0],
+                round_date: roundDateIso,
                 payment_type: paymentType,
                 direction: direction,
                 amount: numAmount,
-                paid_at: paidAt || new Date().toISOString().split('T')[0],
+                paid_at: paidAt || todayStr,
                 notes: notes.trim()
             })
             setShowForm(false)
             setAmount('')
             setNotes('')
+        } catch (err) {
+            console.error('Error saving settlement payment:', err)
         } finally {
             setSaving(false)
         }
