@@ -100,6 +100,93 @@ const getFallbackPayout = (betType, lotteryType) => {
     return DEFAULT_PAYOUTS[normalized] || DEFAULT_PAYOUTS[betType] || 1
 }
 
+const renderHistoryWinningPills = (history) => {
+    if (!history) return null
+    let wn = history.winning_numbers
+    if (typeof wn === 'string') {
+        try {
+            wn = JSON.parse(wn)
+        } catch {
+            wn = null
+        }
+    }
+    if (!wn || typeof wn !== 'object') return null
+
+    const lType = history.lottery_type
+    const isLao = lType === 'lao'
+    const isHanoi = lType === 'hanoi'
+    const isThai = lType === 'thai'
+
+    const set4 = wn['4_set'] || ''
+    const top6 = wn['6_top'] || ''
+
+    const top3 = wn['3_top'] || (set4.length >= 3 ? set4.slice(-3) : (top6.length >= 3 ? top6.slice(-3) : ''))
+    const top2 = wn['2_top'] || (set4.length >= 2 ? set4.slice(-2) : (top6.length >= 2 ? top6.slice(-2) : ''))
+    const bot2 = wn['2_bottom'] || (isLao && set4.length >= 2 ? set4.slice(0, 2) : '')
+
+    let bot3 = ''
+    if (wn['3_bottom']) {
+        if (Array.isArray(wn['3_bottom'])) {
+            bot3 = wn['3_bottom'].filter(Boolean).join(', ')
+        } else {
+            bot3 = String(wn['3_bottom'])
+        }
+    }
+
+    const pills = []
+    if (isThai && top6) {
+        pills.push({ label: 'ที่ 1', value: top6 })
+    } else if ((isLao || isHanoi) && set4) {
+        pills.push({ label: '4 ตัว', value: set4 })
+    }
+
+    if (top3) pills.push({ label: '3 บน', value: top3 })
+    if (top2) pills.push({ label: '2 บน', value: top2 })
+    if (bot2) pills.push({ label: '2 ล่าง', value: bot2 })
+    if (bot3) pills.push({ label: '3 ล่าง', value: bot3 })
+
+    if (pills.length === 0) return null
+
+    return (
+        <div 
+            className="history-winning-pills"
+            style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                flexWrap: 'wrap',
+                marginTop: '0.2rem'
+            }}
+        >
+            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'inline-flex', alignItems: 'center' }}>
+                ออก:
+            </span>
+            {pills.map((p, idx) => (
+                <span
+                    key={idx}
+                    style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        fontSize: '0.72rem',
+                        background: 'rgba(0, 0, 0, 0.45)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        padding: '0.1rem 0.4rem',
+                        borderRadius: '4px',
+                        color: 'var(--color-text-muted, #94a3b8)',
+                        whiteSpace: 'nowrap'
+                    }}
+                >
+                    <span>{p.label}:</span>
+                    <strong style={{ color: '#facc15', fontWeight: 700, letterSpacing: '0.5px' }}>
+                        {p.value}
+                    </strong>
+                </span>
+            ))}
+        </div>
+    )
+}
+
 const getSettingsKey = (betType, lotteryKey) => {
     const normalized = normalizeBetType(betType)
     const POSITION_MAP = {
@@ -1488,6 +1575,8 @@ export default function Dealer() {
                         round_id: round.id,
                         dealer_id: user.id,
                         lottery_type: round.lottery_type,
+                        lottery_name: round.lottery_name || round.lottery_type,
+                        winning_numbers: round.winning_numbers,
                         round_date: round.close_time?.split('T')[0] || round.round_date || round.open_time?.split('T')[0],
                         open_time: round.open_time,
                         close_time: round.close_time,
@@ -1505,7 +1594,24 @@ export default function Dealer() {
                 }
             }
 
-            const combinedHistory = [...activeHistoryItems, ...archivedRounds].sort((a, b) => {
+            // Create a lookup map of winning numbers from activeClosedRounds
+            const roundWinningNumbersMap = {}
+            if (activeClosedRounds && activeClosedRounds.length > 0) {
+                activeClosedRounds.forEach(r => {
+                    if (r.id && r.winning_numbers) {
+                        roundWinningNumbersMap[r.id] = r.winning_numbers
+                    }
+                })
+            }
+
+            const enrichedArchivedRounds = archivedRounds.map(h => {
+                if (!h.winning_numbers && h.round_id && roundWinningNumbersMap[h.round_id]) {
+                    return { ...h, winning_numbers: roundWinningNumbersMap[h.round_id] }
+                }
+                return h
+            })
+
+            const combinedHistory = [...activeHistoryItems, ...enrichedArchivedRounds].sort((a, b) => {
                 const dateA = new Date(a.close_time || a.round_date || a.created_at || a.open_time).getTime()
                 const dateB = new Date(b.close_time || b.round_date || b.created_at || b.open_time).getTime()
                 return dateB - dateA
@@ -2534,7 +2640,8 @@ export default function Dealer() {
                         transferred_amount: transferredAmount,
                         upstream_commission: upstreamCommission,
                         upstream_winnings: upstreamWinnings,
-                        profit: profit
+                        profit: profit,
+                        winning_numbers: roundData.winning_numbers
                     })
 
                 if (historyError) {
@@ -2568,7 +2675,8 @@ export default function Dealer() {
                     total_amount: data.amount,
                     total_commission: data.commission,
                     total_winnings: data.winnings,
-                    profit_loss: data.winnings + data.commission - data.amount
+                    profit_loss: data.winnings + data.commission - data.amount,
+                    winning_numbers: roundData.winning_numbers
                 }))
 
                 if (userHistories.length > 0) {
@@ -3291,54 +3399,57 @@ export default function Dealer() {
                                                                         <span className={`lottery-badge ${history.lottery_type}`}>
                                                                             {LOTTERY_TYPES[history.lottery_type] || history.lottery_type}
                                                                         </span>
-                                                                        <div className="round-details">
-                                                                            <span className="round-name" style={{ fontWeight: 600 }}>
-                                                                                {LOTTERY_TYPES[history.lottery_type] || history.lottery_type}
-                                                                            </span>
-                                                                            <button
-                                                                                title="ลบประวัติงวดนี้"
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    setDeleteHistoryItem(history);
-                                                                                }}
-                                                                                style={{
-                                                                                    background: 'none',
-                                                                                    border: 'none',
-                                                                                    color: '#ef4444',
-                                                                                    cursor: 'pointer',
-                                                                                    padding: '0.15rem 0.35rem',
-                                                                                    borderRadius: '4px',
-                                                                                    display: 'inline-flex',
-                                                                                    alignItems: 'center',
-                                                                                    justifyContent: 'center',
-                                                                                    marginLeft: '0.25rem',
-                                                                                    marginRight: '0.15rem',
-                                                                                    transition: 'background 0.2s'
-                                                                                }}
-                                                                                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
-                                                                                onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
-                                                                            >
-                                                                                <FiTrash2 size={16} />
-                                                                            </button>
-                                                                            <span className="round-date" style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginLeft: '0.5rem' }}>
-                                                                                <FiCalendar /> {formatDate(history.close_time || history.round_date)}
-                                                                            </span>
-                                                                            {isSettled ? (
-                                                                                <span 
-                                                                                    className="settled-status-badge settled" 
-                                                                                    title="งวดนี้ยอดคงค้างเป็น 0 ทุกรายการแล้ว (เคลียร์ครบเรียบร้อย)"
-                                                                                >
-                                                                                    <FiCheck size={12} />
-                                                                                    <span>เคลียร์ครบแล้ว</span>
+                                                                        <div className="round-details" style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                                                                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                                                                                <span className="round-name" style={{ fontWeight: 600 }}>
+                                                                                    {LOTTERY_TYPES[history.lottery_type] || history.lottery_name || history.lottery_type}
                                                                                 </span>
-                                                                            ) : hasActivity ? (
-                                                                                <span 
-                                                                                    className="settled-status-badge pending" 
-                                                                                    title="งวดนี้ยังมีรายการค้างชำระ"
+                                                                                <button
+                                                                                    title="ลบประวัติงวดนี้"
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        setDeleteHistoryItem(history);
+                                                                                    }}
+                                                                                    style={{
+                                                                                        background: 'none',
+                                                                                        border: 'none',
+                                                                                        color: '#ef4444',
+                                                                                        cursor: 'pointer',
+                                                                                        padding: '0.15rem 0.35rem',
+                                                                                        borderRadius: '4px',
+                                                                                        display: 'inline-flex',
+                                                                                        alignItems: 'center',
+                                                                                        justifyContent: 'center',
+                                                                                        marginLeft: '0.25rem',
+                                                                                        marginRight: '0.15rem',
+                                                                                        transition: 'background 0.2s'
+                                                                                    }}
+                                                                                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
+                                                                                    onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
                                                                                 >
-                                                                                    <span>มียอดค้าง</span>
-                                                                                </span>
-                                                                            ) : null}
+                                                                                    <FiTrash2 size={16} />
+                                                                                </button>
+                                                                                {isSettled ? (
+                                                                                    <span 
+                                                                                        className="settled-status-badge settled" 
+                                                                                        title="งวดนี้ยอดคงค้างเป็น 0 ทุกรายการแล้ว (เคลียร์ครบเรียบร้อย)"
+                                                                                    >
+                                                                                        <FiCheck size={12} />
+                                                                                        <span>เคลียร์ครบแล้ว</span>
+                                                                                    </span>
+                                                                                ) : hasActivity ? (
+                                                                                    <span 
+                                                                                        className="settled-status-badge pending" 
+                                                                                        title="งวดนี้ยังมีรายการค้างชำระ"
+                                                                                    >
+                                                                                        <span>มียอดค้าง</span>
+                                                                                    </span>
+                                                                                ) : null}
+                                                                            </div>
+                                                                            <div className="round-date" style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.35rem', margin: 0 }}>
+                                                                                <FiCalendar size={13} /> {formatDate(history.close_time || history.round_date)}
+                                                                            </div>
+                                                                            {renderHistoryWinningPills(history)}
                                                                         </div>
                                                                     </div>
                                                                     <div className="history-stats" style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
