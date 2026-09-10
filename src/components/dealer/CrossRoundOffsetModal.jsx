@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { FiZap, FiX, FiCheck, FiCalendar, FiDollarSign, FiFileText } from 'react-icons/fi'
-import { calculateOffsetSummary, allocateCrossRoundOffsetPayments } from '../../utils/crossRoundOffsetCalculator'
+import { calculateOffsetSummary, allocateCrossRoundOffsetPayments, getRoundCloseDate } from '../../utils/crossRoundOffsetCalculator'
 import './CrossRoundOffsetModal.css'
 
 export default function CrossRoundOffsetModal({
@@ -10,6 +10,7 @@ export default function CrossRoundOffsetModal({
     onConfirmOffset,
     currentRound,
     member,
+    dealerId,
     pastUnpaidRounds = [],
     currentWinnings = 0,
     isUpstream = false,
@@ -17,12 +18,12 @@ export default function CrossRoundOffsetModal({
 }) {
     if (!isOpen || typeof document === 'undefined') return null
 
-    // Sort past unpaid rounds chronologically (oldest first)
+    // Sort past unpaid rounds descending (most recent past round on top, down to oldest)
     const sortedPastRounds = useMemo(() => {
         return [...pastUnpaidRounds].sort((a, b) => {
-            const dateA = a.roundDate || a.round_date || ''
-            const dateB = b.roundDate || b.round_date || ''
-            return dateA.localeCompare(dateB)
+            const dateA = a.roundDate || getRoundCloseDate(a) || a.round_date || ''
+            const dateB = b.roundDate || getRoundCloseDate(b) || b.round_date || ''
+            return dateB.localeCompare(dateA)
         })
     }, [pastUnpaidRounds])
 
@@ -34,11 +35,24 @@ export default function CrossRoundOffsetModal({
     const [paidAt, setPaidAt] = useState(() => new Date().toISOString().split('T')[0])
     const [customNotes, setCustomNotes] = useState('')
     const [saving, setSaving] = useState(false)
+    const [errorMsg, setErrorMsg] = useState(null)
+
+    const masterCheckboxRef = useRef(null)
 
     // Reset selection if pastUnpaidRounds change
     useEffect(() => {
         setSelectedRoundIds(sortedPastRounds.map(r => r.roundId))
     }, [sortedPastRounds])
+
+    // Set indeterminate status on master checkbox
+    const isAllSelected = sortedPastRounds.length > 0 && selectedRoundIds.length === sortedPastRounds.length
+    const isIndeterminate = selectedRoundIds.length > 0 && selectedRoundIds.length < sortedPastRounds.length
+
+    useEffect(() => {
+        if (masterCheckboxRef.current) {
+            masterCheckboxRef.current.indeterminate = isIndeterminate
+        }
+    }, [isIndeterminate])
 
     // Keyboard escape listener
     useEffect(() => {
@@ -51,21 +65,33 @@ export default function CrossRoundOffsetModal({
         return () => window.removeEventListener('keydown', handleKeyDown)
     }, [saving, onClose])
 
-    // Calculate selected past debt
+    // Calculate selected past debt and prize credits
     const selectedPastRounds = useMemo(() => {
         return sortedPastRounds.filter(r => selectedRoundIds.includes(r.roundId))
     }, [sortedPastRounds, selectedRoundIds])
 
-    const pastDebtTotal = useMemo(() => {
-        return selectedPastRounds.reduce((sum, r) => sum + Math.max(0, Number(r.debt || 0)), 0)
+    const pastDebtsTotal = useMemo(() => {
+        return selectedPastRounds
+            .filter(r => Number(r.debt || 0) > 0)
+            .reduce((sum, r) => sum + Number(r.debt || 0), 0)
+    }, [selectedPastRounds])
+
+    const pastPrizesTotal = useMemo(() => {
+        return selectedPastRounds
+            .filter(r => Number(r.debt || 0) < 0)
+            .reduce((sum, r) => sum + Math.abs(Number(r.debt || 0)), 0)
+    }, [selectedPastRounds])
+
+    const pastNetTotal = useMemo(() => {
+        return selectedPastRounds.reduce((sum, r) => sum + Number(r.debt || 0), 0)
     }, [selectedPastRounds])
 
     const summary = useMemo(() => {
         return calculateOffsetSummary({
-            pastDebtTotal,
+            pastDebtTotal: pastNetTotal,
             prizeAmount: currentWinnings
         })
-    }, [pastDebtTotal, currentWinnings])
+    }, [pastNetTotal, currentWinnings])
 
     const activeSlipAmount = customSlipAmount !== '' ? Number(customSlipAmount) : summary.suggestedSlipAmount
 
@@ -86,8 +112,11 @@ export default function CrossRoundOffsetModal({
     const handleSubmit = async (e) => {
         e.preventDefault()
         if (selectedPastRounds.length === 0 || saving) return
+        setErrorMsg(null)
 
         const targetUpstreamName = upstreamDealerName || member?.name || member?.user_name || member?.dealerName
+        const effectiveDealerId = dealerId || member?.dealer_id || currentRound?.dealer_id || null
+        const effectiveMemberUserId = member?.user_id || member?.id || member?.userId || null
 
         const allocations = allocateCrossRoundOffsetPayments({
             selectedPastRounds,
@@ -95,8 +124,8 @@ export default function CrossRoundOffsetModal({
             actualSlipAmount: activeSlipAmount,
             paidAt,
             currentRound,
-            memberUserId: member?.user_id,
-            dealerId: member?.dealer_id,
+            memberUserId: effectiveMemberUserId,
+            dealerId: effectiveDealerId,
             isUpstream,
             upstreamDealerName: targetUpstreamName,
             upstreamDealerId: member?.upstream_dealer_id || null
@@ -104,7 +133,9 @@ export default function CrossRoundOffsetModal({
 
         if (customNotes && customNotes.trim()) {
             const noteText = customNotes.trim()
-            allocations.currentRoundPayment.notes += ` (${noteText})`
+            if (allocations.currentRoundPayment) {
+                allocations.currentRoundPayment.notes += ` (${noteText})`
+            }
             allocations.pastRoundPayments.forEach(p => {
                 p.notes += ` (${noteText})`
             })
@@ -116,12 +147,20 @@ export default function CrossRoundOffsetModal({
             onClose()
         } catch (err) {
             console.error('Error confirming cross-round offset:', err)
+            setErrorMsg(err?.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง')
         } finally {
             setSaving(false)
         }
     }
 
-    const targetDisplayName = member?.name || member?.user_name || member?.dealerName || (isUpstream ? 'เจ้ามือรับตีออก' : 'สมาชิก')
+    const targetDisplayName =
+        member?.profiles?.full_name ||
+        member?.profiles?.line_display_name ||
+        member?.profiles?.email ||
+        member?.name ||
+        member?.user_name ||
+        member?.dealerName ||
+        (isUpstream ? 'เจ้ามือรับตีออก' : 'สมาชิก')
 
     return createPortal(
         <div
@@ -171,11 +210,27 @@ export default function CrossRoundOffsetModal({
                             </div>
                         </div>
 
-                        {/* Past Rounds Selector */}
+                        {/* Past Rounds Selector with Master Checkbox */}
                         <div className="cross-round-box">
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text-muted, #94a3b8)' }}>
-                                    เลือกงวดเก่าที่ต้องการหักล้าง ({selectedRoundIds.length}/{sortedPastRounds.length})
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                                <label style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.45rem',
+                                    cursor: 'pointer',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 600,
+                                    color: '#f8fafc',
+                                    userSelect: 'none'
+                                }}>
+                                    <input
+                                        ref={masterCheckboxRef}
+                                        type="checkbox"
+                                        checked={isAllSelected}
+                                        onChange={toggleSelectAll}
+                                        style={{ cursor: 'pointer', width: '15px', height: '15px' }}
+                                    />
+                                    <span>เลือกงวดเก่าที่ต้องการหักล้าง ({selectedRoundIds.length}/{sortedPastRounds.length})</span>
                                 </label>
                                 <button
                                     type="button"
@@ -190,13 +245,17 @@ export default function CrossRoundOffsetModal({
                                         padding: '0 0.2rem'
                                     }}
                                 >
-                                    {selectedRoundIds.length === sortedPastRounds.length ? 'ยกเลิกทั้งหมด' : 'เลือกทั้งหมด'}
+                                    {isAllSelected ? 'ยกเลิกทั้งหมด' : 'เลือกทั้งหมด'}
                                 </button>
                             </div>
 
                             <div className="past-rounds-list">
                                 {sortedPastRounds.map(r => {
                                     const isChecked = selectedRoundIds.includes(r.roundId)
+                                    const roundDebtNum = Number(r.debt || 0)
+                                    const isDebtPositive = roundDebtNum > 0
+                                    const isDebtNegative = roundDebtNum < 0
+
                                     return (
                                         <div
                                             key={r.roundId}
@@ -210,11 +269,28 @@ export default function CrossRoundOffsetModal({
                                                     onChange={() => {}}
                                                     style={{ cursor: 'pointer' }}
                                                 />
-                                                <span>งวดวันที่ <strong>{r.roundDate || r.round_date}</strong></span>
+                                                <span>
+                                                    งวดวันที่ <strong>{r.roundDate || getRoundCloseDate(r) || r.round_date}</strong>
+                                                    {r.lotteryType && (
+                                                        <span style={{ fontSize: '0.75rem', opacity: 0.75, marginLeft: '0.35rem' }}>
+                                                            ({r.lotteryType === 'thai' ? 'หวยไทย' : r.lotteryType === 'lao' ? 'หวยลาว' : r.lotteryType})
+                                                        </span>
+                                                    )}
+                                                </span>
                                             </div>
-                                            <span style={{ color: '#ef4444', fontWeight: 600 }}>
-                                                ค้าง ฿{Number(r.debt).toLocaleString()}
-                                            </span>
+                                            {isDebtPositive ? (
+                                                <span style={{ color: '#ef4444', fontWeight: 600 }}>
+                                                    {isUpstream ? 'เราค้าง' : 'ค้าง'} ฿{roundDebtNum.toLocaleString()}
+                                                </span>
+                                            ) : isDebtNegative ? (
+                                                <span style={{ color: '#22c55e', fontWeight: 600 }}>
+                                                    {isUpstream ? 'เจ้ามือค้างเรา' : 'ค้างจ่าย'} -฿{Math.abs(roundDebtNum).toLocaleString()}
+                                                </span>
+                                            ) : (
+                                                <span style={{ color: '#94a3b8', fontWeight: 600 }}>
+                                                    ฿0
+                                                </span>
+                                            )}
                                         </div>
                                     )
                                 })}
@@ -225,12 +301,20 @@ export default function CrossRoundOffsetModal({
                         <div className="cross-round-box" style={{ background: 'rgba(250, 204, 21, 0.05)', borderColor: 'rgba(250, 204, 21, 0.2)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--color-text-muted, #94a3b8)' }}>
                                 <span>รวมหนี้เก่าที่เลือก:</span>
-                                <span>฿{pastDebtTotal.toLocaleString()}</span>
+                                <span style={{ fontWeight: 600 }}>฿{pastDebtsTotal.toLocaleString()}</span>
                             </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--color-text-muted, #94a3b8)', marginTop: '0.2rem' }}>
-                                <span>หักลบเงินรางวัลงวดนี้:</span>
-                                <span style={{ color: 'var(--color-primary, #facc15)' }}>-฿{Number(currentWinnings).toLocaleString()}</span>
-                            </div>
+                            {pastPrizesTotal > 0 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--color-text-muted, #94a3b8)', marginTop: '0.2rem' }}>
+                                    <span>{isUpstream ? 'หักลบยอดถูกรางวัลงวดเก่า (เจ้ามือค้างเรา):' : 'หักลบยอดค้างจ่ายรางวัลเก่า (ให้สมาชิก):'}</span>
+                                    <span style={{ color: 'var(--color-success, #22c55e)', fontWeight: 600 }}>-฿{pastPrizesTotal.toLocaleString()}</span>
+                                </div>
+                            )}
+                            {Number(currentWinnings) > 0 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--color-text-muted, #94a3b8)', marginTop: '0.2rem' }}>
+                                    <span>{isUpstream ? 'หักลบยอดถูกรางวัลงวดนี้:' : 'หักลบเงินรางวัลงวดนี้:'}</span>
+                                    <span style={{ color: 'var(--color-primary, #facc15)', fontWeight: 600 }}>-฿{Number(currentWinnings).toLocaleString()}</span>
+                                </div>
+                            )}
                             <div style={{ borderTop: '1px dashed rgba(255,255,255,0.1)', marginTop: '0.4rem', paddingTop: '0.4rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>
                                     {!isUpstream ? (
@@ -323,6 +407,23 @@ export default function CrossRoundOffsetModal({
                                 }}
                             />
                         </div>
+
+                        {errorMsg && (
+                            <div style={{
+                                background: 'rgba(239, 68, 68, 0.15)',
+                                border: '1px solid rgba(239, 68, 68, 0.4)',
+                                borderRadius: '8px',
+                                padding: '0.6rem 0.85rem',
+                                color: '#fca5a5',
+                                fontSize: '0.82rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem'
+                            }}>
+                                <span style={{ fontSize: '1rem' }}>⚠️</span>
+                                <span>{errorMsg}</span>
+                            </div>
+                        )}
                     </div>
 
                     <div className="modal-footer">

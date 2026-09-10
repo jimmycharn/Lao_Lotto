@@ -3,10 +3,49 @@ import {
     calculateOffsetSummary,
     allocateCrossRoundOffsetPayments,
     findMemberPastUnpaidRounds,
-    findUpstreamPastUnpaidRounds
+    findUpstreamPastUnpaidRounds,
+    getRoundCloseDate
 } from './crossRoundOffsetCalculator'
 
 describe('crossRoundOffsetCalculator', () => {
+    describe('getRoundCloseDate', () => {
+        it('prioritizes close_time over round_date and open_time', () => {
+            const round = {
+                id: 'r-1',
+                open_date: '2026-04-15',
+                open_time: '2026-04-15T08:00:00+07:00',
+                round_date: '2026-04-15', // incorrectly set to open_date
+                close_time: '2026-04-16T15:30:00+07:00'
+            }
+            expect(getRoundCloseDate(round)).toBe('2026-04-16')
+        })
+
+        it('prioritizes close_date over round_date', () => {
+            const round = {
+                id: 'r-2',
+                round_date: '2026-05-15',
+                close_date: '2026-05-16'
+            }
+            expect(getRoundCloseDate(round)).toBe('2026-05-16')
+        })
+
+        it('extracts date in Asia/Bangkok timezone correctly', () => {
+            // 2026-04-16 08:30:00 UTC is 2026-04-16 15:30:00 Bangkok
+            expect(getRoundCloseDate('2026-04-16T08:30:00Z')).toBe('2026-04-16')
+            // Exact YYYY-MM-DD string returns directly
+            expect(getRoundCloseDate('2026-06-01')).toBe('2026-06-01')
+        })
+
+        it('falls back to round_date if no close_time or close_date', () => {
+            expect(getRoundCloseDate({ round_date: '2026-07-01' })).toBe('2026-07-01')
+        })
+
+        it('returns empty string for empty or invalid input', () => {
+            expect(getRoundCloseDate(null)).toBe('')
+            expect(getRoundCloseDate(undefined)).toBe('')
+            expect(getRoundCloseDate('')).toBe('')
+        })
+    })
     describe('calculateOffsetSummary', () => {
         it('calculates debt > prize correctly (member pays dealer difference)', () => {
             const result = calculateOffsetSummary({
@@ -172,6 +211,37 @@ describe('crossRoundOffsetCalculator', () => {
                 amount: 2500
             })
         })
+
+        it('prioritizes round_id over history id and ensures valid ISO round_date', () => {
+            const pastRounds = [
+                { roundId: 'round-1', roundDate: '2026-08-01', debt: 2600, lotteryType: 'thai' }
+            ]
+            const currentRound = {
+                id: 'history-row-id-123',
+                round_id: 'actual-round-uuid-456',
+                close_time: '2026-08-16T15:30:00+07:00',
+                round_date: '2026-08-15',
+                lottery_type: 'thai'
+            }
+
+            const allocation = allocateCrossRoundOffsetPayments({
+                selectedPastRounds: pastRounds,
+                offsetPrizeAmount: 12000,
+                actualSlipAmount: 9400,
+                paidAt: '2026-08-16',
+                currentRound,
+                memberUserId: 'user-ja-kuza',
+                dealerId: 'dealer-main',
+                isUpstream: false
+            })
+
+            expect(allocation.currentRoundPayment.round_id).toBe('actual-round-uuid-456')
+            expect(allocation.currentRoundPayment.round_date).toBe('2026-08-16')
+            expect(allocation.pastRoundPayments[0].round_id).toBe('round-1')
+            expect(allocation.pastRoundPayments[0].round_date).toBe('2026-08-01')
+            expect(allocation.pastRoundPayments[0].amount).toBe(2600)
+            expect(allocation.pastRoundPayments[0].notes).toContain('หักล้างรางวัลจากงวด 2026-08-16')
+        })
     })
 
     describe('findMemberPastUnpaidRounds', () => {
@@ -209,13 +279,76 @@ describe('crossRoundOffsetCalculator', () => {
                 debt: 4000
             })
         })
+
+        it('includes past rounds where member has negative balance (unpaid prize credit) like จา คูซ่า (-7533)', () => {
+            const userHistories = [
+                // Round 2026-08-01: Debt 4000
+                { round_id: 'r-1', user_id: 'u-jakusa', total_amount: 5000, total_commission: 1000, total_winnings: 0, round_date: '2026-08-01', lottery_type: 'thai' },
+                // Round 2026-08-16 (16-8-69): Sales 5020, comm 553, win 12000 -> Initial -7533 (Dealer owes member)
+                { round_id: 'r-2', user_id: 'u-jakusa', total_amount: 5020, total_commission: 553, total_winnings: 12000, round_date: '2026-08-16', lottery_type: 'thai' }
+            ]
+
+            const unpaid = findMemberPastUnpaidRounds({
+                userId: 'u-jakusa',
+                currentRoundId: 'r-current',
+                currentRoundDate: '2026-09-01',
+                userHistories,
+                memberPayments: []
+            })
+
+            expect(unpaid).toHaveLength(2)
+            // Must be sorted descending (most recent 2026-08-16 first, then 2026-08-01)
+            expect(unpaid[0].roundDate).toBe('2026-08-16')
+            expect(unpaid[0].debt).toBe(-7533)
+            expect(unpaid[1].roundDate).toBe('2026-08-01')
+            expect(unpaid[1].debt).toBe(4000)
+        })
+
+        it('sorts past unpaid rounds descending (most recent past round on top)', () => {
+            const userHistories = [
+                { round_id: 'r-1', user_id: 'u-1', total_amount: 1000, total_commission: 0, total_winnings: 0, round_date: '2026-07-01' },
+                { round_id: 'r-2', user_id: 'u-1', total_amount: 1000, total_commission: 0, total_winnings: 0, round_date: '2026-08-16' },
+                { round_id: 'r-3', user_id: 'u-1', total_amount: 1000, total_commission: 0, total_winnings: 0, round_date: '2026-07-16' }
+            ]
+
+            const unpaid = findMemberPastUnpaidRounds({
+                userId: 'u-1',
+                userHistories
+            })
+
+            expect(unpaid.map(r => r.roundDate)).toEqual([
+                '2026-08-16',
+                '2026-07-16',
+                '2026-07-01'
+            ])
+        })
+
+        it('resolves correct close date from roundHistory if user_round_history had open_date', () => {
+            const userHistories = [
+                { round_id: 'r-1', user_id: 'u-1', total_amount: 5000, total_commission: 1000, total_winnings: 0, round_date: '2026-04-15', lottery_type: 'thai' }
+            ]
+            const roundHistory = [
+                { id: 'r-1', round_date: '2026-04-15', close_time: '2026-04-16T15:30:00+07:00' }
+            ]
+
+            const unpaid = findMemberPastUnpaidRounds({
+                userId: 'u-1',
+                userHistories,
+                roundHistory
+            })
+
+            expect(unpaid).toHaveLength(1)
+            expect(unpaid[0].roundDate).toBe('2026-04-16')
+        })
     })
 
     describe('findUpstreamPastUnpaidRounds', () => {
-        it('returns only past rounds where dealer owes upstream debt', () => {
+        it('returns only past rounds where dealer owes upstream debt and sorts descending', () => {
             const transfers = [
                 // Past round 1: amount 5000, comm 500, win 0 -> Layoff 4500 - 0 = 4500 debt
                 { round_id: 'r-1', target_dealer_name: 'เฮียเบิร์ด', amount: 5000, commission_earned: 500, winnings: 0, round_date: '2026-08-01', lottery_type: 'lao' },
+                // Past round 2: more recent
+                { round_id: 'r-3', target_dealer_name: 'เฮียเบิร์ด', amount: 3000, commission_earned: 300, winnings: 0, round_date: '2026-08-16', lottery_type: 'lao' },
                 // Current round (should be excluded)
                 { round_id: 'r-2', target_dealer_name: 'เฮียเบิร์ด', amount: 3000, commission_earned: 300, winnings: 5000, round_date: '2026-09-01', lottery_type: 'lao' }
             ]
@@ -230,14 +363,27 @@ describe('crossRoundOffsetCalculator', () => {
                 upstreamPayments
             })
 
-            expect(unpaid).toHaveLength(1)
-            expect(unpaid[0]).toEqual({
-                roundId: 'r-1',
-                roundDate: '2026-08-01',
-                lotteryType: 'lao',
-                debt: 4500,
-                upstreamDealerName: 'เฮียเบิร์ด'
+            expect(unpaid).toHaveLength(2)
+            expect(unpaid[0].roundDate).toBe('2026-08-16')
+            expect(unpaid[1].roundDate).toBe('2026-08-01')
+        })
+
+        it('resolves correct close date from roundHistory for upstream rounds', () => {
+            const transfers = [
+                { round_id: 'r-1', target_dealer_name: 'เฮียเบิร์ด', amount: 5000, commission_earned: 500, winnings: 0, round_date: '2026-05-15', lottery_type: 'thai' }
+            ]
+            const roundHistory = [
+                { id: 'r-1', round_date: '2026-05-15', close_time: '2026-05-16T15:30:00+07:00' }
+            ]
+
+            const unpaid = findUpstreamPastUnpaidRounds({
+                dealerName: 'เฮียเบิร์ด',
+                transfers,
+                roundHistory
             })
+
+            expect(unpaid).toHaveLength(1)
+            expect(unpaid[0].roundDate).toBe('2026-05-16')
         })
     })
 })

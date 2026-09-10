@@ -17,7 +17,7 @@ import {
     getUpstreamSettlementStatus,
     getUpstreamPaymentPresetAmount
 } from '../../utils/memberSettlementCalculator'
-import { findUpstreamPastUnpaidRounds } from '../../utils/crossRoundOffsetCalculator'
+import { findUpstreamPastUnpaidRounds, getRoundCloseDate } from '../../utils/crossRoundOffsetCalculator'
 import CrossRoundOffsetModal from './CrossRoundOffsetModal'
 import './UpstreamSettlementInline.css'
 
@@ -27,6 +27,7 @@ export default function UpstreamSettlementInline({
     payments = [],
     settlementOverview,
     roundHistory = [],
+    dealerId,
     onSavePayment,
     onUpdatePayment,
     onDeletePayment,
@@ -69,25 +70,20 @@ export default function UpstreamSettlementInline({
         .filter(p => p.direction === 'upstream_to_dealer')
         .reduce((sum, p) => sum + Number(p.amount || 0), 0)
 
+    // Prize already collected from upstream in current round
+    const prizeCollected = useMemo(() => {
+        return payments
+            .filter(p => p.direction === 'upstream_to_dealer' || p.payment_type === 'prize_collection')
+            .reduce((sum, p) => sum + Number(p.amount || 0), 0)
+    }, [payments])
+
+    // Available prize from current round that can be used for cross-round offset
+    const availableWinnings = Math.max(0, Math.round(totalWinnings - prizeCollected))
+
     const todayStr = new Date().toISOString().split('T')[0]
     const getRoundDateIso = (r) => {
-        const raw = r?.round_date || r?.close_time || r?.created_at
-        if (!raw) return null
-        if (typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}/.test(raw)) {
-            return raw.slice(0, 10)
-        }
-        try {
-            const d = new Date(raw)
-            if (!isNaN(d.getTime())) {
-                const year = d.getFullYear()
-                const month = String(d.getMonth() + 1).padStart(2, '0')
-                const day = String(d.getDate()).padStart(2, '0')
-                return `${year}-${month}-${day}`
-            }
-        } catch {
-            return null
-        }
-        return null
+        if (!r) return null
+        return getRoundCloseDate(r) || null
     }
     const roundDateIso = getRoundDateIso(round)
 
@@ -101,9 +97,22 @@ export default function UpstreamSettlementInline({
             currentRoundId: round?.round_id || round?.id,
             currentRoundDate: roundDateIso,
             transfers: settlementOverview?.transfers || [],
-            upstreamPayments: settlementOverview?.upstreamPayments || []
+            upstreamPayments: settlementOverview?.upstreamPayments || [],
+            roundHistory: roundHistory || []
         })
-    }, [transfer, round, roundDateIso, settlementOverview])
+    }, [transfer, round, roundDateIso, settlementOverview, roundHistory])
+
+    const pastDebtsTotal = useMemo(() => {
+        return pastUnpaidRounds
+            .filter(r => Number(r.debt || 0) > 0)
+            .reduce((sum, r) => sum + Number(r.debt || 0), 0)
+    }, [pastUnpaidRounds])
+
+    const pastPrizesTotal = useMemo(() => {
+        return pastUnpaidRounds
+            .filter(r => Number(r.debt || 0) < 0)
+            .reduce((sum, r) => sum + Math.abs(Number(r.debt || 0)), 0)
+    }, [pastUnpaidRounds])
 
     const pastDebtTotal = useMemo(() => {
         return pastUnpaidRounds.reduce((sum, r) => sum + (Number(r.debt) || 0), 0)
@@ -298,17 +307,29 @@ export default function UpstreamSettlementInline({
             </div>
 
             {/* Smart Detection Banner for Cross-Round Offset */}
-            {pastUnpaidRounds.length > 0 && totalWinnings > 0 && (
+            {pastUnpaidRounds.length > 0 && (availableWinnings > 0 || pastPrizesTotal > 0 || pastDebtsTotal > 0) && (
                 <div className="cross-round-smart-banner">
                     <div className="banner-left">
                         <span className="banner-icon"><FiZap color="#facc15" size={18} /></span>
                         <div className="banner-text">
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                <strong>ตรวจพบยอดค้างชำระจากงวดก่อนหน้า</strong>
+                                <strong>ตรวจพบยอดคงค้างจากงวดก่อนหน้า</strong>
                                 <span className="banner-count-badge">{pastUnpaidRounds.length} งวด</span>
                             </div>
                             <span>
-                                เรามียอดค้างชำระรวม <strong style={{ color: '#ef4444' }}>฿{pastDebtTotal.toLocaleString()}</strong> สามารถนำยอดถูกรางวัลงวดนี้ (฿{totalWinnings.toLocaleString()}) ไปหักล้างได้
+                                {pastDebtsTotal > 0 && pastPrizesTotal > 0 ? (
+                                    <>
+                                        เรามียอดค้างชำระ <strong style={{ color: '#ef4444' }}>฿{pastDebtsTotal.toLocaleString()}</strong> และยอดถูกรางวัลงวดเก่า <strong style={{ color: '#22c55e' }}>฿{pastPrizesTotal.toLocaleString()}</strong>{availableWinnings > 0 ? ` พร้อมยอดถูกรางวัลงวดนี้ (฿${availableWinnings.toLocaleString()})` : ''} สามารถนำมาหักล้างกันได้
+                                    </>
+                                ) : pastDebtsTotal > 0 ? (
+                                    <>
+                                        เรามียอดค้างชำระรวม <strong style={{ color: '#ef4444' }}>฿{pastDebtsTotal.toLocaleString()}</strong>{availableWinnings > 0 ? ` สามารถนำยอดถูกรางวัลงวดนี้ (฿${availableWinnings.toLocaleString()}) ไปหักล้างได้` : ' สามารถเลือกหักล้างข้ามงวดได้'}
+                                    </>
+                                ) : (
+                                    <>
+                                        มียอดถูกรางวัลค้างรับ <strong style={{ color: '#22c55e' }}>฿{pastPrizesTotal.toLocaleString()}</strong> สามารถนำมาหักล้างหรือเคลียร์พร้อมงวดนี้ได้
+                                    </>
+                                )}
                             </span>
                         </div>
                     </div>
@@ -328,6 +349,22 @@ export default function UpstreamSettlementInline({
                     จัดการการชำระเงินสำหรับ: <strong>{upstreamName}</strong>
                 </span>
                 <div className="upstream-settlement-btn-group">
+                    {pastUnpaidRounds.length > 0 && (
+                        <button
+                            type="button"
+                            className="btn-upstream-settle-action btn-cross-offset-action"
+                            onClick={() => setShowOffsetModal(true)}
+                            title="หักล้างยอดข้ามงวด"
+                            style={{
+                                background: 'rgba(250, 204, 21, 0.12)',
+                                color: '#facc15',
+                                border: '1px solid rgba(250, 204, 21, 0.35)',
+                                fontWeight: 600
+                            }}
+                        >
+                            <FiZap size={14} /> ⚡ หักล้างข้ามงวด ({pastUnpaidRounds.length})
+                        </button>
+                    )}
                     {!status.isSettled && (
                         <button
                             type="button"
@@ -1048,8 +1085,9 @@ export default function UpstreamSettlementInline({
                     }}
                     currentRound={round}
                     member={transfer}
+                    dealerId={dealerId}
                     pastUnpaidRounds={pastUnpaidRounds}
-                    currentWinnings={totalWinnings}
+                    currentWinnings={availableWinnings}
                     isUpstream={true}
                     upstreamDealerName={transfer?.target_dealer_name || transfer?.upstream_dealer_name || transfer?.dealerName}
                 />

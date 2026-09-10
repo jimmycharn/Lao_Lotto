@@ -453,14 +453,14 @@ export default function Dealer() {
                 profiles: profilesMap[uh.user_id] || null
             }))
 
-            const targetRoundId = historyItem.round_id || historyItem.id
+            const roundIdsToQuery = [historyItem.round_id, historyItem.id].filter(Boolean)
             let roundPayments = []
-            if (targetRoundId) {
+            if (roundIdsToQuery.length > 0) {
                 const { data: paymentsData, error: payErr } = await supabase
                     .from('member_round_payments')
                     .select('*')
                     .eq('dealer_id', user.id)
-                    .eq('round_id', targetRoundId)
+                    .in('round_id', roundIdsToQuery)
                     .order('created_at', { ascending: true })
                 if (!payErr && paymentsData) {
                     roundPayments = paymentsData
@@ -468,12 +468,12 @@ export default function Dealer() {
             }
 
             let upstreamRoundPayments = []
-            if (targetRoundId) {
+            if (roundIdsToQuery.length > 0) {
                 const { data: upPaymentsData, error: upPayErr } = await supabase
                     .from('upstream_round_payments')
                     .select('*')
                     .eq('dealer_id', user.id)
-                    .eq('round_id', targetRoundId)
+                    .in('round_id', roundIdsToQuery)
                     .order('created_at', { ascending: true })
                 if (!upPayErr && upPaymentsData) {
                     upstreamRoundPayments = upPaymentsData
@@ -483,6 +483,8 @@ export default function Dealer() {
             setHistoryDetails(prev => ({
                 ...prev,
                 [historyId]: {
+                    id: historyId,
+                    round_id: historyItem.round_id,
                     loading: false,
                     loaded: true,
                     userHistories: userHistoriesWithProfiles,
@@ -563,7 +565,7 @@ export default function Dealer() {
             user_id: member.user_id,
             round_id: roundId,
             lottery_type: historyItem.lottery_type,
-            round_date: paymentData.round_date || historyItem.round_date || (historyItem.close_time ? historyItem.close_time.split('T')[0] : null),
+            round_date: paymentData.round_date || (historyItem.close_time ? historyItem.close_time.split('T')[0] : historyItem.round_date) || null,
             payment_type: paymentData.payment_type,
             direction: paymentData.direction,
             amount: Number(paymentData.amount),
@@ -606,6 +608,12 @@ export default function Dealer() {
     }
 
     async function handleDeleteMemberPayment({ historyItem, paymentId }) {
+        if (!paymentId) {
+            console.error('Cannot delete payment without valid paymentId')
+            toast.error('ไม่พบรหัสรายการชำระเงิน (ID ไม่ถูกต้อง)')
+            return
+        }
+
         const { error } = await supabase
             .from('member_round_payments')
             .delete()
@@ -703,7 +711,7 @@ export default function Dealer() {
             upstream_dealer_id: paymentData.upstream_dealer_id || transfer.upstream_dealer_id || null,
             round_id: roundId,
             lottery_type: historyItem.lottery_type,
-            round_date: paymentData.round_date || historyItem.round_date || (historyItem.close_time ? historyItem.close_time.split('T')[0] : null),
+            round_date: paymentData.round_date || (historyItem.close_time ? historyItem.close_time.split('T')[0] : historyItem.round_date) || null,
             payment_type: paymentData.payment_type,
             direction: paymentData.direction,
             amount: Number(paymentData.amount),
@@ -746,6 +754,12 @@ export default function Dealer() {
     }
 
     async function handleDeleteUpstreamPayment({ historyItem, paymentId }) {
+        if (!paymentId) {
+            console.error('Cannot delete payment without valid paymentId')
+            toast.error('ไม่พบรหัสรายการชำระเงิน (ID ไม่ถูกต้อง)')
+            return
+        }
+
         const { error } = await supabase
             .from('upstream_round_payments')
             .delete()
@@ -836,7 +850,14 @@ export default function Dealer() {
         const recordsToInsert = [
             currentRoundPayment,
             ...pastRoundPayments
-        ].filter(r => r && Number(r.amount) > 0)
+        ].filter(r => r && Number(r.amount) > 0).map(r => ({
+            ...r,
+            dealer_id: user.id,
+            created_by: user.id,
+            user_id: r.user_id || allocations.memberUserId || null,
+            round_date: (/^\d{4}-\d{2}-\d{2}$/.test(String(r.round_date)) ? r.round_date : null),
+            paid_at: (/^\d{4}-\d{2}-\d{2}$/.test(String(r.paid_at)) ? r.paid_at : new Date().toISOString().split('T')[0])
+        }))
 
         if (recordsToInsert.length === 0) return
 
@@ -856,15 +877,21 @@ export default function Dealer() {
         setHistoryDetails(prev => {
             let updated = { ...prev }
             inserted.forEach(rec => {
-                const foundKey = Object.keys(updated).find(k => {
-                    const item = updated[k]
-                    return (item.round_id === rec.round_id || k === rec.round_id || item.id === rec.round_id)
-                })
-                if (foundKey && updated[foundKey]) {
-                    const existing = updated[foundKey].payments || []
-                    updated[foundKey] = {
-                        ...updated[foundKey],
-                        payments: [...existing, rec]
+                const matchingHistory = roundHistory.find(h => 
+                    String(h.id) === String(rec.round_id) || 
+                    (h.round_id && String(h.round_id) === String(rec.round_id))
+                )
+                const targetKey = matchingHistory ? matchingHistory.id : (
+                    Object.keys(updated).find(k => k === rec.round_id || updated[k]?.round_id === rec.round_id || updated[k]?.id === rec.round_id) || rec.round_id
+                )
+
+                if (updated[targetKey]) {
+                    const existing = updated[targetKey].payments || []
+                    if (!existing.some(p => p.id === rec.id)) {
+                        updated[targetKey] = {
+                            ...updated[targetKey],
+                            payments: [...existing, rec]
+                        }
                     }
                 }
             })
@@ -883,7 +910,13 @@ export default function Dealer() {
         const recordsToInsert = [
             currentRoundPayment,
             ...pastRoundPayments
-        ].filter(r => r && Number(r.amount) > 0)
+        ].filter(r => r && Number(r.amount) > 0).map(r => ({
+            ...r,
+            dealer_id: user.id,
+            created_by: user.id,
+            round_date: (/^\d{4}-\d{2}-\d{2}$/.test(String(r.round_date)) ? r.round_date : null),
+            paid_at: (/^\d{4}-\d{2}-\d{2}$/.test(String(r.paid_at)) ? r.paid_at : new Date().toISOString().split('T')[0])
+        }))
 
         if (recordsToInsert.length === 0) return
 
@@ -903,15 +936,21 @@ export default function Dealer() {
         setHistoryDetails(prev => {
             let updated = { ...prev }
             inserted.forEach(rec => {
-                const foundKey = Object.keys(updated).find(k => {
-                    const item = updated[k]
-                    return (item.round_id === rec.round_id || k === rec.round_id || item.id === rec.round_id)
-                })
-                if (foundKey && updated[foundKey]) {
-                    const existing = updated[foundKey].upstreamPayments || []
-                    updated[foundKey] = {
-                        ...updated[foundKey],
-                        upstreamPayments: [...existing, rec]
+                const matchingHistory = roundHistory.find(h => 
+                    String(h.id) === String(rec.round_id) || 
+                    (h.round_id && String(h.round_id) === String(rec.round_id))
+                )
+                const targetKey = matchingHistory ? matchingHistory.id : (
+                    Object.keys(updated).find(k => k === rec.round_id || updated[k]?.round_id === rec.round_id || updated[k]?.id === rec.round_id) || rec.round_id
+                )
+
+                if (updated[targetKey]) {
+                    const existing = updated[targetKey].upstreamPayments || []
+                    if (!existing.some(p => p.id === rec.id)) {
+                        updated[targetKey] = {
+                            ...updated[targetKey],
+                            upstreamPayments: [...existing, rec]
+                        }
                     }
                 }
             })
@@ -1993,12 +2032,12 @@ export default function Dealer() {
                     .limit(5000),
                 supabase
                     .from('member_round_payments')
-                    .select('round_id, user_id, amount, direction, lottery_type, round_date')
+                    .select('id, round_id, user_id, amount, direction, payment_type, paid_at, notes, lottery_type, round_date')
                     .eq('dealer_id', user.id)
                     .limit(5000),
                 supabase
                     .from('upstream_round_payments')
-                    .select('round_id, upstream_dealer_name, amount, direction, lottery_type, round_date')
+                    .select('id, round_id, upstream_dealer_name, amount, direction, payment_type, paid_at, notes, lottery_type, round_date')
                     .eq('dealer_id', user.id)
                     .limit(5000)
             ])
@@ -2826,7 +2865,7 @@ export default function Dealer() {
                     dealer_id: user.id,
                     lottery_type: roundForm.lottery_type,
                     lottery_name: roundForm.lottery_name || LOTTERY_TYPES[roundForm.lottery_type],
-                    round_date: roundForm.open_date,
+                    round_date: roundForm.close_date,
                     open_time: formatLocalDateTime(openDateTime),
                     close_time: formatLocalDateTime(closeDateTime),
                     delete_before_minutes: roundForm.delete_before_minutes,
@@ -3198,7 +3237,7 @@ export default function Dealer() {
                 .update({
                     lottery_type: roundForm.lottery_type,
                     lottery_name: roundForm.lottery_name || LOTTERY_TYPES[roundForm.lottery_type],
-                    round_date: roundForm.open_date,
+                    round_date: roundForm.close_date,
                     open_time: formatLocalDateTime(openDateTime),
                     close_time: formatLocalDateTime(closeDateTime),
                     delete_before_minutes: roundForm.delete_before_minutes,
@@ -3988,7 +4027,20 @@ export default function Dealer() {
                                                                                                             {userHistories.map(uh => {
                                                                                                                 const memberName = uh.profiles?.full_name || uh.profiles?.line_display_name || uh.profiles?.email || "ไม่ระบุ"
                                                                                                                 const dealerProfit = (uh.total_amount || 0) - (uh.total_commission || 0) - (uh.total_winnings || 0)
-                                                                                                                const allRoundPayments = details?.payments || []
+                                                                                                                const targetRoundId = history.round_id || history.id
+                                                                                                                const detailsPayments = details?.payments || []
+                                                                                                                const detailsPaymentIds = new Set(detailsPayments.map(p => p.id).filter(Boolean))
+
+                                                                                                                const extraPayments = (settlementOverview.memberPayments || []).filter(p => {
+                                                                                                                    if (!p.id || detailsPaymentIds.has(p.id)) return false
+                                                                                                                    return (
+                                                                                                                        String(p.round_id) === String(targetRoundId) ||
+                                                                                                                        String(p.round_id) === String(history.id) ||
+                                                                                                                        (history.round_id && String(p.round_id) === String(history.round_id))
+                                                                                                                    )
+                                                                                                                })
+
+                                                                                                                const allRoundPayments = [...detailsPayments, ...extraPayments]
                                                                                                                 const memberPayments = allRoundPayments.filter(p => p.user_id === uh.user_id)
                                                                                                                 const initBal = calculateMemberInitialBalance(uh)
                                                                                                                 const currBal = calculateMemberCurrentBalance(initBal, memberPayments)
@@ -4058,6 +4110,7 @@ export default function Dealer() {
                                                                                                                                         payments={memberPayments}
                                                                                                                                         settlementOverview={settlementOverview}
                                                                                                                                         roundHistory={roundHistory}
+                                                                                                                                        dealerId={user?.id}
                                                                                                                                         onSavePayment={(paymentData) => handleSaveMemberPayment({
                                                                                                                                             historyItem: history,
                                                                                                                                             member: uh,
@@ -4111,7 +4164,20 @@ export default function Dealer() {
                                                                                                                 const upstreamName = t.dealerName || "เจ้ามือ"
                                                                                                                 const entriesCount = t.entriesCount !== undefined ? t.entriesCount : "-"
                                                                                                                 const tProfit = -(t.amount || 0) + (t.commission_earned || 0) + (t.winnings || 0)
-                                                                                                                const allUpstreamPayments = details?.upstreamPayments || []
+                                                                                                                const targetRoundId = history.round_id || history.id
+                                                                                                                const detailsUpstreamPayments = details?.upstreamPayments || []
+                                                                                                                const detailsUpstreamIds = new Set(detailsUpstreamPayments.map(p => p.id).filter(Boolean))
+
+                                                                                                                const extraUpstreamPayments = (settlementOverview.upstreamPayments || []).filter(p => {
+                                                                                                                    if (!p.id || detailsUpstreamIds.has(p.id)) return false
+                                                                                                                    return (
+                                                                                                                        String(p.round_id) === String(targetRoundId) ||
+                                                                                                                        String(p.round_id) === String(history.id) ||
+                                                                                                                        (history.round_id && String(p.round_id) === String(history.round_id))
+                                                                                                                    )
+                                                                                                                })
+
+                                                                                                                const allUpstreamPayments = [...detailsUpstreamPayments, ...extraUpstreamPayments]
                                                                                                                 const upstreamPayments = allUpstreamPayments.filter(p => p.upstream_dealer_name === upstreamName)
                                                                                                                 const initBal = calculateUpstreamInitialBalance(t)
                                                                                                                 const currBal = calculateUpstreamCurrentBalance(initBal, upstreamPayments)
@@ -4181,6 +4247,7 @@ export default function Dealer() {
                                                                                                                                         payments={upstreamPayments}
                                                                                                                                         settlementOverview={settlementOverview}
                                                                                                                                         roundHistory={roundHistory}
+                                                                                                                                        dealerId={user?.id}
                                                                                                                                         onSavePayment={(paymentData) => handleSaveUpstreamPayment({
                                                                                                                                             historyItem: history,
                                                                                                                                             transfer: t,
@@ -4733,7 +4800,7 @@ export default function Dealer() {
                             ยืนยันลบประวัติงวดหวย?
                         </h3>
                         <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-                            คุณต้องการลบประวัติงวด <strong style={{ color: 'var(--color-text-main)' }}>{LOTTERY_TYPES[deleteHistoryItem.lottery_type] || deleteHistoryItem.lottery_type}</strong> ({formatDate(deleteHistoryItem.round_date)}) หรือไม่? 
+                            คุณต้องการลบประวัติงวด <strong style={{ color: 'var(--color-text-main)' }}>{LOTTERY_TYPES[deleteHistoryItem.lottery_type] || deleteHistoryItem.lottery_type}</strong> ({formatDate(deleteHistoryItem.close_time || deleteHistoryItem.round_date)}) หรือไม่? 
                             <br />
                             <span style={{ fontSize: '0.8rem', color: '#ef4444', marginTop: '0.5rem', display: 'block' }}>*รายการประวัติและสรุปงวดนี้จะถูกลบออกจากระบบโดยสมบูรณ์</span>
                         </p>

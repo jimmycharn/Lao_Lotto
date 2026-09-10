@@ -36,3 +36,14 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 2. Use `detect_changes_tool` for code review.
 3. Use `get_affected_flows_tool` to understand impact.
 4. Use `query_graph_tool` pattern="tests_for" to check coverage.
+
+---
+
+## Domain Rules & Conventions (กฎสำคัญของระบบหวย)
+
+### 1. "งวดวันที่" (Round Date) ต้องเป็น "วันที่ปิดรับแทง / วันที่ออกรางวัล" เสมอ (ห้ามใช้วันที่เปิดรับแทงเด็ดขาด)
+- **กฎเหล็ก (Critical Domain Rule)**: ในวงการหวย "งวดวันที่" (Round Date) หมายถึงวันที่ปิดรับแทงและออกรางวัล (`close_time` / `close_date`) **ไม่ใช่** วันที่เปิดรับแทง (`open_time` / `open_date`)
+- **ตัวอย่าง**: ถ้างวดเปิดรับแทงวันที่ 2026-04-15 และปิดรับแทงวันที่ 2026-04-16 งวดนั้นคือ **"งวดวันที่ 2026-04-16"** (ไม่ใช่งวดวันที่ 15)
+- **การสร้าง/แก้ไขงวด (`Dealer.jsx`)**: ฟิลด์ `round_date` ที่บันทึกในฐานข้อมูล `lottery_rounds` ต้องใช้ `roundForm.close_date` เสมอ (ห้ามใช้ `open_date`)
+- **การแสดงผลและการอ้างอิงงวด**: ในการดึงวันที่งวดมาแสดงผล (`CrossRoundOffsetModal`, `MemberSettlementInline`, `UpstreamSettlementInline`, การลบประวัติ ฯลฯ) ต้องจัดลำดับความสำคัญโดยใช้ `close_time` / `close_date` ก่อน `round_date` เสมอ เพื่อป้องกันปัญหากรณีข้อมูลงวดเก่ายังเก็บ `open_date` ไว้
+- **การแปลงวันเวลา**: การดึง `close_time` ออกมาเป็นวันที่ `YYYY-MM-DD` ต้องคำนึงถึงไทม์โซนประเทศไทย (`Asia/Bangkok` / UTC+7) เสมอ ผ่านฟังก์ชัน `getRoundCloseDate`
