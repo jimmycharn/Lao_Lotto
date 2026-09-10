@@ -3,7 +3,11 @@ import {
     calculateMemberInitialBalance,
     calculateMemberCurrentBalance,
     getMemberSettlementStatus,
-    getPaymentPresetAmount
+    getPaymentPresetAmount,
+    calculateUpstreamInitialBalance,
+    calculateUpstreamCurrentBalance,
+    getUpstreamSettlementStatus,
+    getUpstreamPaymentPresetAmount
 } from './memberSettlementCalculator'
 
 describe('memberSettlementCalculator', () => {
@@ -81,3 +85,79 @@ describe('memberSettlementCalculator', () => {
         expect(getPaymentPresetAmount(uh, [], 'prize_payout', 'dealer_to_member')).toBe(1400)
     })
 })
+
+describe('upstreamSettlementCalculator', () => {
+    it('calculates upstream initial balance correctly: (amount - commission) - winnings', () => {
+        // Dealer owes upstream: 8600 - 2570 - 0 = 6030
+        const t1 = { amount: 8600, commission_earned: 2570, winnings: 0 }
+        expect(calculateUpstreamInitialBalance(t1)).toBe(6030)
+
+        // Upstream owes dealer: 5000 - 1000 - 12000 = -8000
+        const t2 = { amount: 5000, commission_earned: 1000, winnings: 12000 }
+        expect(calculateUpstreamInitialBalance(t2)).toBe(-8000)
+
+        // Break-even
+        const t3 = { amount: 5000, commission_earned: 1000, winnings: 4000 }
+        expect(calculateUpstreamInitialBalance(t3)).toBe(0)
+    })
+
+    it('calculates upstream current balance with payments: initial - paid_by_dealer + paid_by_upstream', () => {
+        const initial = 6030
+        // Dealer paid 2000 to upstream
+        const p1 = [{ direction: 'dealer_to_upstream', amount: 2000 }]
+        expect(calculateUpstreamCurrentBalance(initial, p1)).toBe(4030)
+
+        // Dealer paid remaining 4030
+        const p2 = [
+            { direction: 'dealer_to_upstream', amount: 2000 },
+            { direction: 'dealer_to_upstream', amount: 4030 }
+        ]
+        expect(calculateUpstreamCurrentBalance(initial, p2)).toBe(0)
+
+        // Upstream owed dealer 8000 (initial = -8000)
+        const initialNegative = -8000
+        const pUpstream = [{ direction: 'upstream_to_dealer', amount: 5000 }]
+        expect(calculateUpstreamCurrentBalance(initialNegative, pUpstream)).toBe(-3000)
+
+        const pUpstreamFull = [
+            { direction: 'upstream_to_dealer', amount: 5000 },
+            { direction: 'upstream_to_dealer', amount: 3000 }
+        ]
+        expect(calculateUpstreamCurrentBalance(initialNegative, pUpstreamFull)).toBe(0)
+    })
+
+    it('determines upstream settlement status correctly', () => {
+        // Dealer owes upstream (6030) -> -฿6,030
+        expect(getUpstreamSettlementStatus(6030)).toMatchObject({
+            isSettled: false,
+            formattedText: '-฿6,030',
+            partyWhoOwes: 'dealer'
+        })
+
+        // Upstream owes dealer (-8000) -> +฿8,000
+        expect(getUpstreamSettlementStatus(-8000)).toMatchObject({
+            isSettled: false,
+            formattedText: '+฿8,000',
+            partyWhoOwes: 'upstream'
+        })
+
+        // Break even / settled
+        expect(getUpstreamSettlementStatus(0)).toMatchObject({
+            isSettled: true,
+            formattedText: '฿0',
+            partyWhoOwes: 'none'
+        })
+    })
+
+    it('calculates upstream payment presets for buttons', () => {
+        const t = { amount: 8600, commission_earned: 2570, winnings: 2000 }
+        // Net layoff: 6030, Winnings: 2000, Initial balance: 4030 (Dealer owes 4030)
+        expect(getUpstreamPaymentPresetAmount(t, [], 'net_settlement')).toBe(4030)
+        expect(getUpstreamPaymentPresetAmount(t, [], 'prize_collection')).toBe(2000)
+
+        // If 1000 prize already collected
+        const pPrize = [{ payment_type: 'prize_collection', amount: 1000 }]
+        expect(getUpstreamPaymentPresetAmount(t, pPrize, 'prize_collection')).toBe(1000)
+    })
+})
+

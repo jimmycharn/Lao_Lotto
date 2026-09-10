@@ -100,3 +100,96 @@ export function getPaymentPresetAmount(memberHistory, payments = [], paymentType
     const current = calculateMemberCurrentBalance(initial, payments)
     return Math.abs(current)
 }
+
+/**
+ * ==========================================
+ * Upstream Layoff Settlement Calculations
+ * ==========================================
+ */
+
+/**
+ * Calculates initial balance for an upstream dealer layoff:
+ * Net Layoff = (amount - commission_earned)
+ * Initial Balance = Net Layoff - winnings
+ * Positive = Dealer owes Upstream (เราค้างเจ้ามือ)
+ * Negative = Upstream owes Dealer (เจ้ามือค้างเรา)
+ */
+export function calculateUpstreamInitialBalance(transfer) {
+    const amount = Number(transfer?.amount || 0)
+    const comm = Number(transfer?.commission_earned || 0)
+    const netLayoff = Math.round(amount - comm)
+    const winnings = Number(transfer?.winnings || 0)
+    return Math.round(netLayoff - winnings)
+}
+
+/**
+ * Calculates current balance based on initial balance and payment transactions:
+ * Current = Initial - paid_by_dealer + paid_by_upstream
+ */
+export function calculateUpstreamCurrentBalance(initialBalance, payments = []) {
+    const paidByDealer = payments
+        .filter(p => p.direction === 'dealer_to_upstream')
+        .reduce((sum, p) => sum + Number(p.amount || 0), 0)
+    
+    const paidByUpstream = payments
+        .filter(p => p.direction === 'upstream_to_dealer')
+        .reduce((sum, p) => sum + Number(p.amount || 0), 0)
+    
+    return Math.round(initialBalance - paidByDealer + paidByUpstream)
+}
+
+/**
+ * Returns settlement status, formatted text, and UI badges for upstream dealer
+ */
+export function getUpstreamSettlementStatus(currentBalance) {
+    if (Math.abs(currentBalance) <= 0.01) {
+        return {
+            isSettled: true,
+            formattedText: '฿0',
+            color: 'var(--color-success, #10b981)',
+            badgeBg: 'rgba(16, 185, 129, 0.15)',
+            badgeBorder: 'rgba(16, 185, 129, 0.3)',
+            partyWhoOwes: 'none'
+        }
+    }
+
+    if (currentBalance > 0) {
+        // Dealer owes Upstream (เราค้างเจ้ามือ)
+        return {
+            isSettled: false,
+            formattedText: `-฿${Math.round(currentBalance).toLocaleString()}`,
+            color: '#ef4444',
+            badgeBg: 'rgba(239, 68, 68, 0.15)',
+            badgeBorder: 'rgba(239, 68, 68, 0.3)',
+            partyWhoOwes: 'dealer'
+        }
+    }
+
+    // Upstream owes Dealer (เจ้ามือค้างเรา)
+    return {
+        isSettled: false,
+        formattedText: `+฿${Math.abs(Math.round(currentBalance)).toLocaleString()}`,
+        color: 'var(--color-success, #10b981)',
+        badgeBg: 'rgba(16, 185, 129, 0.15)',
+        badgeBorder: 'rgba(16, 185, 129, 0.3)',
+        partyWhoOwes: 'upstream'
+    }
+}
+
+/**
+ * Calculates preset amount for upstream payment form
+ */
+export function getUpstreamPaymentPresetAmount(transfer, payments = [], paymentType = 'net_settlement') {
+    if (paymentType === 'prize_collection') {
+        const totalWinnings = Number(transfer?.winnings || 0)
+        const prizeCollected = payments
+            .filter(p => p.payment_type === 'prize_collection')
+            .reduce((sum, p) => sum + Number(p.amount || 0), 0)
+        return Math.max(0, Math.round(totalWinnings - prizeCollected))
+    }
+
+    const initial = calculateUpstreamInitialBalance(transfer)
+    const current = calculateUpstreamCurrentBalance(initial, payments)
+    return Math.abs(current)
+}
+
