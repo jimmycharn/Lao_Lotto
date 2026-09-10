@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
@@ -74,6 +74,12 @@ import DealerAutomationTab from '../components/dealer/DealerAutomationTab'
 import DealerProfileTab from '../components/dealer/DealerProfileTab'
 import ReferralAffiliateTab from '../components/referral/ReferralAffiliateTab'
 import MemberAccordionItem from '../components/dealer/MemberAccordionItem'
+import MemberSettlementInline from '../components/dealer/MemberSettlementInline'
+import {
+    calculateMemberInitialBalance,
+    calculateMemberCurrentBalance,
+    getMemberSettlementStatus
+} from '../utils/memberSettlementCalculator'
 
 // RoundAccordionItem is now imported from separate file
 
@@ -197,6 +203,7 @@ export default function Dealer() {
     const [historyDetails, setHistoryDetails] = useState({})
     const [deleteHistoryItem, setDeleteHistoryItem] = useState(null)
     const [deletingHistory, setDeletingHistory] = useState(false)
+    const [expandedMemberSettlementId, setExpandedMemberSettlementId] = useState(null)
 
     // Fetch details for an expanded history round
     async function fetchHistoryDetails(historyItem) {
@@ -320,13 +327,28 @@ export default function Dealer() {
                 profiles: profilesMap[uh.user_id] || null
             }))
 
+            const targetRoundId = historyItem.round_id || historyItem.id
+            let roundPayments = []
+            if (targetRoundId) {
+                const { data: paymentsData, error: payErr } = await supabase
+                    .from('member_round_payments')
+                    .select('*')
+                    .eq('dealer_id', user.id)
+                    .eq('round_id', targetRoundId)
+                    .order('created_at', { ascending: true })
+                if (!payErr && paymentsData) {
+                    roundPayments = paymentsData
+                }
+            }
+
             setHistoryDetails(prev => ({
                 ...prev,
                 [historyId]: {
                     loading: false,
                     loaded: true,
                     userHistories: userHistoriesWithProfiles,
-                    transfers: transfers
+                    transfers: transfers,
+                    payments: roundPayments
                 }
             }))
         } catch (err) {
@@ -366,6 +388,12 @@ export default function Dealer() {
                 .delete()
                 .eq('id', roundId)
 
+            // 4. Delete associated member settlement payments
+            await supabase
+                .from('member_round_payments')
+                .delete()
+                .eq('round_id', roundId)
+
             toast.success('ลบประวัติงวดหวยเรียบร้อยแล้ว')
             setDeleteHistoryItem(null)
             fetchRoundHistory()
@@ -375,6 +403,84 @@ export default function Dealer() {
         } finally {
             setDeletingHistory(false)
         }
+    }
+
+    async function handleSaveMemberPayment({ historyItem, member, paymentData }) {
+        if (!paymentData.amount || Number(paymentData.amount) <= 0) {
+            toast.error('กรุณาระบุจำนวนเงินที่ถูกต้อง')
+            return
+        }
+
+        const roundId = historyItem.round_id || historyItem.id
+        const payload = {
+            dealer_id: user.id,
+            user_id: member.user_id,
+            round_id: roundId,
+            lottery_type: historyItem.lottery_type,
+            round_date: historyItem.round_date || (historyItem.close_time ? historyItem.close_time.split('T')[0] : null),
+            payment_type: paymentData.payment_type,
+            direction: paymentData.direction,
+            amount: Number(paymentData.amount),
+            paid_at: paymentData.paid_at || new Date().toISOString().split('T')[0],
+            notes: paymentData.notes || null,
+            created_by: user.id
+        }
+
+        const { data: newPayment, error } = await supabase
+            .from('member_round_payments')
+            .insert(payload)
+            .select()
+            .single()
+
+        if (error) {
+            console.error('Error recording member payment:', error)
+            toast.error('บันทึกการชำระเงินไม่สำเร็จ: ' + error.message)
+            return
+        }
+
+        toast.success('บันทึกการชำระเงินเรียบร้อยแล้ว')
+
+        setHistoryDetails(prev => {
+            const current = prev[historyItem.id]
+            if (!current) return prev
+            const existingPayments = current.payments || []
+            return {
+                ...prev,
+                [historyItem.id]: {
+                    ...current,
+                    payments: [...existingPayments, newPayment]
+                }
+            }
+        })
+    }
+
+    async function handleDeleteMemberPayment({ historyItem, paymentId }) {
+        const { error } = await supabase
+            .from('member_round_payments')
+            .delete()
+            .eq('id', paymentId)
+            .eq('dealer_id', user.id)
+
+        if (error) {
+            console.error('Error deleting member payment:', error)
+            toast.error('ลบรายการชำระเงินไม่สำเร็จ: ' + error.message)
+            return
+        }
+
+        toast.success('ลบรายการชำระเงินเรียบร้อยแล้ว')
+
+        setHistoryDetails(prev => {
+            const current = prev[historyItem.id]
+            if (!current) return prev
+            const existingPayments = current.payments || []
+            return {
+                ...prev,
+                [historyItem.id]: {
+                    ...current,
+                    payments: existingPayments.filter(p => p.id !== paymentId)
+                }
+            }
+        })
     }
 
     const toggleExpandHistory = (historyItem) => {
@@ -3079,23 +3185,96 @@ export default function Dealer() {
                                                                                                                 <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>ค่าคอม</th>
                                                                                                                 <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>ถูกรางวัล</th>
                                                                                                                 <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>กำไรเจ้ามือ</th>
+                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>สถานะ / ยอดคงค้าง</th>
                                                                                                             </tr>
                                                                                                         </thead>
                                                                                                         <tbody>
                                                                                                             {userHistories.map(uh => {
                                                                                                                 const memberName = uh.profiles?.full_name || uh.profiles?.line_display_name || uh.profiles?.email || "ไม่ระบุ"
                                                                                                                 const dealerProfit = (uh.total_amount || 0) - (uh.total_commission || 0) - (uh.total_winnings || 0)
+                                                                                                                const allRoundPayments = details?.payments || []
+                                                                                                                const memberPayments = allRoundPayments.filter(p => p.user_id === uh.user_id)
+                                                                                                                const initBal = calculateMemberInitialBalance(uh)
+                                                                                                                const currBal = calculateMemberCurrentBalance(initBal, memberPayments)
+                                                                                                                const settlementStatus = getMemberSettlementStatus(currBal)
+                                                                                                                const settlementKey = `${history.id}_${uh.user_id}`
+                                                                                                                const isExpanded = expandedMemberSettlementId === settlementKey
+
                                                                                                                 return (
-                                                                                                                    <tr key={uh.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                                                                                                                        <td style={{ padding: "0.5rem", fontWeight: 600 }}>{memberName}</td>
-                                                                                                                        <td style={{ padding: "0.5rem", textAlign: "center" }}>{uh.total_entries}</td>
-                                                                                                                        <td style={{ padding: "0.5rem", textAlign: "right", fontWeight: 600 }}>฿{(uh.total_amount || 0).toLocaleString()}</td>
-                                                                                                                        <td style={{ padding: "0.5rem", textAlign: "right", color: "var(--color-warning)" }}>฿{Math.round(uh.total_commission || 0).toLocaleString()}</td>
-                                                                                                                        <td style={{ padding: "0.5rem", textAlign: "right", color: "var(--color-danger)" }}>฿{(uh.total_winnings || 0).toLocaleString()}</td>
-                                                                                                                        <td style={{ padding: "0.5rem", textAlign: "right", fontWeight: 600, color: dealerProfit >= 0 ? "var(--color-success)" : "var(--color-danger)" }}>
-                                                                                                                            {dealerProfit >= 0 ? "+฿" : "-฿"}{Math.abs(Math.round(dealerProfit)).toLocaleString()}
-                                                                                                                        </td>
-                                                                                                                    </tr>
+                                                                                                                    <Fragment key={uh.id || uh.user_id}>
+                                                                                                                        <tr 
+                                                                                                                            style={{ 
+                                                                                                                                borderBottom: isExpanded ? "none" : "1px solid rgba(255,255,255,0.05)",
+                                                                                                                                cursor: "pointer",
+                                                                                                                                background: isExpanded ? "rgba(99, 102, 241, 0.08)" : "transparent",
+                                                                                                                                transition: "background 0.2s ease"
+                                                                                                                            }}
+                                                                                                                            onClick={() => setExpandedMemberSettlementId(isExpanded ? null : settlementKey)}
+                                                                                                                        >
+                                                                                                                            <td style={{ padding: "0.5rem", fontWeight: 600 }}>
+                                                                                                                                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+                                                                                                                                    <span style={{ fontSize: "0.75rem", color: "var(--color-primary)", opacity: 0.8 }}>
+                                                                                                                                        {isExpanded ? "▼" : "▶"}
+                                                                                                                                    </span>
+                                                                                                                                    {memberName}
+                                                                                                                                </span>
+                                                                                                                            </td>
+                                                                                                                            <td style={{ padding: "0.5rem", textAlign: "center" }}>{uh.total_entries}</td>
+                                                                                                                            <td style={{ padding: "0.5rem", textAlign: "right", fontWeight: 600 }}>฿{(uh.total_amount || 0).toLocaleString()}</td>
+                                                                                                                            <td style={{ padding: "0.5rem", textAlign: "right", color: "var(--color-warning)" }}>฿{Math.round(uh.total_commission || 0).toLocaleString()}</td>
+                                                                                                                            <td style={{ padding: "0.5rem", textAlign: "right", color: "var(--color-danger)" }}>฿{(uh.total_winnings || 0).toLocaleString()}</td>
+                                                                                                                            <td style={{ padding: "0.5rem", textAlign: "right", fontWeight: 600, color: dealerProfit >= 0 ? "var(--color-success)" : "var(--color-danger)" }}>
+                                                                                                                                {dealerProfit >= 0 ? "+฿" : "-฿"}{Math.abs(Math.round(dealerProfit)).toLocaleString()}
+                                                                                                                            </td>
+                                                                                                                            <td style={{ padding: "0.5rem", textAlign: "center" }} onClick={e => e.stopPropagation()}>
+                                                                                                                                <button
+                                                                                                                                    type="button"
+                                                                                                                                    onClick={() => setExpandedMemberSettlementId(isExpanded ? null : settlementKey)}
+                                                                                                                                    style={{
+                                                                                                                                        display: "inline-flex",
+                                                                                                                                        alignItems: "center",
+                                                                                                                                        gap: "0.35rem",
+                                                                                                                                        padding: "0.25rem 0.65rem",
+                                                                                                                                        borderRadius: "9999px",
+                                                                                                                                        fontSize: "0.78rem",
+                                                                                                                                        fontWeight: 600,
+                                                                                                                                        cursor: "pointer",
+                                                                                                                                        border: `1px solid ${settlementStatus.badgeBorder}`,
+                                                                                                                                        background: settlementStatus.badgeBg,
+                                                                                                                                        color: settlementStatus.color,
+                                                                                                                                        transition: "all 0.15s ease"
+                                                                                                                                    }}
+                                                                                                                                    title="คลิกเพื่อบันทึกหรือดูรายการชำระเงิน"
+                                                                                                                                >
+                                                                                                                                    <span>{settlementStatus.formattedText}</span>
+                                                                                                                                    <span style={{ fontSize: "0.7rem", opacity: 0.8 }}>
+                                                                                                                                        {isExpanded ? "▲" : "▼"}
+                                                                                                                                    </span>
+                                                                                                                                </button>
+                                                                                                                            </td>
+                                                                                                                        </tr>
+                                                                                                                        {isExpanded && (
+                                                                                                                            <tr style={{ background: "rgba(0, 0, 0, 0.25)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                                                                                                                                <td colSpan={7} style={{ padding: "0.75rem 1rem" }}>
+                                                                                                                                    <MemberSettlementInline
+                                                                                                                                        member={uh}
+                                                                                                                                        round={history}
+                                                                                                                                        payments={memberPayments}
+                                                                                                                                        onSavePayment={(paymentData) => handleSaveMemberPayment({
+                                                                                                                                            historyItem: history,
+                                                                                                                                            member: uh,
+                                                                                                                                            paymentData
+                                                                                                                                        })}
+                                                                                                                                        onDeletePayment={(paymentId) => handleDeleteMemberPayment({
+                                                                                                                                            historyItem: history,
+                                                                                                                                            paymentId
+                                                                                                                                        })}
+                                                                                                                                        onClose={() => setExpandedMemberSettlementId(null)}
+                                                                                                                                    />
+                                                                                                                                </td>
+                                                                                                                            </tr>
+                                                                                                                        )}
+                                                                                                                    </Fragment>
                                                                                                                 )
                                                                                                             })}
                                                                                                         </tbody>

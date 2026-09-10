@@ -98,6 +98,7 @@ export function getRoundFinancialMetrics(round) {
             totalPayout: 0,
             transferredAmt: 0,
             upstreamComm: 0,
+            upstreamWin: 0,
             netProfit: 0,
             netPending: 0,
             isProfit: false,
@@ -110,9 +111,10 @@ export function getRoundFinancialMetrics(round) {
     const totalPayout = Number(round.total_payout) || 0
     const transferredAmt = Number(round.transferred_amount) || 0
     const upstreamComm = Number(round.upstream_commission) || 0
+    const upstreamWin = Number(round.upstream_winnings) || 0
     const netProfit = round.net_profit !== undefined && round.net_profit !== null
         ? Number(round.net_profit)
-        : ((totalAmt - totalComm - totalPayout) + (-transferredAmt + upstreamComm))
+        : ((totalAmt - totalComm - totalPayout) + (-transferredAmt + upstreamComm + upstreamWin))
     const netPending = (totalAmt - totalComm) + (-transferredAmt + upstreamComm)
 
     return {
@@ -121,6 +123,7 @@ export function getRoundFinancialMetrics(round) {
         totalPayout,
         transferredAmt,
         upstreamComm,
+        upstreamWin,
         netProfit,
         netPending,
         isProfit: netProfit > 0,
