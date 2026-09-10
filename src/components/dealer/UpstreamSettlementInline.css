@@ -1,0 +1,331 @@
+/* Upstream Settlement Inline Styles */
+.upstream-settlement-inline-container {
+    padding: 0.85rem 1rem;
+    background: rgba(15, 23, 42, 0.65);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    backdrop-filter: blur(8px);
+}
+
+/* 1. Summary Strip */
+.upstream-settlement-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 0.75rem;
+    background: rgba(0, 0, 0, 0.35);
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.upstream-strip-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.upstream-strip-label {
+    font-size: 0.75rem;
+    color: var(--color-text-muted, #94a3b8);
+}
+
+.upstream-strip-val {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--color-text, #f8fafc);
+}
+
+.upstream-strip-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    width: fit-content;
+    margin-top: 0.15rem;
+}
+
+/* 2. Actions Header */
+.upstream-settlement-actions-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.upstream-settlement-btn-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.btn-upstream-settle-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.85rem;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s ease;
+}
+
+.btn-upstream-settle-action:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-upstream-settle-quick {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: #ffffff;
+}
+
+.btn-upstream-settle-quick:hover:not(:disabled) {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    transform: translateY(-1px);
+}
+
+.btn-upstream-settle-add {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--color-text, #f8fafc);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.btn-upstream-settle-add:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.btn-upstream-settle-add.active {
+    background: var(--color-primary, #facc15);
+    color: #000000;
+    border-color: var(--color-primary, #facc15);
+}
+
+/* Inline Form */
+.upstream-settlement-form-box {
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    animation: fadeInSlideUpstream 0.2s ease-out;
+}
+
+@keyframes fadeInSlideUpstream {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.upstream-settlement-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.75rem;
+}
+
+.upstream-settlement-form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.upstream-settlement-form-field label {
+    font-size: 0.78rem;
+    color: var(--color-text-muted, #94a3b8);
+}
+
+.upstream-settlement-form-field input,
+.upstream-settlement-form-field select {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    padding: 0.45rem 0.65rem;
+    color: #f8fafc;
+    font-size: 0.85rem;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.upstream-settlement-form-field input:focus,
+.upstream-settlement-form-field select:focus {
+    border-color: var(--color-primary, #facc15);
+    background: rgba(255, 255, 255, 0.09);
+}
+
+.upstream-settlement-presets {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+    margin-top: 0.3rem;
+}
+
+.upstream-preset-pill-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--color-text-muted, #94a3b8);
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.upstream-preset-pill-btn:hover {
+    background: rgba(250, 204, 21, 0.15);
+    color: #facc15;
+    border-color: rgba(250, 204, 21, 0.4);
+}
+
+.upstream-preset-pill-btn.active {
+    background: rgba(250, 204, 21, 0.2);
+    color: #facc15;
+    border-color: #facc15;
+    font-weight: 600;
+}
+
+.upstream-settlement-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
+
+/* History Logs */
+.upstream-settlement-logs-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.upstream-settlement-logs-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--color-text-muted, #94a3b8);
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.upstream-settlement-logs-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+.upstream-settlement-logs-table th {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--color-text-muted, #94a3b8);
+    padding: 0.4rem 0.5rem;
+    font-weight: 500;
+    text-align: left;
+}
+
+.upstream-settlement-logs-table td {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 0.45rem 0.5rem;
+}
+
+.upstream-btn-log-del {
+    background: none;
+    border: none;
+    color: #ef4444;
+    cursor: pointer;
+    padding: 0.2rem 0.35rem;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.75;
+    transition: all 0.15s;
+}
+
+.upstream-btn-log-del:hover:not(:disabled) {
+    opacity: 1;
+    background: rgba(239, 68, 68, 0.15);
+}
+
+@media (max-width: 640px) {
+    .upstream-settlement-inline-container {
+        padding: 0.65rem 0.75rem;
+    }
+
+    .upstream-settlement-strip {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .upstream-settlement-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .upstream-settlement-logs-table {
+        font-size: 0.75rem;
+    }
+}
+
+/* Quick Settle Confirmation Modal */
+.upstream-quick-settle-modal {
+    background: #0f172a;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+    color: #f8fafc;
+    width: 90%;
+    max-width: 440px;
+}
+
+.upstream-quick-settle-modal .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.upstream-quick-settle-modal .modal-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.upstream-quick-settle-modal .modal-close {
+    background: none;
+    border: none;
+    color: var(--color-text-muted, #94a3b8);
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 0.2rem;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s;
+}
+
+.upstream-quick-settle-modal .modal-close:hover {
+    color: #ffffff;
+}
+
+.upstream-quick-settle-modal .modal-body {
+    padding: 1.25rem;
+}
