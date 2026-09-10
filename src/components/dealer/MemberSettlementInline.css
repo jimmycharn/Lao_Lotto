@@ -232,6 +232,24 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
+.btn-edit-log {
+    background: none;
+    border: none;
+    color: var(--color-primary, #facc15);
+    cursor: pointer;
+    padding: 0.2rem 0.35rem;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, transform 0.15s;
+}
+
+.btn-edit-log:hover {
+    background: rgba(250, 204, 21, 0.15);
+    transform: scale(1.08);
+}
+
 .btn-delete-log {
     background: none;
     border: none;
