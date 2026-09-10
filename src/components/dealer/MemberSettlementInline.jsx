@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
     FiPlus,
     FiTrash2,
@@ -500,8 +501,12 @@ export default function MemberSettlementInline({
             </div>
 
             {/* 5. Quick Settle Confirmation Modal */}
-            {showQuickSettleModal && (
-                <div className="modal-overlay nested" onClick={() => setShowQuickSettleModal(false)}>
+            {showQuickSettleModal && typeof document !== 'undefined' && createPortal(
+                <div 
+                    className="modal-overlay nested" 
+                    style={{ zIndex: 99999 }}
+                    onClick={() => setShowQuickSettleModal(false)}
+                >
                     <div className="modal modal-sm quick-settle-modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
                             <h3>
@@ -512,22 +517,22 @@ export default function MemberSettlementInline({
                             </button>
                         </div>
                         <form onSubmit={handleConfirmQuickSettle}>
-                            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                 {/* Summary Info Box */}
                                 <div style={{
                                     background: 'rgba(0, 0, 0, 0.35)',
                                     border: '1px solid rgba(255, 255, 255, 0.08)',
                                     borderRadius: '8px',
-                                    padding: '0.85rem 1rem',
+                                    padding: '0.65rem 0.85rem',
                                     display: 'flex',
                                     flexDirection: 'column',
-                                    gap: '0.45rem'
+                                    gap: '0.35rem'
                                 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
                                         <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>สมาชิก:</span>
                                         <span style={{ fontWeight: 600 }}>{memberName}</span>
                                     </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
                                         <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>ทิศทาง:</span>
                                         <span style={{ 
                                             fontWeight: 600, 
@@ -540,11 +545,11 @@ export default function MemberSettlementInline({
                                         display: 'flex', 
                                         justifyContent: 'space-between', 
                                         alignItems: 'center', 
-                                        marginTop: '0.25rem', 
-                                        paddingTop: '0.45rem', 
+                                        marginTop: '0.2rem', 
+                                        paddingTop: '0.35rem', 
                                         borderTop: '1px solid rgba(255,255,255,0.06)' 
                                     }}>
-                                        <span style={{ color: 'var(--color-text-muted, #94a3b8)', fontSize: '0.85rem' }}>ยอดเคลียร์ครบ:</span>
+                                        <span style={{ color: 'var(--color-text-muted, #94a3b8)', fontSize: '0.82rem' }}>ยอดเคลียร์ครบ:</span>
                                         <span style={{ 
                                             fontSize: '1.25rem', 
                                             fontWeight: 700, 
@@ -557,7 +562,7 @@ export default function MemberSettlementInline({
 
                                 {/* Date Picker with Quick Chips */}
                                 <div className="settlement-form-field">
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
                                         <FiCalendar /> วันที่ชำระ:
                                     </label>
                                     <input
@@ -565,6 +570,7 @@ export default function MemberSettlementInline({
                                         value={quickPaidAt}
                                         onChange={e => setQuickPaidAt(e.target.value)}
                                         required
+                                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
                                     />
                                     <div className="settlement-presets">
                                         <button
@@ -589,7 +595,7 @@ export default function MemberSettlementInline({
 
                                 {/* Notes with Quick Chips */}
                                 <div className="settlement-form-field">
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
                                         <FiFileText /> หมายเหตุ:
                                     </label>
                                     <input
@@ -597,6 +603,7 @@ export default function MemberSettlementInline({
                                         placeholder="ระบุหมายเหตุ (เช่น โอน SCB, เงินสด ฯลฯ)"
                                         value={quickNotes}
                                         onChange={e => setQuickNotes(e.target.value)}
+                                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
                                     />
                                     <div className="settlement-presets">
                                         <button
@@ -628,7 +635,7 @@ export default function MemberSettlementInline({
                                 display: 'flex', 
                                 justifyContent: 'flex-end', 
                                 gap: '0.5rem', 
-                                padding: '0.85rem 1.25rem', 
+                                padding: '0.75rem 1.15rem', 
                                 borderTop: '1px solid rgba(255,255,255,0.08)',
                                 background: 'rgba(0,0,0,0.2)' 
                             }}>
@@ -662,7 +669,8 @@ export default function MemberSettlementInline({
                             </div>
                         </form>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     )

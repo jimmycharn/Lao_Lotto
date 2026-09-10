@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
     FiZap,
     FiPlus,
@@ -503,7 +504,7 @@ export default function UpstreamSettlementInline({
             </div>
 
             {/* 5. Quick Settle Confirmation Modal */}
-            {showQuickSettleModal && (
+            {showQuickSettleModal && typeof document !== 'undefined' && createPortal(
                 <div
                     style={{
                         position: 'fixed',
@@ -517,7 +518,8 @@ export default function UpstreamSettlementInline({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        padding: '1rem'
+                        padding: '1rem',
+                        boxSizing: 'border-box'
                     }}
                     onClick={() => !saving && setShowQuickSettleModal(false)}
                 >
@@ -539,26 +541,26 @@ export default function UpstreamSettlementInline({
                         </div>
 
                         <form onSubmit={handleConfirmQuickSettle} className="modal-body">
-                            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.85rem', borderRadius: '8px', marginBottom: '1rem' }}>
-                                <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.3rem' }}>
+                            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.65rem 0.85rem', borderRadius: '8px' }}>
+                                <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginBottom: '0.2rem' }}>
                                     เจ้ามือรับตีออก: <strong style={{ color: '#fff' }}>{upstreamName}</strong>
                                 </div>
-                                <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.3rem' }}>
+                                <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginBottom: '0.2rem' }}>
                                     ทิศทางการเงิน: <strong style={{ color: currentBalance > 0 ? '#ef4444' : 'var(--color-success)' }}>
                                         {currentBalance > 0 ? '🔴 เราจ่ายให้เจ้ามือรับตีออก' : '🟢 เจ้ามือรับตีออกจ่ายคืนเรา'}
                                     </strong>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginTop: '0.5rem' }}>
-                                    <span style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>ยอดเงินที่จะบันทึกเคลียร์:</span>
-                                    <span style={{ fontSize: '1.4rem', fontWeight: 800, color: currentBalance > 0 ? '#ef4444' : 'var(--color-success)' }}>
+                                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginTop: '0.35rem' }}>
+                                    <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>ยอดเงินที่จะบันทึกเคลียร์:</span>
+                                    <span style={{ fontSize: '1.25rem', fontWeight: 800, color: currentBalance > 0 ? '#ef4444' : 'var(--color-success)' }}>
                                         ฿{Math.abs(currentBalance).toLocaleString()}
                                     </span>
                                 </div>
                             </div>
 
                             {/* Date Field with Presets */}
-                            <div className="upstream-settlement-form-field" style={{ marginBottom: '1rem' }}>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                            <div className="upstream-settlement-form-field">
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem' }}>
                                     <FiCalendar size={13} /> วันที่ชำระ
                                 </label>
                                 <input
@@ -566,6 +568,7 @@ export default function UpstreamSettlementInline({
                                     value={quickPaidAt}
                                     onChange={(e) => setQuickPaidAt(e.target.value)}
                                     required
+                                    style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
                                 />
                                 <div className="upstream-settlement-presets">
                                     <button
@@ -589,8 +592,8 @@ export default function UpstreamSettlementInline({
                             </div>
 
                             {/* Notes Field with Presets */}
-                            <div className="upstream-settlement-form-field" style={{ marginBottom: '1.25rem' }}>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                            <div className="upstream-settlement-form-field">
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem' }}>
                                     <FiFileText size={13} /> หมายเหตุ
                                 </label>
                                 <input
@@ -598,6 +601,7 @@ export default function UpstreamSettlementInline({
                                     placeholder="ระบุหมายเหตุ เช่น โอนเงินแล้ว"
                                     value={quickNotes}
                                     onChange={(e) => setQuickNotes(e.target.value)}
+                                    style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
                                 />
                                 <div className="upstream-settlement-presets">
                                     <button
@@ -624,12 +628,13 @@ export default function UpstreamSettlementInline({
                                 </div>
                             </div>
 
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.35rem' }}>
                                 <button
                                     type="button"
                                     className="btn-upstream-settle-action btn-upstream-settle-add"
                                     onClick={() => setShowQuickSettleModal(false)}
                                     disabled={saving}
+                                    style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem' }}
                                 >
                                     ยกเลิก
                                 </button>
@@ -637,13 +642,15 @@ export default function UpstreamSettlementInline({
                                     type="submit"
                                     className="btn-upstream-settle-action btn-upstream-settle-quick"
                                     disabled={saving}
+                                    style={{ padding: '0.45rem 1rem', fontSize: '0.82rem' }}
                                 >
                                     <FiCheck size={14} /> {saving ? 'กำลังบันทึก...' : 'ยืนยันบันทึกเคลียร์ยอด'}
                                 </button>
                             </div>
                         </form>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     )
