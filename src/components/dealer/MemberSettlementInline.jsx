@@ -69,8 +69,23 @@ export default function MemberSettlementInline({
         setShowForm(true)
     }
 
-    // Quick full settlement button
-    const handleQuickSettle = async () => {
+    // Quick Settle Modal states
+    const [showQuickSettleModal, setShowQuickSettleModal] = useState(false)
+    const [quickPaidAt, setQuickPaidAt] = useState(() => new Date().toISOString().split('T')[0])
+    const [quickNotes, setQuickNotes] = useState('เคลียร์ยอดครบจำนวน')
+
+    const roundDate = round?.round_date || (round?.close_time ? round.close_time.split('T')[0] : null)
+
+    // Open Quick full settlement modal
+    const handleOpenQuickSettle = () => {
+        setQuickPaidAt(new Date().toISOString().split('T')[0])
+        setQuickNotes('เคลียร์ยอดครบจำนวน')
+        setShowQuickSettleModal(true)
+    }
+
+    // Confirm and save Quick settlement
+    const handleConfirmQuickSettle = async (e) => {
+        if (e) e.preventDefault()
         if (currentBalance === 0) return
         const defDir = currentBalance > 0 ? 'member_to_dealer' : 'dealer_to_member'
         const settleAmount = Math.abs(currentBalance)
@@ -81,13 +96,14 @@ export default function MemberSettlementInline({
                 user_id: member.user_id,
                 round_id: round.round_id || round.id,
                 lottery_type: round.lottery_type,
-                round_date: round.round_date || round.close_time?.split('T')[0],
+                round_date: roundDate,
                 payment_type: 'net_settlement',
                 direction: defDir,
                 amount: settleAmount,
-                paid_at: new Date().toISOString().split('T')[0],
-                notes: 'เคลียร์ยอดครบจำนวน'
+                paid_at: quickPaidAt || new Date().toISOString().split('T')[0],
+                notes: quickNotes.trim() || 'เคลียร์ยอดครบจำนวน'
             })
+            setShowQuickSettleModal(false)
         } finally {
             setSaving(false)
         }
@@ -176,9 +192,9 @@ export default function MemberSettlementInline({
                         <button
                             type="button"
                             className="btn-settle-action btn-settle-quick"
-                            onClick={handleQuickSettle}
+                            onClick={handleOpenQuickSettle}
                             disabled={saving}
-                            title="บันทึกชำระยอดคงค้างเต็มจำนวนใน 1 คลิก"
+                            title="ระบุวันที่/หมายเหตุ และบันทึกชำระยอดคงค้างครบจำนวน"
                         >
                             <FiZap size={14} /> ⚡ เคลียร์ครบ ({status.formattedText})
                         </button>
@@ -412,6 +428,160 @@ export default function MemberSettlementInline({
                     </div>
                 )}
             </div>
+
+            {/* 5. Quick Settle Confirmation Modal */}
+            {showQuickSettleModal && (
+                <div className="modal-overlay nested" onClick={() => setShowQuickSettleModal(false)}>
+                    <div className="modal modal-sm quick-settle-modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3>
+                                <FiZap style={{ color: 'var(--color-success, #10b981)' }} /> เคลียร์ยอดคงค้างครบ
+                            </h3>
+                            <button type="button" className="modal-close" onClick={() => setShowQuickSettleModal(false)}>
+                                <FiX />
+                            </button>
+                        </div>
+                        <form onSubmit={handleConfirmQuickSettle}>
+                            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                {/* Summary Info Box */}
+                                <div style={{
+                                    background: 'rgba(0, 0, 0, 0.35)',
+                                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                                    borderRadius: '8px',
+                                    padding: '0.85rem 1rem',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '0.45rem'
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                                        <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>สมาชิก:</span>
+                                        <span style={{ fontWeight: 600 }}>{memberName}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                                        <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>ทิศทาง:</span>
+                                        <span style={{ 
+                                            fontWeight: 600, 
+                                            color: currentBalance > 0 ? 'var(--color-warning, #f59e0b)' : 'var(--color-danger, #ef4444)' 
+                                        }}>
+                                            {currentBalance > 0 ? '🟢 คนส่งจ่ายให้เจ้ามือ (รับชำระ)' : '🔴 เจ้ามือจ่ายให้คนส่ง (เคลียร์ยอด)'}
+                                        </span>
+                                    </div>
+                                    <div style={{ 
+                                        display: 'flex', 
+                                        justifyContent: 'space-between', 
+                                        alignItems: 'center', 
+                                        marginTop: '0.25rem', 
+                                        paddingTop: '0.45rem', 
+                                        borderTop: '1px solid rgba(255,255,255,0.06)' 
+                                    }}>
+                                        <span style={{ color: 'var(--color-text-muted, #94a3b8)', fontSize: '0.85rem' }}>ยอดเคลียร์ครบ:</span>
+                                        <span style={{ 
+                                            fontSize: '1.25rem', 
+                                            fontWeight: 700, 
+                                            color: 'var(--color-success, #10b981)' 
+                                        }}>
+                                            ฿{Math.abs(currentBalance).toLocaleString()}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Date Picker with Quick Chips */}
+                                <div className="settlement-form-field">
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                        <FiCalendar /> วันที่ชำระ:
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={quickPaidAt}
+                                        onChange={e => setQuickPaidAt(e.target.value)}
+                                        required
+                                    />
+                                    <div className="settlement-presets">
+                                        <button
+                                            type="button"
+                                            className="preset-pill-btn"
+                                            onClick={() => setQuickPaidAt(new Date().toISOString().split('T')[0])}
+                                        >
+                                            วันนี้
+                                        </button>
+                                        {roundDate && roundDate !== new Date().toISOString().split('T')[0] && (
+                                            <button
+                                                type="button"
+                                                className="preset-pill-btn"
+                                                onClick={() => setQuickPaidAt(roundDate)}
+                                            >
+                                                วันที่งวด ({roundDate})
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Notes with Quick Chips */}
+                                <div className="settlement-form-field">
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                        <FiFileText /> หมายเหตุ:
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="ระบุหมายเหตุ (เช่น โอนเงิน, เงินสด ฯลฯ)"
+                                        value={quickNotes}
+                                        onChange={e => setQuickNotes(e.target.value)}
+                                    />
+                                    <div className="settlement-presets">
+                                        {['เคลียร์ยอดครบจำนวน', 'โอนเงินแล้ว', 'รับเงินสด'].map(preset => (
+                                            <button
+                                                key={preset}
+                                                type="button"
+                                                className="preset-pill-btn"
+                                                onClick={() => setQuickNotes(preset)}
+                                            >
+                                                {preset}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="modal-footer" style={{ 
+                                display: 'flex', 
+                                justifyContent: 'flex-end', 
+                                gap: '0.5rem', 
+                                padding: '0.85rem 1.25rem', 
+                                borderTop: '1px solid rgba(255,255,255,0.08)',
+                                background: 'rgba(0,0,0,0.2)' 
+                            }}>
+                                <button
+                                    type="button"
+                                    className="btn btn-outline btn-sm"
+                                    onClick={() => setShowQuickSettleModal(false)}
+                                    disabled={saving}
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="btn btn-success btn-sm"
+                                    disabled={saving}
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '0.35rem',
+                                        fontWeight: 600
+                                    }}
+                                >
+                                    {saving ? (
+                                        <>กำลังบันทึก...</>
+                                    ) : (
+                                        <>
+                                            <FiCheck /> ยืนยันเคลียร์ครบ (฿{Math.abs(currentBalance).toLocaleString()})
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
