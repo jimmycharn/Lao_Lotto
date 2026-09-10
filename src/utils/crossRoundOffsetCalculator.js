@@ -1,7 +1,9 @@
-/**
- * Cross-Round Offset Calculator
- * Handles arithmetic and FIFO allocation for cross-round settlement offsets.
- */
+import {
+    calculateMemberInitialBalance,
+    calculateMemberCurrentBalance,
+    calculateUpstreamInitialBalance,
+    calculateUpstreamCurrentBalance
+} from './memberSettlementCalculator'
 
 /**
  * Calculates net difference and direction between past debt total and current prize amount.
@@ -135,4 +137,131 @@ export function allocateCrossRoundOffsetPayments({
         currentRoundPayment,
         pastRoundPayments
     }
+}
+
+/**
+ * Finds all past rounds where a member has outstanding unpaid debt (currentBalance > 0).
+ * 
+ * @param {Object} params
+ * @param {string} params.userId
+ * @param {string} [params.currentRoundId]
+ * @param {string} [params.currentRoundDate]
+ * @param {Array<Object>} [params.userHistories=[]]
+ * @param {Array<Object>} [params.memberPayments=[]]
+ * @returns {Array<{ roundId: string, roundDate: string, lotteryType: string, debt: number }>}
+ */
+export function findMemberPastUnpaidRounds({
+    userId,
+    currentRoundId,
+    currentRoundDate,
+    userHistories = [],
+    memberPayments = []
+}) {
+    if (!userId) return []
+    const results = []
+
+    const relevant = userHistories.filter(h => {
+        if (h.user_id !== userId) return false
+        const roundId = h.round_id || h.id
+        if (currentRoundId && roundId === currentRoundId) return false
+        if (currentRoundDate && h.round_date && h.round_date >= currentRoundDate && roundId === currentRoundId) return false
+        return true
+    })
+
+    for (const h of relevant) {
+        const roundId = h.round_id || h.id
+        const initial = calculateMemberInitialBalance(h)
+        const roundPayments = memberPayments.filter(p => (p.round_id === roundId || p.roundId === roundId) && p.user_id === userId)
+        const currentBalance = calculateMemberCurrentBalance(initial, roundPayments)
+
+        if (currentBalance > 0) {
+            results.push({
+                roundId,
+                roundDate: h.round_date || '',
+                lotteryType: h.lottery_type || '',
+                debt: currentBalance
+            })
+        }
+    }
+
+    return results.sort((a, b) => (a.roundDate || '').localeCompare(b.roundDate || ''))
+}
+
+/**
+ * Finds all past rounds where the dealer owes an upstream dealer debt (currentBalance > 0).
+ * 
+ * @param {Object} params
+ * @param {string} params.dealerName
+ * @param {string} [params.currentRoundId]
+ * @param {string} [params.currentRoundDate]
+ * @param {Array<Object>} [params.transfers=[]]
+ * @param {Array<Object>} [params.upstreamPayments=[]]
+ * @returns {Array<{ roundId: string, roundDate: string, lotteryType: string, debt: number, upstreamDealerName: string }>}
+ */
+export function findUpstreamPastUnpaidRounds({
+    dealerName,
+    currentRoundId,
+    currentRoundDate,
+    transfers = [],
+    upstreamPayments = []
+}) {
+    if (!dealerName) return []
+    const results = []
+    const normalizedTarget = dealerName.trim().toLowerCase()
+
+    // Group transfers by round_id
+    const roundMap = {}
+    for (const t of transfers) {
+        const tName = (t.target_dealer_name || t.upstream_dealer_name || t.dealerName || '').trim().toLowerCase()
+        if (tName !== normalizedTarget) continue
+
+        const roundId = t.round_id || t.id
+        if (currentRoundId && roundId === currentRoundId) continue
+
+        if (!roundMap[roundId]) {
+            roundMap[roundId] = {
+                roundId,
+                roundDate: t.round_date || '',
+                lotteryType: t.lottery_type || '',
+                upstreamDealerName: t.target_dealer_name || t.upstream_dealer_name || dealerName,
+                amount: 0,
+                commission_earned: 0,
+                winnings: 0
+            }
+        }
+
+        roundMap[roundId].amount += Number(t.amount || 0)
+        roundMap[roundId].commission_earned += Number(t.commission_earned || 0)
+        roundMap[roundId].winnings += Number(t.winnings || 0)
+        if (t.round_date && !roundMap[roundId].roundDate) {
+            roundMap[roundId].roundDate = t.round_date
+        }
+    }
+
+    for (const roundId of Object.keys(roundMap)) {
+        const aggregatedTransfer = roundMap[roundId]
+        if (currentRoundDate && aggregatedTransfer.roundDate && aggregatedTransfer.roundDate >= currentRoundDate && roundId === currentRoundId) {
+            continue
+        }
+
+        const initial = calculateUpstreamInitialBalance(aggregatedTransfer)
+        const roundPayments = upstreamPayments.filter(p => {
+            const pRound = p.round_id || p.roundId
+            const pName = (p.upstream_dealer_name || '').trim().toLowerCase()
+            return pRound === roundId && (pName === normalizedTarget || !p.upstream_dealer_name)
+        })
+        const currentBalance = calculateUpstreamCurrentBalance(initial, roundPayments)
+
+        if (currentBalance > 0) {
+            results.push({
+                roundId,
+                roundDate: aggregatedTransfer.roundDate,
+                lotteryType: aggregatedTransfer.lotteryType,
+                debt: currentBalance,
+                upstreamDealerName: aggregatedTransfer.upstreamDealerName
+            })
+        }
+    }
+
+    return results.sort((a, b) => (a.roundDate || '').localeCompare(b.roundDate || ''))
 }
