@@ -242,6 +242,26 @@
     padding: 0.45rem 0.5rem;
 }
 
+.upstream-btn-log-edit {
+    background: none;
+    border: none;
+    color: var(--color-primary, #facc15);
+    cursor: pointer;
+    padding: 0.2rem 0.35rem;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.85;
+    transition: all 0.15s;
+}
+
+.upstream-btn-log-edit:hover:not(:disabled) {
+    opacity: 1;
+    background: rgba(250, 204, 21, 0.15);
+    transform: scale(1.08);
+}
+
 .upstream-btn-log-del {
     background: none;
     border: none;

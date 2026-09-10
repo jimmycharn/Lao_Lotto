@@ -7,7 +7,8 @@ import {
     FiCheck,
     FiTrash2,
     FiCalendar,
-    FiFileText
+    FiFileText,
+    FiEdit2
 } from 'react-icons/fi'
 import {
     calculateUpstreamInitialBalance,
@@ -22,12 +23,22 @@ export default function UpstreamSettlementInline({
     round,
     payments = [],
     onSavePayment,
+    onUpdatePayment,
     onDeletePayment,
     onClose
 }) {
     const [showForm, setShowForm] = useState(false)
     const [saving, setSaving] = useState(false)
     const [deletingId, setDeletingId] = useState(null)
+
+    // Edit Modal states
+    const [editingPayment, setEditingPayment] = useState(null)
+    const [editPaymentType, setEditPaymentType] = useState('net_settlement')
+    const [editDirection, setEditDirection] = useState('dealer_to_upstream')
+    const [editAmount, setEditAmount] = useState('')
+    const [editPaidAt, setEditPaidAt] = useState('')
+    const [editNotes, setEditNotes] = useState('')
+    const [editSaving, setEditSaving] = useState(false)
 
     // Form states
     const [paymentType, setPaymentType] = useState('net_settlement') // 'net_settlement' | 'prize_collection'
@@ -183,6 +194,43 @@ export default function UpstreamSettlementInline({
             console.error('Error deleting upstream payment:', err)
         } finally {
             setDeletingId(null)
+        }
+    }
+
+    // Handlers for Edit Modal
+    const handleOpenEditModal = (p) => {
+        setEditingPayment(p)
+        setEditPaymentType(p.payment_type || 'net_settlement')
+        setEditDirection(p.direction || 'dealer_to_upstream')
+        setEditAmount(p.amount ? String(p.amount) : '')
+        setEditPaidAt(p.paid_at || todayStr)
+        setEditNotes(p.notes || '')
+    }
+
+    const handleConfirmEditPayment = async (e) => {
+        if (e) e.preventDefault()
+        if (!editingPayment) return
+        const numAmount = Number(editAmount)
+        if (!numAmount || numAmount <= 0) return
+
+        setEditSaving(true)
+        try {
+            if (onUpdatePayment) {
+                const ok = await onUpdatePayment(editingPayment.id, {
+                    payment_type: editPaymentType,
+                    direction: editDirection,
+                    amount: numAmount,
+                    paid_at: editPaidAt || todayStr,
+                    notes: editNotes.trim()
+                })
+                if (ok !== false) {
+                    setEditingPayment(null)
+                }
+            }
+        } catch (err) {
+            console.error('Error confirming edit upstream payment:', err)
+        } finally {
+            setEditSaving(false)
         }
     }
 
@@ -483,16 +531,26 @@ export default function UpstreamSettlementInline({
                                             <td style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>
                                                 {p.notes || '-'}
                                             </td>
-                                            <td style={{ textAlign: 'center' }}>
-                                                <button
-                                                    type="button"
-                                                    className="upstream-btn-log-del"
-                                                    title="ลบรายการนี้"
-                                                    disabled={deletingId === p.id}
-                                                    onClick={() => handleDelete(p.id)}
-                                                >
-                                                    <FiTrash2 size={13} />
-                                                </button>
+                                            <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                    <button
+                                                        type="button"
+                                                        className="upstream-btn-log-edit"
+                                                        title="แก้ไขรายการนี้"
+                                                        onClick={() => handleOpenEditModal(p)}
+                                                    >
+                                                        <FiEdit2 size={13} />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="upstream-btn-log-del"
+                                                        title="ลบรายการนี้"
+                                                        disabled={deletingId === p.id}
+                                                        onClick={() => handleDelete(p.id)}
+                                                    >
+                                                        <FiTrash2 size={13} />
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     )
@@ -645,6 +703,252 @@ export default function UpstreamSettlementInline({
                                     style={{ padding: '0.45rem 1rem', fontSize: '0.82rem' }}
                                 >
                                     <FiCheck size={14} /> {saving ? 'กำลังบันทึก...' : 'ยืนยันบันทึกเคลียร์ยอด'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* 6. Edit Payment Modal */}
+            {editingPayment && typeof document !== 'undefined' && createPortal(
+                <div 
+                    className="modal-overlay nested" 
+                    style={{ zIndex: 99999 }}
+                    onClick={() => setEditingPayment(null)}
+                >
+                    <div 
+                        className="modal modal-sm" 
+                        style={{
+                            background: '#0f172a',
+                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                            borderRadius: '12px',
+                            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+                            color: '#f8fafc',
+                            width: '90%',
+                            maxWidth: '440px',
+                            overflow: 'hidden',
+                            padding: '1.25rem'
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
+                            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <FiEdit2 style={{ color: 'var(--color-primary, #facc15)' }} /> แก้ไขรายการชำระเงิน
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={() => setEditingPayment(null)}
+                                style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}
+                            >
+                                <FiX />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleConfirmEditPayment} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                            {/* Summary info */}
+                            <div style={{
+                                background: 'rgba(0,0,0,0.35)',
+                                padding: '0.65rem 0.85rem',
+                                borderRadius: '6px',
+                                border: '1px solid rgba(255,255,255,0.06)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.35rem'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
+                                    <span style={{ color: 'var(--color-text-muted)' }}>เจ้ามือรับตีออก:</span>
+                                    <span style={{ fontWeight: 600 }}>{transfer?.dealerName || 'เจ้ามือรับตีออก'}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
+                                    <span style={{ color: 'var(--color-text-muted)' }}>ประเภท:</span>
+                                    <span style={{ fontWeight: 600, color: editPaymentType === 'prize_collection' ? 'var(--color-success)' : 'var(--color-primary)' }}>
+                                        {editPaymentType === 'prize_collection' ? '🏆 รับคืนรางวัล' : 'เคลียร์ยอดสุทธิ'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Payment type switcher (if totalWinnings > 0) */}
+                            {totalWinnings > 0 && (
+                                <div className="upstream-settlement-form-field">
+                                    <label>ประเภทรายการ</label>
+                                    <div style={{ display: 'flex', gap: '0.35rem' }}>
+                                        <button
+                                            type="button"
+                                            className="preset-pill-btn"
+                                            style={{
+                                                background: editPaymentType === 'net_settlement' ? 'var(--color-primary)' : undefined,
+                                                color: editPaymentType === 'net_settlement' ? '#000' : undefined,
+                                                fontWeight: editPaymentType === 'net_settlement' ? 700 : 400
+                                            }}
+                                            onClick={() => {
+                                                setEditPaymentType('net_settlement')
+                                                const defDir = currentBalance >= 0 ? 'dealer_to_upstream' : 'upstream_to_dealer'
+                                                setEditDirection(defDir)
+                                            }}
+                                        >
+                                            เคลียร์ยอดสุทธิ
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="preset-pill-btn"
+                                            style={{
+                                                background: editPaymentType === 'prize_collection' ? 'var(--color-success)' : undefined,
+                                                color: editPaymentType === 'prize_collection' ? '#fff' : undefined,
+                                                fontWeight: editPaymentType === 'prize_collection' ? 700 : 400
+                                            }}
+                                            onClick={() => {
+                                                setEditPaymentType('prize_collection')
+                                                setEditDirection('upstream_to_dealer')
+                                            }}
+                                        >
+                                            รับคืนเงินรางวัล
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Direction selector */}
+                            {editPaymentType === 'net_settlement' ? (
+                                <div className="upstream-settlement-form-field">
+                                    <label>ทิศทางการเงิน</label>
+                                    <select
+                                        value={editDirection}
+                                        onChange={(e) => setEditDirection(e.target.value)}
+                                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
+                                    >
+                                        <option value="dealer_to_upstream">🔴 เราจ่ายให้เจ้ามือรับตีออก</option>
+                                        <option value="upstream_to_dealer">🟢 เจ้ามือรับตีออกจ่ายคืนเรา</option>
+                                    </select>
+                                </div>
+                            ) : (
+                                <div className="upstream-settlement-form-field">
+                                    <label>ทิศทางการเงิน</label>
+                                    <div style={{ fontSize: '0.85rem', color: 'var(--color-success)', fontWeight: 600 }}>
+                                        🟢 เจ้ามือรับตีออกจ่ายคืนเรา (รับคืนรางวัล)
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Amount */}
+                            <div className="upstream-settlement-form-field">
+                                <label>จำนวนเงิน (บาท) *</label>
+                                <input
+                                    type="number"
+                                    min="0.01"
+                                    step="any"
+                                    required
+                                    placeholder="0.00"
+                                    value={editAmount}
+                                    onChange={(e) => setEditAmount(e.target.value)}
+                                    style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
+                                />
+                                <div className="upstream-settlement-presets">
+                                    {Math.abs(currentBalance) > 0 && (
+                                        <button
+                                            type="button"
+                                            className={`preset-pill-btn ${Number(editAmount) === Math.abs(currentBalance) ? 'active' : ''}`}
+                                            onClick={() => setEditAmount(String(Math.abs(currentBalance)))}
+                                        >
+                                            ยอดคงค้าง ฿{Math.abs(currentBalance).toLocaleString()}
+                                        </button>
+                                    )}
+                                    {totalWinnings > 0 && (
+                                        <button
+                                            type="button"
+                                            className={`preset-pill-btn ${Number(editAmount) === totalWinnings ? 'active' : ''}`}
+                                            onClick={() => setEditAmount(String(totalWinnings))}
+                                        >
+                                            รับคืนรางวัล ฿{totalWinnings.toLocaleString()}
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Date */}
+                            <div className="upstream-settlement-form-field">
+                                <label>วันที่ชำระ</label>
+                                <input
+                                    type="date"
+                                    value={editPaidAt}
+                                    onChange={(e) => setEditPaidAt(e.target.value)}
+                                    required
+                                    style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
+                                />
+                                <div className="upstream-settlement-presets">
+                                    <button
+                                        type="button"
+                                        className={`preset-pill-btn ${editPaidAt === todayStr ? 'active' : ''}`}
+                                        onClick={() => setEditPaidAt(todayStr)}
+                                    >
+                                        วันนี้
+                                    </button>
+                                    {roundDateIso && (
+                                        <button
+                                            type="button"
+                                            className={`preset-pill-btn ${editPaidAt === roundDateIso ? 'active' : ''}`}
+                                            onClick={() => setEditPaidAt(roundDateIso)}
+                                            title={`วันที่งวดหวย (${roundDateIso})`}
+                                        >
+                                            วันที่งวดหวย
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Notes */}
+                            <div className="upstream-settlement-form-field">
+                                <label>หมายเหตุ</label>
+                                <input
+                                    type="text"
+                                    placeholder="เช่น โอนแล้ว, เงินสด"
+                                    value={editNotes}
+                                    onChange={(e) => setEditNotes(e.target.value)}
+                                    style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
+                                />
+                                <div className="upstream-settlement-presets">
+                                    <button
+                                        type="button"
+                                        className={`preset-pill-btn ${editNotes === 'โอนแล้ว' ? 'active' : ''}`}
+                                        onClick={() => setEditNotes('โอนแล้ว')}
+                                    >
+                                        โอนแล้ว
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`preset-pill-btn ${editNotes === 'เงินสด' ? 'active' : ''}`}
+                                        onClick={() => setEditNotes('เงินสด')}
+                                    >
+                                        เงินสด
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`preset-pill-btn ${editNotes === 'เคลียร์ยอดครบจำนวน' ? 'active' : ''}`}
+                                        onClick={() => setEditNotes('เคลียร์ยอดครบจำนวน')}
+                                    >
+                                        เคลียร์ยอดครบจำนวน
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.35rem' }}>
+                                <button
+                                    type="button"
+                                    className="btn-upstream-settle-action btn-upstream-settle-add"
+                                    onClick={() => setEditingPayment(null)}
+                                    disabled={editSaving}
+                                    style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem' }}
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="btn-upstream-settle-action btn-upstream-settle-quick"
+                                    disabled={editSaving || !Number(editAmount)}
+                                    style={{ padding: '0.45rem 1rem', fontSize: '0.82rem' }}
+                                >
+                                    <FiCheck size={14} /> {editSaving ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
                                 </button>
                             </div>
                         </form>
