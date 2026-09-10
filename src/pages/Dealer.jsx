@@ -639,6 +639,57 @@ export default function Dealer() {
         }))
     }
 
+    async function handleUpdateMemberPayment({ historyItem, paymentId, paymentData }) {
+        if (!paymentData.amount || Number(paymentData.amount) <= 0) {
+            toast.error('กรุณาระบุจำนวนเงินที่ถูกต้อง')
+            return false
+        }
+
+        const payload = {
+            payment_type: paymentData.payment_type,
+            direction: paymentData.direction,
+            amount: Number(paymentData.amount),
+            paid_at: paymentData.paid_at || new Date().toISOString().split('T')[0],
+            notes: paymentData.notes || null
+        }
+
+        const { data: updatedPayment, error } = await supabase
+            .from('member_round_payments')
+            .update(payload)
+            .eq('id', paymentId)
+            .eq('dealer_id', user.id)
+            .select()
+            .single()
+
+        if (error) {
+            console.error('Error updating member payment:', error)
+            toast.error('แก้ไขรายการไม่สำเร็จ: ' + error.message)
+            return false
+        }
+
+        toast.success('แก้ไขรายการชำระเงินเรียบร้อยแล้ว')
+
+        setHistoryDetails(prev => {
+            const current = prev[historyItem.id]
+            if (!current) return prev
+            const existingPayments = current.payments || []
+            return {
+                ...prev,
+                [historyItem.id]: {
+                    ...current,
+                    payments: existingPayments.map(p => p.id === paymentId ? updatedPayment : p)
+                }
+            }
+        })
+
+        setSettlementOverview(prev => ({
+            ...prev,
+            memberPayments: prev.memberPayments ? prev.memberPayments.map(p => p.id === paymentId ? updatedPayment : p) : []
+        }))
+
+        return true
+    }
+
     async function handleSaveUpstreamPayment({ historyItem, transfer, paymentData }) {
         if (!paymentData.amount || Number(paymentData.amount) <= 0) {
             toast.error('กรุณาระบุจำนวนเงินที่ถูกต้อง')
@@ -726,6 +777,57 @@ export default function Dealer() {
             ...prev,
             upstreamPayments: prev.upstreamPayments.filter(p => p.id !== paymentId)
         }))
+    }
+
+    async function handleUpdateUpstreamPayment({ historyItem, paymentId, paymentData }) {
+        if (!paymentData.amount || Number(paymentData.amount) <= 0) {
+            toast.error('กรุณาระบุจำนวนเงินที่ถูกต้อง')
+            return false
+        }
+
+        const payload = {
+            payment_type: paymentData.payment_type,
+            direction: paymentData.direction,
+            amount: Number(paymentData.amount),
+            paid_at: paymentData.paid_at || new Date().toISOString().split('T')[0],
+            notes: paymentData.notes || null
+        }
+
+        const { data: updatedPayment, error } = await supabase
+            .from('upstream_round_payments')
+            .update(payload)
+            .eq('id', paymentId)
+            .eq('dealer_id', user.id)
+            .select()
+            .single()
+
+        if (error) {
+            console.error('Error updating upstream payment:', error)
+            toast.error('แก้ไขรายการไม่สำเร็จ: ' + error.message)
+            return false
+        }
+
+        toast.success('แก้ไขรายการชำระเงินเรียบร้อยแล้ว')
+
+        setHistoryDetails(prev => {
+            const current = prev[historyItem.id]
+            if (!current) return prev
+            const existingPayments = current.upstreamPayments || []
+            return {
+                ...prev,
+                [historyItem.id]: {
+                    ...current,
+                    upstreamPayments: existingPayments.map(p => p.id === paymentId ? updatedPayment : p)
+                }
+            }
+        })
+
+        setSettlementOverview(prev => ({
+            ...prev,
+            upstreamPayments: prev.upstreamPayments ? prev.upstreamPayments.map(p => p.id === paymentId ? updatedPayment : p) : []
+        }))
+
+        return true
     }
 
     const toggleExpandHistory = (historyItem) => {
@@ -3865,6 +3967,11 @@ export default function Dealer() {
                                                                                                                                             member: uh,
                                                                                                                                             paymentData
                                                                                                                                         })}
+                                                                                                                                        onUpdatePayment={(paymentId, paymentData) => handleUpdateMemberPayment({
+                                                                                                                                            historyItem: history,
+                                                                                                                                            paymentId,
+                                                                                                                                            paymentData
+                                                                                                                                        })}
                                                                                                                                         onDeletePayment={(paymentId) => handleDeleteMemberPayment({
                                                                                                                                             historyItem: history,
                                                                                                                                             paymentId
@@ -3978,6 +4085,11 @@ export default function Dealer() {
                                                                                                                                         onSavePayment={(paymentData) => handleSaveUpstreamPayment({
                                                                                                                                             historyItem: history,
                                                                                                                                             transfer: t,
+                                                                                                                                            paymentData
+                                                                                                                                        })}
+                                                                                                                                        onUpdatePayment={(paymentId, paymentData) => handleUpdateUpstreamPayment({
+                                                                                                                                            historyItem: history,
+                                                                                                                                            paymentId,
                                                                                                                                             paymentData
                                                                                                                                         })}
                                                                                                                                         onDeletePayment={(paymentId) => handleDeleteUpstreamPayment({
