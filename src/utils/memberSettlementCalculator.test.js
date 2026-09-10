@@ -273,5 +273,36 @@ describe('isRoundFullySettled', () => {
             upstreamPayments
         })).toBe(true)
     })
+
+    it('settles round when synthesized transfer fallback matches upstream payment even with custom upstream dealer name', () => {
+        const history = {
+            id: 'round-thai-16aug-synth',
+            lottery_type: 'thai',
+            total_entries: 1,
+            total_amount: 1000,
+            transferred_amount: 8600,
+            upstream_commission: 2570,
+            upstream_winnings: 0
+        }
+        const userHistories = [
+            { user_id: 'u1', total_amount: 1000, total_commission: 200, total_winnings: 800 }
+        ]
+        const memberPayments = [
+            { user_id: 'u1', amount: 0, direction: 'member_to_dealer' }
+        ]
+        // transfers is empty (fallback to history.transferred_amount)
+        const upstreamPayments = [
+            { upstream_dealer_name: 'พี่จิ๋ม อ้อมค่าย', amount: 6030, direction: 'dealer_to_upstream' }
+        ]
+
+        expect(isRoundFullySettled({
+            history,
+            userHistories,
+            memberPayments,
+            transfers: [],
+            upstreamPayments
+        })).toBe(true)
+    })
 })
+
 

@@ -286,9 +286,10 @@ export function isRoundFullySettled({
     }
 
     const outAmt = Number(history?.transferred_amount || 0)
+    const isThai = String(history?.lottery_type || '').toLowerCase().includes('thai')
     const outComm = Number(history?.upstream_commission || 0) > 0
         ? Number(history.upstream_commission)
-        : Math.round(outAmt * (25 / 120))
+        : Math.round(outAmt * (isThai ? 0.30 : (25 / 120)))
     const outWin = Number(history?.upstream_winnings || 0)
 
     const effectiveTransfers = Object.values(groupedMap).length > 0
@@ -305,7 +306,7 @@ export function isRoundFullySettled({
             const upstreamName = t.dealerName || "เจ้ามือ"
             const upPayments = upstreamPayments.filter(p => 
                 p.upstream_dealer_name === upstreamName ||
-                (effectiveTransfers.length === 1 && (!p.upstream_dealer_name || p.upstream_dealer_name === "เจ้ามือ" || p.upstream_dealer_name === "เจ้ามือ (สรุปในประวัติ)"))
+                effectiveTransfers.length === 1
             )
             const initBal = calculateUpstreamInitialBalance(t)
             const currBal = calculateUpstreamCurrentBalance(initBal, upPayments)

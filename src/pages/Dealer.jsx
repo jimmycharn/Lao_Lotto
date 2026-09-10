@@ -779,7 +779,8 @@ export default function Dealer() {
     const getRoundSettlementStatus = (history) => {
         if (!history) return false
         const targetRoundId = history.round_id || history.id
-        const histDate = history.round_date || (history.close_time ? history.close_time.split('T')[0] : null)
+        const histDate = (history.round_date ? String(history.round_date).split('T')[0] : null) || 
+                         (history.close_time ? String(history.close_time).split('T')[0] : null)
         const details = historyDetails[history.id]
 
         let uHist = []
@@ -794,28 +795,46 @@ export default function Dealer() {
             upPay = details.upstreamPayments || []
         } else {
             // First match userHistories by round_id
-            if (targetRoundId || history.round_id) {
+            if (targetRoundId || history.round_id || history.id) {
                 uHist = settlementOverview.userHistories.filter(uh =>
                     (targetRoundId && uh.round_id === targetRoundId) ||
-                    (history.round_id && uh.round_id === history.round_id)
+                    (history.round_id && uh.round_id === history.round_id) ||
+                    (history.id && uh.round_id === history.id)
                 )
             }
             // Fallback to lottery_type + round_date only if no records matched by round_id
             if (uHist.length === 0 && histDate) {
                 uHist = settlementOverview.userHistories.filter(uh =>
-                    uh.lottery_type === history.lottery_type && uh.round_date === histDate
+                    uh.lottery_type === history.lottery_type && 
+                    (uh.round_date ? String(uh.round_date).split('T')[0] : null) === histDate
                 )
             }
 
             mPay = settlementOverview.memberPayments.filter(p =>
                 p.round_id === targetRoundId || p.round_id === history.id || (history.round_id && p.round_id === history.round_id)
             )
+            if (mPay.length === 0 && histDate) {
+                mPay = settlementOverview.memberPayments.filter(p =>
+                    p.lottery_type === history.lottery_type && 
+                    (p.round_date ? String(p.round_date).split('T')[0] : null) === histDate
+                )
+            }
+
             trf = settlementOverview.transfers.filter(t =>
-                (targetRoundId && t.round_id === targetRoundId) || (history.round_id && t.round_id === history.round_id)
+                (targetRoundId && t.round_id === targetRoundId) || 
+                (history.round_id && t.round_id === history.round_id) ||
+                (history.id && t.round_id === history.id)
             )
+
             upPay = settlementOverview.upstreamPayments.filter(p =>
                 p.round_id === targetRoundId || p.round_id === history.id || (history.round_id && p.round_id === history.round_id)
             )
+            if (upPay.length === 0 && histDate) {
+                upPay = settlementOverview.upstreamPayments.filter(p =>
+                    p.lottery_type === history.lottery_type && 
+                    (p.round_date ? String(p.round_date).split('T')[0] : null) === histDate
+                )
+            }
         }
 
         return isRoundFullySettled({
@@ -1523,6 +1542,9 @@ export default function Dealer() {
             }
 
             const activeHistoryItems = []
+            const activeRoundUserHistories = []
+            const activeRoundTransfers = []
+
             if (activeClosedRounds && activeClosedRounds.length > 0) {
                 for (const round of activeClosedRounds) {
                     if (existingRoundIds.has(round.id)) continue
@@ -1540,8 +1562,16 @@ export default function Dealer() {
                     // Fetch transfers for this active closed round
                     const { data: transfers } = await supabase
                         .from('bet_transfers')
-                        .select('*')
+                        .select('id, round_id, upstream_dealer_id, target_dealer_name, amount, winnings, bet_type, upstream_dealer:upstream_dealer_id(full_name)')
                         .eq('round_id', round.id)
+
+                    if (transfers && transfers.length > 0) {
+                        activeRoundTransfers.push(...transfers.map(t => ({
+                            ...t,
+                            commission_earned: calculateTransferCommission(t),
+                            winnings: Number(t.winnings || 0)
+                        })))
+                    }
 
                     const totalEntries = submissions?.length || 0
                     const totalAmount = submissions?.reduce((sum, s) => sum + (s.amount || 0), 0) || 0
@@ -1550,6 +1580,32 @@ export default function Dealer() {
                     const totalPayout = submissions?.reduce((sum, s) => {
                         return sum + getExpectedSubmissionPayout(s, round.lottery_type, userSettingsMap, setPrice)
                     }, 0) || 0
+
+                    if (submissions && submissions.length > 0) {
+                        const userSubmissions = {}
+                        submissions.forEach(s => {
+                            const uid = s.user_id
+                            if (!userSubmissions[uid]) {
+                                userSubmissions[uid] = {
+                                    id: `${round.id}_${uid}`,
+                                    round_id: round.id,
+                                    user_id: uid,
+                                    lottery_type: round.lottery_type,
+                                    round_date: round.close_time?.split('T')[0] || round.round_date || round.open_time?.split('T')[0],
+                                    total_entries: 0,
+                                    total_amount: 0,
+                                    total_commission: 0,
+                                    total_winnings: 0
+                                }
+                            }
+                            userSubmissions[uid].total_entries += 1
+                            userSubmissions[uid].total_amount += (s.amount || 0)
+                            userSubmissions[uid].total_commission += (s.commission_amount || 0)
+                            const winAmt = getExpectedSubmissionPayout(s, round.lottery_type, userSettingsMap, setPrice)
+                            userSubmissions[uid].total_winnings += winAmt
+                        })
+                        activeRoundUserHistories.push(...Object.values(userSubmissions))
+                    }
 
                     const transferredAmount = transfers?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0
                     const upstreamCommission = transfers?.reduce((sum, t) => sum + calculateTransferCommission(t), 0) || 0
@@ -1609,11 +1665,29 @@ export default function Dealer() {
             setRoundHistory(combinedHistory)
 
             // 3. Fetch settlement overview data to calculate settled status for all history rounds
+            const allRoundIds = Array.from(new Set(combinedHistory.map(h => h.round_id || h.id).filter(Boolean)))
+
+            let fetchedTransfers = []
+            if (allRoundIds.length > 0) {
+                const chunkSize = 50
+                for (let i = 0; i < allRoundIds.length; i += chunkSize) {
+                    const chunk = allRoundIds.slice(i, i + chunkSize)
+                    const { data: chunkTransfers, error: transErr } = await supabase
+                        .from('bet_transfers')
+                        .select('id, round_id, upstream_dealer_id, target_dealer_name, amount, winnings, bet_type, upstream_dealer:upstream_dealer_id(full_name)')
+                        .in('round_id', chunk)
+                    if (transErr) {
+                        console.error('Error fetching bet_transfers for history overview:', transErr)
+                    } else if (chunkTransfers) {
+                        fetchedTransfers.push(...chunkTransfers)
+                    }
+                }
+            }
+
             const [
-                { data: allUserHistories },
-                { data: allMemberPayments },
-                { data: allUpstreamPayments },
-                { data: allTransfers }
+                { data: allUserHistories, error: uhErr },
+                { data: allMemberPayments, error: mpErr },
+                { data: allUpstreamPayments, error: upErr }
             ] = await Promise.all([
                 supabase
                     .from('user_round_history')
@@ -1622,30 +1696,40 @@ export default function Dealer() {
                     .limit(5000),
                 supabase
                     .from('member_round_payments')
-                    .select('round_id, user_id, amount, direction')
+                    .select('round_id, user_id, amount, direction, lottery_type, round_date')
                     .eq('dealer_id', user.id)
                     .limit(5000),
                 supabase
                     .from('upstream_round_payments')
-                    .select('round_id, upstream_dealer_name, amount, direction')
-                    .eq('dealer_id', user.id)
-                    .limit(5000),
-                supabase
-                    .from('bet_transfers')
-                    .select('round_id, upstream_dealer_id, target_dealer_name, amount, winnings, lottery_type, bet_type, upstream_dealer:upstream_dealer_id(full_name)')
+                    .select('round_id, upstream_dealer_name, amount, direction, lottery_type, round_date')
                     .eq('dealer_id', user.id)
                     .limit(5000)
             ])
 
+            if (uhErr) console.error('Error fetching user_round_history overview:', uhErr)
+            if (mpErr) console.error('Error fetching member_round_payments overview:', mpErr)
+            if (upErr) console.error('Error fetching upstream_round_payments overview:', upErr)
+
+            // Combine fetched transfers with activeRoundTransfers (deduplicating by transfer id or key)
+            const seenTransferKeys = new Set()
+            const allTransfersCombined = []
+            for (const t of [...activeRoundTransfers, ...fetchedTransfers]) {
+                const key = t.id || `${t.round_id}_${t.amount}_${t.bet_type}_${t.target_dealer_name || ''}`
+                if (!seenTransferKeys.has(key)) {
+                    seenTransferKeys.add(key)
+                    allTransfersCombined.push({
+                        ...t,
+                        commission_earned: calculateTransferCommission(t),
+                        winnings: Number(t.winnings || 0)
+                    })
+                }
+            }
+
             setSettlementOverview({
-                userHistories: allUserHistories || [],
+                userHistories: [...(allUserHistories || []), ...activeRoundUserHistories],
                 memberPayments: allMemberPayments || [],
                 upstreamPayments: allUpstreamPayments || [],
-                transfers: (allTransfers || []).map(t => ({
-                    ...t,
-                    commission_earned: calculateTransferCommission(t),
-                    winnings: Number(t.winnings || 0)
-                }))
+                transfers: allTransfersCombined
             })
         } catch (error) {
             console.error('Error fetching round history:', error)
