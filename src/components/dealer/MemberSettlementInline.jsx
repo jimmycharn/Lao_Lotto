@@ -74,11 +74,31 @@ export default function MemberSettlementInline({
     const [quickPaidAt, setQuickPaidAt] = useState(() => new Date().toISOString().split('T')[0])
     const [quickNotes, setQuickNotes] = useState('เคลียร์ยอดครบจำนวน')
 
-    const roundDate = round?.round_date || (round?.close_time ? round.close_time.split('T')[0] : null)
+    const todayStr = new Date().toISOString().split('T')[0]
+    const getRoundDateIso = (r) => {
+        const raw = r?.round_date || r?.close_time || r?.created_at
+        if (!raw) return null
+        if (typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}/.test(raw)) {
+            return raw.slice(0, 10)
+        }
+        try {
+            const d = new Date(raw)
+            if (!isNaN(d.getTime())) {
+                const year = d.getFullYear()
+                const month = String(d.getMonth() + 1).padStart(2, '0')
+                const day = String(d.getDate()).padStart(2, '0')
+                return `${year}-${month}-${day}`
+            }
+        } catch {
+            return null
+        }
+        return null
+    }
+    const roundDateIso = getRoundDateIso(round)
 
     // Open Quick full settlement modal
     const handleOpenQuickSettle = () => {
-        setQuickPaidAt(new Date().toISOString().split('T')[0])
+        setQuickPaidAt(todayStr)
         setQuickNotes('เคลียร์ยอดครบจำนวน')
         setShowQuickSettleModal(true)
     }
@@ -318,6 +338,25 @@ export default function MemberSettlementInline({
                                 value={paidAt}
                                 onChange={(e) => setPaidAt(e.target.value)}
                             />
+                            <div className="settlement-presets">
+                                <button
+                                    type="button"
+                                    className={`preset-pill-btn ${paidAt === todayStr ? 'active' : ''}`}
+                                    onClick={() => setPaidAt(todayStr)}
+                                >
+                                    วันนี้
+                                </button>
+                                {roundDateIso && (
+                                    <button
+                                        type="button"
+                                        className={`preset-pill-btn ${paidAt === roundDateIso ? 'active' : ''}`}
+                                        onClick={() => setPaidAt(roundDateIso)}
+                                        title={`วันที่งวดหวย (${roundDateIso})`}
+                                    >
+                                        วันที่งวดหวย
+                                    </button>
+                                )}
+                            </div>
                         </div>
 
                         {/* Notes */}
@@ -329,6 +368,22 @@ export default function MemberSettlementInline({
                                 value={notes}
                                 onChange={(e) => setNotes(e.target.value)}
                             />
+                            <div className="settlement-presets">
+                                <button
+                                    type="button"
+                                    className={`preset-pill-btn ${notes === 'โอนแล้ว' ? 'active' : ''}`}
+                                    onClick={() => setNotes('โอนแล้ว')}
+                                >
+                                    โอนแล้ว
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`preset-pill-btn ${notes === 'เงินสด' ? 'active' : ''}`}
+                                    onClick={() => setNotes('เงินสด')}
+                                >
+                                    เงินสด
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -499,18 +554,19 @@ export default function MemberSettlementInline({
                                     <div className="settlement-presets">
                                         <button
                                             type="button"
-                                            className="preset-pill-btn"
-                                            onClick={() => setQuickPaidAt(new Date().toISOString().split('T')[0])}
+                                            className={`preset-pill-btn ${quickPaidAt === todayStr ? 'active' : ''}`}
+                                            onClick={() => setQuickPaidAt(todayStr)}
                                         >
                                             วันนี้
                                         </button>
-                                        {roundDate && roundDate !== new Date().toISOString().split('T')[0] && (
+                                        {roundDateIso && (
                                             <button
                                                 type="button"
-                                                className="preset-pill-btn"
-                                                onClick={() => setQuickPaidAt(roundDate)}
+                                                className={`preset-pill-btn ${quickPaidAt === roundDateIso ? 'active' : ''}`}
+                                                onClick={() => setQuickPaidAt(roundDateIso)}
+                                                title={`วันที่งวดหวย (${roundDateIso})`}
                                             >
-                                                วันที่งวด ({roundDate})
+                                                วันที่งวดหวย
                                             </button>
                                         )}
                                     </div>
@@ -523,21 +579,32 @@ export default function MemberSettlementInline({
                                     </label>
                                     <input
                                         type="text"
-                                        placeholder="ระบุหมายเหตุ (เช่น โอนเงิน, เงินสด ฯลฯ)"
+                                        placeholder="ระบุหมายเหตุ (เช่น โอน SCB, เงินสด ฯลฯ)"
                                         value={quickNotes}
                                         onChange={e => setQuickNotes(e.target.value)}
                                     />
                                     <div className="settlement-presets">
-                                        {['เคลียร์ยอดครบจำนวน', 'โอนเงินแล้ว', 'รับเงินสด'].map(preset => (
-                                            <button
-                                                key={preset}
-                                                type="button"
-                                                className="preset-pill-btn"
-                                                onClick={() => setQuickNotes(preset)}
-                                            >
-                                                {preset}
-                                            </button>
-                                        ))}
+                                        <button
+                                            type="button"
+                                            className={`preset-pill-btn ${quickNotes === 'เคลียร์ยอดครบจำนวน' ? 'active' : ''}`}
+                                            onClick={() => setQuickNotes('เคลียร์ยอดครบจำนวน')}
+                                        >
+                                            เคลียร์ยอดครบจำนวน
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`preset-pill-btn ${quickNotes === 'โอนแล้ว' ? 'active' : ''}`}
+                                            onClick={() => setQuickNotes('โอนแล้ว')}
+                                        >
+                                            โอนแล้ว
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`preset-pill-btn ${quickNotes === 'เงินสด' ? 'active' : ''}`}
+                                            onClick={() => setQuickNotes('เงินสด')}
+                                        >
+                                            เงินสด
+                                        </button>
                                     </div>
                                 </div>
                             </div>

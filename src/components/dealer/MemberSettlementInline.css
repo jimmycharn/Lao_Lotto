@@ -186,6 +186,13 @@
     border-color: rgba(250, 204, 21, 0.4);
 }
 
+.preset-pill-btn.active {
+    background: rgba(250, 204, 21, 0.2);
+    color: #facc15;
+    border-color: #facc15;
+    font-weight: 600;
+}
+
 .settlement-form-actions {
     display: flex;
     justify-content: flex-end;
