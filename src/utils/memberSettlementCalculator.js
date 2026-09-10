@@ -108,6 +108,33 @@ export function getPaymentPresetAmount(memberHistory, payments = [], paymentType
  */
 
 /**
+ * Calculates commission earned on an upstream layoff transfer based on bet type.
+ * 4_set is fixed Baht per set (default 25 Baht / 120 Baht set).
+ * 3 digits = 30%, 2 digits = 28%, 1 digit / run = 12%, other = 25%.
+ */
+export function calculateTransferCommission(t, setPrice = 120) {
+    if (t?.commission_earned !== undefined && t?.commission_earned !== null && Number(t.commission_earned) > 0) {
+        return Number(t.commission_earned)
+    }
+    const amt = Number(t?.amount || 0)
+    if (amt <= 0) return 0
+
+    if (t?.bet_type === '4_set') {
+        const numSets = Math.max(1, Math.floor(amt / setPrice))
+        const commPerSet = 25
+        return numSets * commPerSet
+    } else if (t?.bet_type === '3_top' || t?.bet_type === '3_tod' || t?.bet_type === '3_front' || t?.bet_type === '3_straight') {
+        return Math.round(amt * 0.30)
+    } else if (t?.bet_type === '2_top' || t?.bet_type === '2_bottom' || t?.bet_type === '2_front' || t?.bet_type === '2_spread') {
+        return Math.round(amt * 0.28)
+    } else if (t?.bet_type === '1_top' || t?.bet_type === '1_bottom' || t?.bet_type === 'run_top') {
+        return Math.round(amt * 0.12)
+    } else {
+        return Math.round(amt * 0.25)
+    }
+}
+
+/**
  * Calculates initial balance for an upstream dealer layoff:
  * Net Layoff = (amount - commission_earned)
  * Initial Balance = Net Layoff - winnings
@@ -252,9 +279,7 @@ export function isRoundFullySettled({
                 }
             }
             groupedMap[dName].amount += Number(t.amount || 0)
-            const comm = t.commission_earned !== undefined && t.commission_earned !== null
-                ? Number(t.commission_earned)
-                : Math.round(Number(t.amount || 0) * 0.25)
+            const comm = calculateTransferCommission(t)
             groupedMap[dName].commission_earned += comm
             groupedMap[dName].winnings += Number(t.winnings || 0)
         })
@@ -278,7 +303,10 @@ export function isRoundFullySettled({
     if (effectiveTransfers.length > 0) {
         for (const t of effectiveTransfers) {
             const upstreamName = t.dealerName || "เจ้ามือ"
-            const upPayments = upstreamPayments.filter(p => p.upstream_dealer_name === upstreamName)
+            const upPayments = upstreamPayments.filter(p => 
+                p.upstream_dealer_name === upstreamName ||
+                (effectiveTransfers.length === 1 && (!p.upstream_dealer_name || p.upstream_dealer_name === "เจ้ามือ" || p.upstream_dealer_name === "เจ้ามือ (สรุปในประวัติ)"))
+            )
             const initBal = calculateUpstreamInitialBalance(t)
             const currBal = calculateUpstreamCurrentBalance(initBal, upPayments)
             if (Math.abs(currBal) > 0.01) {

@@ -242,5 +242,36 @@ describe('isRoundFullySettled', () => {
             upstreamPayments: []
         })).toBe(false)
     })
+
+    it('calculates transfer commission accurately and settles round even with raw transfers lacking commission_earned', () => {
+        const history = {
+            id: 'round-thai-16aug',
+            total_entries: 1,
+            total_amount: 1000,
+            transferred_amount: 8600
+        }
+        const userHistories = [
+            { user_id: 'u1', total_amount: 1000, total_commission: 200, total_winnings: 800 }
+        ]
+        const memberPayments = [
+            { user_id: 'u1', amount: 0, direction: 'member_to_dealer' }
+        ]
+        // Raw transfer from bet_transfers table (has bet_type, but no pre-computed commission_earned)
+        const rawTransfers = [
+            { target_dealer_name: 'พี่จึ๋ม อ้อมค่าย', amount: 8600, bet_type: '3_top', winnings: 0 }
+        ]
+        // Upstream payment recorded: 8600 - (8600 * 0.30 = 2580) = 6020 (or 6030)
+        const upstreamPayments = [
+            { upstream_dealer_name: 'พี่จึ๋ม อ้อมค่าย', amount: 6020, direction: 'dealer_to_upstream' }
+        ]
+
+        expect(isRoundFullySettled({
+            history,
+            userHistories,
+            memberPayments,
+            transfers: rawTransfers,
+            upstreamPayments
+        })).toBe(true)
+    })
 })
 

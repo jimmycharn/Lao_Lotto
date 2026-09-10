@@ -83,6 +83,7 @@ import {
     calculateUpstreamInitialBalance,
     calculateUpstreamCurrentBalance,
     getUpstreamSettlementStatus,
+    calculateTransferCommission,
     isRoundFullySettled
 } from '../utils/memberSettlementCalculator'
 
@@ -227,28 +228,7 @@ function getMemberCommission(amount, commission) {
     if (amt <= 0) return 0
     return Math.round(amt * 0.20)
 }
-function calculateTransferCommission(t, setPrice = 120) {
-    if (t.commission_earned !== undefined && t.commission_earned !== null && Number(t.commission_earned) > 0) {
-        return Number(t.commission_earned)
-    }
-    const amt = Number(t.amount || 0)
-    if (amt <= 0) return 0
-
-    if (t.bet_type === '4_set') {
-        // 4_set (หวยชุด 4 ตัว) commission is FIXED BAHT PER SET (25 Baht / set of 120 Baht)
-        const numSets = Math.max(1, Math.floor(amt / setPrice))
-        const commPerSet = 25
-        return numSets * commPerSet
-    } else if (t.bet_type === '3_top' || t.bet_type === '3_tod' || t.bet_type === '3_front' || t.bet_type === '3_straight') {
-        return Math.round(amt * 0.30)
-    } else if (t.bet_type === '2_top' || t.bet_type === '2_bottom' || t.bet_type === '2_front' || t.bet_type === '2_spread') {
-        return Math.round(amt * 0.28)
-    } else if (t.bet_type === '1_top' || t.bet_type === '1_bottom' || t.bet_type === 'run_top') {
-        return Math.round(amt * 0.12)
-    } else {
-        return Math.round(amt * 0.25)
-    }
-}
+// calculateTransferCommission is imported from memberSettlementCalculator
 
 export default function Dealer() {
     const { user, profile, isDealer, isSuperAdmin, isAccountSuspended } = useAuth()
@@ -813,11 +793,20 @@ export default function Dealer() {
             trf = details.transfers || []
             upPay = details.upstreamPayments || []
         } else {
-            uHist = settlementOverview.userHistories.filter(uh =>
-                (targetRoundId && uh.round_id === targetRoundId) ||
-                (history.round_id && uh.round_id === history.round_id) ||
-                (uh.lottery_type === history.lottery_type && histDate && uh.round_date === histDate)
-            )
+            // First match userHistories by round_id
+            if (targetRoundId || history.round_id) {
+                uHist = settlementOverview.userHistories.filter(uh =>
+                    (targetRoundId && uh.round_id === targetRoundId) ||
+                    (history.round_id && uh.round_id === history.round_id)
+                )
+            }
+            // Fallback to lottery_type + round_date only if no records matched by round_id
+            if (uHist.length === 0 && histDate) {
+                uHist = settlementOverview.userHistories.filter(uh =>
+                    uh.lottery_type === history.lottery_type && uh.round_date === histDate
+                )
+            }
+
             mPay = settlementOverview.memberPayments.filter(p =>
                 p.round_id === targetRoundId || p.round_id === history.id || (history.round_id && p.round_id === history.round_id)
             )
@@ -1652,7 +1641,11 @@ export default function Dealer() {
                 userHistories: allUserHistories || [],
                 memberPayments: allMemberPayments || [],
                 upstreamPayments: allUpstreamPayments || [],
-                transfers: allTransfers || []
+                transfers: (allTransfers || []).map(t => ({
+                    ...t,
+                    commission_earned: calculateTransferCommission(t),
+                    winnings: Number(t.winnings || 0)
+                }))
             })
         } catch (error) {
             console.error('Error fetching round history:', error)
