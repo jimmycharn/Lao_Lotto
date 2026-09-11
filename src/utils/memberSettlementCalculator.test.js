@@ -10,7 +10,8 @@ import {
     getUpstreamPaymentPresetAmount,
     calculateRoundOutstandingDetails,
     calculateTransferCommission,
-    isRoundFullySettled
+    isRoundFullySettled,
+    synthesizeMissingRoundHistory
 } from './memberSettlementCalculator'
 
 describe('memberSettlementCalculator', () => {
@@ -469,6 +470,74 @@ describe('calculateRoundOutstandingDetails', () => {
         expect(details.dealerOwesUpstream).toBe(5605)
         expect(details.memberOwesDealer).toBe(20041)
         expect(details.netOutstanding).toBe(14436)
+    })
+
+    describe('synthesizeMissingRoundHistory', () => {
+        it('aggregates orphan user_round_history entries into round history items', () => {
+            const userHistories = [
+                {
+                    round_id: 'orphan-round-1',
+                    user_id: 'user-suphanee',
+                    dealer_id: 'dealer-jimmy',
+                    lottery_type: 'thai',
+                    round_date: '2026-02-20',
+                    total_entries: 48,
+                    total_amount: 3169,
+                    total_commission: 475,
+                    total_winnings: 900
+                },
+                {
+                    round_id: 'orphan-round-1',
+                    user_id: 'user-2',
+                    dealer_id: 'dealer-jimmy',
+                    lottery_type: 'thai',
+                    round_date: '2026-02-20',
+                    total_entries: 20,
+                    total_amount: 1140,
+                    total_commission: 174,
+                    total_winnings: 0
+                },
+                {
+                    round_id: 'existing-round-1',
+                    user_id: 'user-1',
+                    total_amount: 5000
+                }
+            ]
+
+            const existingRoundIds = new Set(['existing-round-1'])
+            const result = synthesizeMissingRoundHistory(userHistories, existingRoundIds, 'dealer-jimmy', { thai: 'หวยไทย' })
+
+            expect(result).toHaveLength(1)
+            const item = result[0]
+            expect(item.round_id).toBe('orphan-round-1')
+            expect(item.round_date).toBe('2026-02-20')
+            expect(item.close_time).toBe('2026-02-20T16:00:00+07:00')
+            expect(item.lottery_type).toBe('thai')
+            expect(item.lottery_name).toBe('หวยไทย')
+            expect(item.total_entries).toBe(68)
+            expect(item.total_amount).toBe(4309)
+            expect(item.total_commission).toBe(649)
+            expect(item.total_payout).toBe(900)
+            expect(item.profit).toBe(4309 - 649 - 900)
+            expect(item.is_archived).toBe(true)
+            expect(item.is_synthesized).toBe(true)
+        })
+
+        it('ignores already existing round IDs in either Set or Array format', () => {
+            const userHistories = [
+                { round_id: 'r-1', total_amount: 100 },
+                { round_id: 'r-2', total_amount: 200 }
+            ]
+            const existingArray = ['r-1', 'r-2']
+            const result = synthesizeMissingRoundHistory(userHistories, existingArray, 'dealer-1')
+            expect(result).toHaveLength(0)
+        })
+
+        it('returns empty array for empty inputs or null userHistories', () => {
+            expect(synthesizeMissingRoundHistory([])).toEqual([])
+            expect(synthesizeMissingRoundHistory(null)).toEqual([])
+            expect(synthesizeMissingRoundHistory(undefined)).toEqual([])
+        })
     })
 })
 

@@ -76,6 +76,7 @@ import ReferralAffiliateTab from '../components/referral/ReferralAffiliateTab'
 import MemberAccordionItem from '../components/dealer/MemberAccordionItem'
 import MemberSettlementInline from '../components/dealer/MemberSettlementInline'
 import UpstreamSettlementInline from '../components/dealer/UpstreamSettlementInline'
+import { getRoundCloseDate } from '../utils/crossRoundOffsetCalculator'
 import {
     calculateMemberInitialBalance,
     calculateMemberCurrentBalance,
@@ -85,7 +86,8 @@ import {
     getUpstreamSettlementStatus,
     calculateTransferCommission,
     calculateRoundOutstandingDetails,
-    isRoundFullySettled
+    isRoundFullySettled,
+    synthesizeMissingRoundHistory
 } from '../utils/memberSettlementCalculator'
 
 // RoundAccordionItem is now imported from separate file
@@ -510,7 +512,17 @@ export default function Dealer() {
             const historyId = deleteHistoryItem.id
             const roundId = deleteHistoryItem.round_id || deleteHistoryItem.id
 
-            // 1. Delete from round_history
+            // 1. Try atomic RPC delete first
+            try {
+                await supabase.rpc('delete_dealer_round_history', {
+                    p_round_id: roundId,
+                    p_history_id: historyId
+                })
+            } catch (rpcErr) {
+                console.warn('RPC delete_dealer_round_history note:', rpcErr)
+            }
+
+            // 2. Direct delete from round_history
             const { error: err1 } = await supabase
                 .from('round_history')
                 .delete()
@@ -518,30 +530,34 @@ export default function Dealer() {
 
             if (err1) console.warn('round_history delete note:', err1)
 
-            // 2. Delete from user_round_history
+            // 3. Direct delete from user_round_history
             await supabase
                 .from('user_round_history')
                 .delete()
                 .eq('round_id', roundId)
 
-            // 3. Delete from lottery_rounds if active closed/announced round
+            // 4. Direct delete from lottery_rounds if active closed/announced round
             await supabase
                 .from('lottery_rounds')
                 .delete()
                 .eq('id', roundId)
 
-            // 4. Delete associated member settlement payments
+            // 5. Delete associated member settlement payments
             await supabase
                 .from('member_round_payments')
                 .delete()
                 .eq('round_id', roundId)
 
-            // 5. Delete associated upstream settlement payments
+            // 6. Delete associated upstream settlement payments
             await supabase
                 .from('upstream_round_payments')
                 .delete()
                 .eq('round_id', roundId)
 
+            setRoundHistory(prev => prev.filter(h => h.id !== historyId && h.round_id !== roundId))
+            if (expandedHistoryId === historyId || expandedHistoryId === roundId) {
+                setExpandedHistoryId(null)
+            }
             toast.success('ลบประวัติงวดหวยเรียบร้อยแล้ว')
             setDeleteHistoryItem(null)
             fetchRoundHistory()
@@ -975,12 +991,18 @@ export default function Dealer() {
     const availableHistoryMonths = useMemo(() => {
         const monthSet = new Set()
         roundHistory.forEach(h => {
-            const dateStr = h.close_time || h.round_date || h.created_at || h.open_time
-            if (dateStr) {
-                const d = new Date(dateStr)
-                if (!isNaN(d.getTime())) {
-                    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-                    monthSet.add(key)
+            const closeDate = getRoundCloseDate(h) || h.round_date || ''
+            if (closeDate && /^\d{4}-\d{2}/.test(closeDate)) {
+                const key = closeDate.slice(0, 7)
+                monthSet.add(key)
+            } else {
+                const dateStr = h.close_time || h.round_date || h.created_at || h.open_time
+                if (dateStr) {
+                    const d = new Date(dateStr)
+                    if (!isNaN(d.getTime())) {
+                        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+                        monthSet.add(key)
+                    }
                 }
             }
         })
@@ -1005,14 +1027,20 @@ export default function Dealer() {
     const filteredRoundHistory = useMemo(() => {
         return roundHistory.filter(h => {
             if (historyMonthFilter !== 'all') {
-                const dateStr = h.close_time || h.round_date || h.created_at || h.open_time
-                if (dateStr) {
-                    const d = new Date(dateStr)
-                    if (!isNaN(d.getTime())) {
-                        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-                        if (key !== historyMonthFilter) return false
+                const closeDate = getRoundCloseDate(h) || h.round_date || ''
+                let key = ''
+                if (closeDate && /^\d{4}-\d{2}/.test(closeDate)) {
+                    key = closeDate.slice(0, 7)
+                } else {
+                    const dateStr = h.close_time || h.round_date || h.created_at || h.open_time
+                    if (dateStr) {
+                        const d = new Date(dateStr)
+                        if (!isNaN(d.getTime())) {
+                            key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+                        }
                     }
                 }
+                if (key !== historyMonthFilter) return false
             }
             if (historyTypeFilter !== 'all') {
                 if (h.lottery_type !== historyTypeFilter) return false
@@ -1992,15 +2020,74 @@ export default function Dealer() {
                 return h
             })
 
-            const combinedHistory = [...activeHistoryItems, ...enrichedArchivedRounds].sort((a, b) => {
-                const dateA = new Date(a.close_time || a.round_date || a.created_at || a.open_time).getTime()
-                const dateB = new Date(b.close_time || b.round_date || b.created_at || b.open_time).getTime()
+            // 3. Fetch settlement overview data to calculate settled status and synthesize any orphan rounds
+            const [
+                { data: allUserHistories, error: uhErr },
+                { data: allMemberPayments, error: mpErr },
+                { data: allUpstreamPayments, error: upErr }
+            ] = await Promise.all([
+                supabase
+                    .from('user_round_history')
+                    .select('id, round_id, user_id, total_amount, total_commission, total_winnings, lottery_type, round_date, total_entries, open_time, close_time, lottery_name, winning_numbers')
+                    .eq('dealer_id', user.id)
+                    .limit(5000),
+                supabase
+                    .from('member_round_payments')
+                    .select('id, round_id, user_id, amount, direction, payment_type, paid_at, notes, lottery_type, round_date')
+                    .eq('dealer_id', user.id)
+                    .limit(5000),
+                supabase
+                    .from('upstream_round_payments')
+                    .select('id, round_id, upstream_dealer_name, amount, direction, payment_type, paid_at, notes, lottery_type, round_date')
+                    .eq('dealer_id', user.id)
+                    .limit(5000)
+            ])
+
+            if (uhErr) console.error('Error fetching user_round_history overview:', uhErr)
+            if (mpErr) console.error('Error fetching member_round_payments overview:', mpErr)
+            if (upErr) console.error('Error fetching upstream_round_payments overview:', upErr)
+
+            // Synthesize any rounds present in user_round_history but missing from round_history / activeClosedRounds
+            const synthesizedOrphanRounds = synthesizeMissingRoundHistory(
+                allUserHistories,
+                existingRoundIds,
+                user.id,
+                LOTTERY_TYPES
+            )
+
+            // Self-repair: backfill missing round_history records in database if any found
+            if (synthesizedOrphanRounds.length > 0) {
+                const toInsert = synthesizedOrphanRounds.map(s => ({
+                    dealer_id: s.dealer_id,
+                    round_id: s.round_id,
+                    lottery_type: s.lottery_type,
+                    lottery_name: s.lottery_name,
+                    round_date: s.round_date,
+                    open_time: s.open_time,
+                    close_time: s.close_time,
+                    total_entries: s.total_entries,
+                    total_amount: s.total_amount,
+                    total_commission: s.total_commission,
+                    total_payout: s.total_payout,
+                    transferred_amount: 0,
+                    upstream_commission: 0,
+                    upstream_winnings: 0,
+                    profit: s.profit,
+                    winning_numbers: s.winning_numbers
+                }))
+                supabase.from('round_history').insert(toInsert).then(({ error: autoRepairErr }) => {
+                    if (autoRepairErr) console.warn('Auto-repair round_history note:', autoRepairErr)
+                })
+            }
+
+            const combinedHistory = [...activeHistoryItems, ...enrichedArchivedRounds, ...synthesizedOrphanRounds].sort((a, b) => {
+                const dateA = new Date(getRoundCloseDate(a) || a.close_time || a.round_date || a.created_at || a.open_time).getTime()
+                const dateB = new Date(getRoundCloseDate(b) || b.close_time || b.round_date || b.created_at || b.open_time).getTime()
                 return dateB - dateA
             })
 
             setRoundHistory(combinedHistory)
 
-            // 3. Fetch settlement overview data to calculate settled status for all history rounds
             const allRoundIds = Array.from(new Set(combinedHistory.flatMap(h => [h.round_id, h.id]).filter(Boolean)))
 
             let fetchedTransfers = []
@@ -2019,32 +2106,6 @@ export default function Dealer() {
                     }
                 }
             }
-
-            const [
-                { data: allUserHistories, error: uhErr },
-                { data: allMemberPayments, error: mpErr },
-                { data: allUpstreamPayments, error: upErr }
-            ] = await Promise.all([
-                supabase
-                    .from('user_round_history')
-                    .select('round_id, user_id, total_amount, total_commission, total_winnings, lottery_type, round_date')
-                    .eq('dealer_id', user.id)
-                    .limit(5000),
-                supabase
-                    .from('member_round_payments')
-                    .select('id, round_id, user_id, amount, direction, payment_type, paid_at, notes, lottery_type, round_date')
-                    .eq('dealer_id', user.id)
-                    .limit(5000),
-                supabase
-                    .from('upstream_round_payments')
-                    .select('id, round_id, upstream_dealer_name, amount, direction, payment_type, paid_at, notes, lottery_type, round_date')
-                    .eq('dealer_id', user.id)
-                    .limit(5000)
-            ])
-
-            if (uhErr) console.error('Error fetching user_round_history overview:', uhErr)
-            if (mpErr) console.error('Error fetching member_round_payments overview:', mpErr)
-            if (upErr) console.error('Error fetching upstream_round_payments overview:', upErr)
 
             // Combine fetched transfers with activeRoundTransfers (deduplicating by transfer id or key)
             const roundLotteryTypeMap = {}
@@ -3878,7 +3939,7 @@ export default function Dealer() {
                                                                                 ) : null}
                                                                             </div>
                                                                             <div className="round-date" style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.35rem', margin: 0 }}>
-                                                                                <FiCalendar size={13} /> {formatDate(history.close_time || history.round_date)}
+                                                                                <FiCalendar size={13} /> {formatDate(getRoundCloseDate(history) || history.close_time || history.round_date)}
                                                                             </div>
                                                                             {renderHistoryWinningPills(history)}
                                                                         </div>
@@ -4800,7 +4861,7 @@ export default function Dealer() {
                             ยืนยันลบประวัติงวดหวย?
                         </h3>
                         <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-                            คุณต้องการลบประวัติงวด <strong style={{ color: 'var(--color-text-main)' }}>{LOTTERY_TYPES[deleteHistoryItem.lottery_type] || deleteHistoryItem.lottery_type}</strong> ({formatDate(deleteHistoryItem.close_time || deleteHistoryItem.round_date)}) หรือไม่? 
+                            คุณต้องการลบประวัติงวด <strong style={{ color: 'var(--color-text-main)' }}>{LOTTERY_TYPES[deleteHistoryItem.lottery_type] || deleteHistoryItem.lottery_type}</strong> ({formatDate(getRoundCloseDate(deleteHistoryItem) || deleteHistoryItem.close_time || deleteHistoryItem.round_date)}) หรือไม่? 
                             <br />
                             <span style={{ fontSize: '0.8rem', color: '#ef4444', marginTop: '0.5rem', display: 'block' }}>*รายการประวัติและสรุปงวดนี้จะถูกลบออกจากระบบโดยสมบูรณ์</span>
                         </p>

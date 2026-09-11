@@ -478,4 +478,72 @@ export function isRoundFullySettled(params = {}) {
     return calculateRoundOutstandingDetails(params).isSettled
 }
 
+/**
+ * Synthesizes round history cards from user_round_history for any rounds
+ * that exist in user_round_history but are missing from round_history / activeClosedRounds.
+ * Ensures historical rounds with member activity are visible and settleable in the UI.
+ *
+ * @param {Array<Object>} userHistories - Rows from user_round_history
+ * @param {Set<string>|Array<string>} existingRoundIds - Set or array of known round IDs
+ * @param {string} dealerId - Dealer's user ID
+ * @param {Object} [lotteryTypesMap={}] - Optional mapping for lottery type names
+ * @returns {Array<Object>} Array of synthesized round_history items
+ */
+export function synthesizeMissingRoundHistory(userHistories = [], existingRoundIds = new Set(), dealerId = '', lotteryTypesMap = {}) {
+    if (!Array.isArray(userHistories) || userHistories.length === 0) return []
+
+    const existingSet = existingRoundIds instanceof Set
+        ? existingRoundIds
+        : new Set((existingRoundIds || []).map(String))
+    const orphanGroups = {}
+
+    userHistories.forEach(uh => {
+        const roundId = uh.round_id
+        if (!roundId || existingSet.has(String(roundId))) return
+
+        if (!orphanGroups[roundId]) {
+            orphanGroups[roundId] = {
+                id: roundId,
+                round_id: roundId,
+                dealer_id: dealerId || uh.dealer_id,
+                lottery_type: uh.lottery_type || 'thai',
+                lottery_name: uh.lottery_name || lotteryTypesMap[uh.lottery_type] || uh.lottery_type,
+                round_date: uh.round_date,
+                open_time: uh.open_time || null,
+                close_time: uh.close_time || (uh.round_date ? `${uh.round_date}T16:00:00+07:00` : null),
+                winning_numbers: uh.winning_numbers || null,
+                total_entries: 0,
+                total_amount: 0,
+                total_commission: 0,
+                total_payout: 0,
+                transferred_amount: 0,
+                upstream_commission: 0,
+                upstream_winnings: 0,
+                is_archived: true,
+                is_synthesized: true
+            }
+        }
+
+        orphanGroups[roundId].total_entries += Number(uh.total_entries || 0)
+        orphanGroups[roundId].total_amount += Number(uh.total_amount || 0)
+        orphanGroups[roundId].total_commission += Number(uh.total_commission || 0)
+        orphanGroups[roundId].total_payout += Number(uh.total_winnings || 0)
+
+        if (!orphanGroups[roundId].close_time && uh.close_time) {
+            orphanGroups[roundId].close_time = uh.close_time
+        }
+        if (!orphanGroups[roundId].round_date && uh.round_date) {
+            orphanGroups[roundId].round_date = uh.round_date
+        }
+        if (!orphanGroups[roundId].winning_numbers && uh.winning_numbers) {
+            orphanGroups[roundId].winning_numbers = uh.winning_numbers
+        }
+    })
+
+    return Object.values(orphanGroups).map(item => ({
+        ...item,
+        profit: item.total_amount - item.total_commission - item.total_payout
+    }))
+}
+
 
