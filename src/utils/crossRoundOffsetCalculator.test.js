@@ -282,6 +282,29 @@ describe('crossRoundOffsetCalculator', () => {
             })
         })
 
+        it('calculates member debt with 20% commission fallback when past round has 0 or null commission (e.g. 510 -> 408)', () => {
+            const userHistories = [
+                // พี่แตง: Sales 510, comm 0 (from older round history), win 0 -> debt should be 510 - 102 = 408
+                { round_id: 'r-24jan', user_id: 'u-tang', total_amount: 510, total_commission: 0, total_winnings: 0, round_date: '2026-01-24', lottery_type: 'lao' }
+            ]
+
+            const unpaid = findMemberPastUnpaidRounds({
+                userId: 'u-tang',
+                currentRoundId: 'r-26jan',
+                currentRoundDate: '2026-01-26',
+                userHistories,
+                memberPayments: []
+            })
+
+            expect(unpaid).toHaveLength(1)
+            expect(unpaid[0]).toEqual({
+                roundId: 'r-24jan',
+                roundDate: '2026-01-24',
+                lotteryType: 'lao',
+                debt: 408
+            })
+        })
+
         it('includes past rounds where member has negative balance (unpaid prize credit) like จา คูซ่า (-7533)', () => {
             const userHistories = [
                 // Round 2026-08-01: Debt 4000

@@ -2051,9 +2051,16 @@ export default function Dealer() {
             if (mpErr) console.error('Error fetching member_round_payments overview:', mpErr)
             if (upErr) console.error('Error fetching upstream_round_payments overview:', upErr)
 
+            // Enrich user_round_history with getMemberCommission to ensure commission is never 0 for past rounds
+            const normalizedUserHistories = (allUserHistories || []).map(uh => ({
+                ...uh,
+                total_commission: getMemberCommission(uh.total_amount, uh.total_commission),
+                total_winnings: Number(uh.total_winnings || 0)
+            }))
+
             // Synthesize any rounds present in user_round_history but missing from round_history / activeClosedRounds
             const synthesizedOrphanRounds = synthesizeMissingRoundHistory(
-                allUserHistories,
+                normalizedUserHistories,
                 existingRoundIds,
                 user.id,
                 LOTTERY_TYPES
@@ -2134,7 +2141,7 @@ export default function Dealer() {
             }
 
             setSettlementOverview({
-                userHistories: [...(allUserHistories || []), ...activeRoundUserHistories],
+                userHistories: [...normalizedUserHistories, ...activeRoundUserHistories],
                 memberPayments: allMemberPayments || [],
                 upstreamPayments: allUpstreamPayments || [],
                 transfers: allTransfersCombined

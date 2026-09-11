@@ -291,7 +291,10 @@ export function findMemberPastUnpaidRounds({
             }
         }
         roundMap[roundId].total_amount += Number(h.total_amount || 0)
-        roundMap[roundId].total_commission += Number(h.total_commission || 0)
+        const itemComm = (h.total_commission !== undefined && h.total_commission !== null && Number(h.total_commission) > 0)
+            ? Number(h.total_commission)
+            : (Number(h.total_amount || 0) > 0 ? Math.round(Number(h.total_amount) * 0.20) : 0)
+        roundMap[roundId].total_commission += itemComm
         roundMap[roundId].total_winnings += Number(h.total_winnings || 0)
         if (!roundMap[roundId].roundDate && roundDate) {
             roundMap[roundId].roundDate = roundDate
