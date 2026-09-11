@@ -7,7 +7,7 @@
     color: #f8fafc;
     width: 95%;
     max-width: 530px;
-    max-height: min(90vh, 620px);
+    max-height: min(92vh, 780px);
     display: flex;
     flex-direction: column;
     overflow: hidden;
