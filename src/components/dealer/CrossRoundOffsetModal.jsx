@@ -65,9 +65,13 @@ export default function CrossRoundOffsetModal({
         sortedPastRounds.map(r => r.roundId)
     )
     const getTodayBangkok = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+    const getCurrentTimeBangkok = () => new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', hour12: false })
     const roundCloseDate = useMemo(() => {
         return getRoundCloseDate(currentRound) || getTodayBangkok()
     }, [currentRound])
+
+    const dateInputRef = useRef(null)
+    const timeInputRef = useRef(null)
 
     const [customSlipAmount, setCustomSlipAmount] = useState('')
     const [paidAt, setPaidAt] = useState(() => roundCloseDate)
@@ -643,51 +647,89 @@ export default function CrossRoundOffsetModal({
                                 />
                             </div>
                             <div className="settlement-form-field">
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem' }}>
+                                <label
+                                    onClick={() => {
+                                        try { dateInputRef.current?.showPicker?.() } catch {}
+                                    }}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.35rem',
+                                        fontSize: '0.78rem',
+                                        color: 'var(--color-text-muted, #94a3b8)',
+                                        marginBottom: '0.2rem',
+                                        cursor: 'pointer'
+                                    }}
+                                    title="คลิกเพื่อเปิดปฏิทินเลือกวันที่"
+                                >
                                     <FiCalendar /> วันที่ชำระ
                                 </label>
-                                <input
-                                    type="date"
-                                    value={paidAt}
-                                    onChange={e => setPaidAt(e.target.value)}
-                                    required
-                                    style={{
-                                        width: '100%',
-                                        padding: '0.38rem 0.55rem',
-                                        fontSize: '0.85rem',
-                                        background: 'rgba(0, 0, 0, 0.3)',
-                                        border: '1px solid rgba(255, 255, 255, 0.15)',
-                                        borderRadius: '6px',
-                                        color: '#f8fafc'
-                                    }}
-                                />
-                                <button
-                                    type="button"
-                                    className={`btn-today-preset ${paidAt === getTodayBangkok() ? 'active' : ''}`}
-                                    onClick={() => setPaidAt(getTodayBangkok())}
-                                    title="ตั้งเป็นวันที่ปัจจุบัน (วันนี้)"
-                                >
-                                    วันนี้
-                                </button>
+                                <div className="settlement-input-icon-wrapper">
+                                    <input
+                                        ref={dateInputRef}
+                                        type="date"
+                                        className="settlement-input-with-action"
+                                        value={paidAt}
+                                        onChange={e => setPaidAt(e.target.value)}
+                                        onDoubleClick={() => {
+                                            try { dateInputRef.current?.showPicker?.() } catch {}
+                                        }}
+                                        required
+                                    />
+                                    <button
+                                        type="button"
+                                        className={`btn-input-trailing-action ${paidAt === getTodayBangkok() ? 'active' : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            setPaidAt(getTodayBangkok())
+                                        }}
+                                        title="คลิกเพื่อตั้งเป็นวันที่ปัจจุบัน (วันนี้)"
+                                    >
+                                        <FiCalendar size={14} />
+                                    </button>
+                                </div>
                             </div>
                             <div className="settlement-form-field">
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem' }}>
+                                <label
+                                    onClick={() => {
+                                        try { timeInputRef.current?.showPicker?.() } catch {}
+                                    }}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.35rem',
+                                        fontSize: '0.78rem',
+                                        color: 'var(--color-text-muted, #94a3b8)',
+                                        marginBottom: '0.2rem',
+                                        cursor: 'pointer'
+                                    }}
+                                    title="คลิกเพื่อเปิดตัวเลือกเวลา"
+                                >
                                     <FiClock /> เวลาโอน
                                 </label>
-                                <input
-                                    type="time"
-                                    value={paidTime}
-                                    onChange={e => setPaidTime(e.target.value)}
-                                    style={{
-                                        width: '100%',
-                                        padding: '0.38rem 0.55rem',
-                                        fontSize: '0.85rem',
-                                        background: 'rgba(0, 0, 0, 0.3)',
-                                        border: '1px solid rgba(255, 255, 255, 0.15)',
-                                        borderRadius: '6px',
-                                        color: '#f8fafc'
-                                    }}
-                                />
+                                <div className="settlement-input-icon-wrapper">
+                                    <input
+                                        ref={timeInputRef}
+                                        type="time"
+                                        className="settlement-input-with-action"
+                                        value={paidTime}
+                                        onChange={e => setPaidTime(e.target.value)}
+                                        onDoubleClick={() => {
+                                            try { timeInputRef.current?.showPicker?.() } catch {}
+                                        }}
+                                    />
+                                    <button
+                                        type="button"
+                                        className={`btn-input-trailing-action ${paidTime ? 'active' : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            setPaidTime(getCurrentTimeBangkok())
+                                        }}
+                                        title="คลิกเพื่อตั้งเป็นเวลาปัจจุบัน"
+                                    >
+                                        <FiClock size={14} />
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
