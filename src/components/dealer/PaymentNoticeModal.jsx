@@ -86,7 +86,7 @@ export default function PaymentNoticeModal({
             try {
                 const { data: profile } = await supabase
                     .from('profiles')
-                    .select('id, line_user_id, full_name, line_display_name')
+                    .select('id, line_user_id, full_name')
                     .eq('id', memberUserId)
                     .maybeSingle()
 

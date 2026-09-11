@@ -399,10 +399,13 @@ export default function Dealer() {
             const userIds = Array.from(new Set(userHistories.map(uh => uh.user_id).filter(Boolean)))
             let profilesMap = {}
             if (userIds.length > 0) {
-                const { data: profilesData } = await supabase
+                const { data: profilesData, error: profErr } = await supabase
                     .from('profiles')
-                    .select('id, full_name, email, phone, line_user_id, line_display_name')
+                    .select('id, full_name, email, phone, line_user_id')
                     .in('id', userIds)
+                if (profErr) {
+                    console.error('Error fetching profiles in history details:', profErr)
+                }
                 if (profilesData) {
                     profilesData.forEach(p => {
                         profilesMap[p.id] = p
@@ -452,8 +455,8 @@ export default function Dealer() {
                 ...uh,
                 total_commission: getMemberCommission(uh.total_amount, uh.total_commission),
                 total_winnings: Number(uh.total_winnings || 0),
-                profiles: profilesMap[uh.user_id] || null,
-                line_user_id: profilesMap[uh.user_id]?.line_user_id || null
+                profiles: profilesMap[uh.user_id] || (members || []).find(m => m.id === uh.user_id) || null,
+                line_user_id: profilesMap[uh.user_id]?.line_user_id || (members || []).find(m => m.id === uh.user_id)?.line_user_id || null
             }))
 
             const roundIdsToQuery = [historyItem.round_id, historyItem.id].filter(Boolean)
