@@ -43,10 +43,9 @@ export default function CrossRoundOffsetModal({
     const curBal = Number(currentBalance || 0)
 
     // 4 Modes: 'current_debt' | 'current_prize' | 'offset_prize_past_debt' | 'combine_all'
+    // Default to 'offset_prize_past_debt' (หักลบรางวัลกับหนี้เก่า) when past unpaid rounds exist
     const [mode, setMode] = useState(() => {
         if (hasPastRounds) {
-            if (prizeToOffset > 0) return 'offset_prize_past_debt'
-            if (curBal > 0) return 'combine_all'
             return 'offset_prize_past_debt'
         }
         if (curBal > 0) return 'current_debt'
