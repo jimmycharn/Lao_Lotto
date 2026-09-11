@@ -1,3 +1,5 @@
+import { formatThaiDate, getRoundCloseDate } from './crossRoundOffsetCalculator'
+
 /**
  * Calculates payment notice summary according to selected mode
  * @param {Object} params
@@ -335,6 +337,28 @@ export async function resolvePaymentNoticeBankAccount({
     return null
 }
 
+function resolveLotteryName(type, fallback = 'หวย') {
+    if (!type) return fallback
+    const t = String(type).trim().toLowerCase()
+    if (t === 'thai' || t.includes('ไทย')) return 'หวยไทย'
+    if (t === 'lao' || t.includes('ลาว')) return 'หวยลาว'
+    if (t === 'hanoi' || t.includes('ฮานอย')) return 'หวยฮานอย'
+    if (t === 'malay' || t.includes('มาเลย์')) return 'หวยมาเลย์'
+    return type
+}
+
+function resolveDisplayRoundDate(dateVal) {
+    if (!dateVal) return ''
+    if (typeof dateVal === 'string') {
+        const trimmed = dateVal.trim()
+        if (/[ก-๙]/.test(trimmed)) {
+            return trimmed
+        }
+    }
+    const formatted = formatThaiDate(dateVal)
+    return (formatted && formatted !== '-') ? formatted : String(dateVal || '').trim()
+}
+
 /**
  * Formats LINE text message for payment notice
  */
@@ -344,28 +368,61 @@ export function formatPaymentNoticeMessage({
     lotteryTypeName = 'หวย',
     mode = 'offset_prize_past_debt',
     summary,
+    selectedPastRounds = [],
     bankAccount,
     customNotes = ''
 }) {
     const lines = []
-    lines.push('📋 ใบแจ้งชำระเงิน')
     lines.push(`👤 สมาชิก: ${memberName}`)
-    if (roundDate) {
-        lines.push(`🎲 งวดวันที่: ${roundDate} (${lotteryTypeName})`)
-    }
     lines.push(`📌 รูปแบบ: ${summary?.modeLabel || 'แจ้งชำระ'}`)
     lines.push('----------------------------')
 
-    const currentRoundDateText = roundDate ? `งวด ${roundDate.trim()}` : 'งวดปัจจุบัน'
+    const curLottery = resolveLotteryName(lotteryTypeName)
+    const curDate = resolveDisplayRoundDate(roundDate)
+    const curDateFormatted = curDate ? ` ${curDate}` : ' ปัจจุบัน'
+
+    const sortedPast = [...(selectedPastRounds || [])].sort((a, b) => {
+        const dateA = a.roundDate || getRoundCloseDate(a) || a.round_date || ''
+        const dateB = b.roundDate || getRoundCloseDate(b) || b.round_date || ''
+        return String(dateB).localeCompare(String(dateA))
+    })
 
     if (mode === 'current_debt') {
-        lines.push(`- ยอดค้าง${currentRoundDateText}: ฿${Number(summary?.currentRoundDebt || 0).toLocaleString()}`)
+        if (summary?.currentRoundPrize > 0 && !summary?.currentRoundDebt) {
+            lines.push(`- เงินรางวัลงวดนี้(${curLottery})${curDateFormatted}: ฿${Number(summary.currentRoundPrize).toLocaleString()}`)
+        } else {
+            lines.push(`- ยอดค้างงวด(${curLottery})${curDateFormatted}: ฿${Number(summary?.currentRoundDebt || 0).toLocaleString()}`)
+        }
     } else if (mode === 'offset_prize_past_debt') {
-        lines.push(`- รวมหนี้งวดค้างเก่า: ฿${Number(summary?.selectedPastDebt || 0).toLocaleString()}`)
-        lines.push(`- รางวัลงวดนี้ที่นำมาหักล้าง: ฿${Number(summary?.currentRoundPrize || 0).toLocaleString()}`)
+        if (sortedPast.length > 0) {
+            for (const r of sortedPast) {
+                const pastLottery = resolveLotteryName(r.lotteryType || r.lottery_type, curLottery)
+                const pastDate = resolveDisplayRoundDate(r.roundDate || r.round_date || getRoundCloseDate(r))
+                const pastDebt = Number(r.debt || 0)
+                const prefix = pastDebt < 0 ? '- ยอดค้างจ่ายงวด' : '- ยอดค้างงวด'
+                lines.push(`${prefix}(${pastLottery}) ${pastDate}: ${pastDebt < 0 ? '-' : ''}฿${Math.abs(pastDebt).toLocaleString()}`)
+            }
+        } else if (summary?.selectedPastDebt) {
+            lines.push(`- รวมหนี้งวดค้างเก่า: ฿${Number(summary.selectedPastDebt).toLocaleString()}`)
+        }
+        if (summary?.currentRoundPrize > 0) {
+            lines.push(`- รางวัลงวดนี้ที่นำมาหักล้าง: ฿${Number(summary.currentRoundPrize).toLocaleString()}`)
+        }
     } else if (mode === 'combine_all') {
-        lines.push(`- ยอดค้าง${currentRoundDateText}: ฿${Number(summary?.currentRoundDebt || 0).toLocaleString()}`)
-        lines.push(`- รวมหนี้งวดค้างเก่า: ฿${Number(summary?.selectedPastDebt || 0).toLocaleString()}`)
+        if (Number(summary?.currentRoundDebt || 0) > 0 || sortedPast.length === 0) {
+            lines.push(`- ยอดค้างงวด(${curLottery})${curDateFormatted}: ฿${Number(summary?.currentRoundDebt || 0).toLocaleString()}`)
+        }
+        if (sortedPast.length > 0) {
+            for (const r of sortedPast) {
+                const pastLottery = resolveLotteryName(r.lotteryType || r.lottery_type, curLottery)
+                const pastDate = resolveDisplayRoundDate(r.roundDate || r.round_date || getRoundCloseDate(r))
+                const pastDebt = Number(r.debt || 0)
+                const prefix = pastDebt < 0 ? '- ยอดค้างจ่ายงวด' : '- ยอดค้างงวด'
+                lines.push(`${prefix}(${pastLottery}) ${pastDate}: ${pastDebt < 0 ? '-' : ''}฿${Math.abs(pastDebt).toLocaleString()}`)
+            }
+        } else if (summary?.selectedPastDebt) {
+            lines.push(`- รวมหนี้งวดค้างเก่า: ฿${Number(summary.selectedPastDebt).toLocaleString()}`)
+        }
     }
 
     lines.push('----------------------------')

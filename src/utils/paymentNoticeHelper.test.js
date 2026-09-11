@@ -109,12 +109,9 @@ describe('paymentNoticeHelper', () => {
                 }
             })
 
-            expect(msg).toContain('ใบแจ้งชำระเงิน')
-            expect(msg).toContain('พี่ชัช')
+            expect(msg).toContain('👤 สมาชิก: พี่ชัช')
             expect(msg).toContain('9,157')
-            expect(msg).toContain('ไทยพาณิชย์')
-            expect(msg).toContain('9972081291')
-            expect(msg).toContain('สมชาย ใจดี')
+            expect(msg).toContain('ไทยพาณิชย์ 9972081291 (สมชาย ใจดี)')
             expect(msg).toContain('สมาชิกโอนชำระให้เจ้ามือ')
         })
 
@@ -144,7 +141,7 @@ describe('paymentNoticeHelper', () => {
             expect(msg).toContain('กสิกรไทย 1234567890 (พี่ชัช)')
         })
 
-        it('formats payment notice matching user example template for combine_all mode', () => {
+        it('formats payment notice matching user example template for combine_all mode with all unpaid rounds listed', () => {
             const msg = formatPaymentNoticeMessage({
                 memberName: 'พี่แตง',
                 roundDate: '8 ก.ย. 2569',
@@ -158,6 +155,11 @@ describe('paymentNoticeHelper', () => {
                     currentRoundPrize: 0,
                     selectedPastDebt: 655
                 },
+                selectedPastRounds: [
+                    { roundId: 'r1', lotteryType: 'lao', roundDate: '2026-09-04', debt: 328 },
+                    { roundId: 'r2', lotteryType: 'lao', roundDate: '2026-09-02', debt: 232 },
+                    { roundId: 'r3', lotteryType: 'lao', roundDate: '2026-08-26', debt: 95 }
+                ],
                 bankAccount: {
                     bank_name: 'ธนาคารออมสิน 020432578092 (นายธีรเดช บรรจงแก้ว)',
                     bank_account: '',
@@ -166,13 +168,13 @@ describe('paymentNoticeHelper', () => {
             })
 
             const expected = [
-                '📋 ใบแจ้งชำระเงิน',
                 '👤 สมาชิก: พี่แตง',
-                '🎲 งวดวันที่: 8 ก.ย. 2569 (หวยลาว)',
                 '📌 รูปแบบ: หักลบทั้งหมด',
                 '----------------------------',
-                '- ยอดค้างงวด 8 ก.ย. 2569: ฿214',
-                '- รวมหนี้งวดค้างเก่า: ฿655',
+                '- ยอดค้างงวด(หวยลาว) 8 ก.ย. 2569: ฿214',
+                '- ยอดค้างงวด(หวยลาว) 4 ก.ย. 2569: ฿328',
+                '- ยอดค้างงวด(หวยลาว) 2 ก.ย. 2569: ฿232',
+                '- ยอดค้างงวด(หวยลาว) 26 ส.ค. 2569: ฿95',
                 '----------------------------',
                 '💰 รวมยอดที่ต้องโอน/ชำระ: ฿869',
                 '🟢 สมาชิกโอนชำระให้เจ้ามือ',
@@ -200,7 +202,7 @@ describe('paymentNoticeHelper', () => {
                 }
             })
 
-            expect(msg).toContain('- ยอดค้างงวด 8 ก.ย. 2569: ฿214')
+            expect(msg).toContain('- ยอดค้างงวด(หวยลาว) 8 ก.ย. 2569: ฿214')
             expect(msg).toContain('💰 ยอดที่ต้องโอน/ชำระ: ฿214')
             expect(msg).toContain('🟢 สมาชิกโอนชำระให้เจ้ามือ')
         })

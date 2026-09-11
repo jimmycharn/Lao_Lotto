@@ -247,6 +247,7 @@ export default function PaymentNoticeModal({
             lotteryTypeName: lotteryName,
             mode,
             summary,
+            selectedPastRounds: mode === 'current_debt' ? [] : selectedPastRounds,
             bankAccount: {
                 bank_name: bankAccountText || resolvedBank?.bank_name || '',
                 bank_account: '',
@@ -254,7 +255,7 @@ export default function PaymentNoticeModal({
             },
             customNotes
         })
-    }, [targetDisplayName, roundDateIso, lotteryName, mode, summary, bankAccountText, resolvedBank, customNotes])
+    }, [targetDisplayName, roundDateIso, lotteryName, mode, summary, selectedPastRounds, bankAccountText, resolvedBank, customNotes])
 
     // Copy to clipboard with multi-layer fallback (supports HTTP, mobile, iframe, and modern clipboard API)
     const handleCopyNotice = async (e) => {
