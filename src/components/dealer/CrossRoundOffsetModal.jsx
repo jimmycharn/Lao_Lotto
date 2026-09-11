@@ -64,13 +64,25 @@ export default function CrossRoundOffsetModal({
     const [selectedRoundIds, setSelectedRoundIds] = useState(() =>
         sortedPastRounds.map(r => r.roundId)
     )
+    const getTodayBangkok = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+    const roundCloseDate = useMemo(() => {
+        return getRoundCloseDate(currentRound) || getTodayBangkok()
+    }, [currentRound])
+
     const [customSlipAmount, setCustomSlipAmount] = useState('')
-    const [paidAt, setPaidAt] = useState(() => new Date().toISOString().split('T')[0])
+    const [paidAt, setPaidAt] = useState(() => roundCloseDate)
     const [paidTime, setPaidTime] = useState('')
     const [referenceDoc, setReferenceDoc] = useState('')
     const [customNotes, setCustomNotes] = useState('')
     const [saving, setSaving] = useState(false)
     const [errorMsg, setErrorMsg] = useState(null)
+
+    // Sync paidAt if round date changes
+    useEffect(() => {
+        if (roundCloseDate) {
+            setPaidAt(roundCloseDate)
+        }
+    }, [roundCloseDate])
 
     const effectiveDealerId = dealerId || member?.dealer_id || currentRound?.dealer_id || null
     const effectiveMemberUserId = member?.user_id || member?.id || member?.userId || null
@@ -608,7 +620,7 @@ export default function CrossRoundOffsetModal({
                         </div>
 
                         {/* Actual Slip Amount, Date & Time (3 columns) */}
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.5rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.5rem', alignItems: 'start' }}>
                             <div className="settlement-form-field">
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem' }}>
                                     <FiDollarSign /> จำนวนเงิน
@@ -649,6 +661,14 @@ export default function CrossRoundOffsetModal({
                                         color: '#f8fafc'
                                     }}
                                 />
+                                <button
+                                    type="button"
+                                    className={`btn-today-preset ${paidAt === getTodayBangkok() ? 'active' : ''}`}
+                                    onClick={() => setPaidAt(getTodayBangkok())}
+                                    title="ตั้งเป็นวันที่ปัจจุบัน (วันนี้)"
+                                >
+                                    วันนี้
+                                </button>
                             </div>
                             <div className="settlement-form-field">
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem' }}>
