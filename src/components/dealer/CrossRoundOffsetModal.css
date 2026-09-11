@@ -193,6 +193,13 @@
     flex-shrink: 0;
 }
 
+.cross-round-modal .modal-footer button:disabled {
+    opacity: 0.45 !important;
+    cursor: not-allowed !important;
+    box-shadow: none !important;
+    filter: grayscale(0.5);
+}
+
 @media (max-width: 480px) {
     .cross-round-modal {
         width: 100%;

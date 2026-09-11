@@ -145,11 +145,32 @@ export default function CrossRoundOffsetModal({
         }
     }
 
+    const needsPastRounds = mode === 'offset_prize_past_debt' || mode === 'combine_all'
+
+    // Check if the total amount to transfer/settle is 0
+    const isAmountZero = (() => {
+        if (mode === 'current_debt') {
+            return activeSlipAmount <= 0
+        }
+        if (mode === 'current_prize') {
+            return activeSlipAmount <= 0
+        }
+        if (mode === 'offset_prize_past_debt') {
+            const hasPrizeToOffset = prizeToOffset > 0 && selectedPastRounds.length > 0
+            const hasPastPrizeCredit = pastPrizesTotal > 0 && selectedPastRounds.length > 0
+            return activeSlipAmount <= 0 && !hasPrizeToOffset && !hasPastPrizeCredit
+        }
+        if (mode === 'combine_all') {
+            return activeSlipAmount <= 0 && pastPrizesTotal <= 0
+        }
+        return activeSlipAmount <= 0
+    })()
+
+    const isSubmitDisabled = saving || (needsPastRounds && selectedPastRounds.length === 0) || isAmountZero
+
     const handleSubmit = async (e) => {
         e.preventDefault()
-        const needsPastRounds = mode === 'offset_prize_past_debt' || mode === 'combine_all'
-        if (needsPastRounds && selectedPastRounds.length === 0) return
-        if (saving) return
+        if (isSubmitDisabled) return
         setErrorMsg(null)
 
         const targetUpstreamName = upstreamDealerName || member?.name || member?.user_name || member?.dealerName
@@ -193,9 +214,6 @@ export default function CrossRoundOffsetModal({
         member?.user_name ||
         member?.dealerName ||
         (isUpstream ? 'เจ้ามือรับตีออก' : 'สมาชิก')
-
-    const needsPastRounds = mode === 'offset_prize_past_debt' || mode === 'combine_all'
-    const isSubmitDisabled = saving || (needsPastRounds && selectedPastRounds.length === 0)
 
     return createPortal(
         <div
