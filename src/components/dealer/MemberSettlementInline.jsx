@@ -374,7 +374,7 @@ export default function MemberSettlementInline({
                                 fontWeight: 600
                             }}
                         >
-                            <FiZap size={14} /> ⚡ หักล้างข้ามงวด ({pastUnpaidRounds.length})
+                            <FiZap size={14} /> หักล้างข้ามงวด ({pastUnpaidRounds.length})
                         </button>
                     )}
                     {hasDebt && (
@@ -395,7 +395,7 @@ export default function MemberSettlementInline({
                             disabled={saving}
                             title="ระบุวันที่/หมายเหตุ และบันทึกชำระยอดคงค้างครบจำนวน"
                         >
-                            <FiZap size={14} /> ⚡ เคลียร์ครบ ({status.formattedText})
+                            <FiZap size={14} /> เคลียร์ครบ ({status.formattedText})
                         </button>
                     )}
                     <button
@@ -410,7 +410,7 @@ export default function MemberSettlementInline({
                         }}
                     >
                         {showForm ? <FiX size={14} /> : <FiPlus size={14} />}
-                        {showForm ? 'ปิดฟอร์ม' : '+ บันทึกการจ่าย/รับเงิน'}
+                        {showForm ? 'ปิดฟอร์ม' : 'บันทึกการจ่าย/รับเงิน'}
                     </button>
                 </div>
             </div>

@@ -362,7 +362,7 @@ export default function UpstreamSettlementInline({
                                 fontWeight: 600
                             }}
                         >
-                            <FiZap size={14} /> ⚡ หักล้างข้ามงวด ({pastUnpaidRounds.length})
+                            <FiZap size={14} /> หักล้างข้ามงวด ({pastUnpaidRounds.length})
                         </button>
                     )}
                     {!status.isSettled && (
@@ -373,7 +373,7 @@ export default function UpstreamSettlementInline({
                             disabled={saving}
                             title="ระบุวันที่/หมายเหตุ และบันทึกชำระยอดคงค้างครบจำนวน"
                         >
-                            <FiZap size={14} /> ⚡ เคลียร์ครบ ({status.formattedText})
+                            <FiZap size={14} /> เคลียร์ครบ ({status.formattedText})
                         </button>
                     )}
                     <button
@@ -388,7 +388,7 @@ export default function UpstreamSettlementInline({
                         }}
                     >
                         {showForm ? <FiX size={14} /> : <FiPlus size={14} />}
-                        {showForm ? 'ปิดฟอร์ม' : '+ บันทึกการจ่าย/รับเงิน'}
+                        {showForm ? 'ปิดฟอร์ม' : 'บันทึกการจ่าย/รับเงิน'}
                     </button>
                 </div>
             </div>
