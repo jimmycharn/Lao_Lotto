@@ -377,7 +377,7 @@ export default function MemberSettlementInline({
                             <FiZap size={14} /> หักล้างข้ามงวด ({pastUnpaidRounds.length})
                         </button>
                     )}
-                    {hasDebt && (
+                    {hasDebt && pastUnpaidRounds.length === 0 && (
                         <button
                             type="button"
                             className="btn-settle-action btn-settle-notice"
