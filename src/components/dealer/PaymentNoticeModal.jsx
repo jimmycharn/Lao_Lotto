@@ -5,7 +5,6 @@ import {
     FiX,
     FiCheck,
     FiCalendar,
-    FiDollarSign,
     FiCreditCard,
     FiCopy,
     FiAlertCircle,
@@ -50,7 +49,6 @@ export default function PaymentNoticeModal({
         sortedPastRounds.map(r => r.roundId)
     )
 
-    const [customAmount, setCustomAmount] = useState('')
     const [noticeDate, setNoticeDate] = useState(() => new Date().toISOString().split('T')[0])
     const [customNotes, setCustomNotes] = useState('')
 
@@ -138,9 +136,6 @@ export default function PaymentNoticeModal({
             selectedPastRounds: mode === 'current_debt' ? [] : selectedPastRounds
         })
     }, [mode, currentBalance, prizeToOffset, selectedPastRounds])
-
-    // Auto-fill custom amount whenever summary.netAmount changes if user hasn't overridden
-    const displayAmount = customAmount !== '' ? customAmount : String(summary.netAmount)
 
     // Resolve Bank Account whenever direction changes
     useEffect(() => {
@@ -232,10 +227,7 @@ export default function PaymentNoticeModal({
             roundDate: roundDateIso,
             lotteryTypeName: lotteryName,
             mode,
-            summary: {
-                ...summary,
-                netAmount: Number(displayAmount || summary.netAmount)
-            },
+            summary,
             bankAccount: {
                 bank_name: bankAccountText || resolvedBank?.bank_name || '',
                 bank_account: '',
@@ -243,7 +235,7 @@ export default function PaymentNoticeModal({
             },
             customNotes
         })
-    }, [targetDisplayName, roundDateIso, lotteryName, mode, summary, displayAmount, bankAccountText, resolvedBank, customNotes])
+    }, [targetDisplayName, roundDateIso, lotteryName, mode, summary, bankAccountText, resolvedBank, customNotes])
 
     // Copy to clipboard
     const handleCopyNotice = async () => {
@@ -538,63 +530,31 @@ export default function PaymentNoticeModal({
                             </div>
                         </div>
 
-                        {/* Amount & Date inputs */}
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem' }}>
-                            <div className="notice-bank-field">
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: '#94a3b8' }}>
-                                    <FiDollarSign /> จำนวนเงินตามสลิปจริง (บาท)
-                                </label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    step="any"
-                                    value={displayAmount}
-                                    onChange={e => setCustomAmount(e.target.value)}
-                                    style={{
-                                        width: '100%',
-                                        padding: '0.38rem 0.55rem',
-                                        fontSize: '0.85rem',
-                                        background: 'rgba(0, 0, 0, 0.3)',
-                                        border: '1px solid rgba(255, 255, 255, 0.15)',
-                                        borderRadius: '6px',
-                                        color: '#f8fafc'
-                                    }}
-                                />
-                            </div>
-                            <div className="notice-bank-field">
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: '#94a3b8' }}>
-                                    <FiCalendar /> วันที่ชำระ
-                                </label>
-                                <input
-                                    type="date"
-                                    value={noticeDate}
-                                    onChange={e => setNoticeDate(e.target.value)}
-                                    style={{
-                                        width: '100%',
-                                        padding: '0.38rem 0.55rem',
-                                        fontSize: '0.85rem',
-                                        background: 'rgba(0, 0, 0, 0.3)',
-                                        border: '1px solid rgba(255, 255, 255, 0.15)',
-                                        borderRadius: '6px',
-                                        color: '#f8fafc'
-                                    }}
-                                />
-                            </div>
+                        {/* Payment Date input */}
+                        <div className="notice-bank-field">
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: '#94a3b8' }}>
+                                <FiCalendar /> วันที่ชำระ
+                            </label>
+                            <input
+                                type="date"
+                                value={noticeDate}
+                                onChange={e => setNoticeDate(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '0.38rem 0.55rem',
+                                    fontSize: '0.85rem',
+                                    background: 'rgba(0, 0, 0, 0.3)',
+                                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                                    borderRadius: '6px',
+                                    color: '#f8fafc'
+                                }}
+                            />
                         </div>
 
                         {/* Bank Account */}
                         <div className="notice-bank-field">
-                            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem', color: '#94a3b8' }}>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                    <FiCreditCard /> บัญชีโอนเงิน
-                                </span>
-                                <span style={{ fontSize: '0.72rem', opacity: 0.8 }}>
-                                    {loadingBank ? 'กำลังโหลด...' : (
-                                        summary.direction === 'dealer_to_member' ? 'ดึงจากบัญชีสมาชิก' :
-                                        resolvedBank?.source === 'dealer_assigned' ? 'ดึงจากบัญชีที่กำหนดให้สมาชิก' :
-                                        'ดึงจากบัญชีหลักเจ้ามือ'
-                                    )}
-                                </span>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: '#94a3b8' }}>
+                                <FiCreditCard /> บัญชีโอนเงิน
                             </label>
                             <input
                                 type="text"
@@ -605,80 +565,42 @@ export default function PaymentNoticeModal({
                             />
                         </div>
 
-                        {/* LINE Status & Copy Fallback */}
-                        {effectiveLineUserId ? (
+                        {/* LINE Status & Copy Fallback (แสดงเฉพาะเมื่อยังไม่ได้ผูก LINE UID) */}
+                        {!effectiveLineUserId && !loadingProfile && (
                             <div style={{
-                                background: 'rgba(34, 197, 94, 0.08)',
-                                border: '1px solid rgba(34, 197, 94, 0.25)',
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                border: '1px solid rgba(239, 68, 68, 0.25)',
                                 borderRadius: '6px',
-                                padding: '0.45rem 0.75rem',
+                                padding: '0.5rem 0.75rem',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
                                 fontSize: '0.8rem',
-                                color: '#86efac'
+                                color: '#fca5a5'
                             }}>
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                    <FiCheckCircle size={15} color="#22c55e" /> ผูก LINE UID แล้ว: <code style={{ fontSize: '0.75rem', color: '#bbf7d0', background: 'rgba(0,0,0,0.3)', padding: '0.1rem 0.35rem', borderRadius: '4px' }}>{effectiveLineUserId}</code>
+                                    <FiAlertCircle size={15} /> สมาชิกยังไม่ได้ผูก LINE UID
                                 </span>
                                 <button
                                     type="button"
                                     onClick={handleCopyNotice}
                                     style={{
-                                        background: 'rgba(255,255,255,0.08)',
-                                        border: '1px solid rgba(255,255,255,0.15)',
+                                        background: 'rgba(255,255,255,0.1)',
+                                        border: '1px solid rgba(255,255,255,0.2)',
                                         color: '#fff',
-                                        padding: '0.2rem 0.55rem',
+                                        padding: '0.2rem 0.6rem',
                                         borderRadius: '4px',
-                                        fontSize: '0.73rem',
+                                        fontSize: '0.75rem',
                                         cursor: 'pointer',
                                         display: 'inline-flex',
                                         alignItems: 'center',
                                         gap: '0.3rem'
                                     }}
-                                    title="คัดลอกข้อความสำรอง"
                                 >
                                     {copied ? <FiCheckCircle color="#22c55e" /> : <FiCopy />}
                                     {copied ? 'คัดลอกแล้ว' : 'คัดลอกข้อความ'}
                                 </button>
                             </div>
-                        ) : (
-                            !loadingProfile && (
-                                <div style={{
-                                    background: 'rgba(239, 68, 68, 0.1)',
-                                    border: '1px solid rgba(239, 68, 68, 0.25)',
-                                    borderRadius: '6px',
-                                    padding: '0.5rem 0.75rem',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    fontSize: '0.8rem',
-                                    color: '#fca5a5'
-                                }}>
-                                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                        <FiAlertCircle size={15} /> สมาชิกยังไม่ได้ผูก LINE UID
-                                    </span>
-                                    <button
-                                        type="button"
-                                        onClick={handleCopyNotice}
-                                        style={{
-                                            background: 'rgba(255,255,255,0.1)',
-                                            border: '1px solid rgba(255,255,255,0.2)',
-                                            color: '#fff',
-                                            padding: '0.2rem 0.6rem',
-                                            borderRadius: '4px',
-                                            fontSize: '0.75rem',
-                                            cursor: 'pointer',
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '0.3rem'
-                                        }}
-                                    >
-                                        {copied ? <FiCheckCircle color="#22c55e" /> : <FiCopy />}
-                                        {copied ? 'คัดลอกแล้ว' : 'คัดลอกข้อความ'}
-                                    </button>
-                                </div>
-                            )
                         )}
                     </div>
 
