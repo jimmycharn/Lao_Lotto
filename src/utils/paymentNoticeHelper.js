@@ -1,0 +1,289 @@
+/**
+ * Calculates payment notice summary according to selected mode
+ * @param {Object} params
+ * @param {'current_debt' | 'offset_prize_past_debt' | 'combine_all'} params.mode
+ * @param {number} params.currentBalance - Current round net balance (+ member owes dealer, - dealer owes member)
+ * @param {number} params.currentWinnings - Total winning prize in current round
+ * @param {Array<Object>} params.selectedPastRounds - Array of selected past unpaid round objects
+ * @returns {Object} Calculated summary
+ */
+export function calculatePaymentNoticeSummary({
+    mode = 'offset_prize_past_debt',
+    currentBalance = 0,
+    currentWinnings = 0,
+    selectedPastRounds = []
+}) {
+    const curBal = Number(currentBalance || 0)
+    const prize = Math.max(0, Number(currentWinnings || 0))
+
+    const pastDebtTotal = selectedPastRounds
+        .filter(r => Number(r.debt || 0) > 0)
+        .reduce((sum, r) => sum + Number(r.debt || 0), 0)
+
+    const pastPrizeTotal = selectedPastRounds
+        .filter(r => Number(r.debt || 0) < 0)
+        .reduce((sum, r) => sum + Math.abs(Number(r.debt || 0)), 0)
+
+    const pastNetTotal = selectedPastRounds.reduce((sum, r) => sum + Number(r.debt || 0), 0)
+
+    if (mode === 'current_debt') {
+        const net = Math.abs(curBal)
+        let direction = 'even'
+        if (curBal > 0) direction = 'member_to_dealer'
+        else if (curBal < 0) direction = 'dealer_to_member'
+
+        return {
+            mode,
+            modeLabel: 'หนี้งวดนี้',
+            netAmount: net,
+            direction,
+            currentRoundDebt: curBal > 0 ? curBal : 0,
+            currentRoundPrize: curBal < 0 ? Math.abs(curBal) : 0,
+            selectedPastDebt: 0,
+            selectedPastPrize: 0
+        }
+    }
+
+    if (mode === 'offset_prize_past_debt') {
+        // Offset current prize against past net debt
+        const diff = pastNetTotal - prize
+        let direction = 'even'
+        if (diff > 0) direction = 'member_to_dealer'
+        else if (diff < 0) direction = 'dealer_to_member'
+
+        return {
+            mode,
+            modeLabel: 'หักลบรางวัลกับหนี้เก่า',
+            netAmount: Math.abs(diff),
+            direction,
+            currentRoundDebt: curBal > 0 ? curBal : 0,
+            currentRoundPrize: prize,
+            selectedPastDebt: pastDebtTotal,
+            selectedPastPrize: pastPrizeTotal
+        }
+    }
+
+    // combine_all: Current balance + all selected past debts
+    const totalCombined = curBal + pastNetTotal
+    let direction = 'even'
+    if (totalCombined > 0) direction = 'member_to_dealer'
+    else if (totalCombined < 0) direction = 'dealer_to_member'
+
+    return {
+        mode,
+        modeLabel: 'หักลบทั้งหมด',
+        netAmount: Math.abs(totalCombined),
+        direction,
+        currentRoundDebt: curBal > 0 ? curBal : 0,
+        currentRoundPrize: curBal < 0 ? Math.abs(curBal) : 0,
+        selectedPastDebt: pastDebtTotal,
+        selectedPastPrize: pastPrizeTotal
+    }
+}
+
+/**
+ * Resolves bank account for the payment notice
+ */
+export async function resolvePaymentNoticeBankAccount({
+    direction = 'member_to_dealer',
+    dealerId,
+    memberUserId,
+    supabase,
+    cachedDealerBanks = [],
+    assignedBankAccountId = null
+}) {
+    if (!supabase) return null
+
+    if (direction === 'dealer_to_member') {
+        // Dealer pays member -> fetch member's bank account
+        try {
+            const { data: userBanks } = await supabase
+                .from('user_bank_accounts')
+                .select('*')
+                .eq('user_id', memberUserId)
+                .order('is_default', { ascending: false })
+                .order('created_at', { ascending: true })
+
+            if (userBanks && userBanks.length > 0) {
+                const b = userBanks[0]
+                return {
+                    bank_name: b.bank_name || 'ไม่ระบุธนาคาร',
+                    bank_account: b.bank_account || '',
+                    account_name: b.account_name || '',
+                    source: 'member_bank_accounts'
+                }
+            }
+
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('bank_name, bank_account, bank_account_number, bank_account_name')
+                .eq('id', memberUserId)
+                .maybeSingle()
+
+            if (profile?.bank_account || profile?.bank_account_number) {
+                return {
+                    bank_name: profile.bank_name || 'ไม่ระบุธนาคาร',
+                    bank_account: profile.bank_account || profile.bank_account_number || '',
+                    account_name: profile.bank_account_name || '',
+                    source: 'member_profile'
+                }
+            }
+        } catch (err) {
+            console.error('Error resolving member bank account:', err)
+        }
+        return null
+    }
+
+    // Member pays dealer -> fetch dealer's assigned or default bank account
+    try {
+        let assignedId = assignedBankAccountId
+        if (!assignedId && dealerId && memberUserId) {
+            const { data: membership } = await supabase
+                .from('user_dealer_memberships')
+                .select('assigned_bank_account_id')
+                .eq('dealer_id', dealerId)
+                .eq('user_id', memberUserId)
+                .maybeSingle()
+            if (membership?.assigned_bank_account_id) {
+                assignedId = membership.assigned_bank_account_id
+            }
+        }
+
+        if (assignedId) {
+            const cachedAssigned = cachedDealerBanks.find(b => b.id === assignedId)
+            if (cachedAssigned) {
+                return {
+                    bank_name: cachedAssigned.bank_name || '',
+                    bank_account: cachedAssigned.bank_account || '',
+                    account_name: cachedAssigned.account_name || '',
+                    source: 'dealer_assigned'
+                }
+            }
+
+            const { data: assignedBank } = await supabase
+                .from('dealer_bank_accounts')
+                .select('*')
+                .eq('id', assignedId)
+                .maybeSingle()
+
+            if (assignedBank) {
+                return {
+                    bank_name: assignedBank.bank_name || '',
+                    bank_account: assignedBank.bank_account || '',
+                    account_name: assignedBank.account_name || '',
+                    source: 'dealer_assigned'
+                }
+            }
+        }
+
+        // Fallback: Dealer's default account
+        if (cachedDealerBanks.length > 0) {
+            const def = cachedDealerBanks.find(b => b.is_default) || cachedDealerBanks[0]
+            if (def) {
+                return {
+                    bank_name: def.bank_name || '',
+                    bank_account: def.bank_account || '',
+                    account_name: def.account_name || '',
+                    source: 'dealer_default'
+                }
+            }
+        }
+
+        const { data: dealerBanks } = await supabase
+            .from('dealer_bank_accounts')
+            .select('*')
+            .eq('dealer_id', dealerId)
+            .order('is_default', { ascending: false })
+
+        if (dealerBanks && dealerBanks.length > 0) {
+            const b = dealerBanks[0]
+            return {
+                bank_name: b.bank_name || '',
+                bank_account: b.bank_account || '',
+                account_name: b.account_name || '',
+                source: 'dealer_default'
+            }
+        }
+
+        // Fallback: Dealer profile
+        const { data: dealerProf } = await supabase
+            .from('profiles')
+            .select('bank_name, bank_account, bank_account_number, bank_account_name')
+            .eq('id', dealerId)
+            .maybeSingle()
+
+        if (dealerProf?.bank_account || dealerProf?.bank_account_number) {
+            return {
+                bank_name: dealerProf.bank_name || '',
+                bank_account: dealerProf.bank_account || dealerProf.bank_account_number || '',
+                account_name: dealerProf.bank_account_name || '',
+                source: 'dealer_profile'
+            }
+        }
+    } catch (err) {
+        console.error('Error resolving dealer bank account:', err)
+    }
+
+    return null
+}
+
+/**
+ * Formats LINE text message for payment notice
+ */
+export function formatPaymentNoticeMessage({
+    memberName = 'สมาชิก',
+    roundDate = '',
+    lotteryTypeName = 'หวย',
+    mode = 'offset_prize_past_debt',
+    summary,
+    bankAccount,
+    customNotes = ''
+}) {
+    const lines = []
+    lines.push('📋 ใบแจ้งชำระเงิน')
+    lines.push(`👤 สมาชิก: ${memberName}`)
+    if (roundDate) {
+        lines.push(`🎲 งวดวันที่: ${roundDate} (${lotteryTypeName})`)
+    }
+    lines.push(`📌 รูปแบบ: ${summary?.modeLabel || 'แจ้งชำระ'}`)
+    lines.push('----------------------------')
+
+    if (mode === 'current_debt') {
+        lines.push(`- ยอดค้างงวดปัจจุบัน: ฿${Number(summary?.currentRoundDebt || 0).toLocaleString()}`)
+    } else if (mode === 'offset_prize_past_debt') {
+        lines.push(`- รวมหนี้งวดเก่าที่เลือก: ฿${Number(summary?.selectedPastDebt || 0).toLocaleString()}`)
+        lines.push(`- รางวัลงวดนี้ที่นำมาหักล้าง: ฿${Number(summary?.currentRoundPrize || 0).toLocaleString()}`)
+    } else if (mode === 'combine_all') {
+        lines.push(`- ยอดค้างงวดปัจจุบัน: ฿${Number(summary?.currentRoundDebt || 0).toLocaleString()}`)
+        lines.push(`- รวมหนี้งวดเก่าที่เลือก: ฿${Number(summary?.selectedPastDebt || 0).toLocaleString()}`)
+    }
+
+    lines.push('----------------------------')
+
+    const netAmt = Number(summary?.netAmount || 0).toLocaleString()
+    if (summary?.direction === 'member_to_dealer') {
+        lines.push(`💰 ยอดที่ต้องโอนชำระ: ฿${netAmt}`)
+        lines.push('(🟢 สมาชิกโอนชำระให้เจ้ามือ)')
+    } else if (summary?.direction === 'dealer_to_member') {
+        lines.push(`💰 ยอดที่เจ้ามือต้องโอน: ฿${netAmt}`)
+        lines.push('(🔴 เจ้ามือโอนคืนให้สมาชิก)')
+    } else {
+        lines.push(`💰 ยอดหักล้างพอดี: ฿0`)
+        lines.push('(⚪ ไม่มียอดต้องโอน)')
+    }
+
+    if (bankAccount && (bankAccount.bank_account || bankAccount.bank_name)) {
+        lines.push('')
+        lines.push('💳 บัญชีโอนเงิน:')
+        if (bankAccount.bank_name) lines.push(`ธนาคาร: ${bankAccount.bank_name}`)
+        if (bankAccount.bank_account) lines.push(`เลขบัญชี: ${bankAccount.bank_account}`)
+        if (bankAccount.account_name) lines.push(`ชื่อบัญชี: ${bankAccount.account_name}`)
+    }
+
+    if (customNotes && customNotes.trim()) {
+        lines.push('')
+        lines.push(`📝 หมายเหตุ: ${customNotes.trim()}`)
+    }
+
+    return lines.join('\n')
+}
