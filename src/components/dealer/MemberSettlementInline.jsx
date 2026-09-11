@@ -366,7 +366,7 @@ export default function MemberSettlementInline({
                             type="button"
                             className="btn-settle-action btn-cross-offset-action"
                             onClick={() => setShowOffsetModal(true)}
-                            title="หักล้างยอดข้ามงวด"
+                            title="บันทึกชำระเงิน"
                             style={{
                                 background: 'rgba(250, 204, 21, 0.12)',
                                 color: '#facc15',
@@ -374,7 +374,7 @@ export default function MemberSettlementInline({
                                 fontWeight: 600
                             }}
                         >
-                            <FiZap size={14} /> หักล้างข้ามงวด ({pastUnpaidRounds.length})
+                            <FiZap size={14} /> บันทึกชำระเงิน ({pastUnpaidRounds.length})
                         </button>
                     )}
                     {hasDebt && pastUnpaidRounds.length === 0 && (
@@ -1136,7 +1136,9 @@ export default function MemberSettlementInline({
                     member={{ ...member, name: memberName }}
                     dealerId={dealerId}
                     pastUnpaidRounds={pastUnpaidRounds}
-                    currentWinnings={availableWinnings}
+                    currentBalance={currentBalance}
+                    currentWinnings={totalWinnings}
+                    availableWinnings={availableWinnings}
                     isUpstream={false}
                 />
             )}

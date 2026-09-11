@@ -413,3 +413,341 @@ export function findUpstreamPastUnpaidRounds({
     // Sort descending: most recent past round first (top to bottom)
     return results.sort((a, b) => (b.roundDate || '').localeCompare(a.roundDate || ''))
 }
+
+/**
+ * Calculates payment summary according to the 4 settlement modes:
+ * - 'current_debt': Pay debt of current round only
+ * - 'current_prize': Payout prize of current round only
+ * - 'offset_prize_past_debt': Offset current prize against selected past debt
+ * - 'combine_all': Combine current round balance with all selected past debt
+ *
+ * @param {Object} params
+ * @param {'current_debt' | 'current_prize' | 'offset_prize_past_debt' | 'combine_all'} [params.mode='offset_prize_past_debt']
+ * @param {number} [params.currentBalance=0]
+ * @param {number} [params.currentWinnings=0]
+ * @param {number} [params.availableWinnings=0]
+ * @param {Array<Object>} [params.selectedPastRounds=[]]
+ * @param {boolean} [params.isUpstream=false]
+ * @returns {Object} summary
+ */
+export function calculateCrossRoundPaymentSummary({
+    mode = 'offset_prize_past_debt',
+    currentBalance = 0,
+    currentWinnings = 0,
+    availableWinnings = 0,
+    selectedPastRounds = [],
+    isUpstream = false
+}) {
+    const curBal = Number(currentBalance || 0)
+    const prize = Math.max(0, Number(availableWinnings > 0 ? availableWinnings : currentWinnings) || 0)
+
+    const pastDebts = selectedPastRounds.filter(r => Number(r.debt || 0) > 0)
+    const pastPrizes = selectedPastRounds.filter(r => Number(r.debt || 0) < 0)
+
+    const pastDebtsTotal = pastDebts.reduce((sum, r) => sum + Number(r.debt || 0), 0)
+    const pastPrizesTotal = pastPrizes.reduce((sum, r) => sum + Math.abs(Number(r.debt || 0)), 0)
+    const pastNetTotal = selectedPastRounds.reduce((sum, r) => sum + Number(r.debt || 0), 0)
+
+    if (mode === 'current_debt') {
+        let direction = 'even'
+        if (curBal > 0) {
+            direction = isUpstream ? 'dealer_to_upstream' : 'member_to_dealer'
+        } else if (curBal < 0) {
+            direction = isUpstream ? 'upstream_to_dealer' : 'dealer_to_member'
+        }
+        return {
+            mode,
+            modeLabel: 'จ่ายหนี้งวดนี้',
+            currentRoundDebt: curBal > 0 ? curBal : 0,
+            currentRoundPrize: curBal < 0 ? Math.abs(curBal) : 0,
+            pastDebtsTotal: 0,
+            pastPrizesTotal: 0,
+            pastNetTotal: 0,
+            netDifference: Math.abs(curBal),
+            direction,
+            suggestedSlipAmount: Math.abs(curBal)
+        }
+    }
+
+    if (mode === 'current_prize') {
+        const direction = isUpstream ? 'upstream_to_dealer' : 'dealer_to_member'
+        return {
+            mode,
+            modeLabel: 'รางวัลงวดนี้',
+            currentRoundDebt: 0,
+            currentRoundPrize: prize,
+            pastDebtsTotal: 0,
+            pastPrizesTotal: 0,
+            pastNetTotal: 0,
+            netDifference: prize,
+            direction,
+            suggestedSlipAmount: prize
+        }
+    }
+
+    if (mode === 'offset_prize_past_debt') {
+        const netDiff = pastNetTotal - prize
+        let direction = 'even'
+        if (netDiff > 0) {
+            direction = isUpstream ? 'dealer_to_upstream' : 'member_to_dealer'
+        } else if (netDiff < 0) {
+            direction = isUpstream ? 'upstream_to_dealer' : 'dealer_to_member'
+        }
+        return {
+            mode,
+            modeLabel: 'หักลบรางวัลกับหนี้เก่า',
+            currentRoundDebt: curBal > 0 ? curBal : 0,
+            currentRoundPrize: prize,
+            pastDebtsTotal,
+            pastPrizesTotal,
+            pastNetTotal,
+            netDifference: Math.abs(netDiff),
+            direction,
+            suggestedSlipAmount: Math.abs(netDiff)
+        }
+    }
+
+    // combine_all
+    const totalCombined = curBal + pastNetTotal
+    let direction = 'even'
+    if (totalCombined > 0) {
+        direction = isUpstream ? 'dealer_to_upstream' : 'member_to_dealer'
+    } else if (totalCombined < 0) {
+        direction = isUpstream ? 'upstream_to_dealer' : 'dealer_to_member'
+    }
+    return {
+        mode,
+        modeLabel: 'หักลบหนี้ทั้งหมด',
+        currentRoundDebt: curBal > 0 ? curBal : 0,
+        currentRoundPrize: curBal < 0 ? Math.abs(curBal) : 0,
+        pastDebtsTotal,
+        pastPrizesTotal,
+        pastNetTotal,
+        netDifference: Math.abs(totalCombined),
+        direction,
+        suggestedSlipAmount: Math.abs(totalCombined)
+    }
+}
+
+/**
+ * Allocates payments according to selected mode:
+ * - 'current_debt': Generates single net_settlement for current round
+ * - 'current_prize': Generates single prize_payout/prize_collection for current round
+ * - 'offset_prize_past_debt': Uses allocateCrossRoundOffsetPayments
+ * - 'combine_all': Clears past debts (FIFO) and current round debt/prize with slip amount
+ */
+export function allocateSettlementPaymentsByMode({
+    mode = 'offset_prize_past_debt',
+    selectedPastRounds = [],
+    currentBalance = 0,
+    currentWinnings = 0,
+    availableWinnings = 0,
+    actualSlipAmount = 0,
+    paidAt = new Date().toISOString().split('T')[0],
+    currentRound = {},
+    memberUserId = null,
+    dealerId = null,
+    isUpstream = false,
+    upstreamDealerName = null,
+    upstreamDealerId = null,
+    customNotes = ''
+}) {
+    const curBal = Number(currentBalance || 0)
+    const prize = Math.max(0, Number(availableWinnings > 0 ? availableWinnings : currentWinnings) || 0)
+    const slip = Math.max(0, Number(actualSlipAmount) || 0)
+    const curRoundId = currentRound.round_id || currentRound.id
+    const curRoundDateIso = getRoundCloseDate(currentRound) || (/^\d{4}-\d{2}-\d{2}$/.test(String(currentRound.round_date)) ? currentRound.round_date : null)
+    const noteSuffix = customNotes && customNotes.trim() ? ` (${customNotes.trim()})` : ''
+
+    if (mode === 'current_debt') {
+        const curPayment = {
+            dealer_id: dealerId,
+            round_id: curRoundId,
+            lottery_type: currentRound.lottery_type || null,
+            round_date: curRoundDateIso,
+            payment_type: 'net_settlement',
+            direction: isUpstream
+                ? (curBal >= 0 ? 'dealer_to_upstream' : 'upstream_to_dealer')
+                : (curBal >= 0 ? 'member_to_dealer' : 'dealer_to_member'),
+            amount: slip,
+            paid_at: paidAt,
+            notes: `ชำระหนี้งวดนี้${noteSuffix}`,
+            created_by: dealerId
+        }
+        if (isUpstream) {
+            curPayment.upstream_dealer_name = upstreamDealerName || 'เจ้ามือรับตีออก'
+            curPayment.upstream_dealer_id = upstreamDealerId || null
+        } else {
+            curPayment.user_id = memberUserId
+        }
+        return {
+            currentRoundPayment: curPayment,
+            pastRoundPayments: []
+        }
+    }
+
+    if (mode === 'current_prize') {
+        const curPayment = {
+            dealer_id: dealerId,
+            round_id: curRoundId,
+            lottery_type: currentRound.lottery_type || null,
+            round_date: curRoundDateIso,
+            payment_type: isUpstream ? 'prize_collection' : 'prize_payout',
+            direction: isUpstream ? 'upstream_to_dealer' : 'dealer_to_member',
+            amount: slip,
+            paid_at: paidAt,
+            notes: `${isUpstream ? 'รับคืนเงินถูกรางวัลงวดนี้' : 'จ่ายเงินถูกรางวัลงวดนี้'}${noteSuffix}`,
+            created_by: dealerId
+        }
+        if (isUpstream) {
+            curPayment.upstream_dealer_name = upstreamDealerName || 'เจ้ามือรับตีออก'
+            curPayment.upstream_dealer_id = upstreamDealerId || null
+        } else {
+            curPayment.user_id = memberUserId
+        }
+        return {
+            currentRoundPayment: curPayment,
+            pastRoundPayments: []
+        }
+    }
+
+    if (mode === 'offset_prize_past_debt') {
+        const allocations = allocateCrossRoundOffsetPayments({
+            selectedPastRounds,
+            offsetPrizeAmount: prize,
+            actualSlipAmount: slip,
+            paidAt,
+            currentRound,
+            memberUserId,
+            dealerId,
+            isUpstream,
+            upstreamDealerName,
+            upstreamDealerId
+        })
+        if (noteSuffix) {
+            if (allocations.currentRoundPayment) {
+                allocations.currentRoundPayment.notes += noteSuffix
+            }
+            allocations.pastRoundPayments.forEach(p => {
+                p.notes += noteSuffix
+            })
+        }
+        return allocations
+    }
+
+    // combine_all:
+    // First, clear any past prize credits (< 0)
+    const pastDebts = selectedPastRounds.filter(r => Number(r.debt || 0) > 0)
+    const pastPrizes = selectedPastRounds.filter(r => Number(r.debt || 0) < 0)
+
+    const pastRoundPayments = []
+    let totalPastPrizeCredit = 0
+    for (const past of pastPrizes) {
+        const prizeAmt = Math.abs(Number(past.debt || 0))
+        totalPastPrizeCredit += prizeAmt
+
+        const pastPrizeRoundDateIso = getRoundCloseDate(past) || (/^\d{4}-\d{2}-\d{2}$/.test(String(past.roundDate || past.round_date)) ? (past.roundDate || past.round_date) : null)
+        const pastPrizePayment = {
+            dealer_id: dealerId,
+            round_id: past.roundId || past.round_id,
+            lottery_type: past.lotteryType || past.lottery_type || null,
+            round_date: pastPrizeRoundDateIso,
+            payment_type: isUpstream ? 'prize_collection' : 'prize_payout',
+            direction: isUpstream ? 'upstream_to_dealer' : 'dealer_to_member',
+            amount: prizeAmt,
+            paid_at: paidAt,
+            notes: `หักล้างหนี้รวม (รางวัลเก่า)${noteSuffix}`,
+            created_by: dealerId
+        }
+        if (isUpstream) {
+            pastPrizePayment.upstream_dealer_name = upstreamDealerName || past.upstreamDealerName || 'เจ้ามือรับตีออก'
+            pastPrizePayment.upstream_dealer_id = upstreamDealerId || past.upstreamDealerId || null
+        } else {
+            pastPrizePayment.user_id = memberUserId
+        }
+        pastRoundPayments.push(pastPrizePayment)
+    }
+
+    let remainingFunds = Math.round(slip + totalPastPrizeCredit)
+
+    // Allocate to past debts FIFO
+    for (const past of pastDebts) {
+        if (remainingFunds <= 0) break
+        const debtAmt = Math.max(0, Number(past.debt || 0))
+        const allocated = Math.min(debtAmt, remainingFunds)
+        if (allocated > 0) {
+            const pastRoundDateIso = getRoundCloseDate(past) || (/^\d{4}-\d{2}-\d{2}$/.test(String(past.roundDate || past.round_date)) ? (past.roundDate || past.round_date) : null)
+            const pastPayment = {
+                dealer_id: dealerId,
+                round_id: past.roundId || past.round_id,
+                lottery_type: past.lotteryType || past.lottery_type || null,
+                round_date: pastRoundDateIso,
+                payment_type: 'net_settlement',
+                amount: allocated,
+                paid_at: paidAt,
+                notes: `ชำระหนี้รวม (งวด ${pastRoundDateIso || 'งวดก่อน'})${noteSuffix}`,
+                created_by: dealerId
+            }
+            if (isUpstream) {
+                pastPayment.upstream_dealer_name = upstreamDealerName || past.upstreamDealerName || 'เจ้ามือรับตีออก'
+                pastPayment.upstream_dealer_id = upstreamDealerId || past.upstreamDealerId || null
+                pastPayment.direction = 'dealer_to_upstream'
+            } else {
+                pastPayment.user_id = memberUserId
+                pastPayment.direction = 'member_to_dealer'
+            }
+            pastRoundPayments.push(pastPayment)
+            remainingFunds -= allocated
+        }
+    }
+
+    // Allocate remaining funds to current round
+    let currentRoundPayment = null
+    if (curBal > 0 && remainingFunds > 0) {
+        const curAllocated = Math.min(curBal, remainingFunds)
+        currentRoundPayment = {
+            dealer_id: dealerId,
+            round_id: curRoundId,
+            lottery_type: currentRound.lottery_type || null,
+            round_date: curRoundDateIso,
+            payment_type: 'net_settlement',
+            direction: isUpstream ? 'dealer_to_upstream' : 'member_to_dealer',
+            amount: curAllocated,
+            paid_at: paidAt,
+            notes: `ชำระหนี้รวม (งวดปัจจุบัน)${noteSuffix}`,
+            created_by: dealerId
+        }
+        if (isUpstream) {
+            currentRoundPayment.upstream_dealer_name = upstreamDealerName || 'เจ้ามือรับตีออก'
+            currentRoundPayment.upstream_dealer_id = upstreamDealerId || null
+        } else {
+            currentRoundPayment.user_id = memberUserId
+        }
+        remainingFunds -= curAllocated
+    } else if (curBal < 0) {
+        currentRoundPayment = {
+            dealer_id: dealerId,
+            round_id: curRoundId,
+            lottery_type: currentRound.lottery_type || null,
+            round_date: curRoundDateIso,
+            payment_type: isUpstream ? 'prize_collection' : 'prize_payout',
+            direction: isUpstream ? 'upstream_to_dealer' : 'dealer_to_member',
+            amount: Math.abs(curBal),
+            paid_at: paidAt,
+            notes: `หักล้างหนี้รวม (งวดปัจจุบัน)${noteSuffix}`,
+            created_by: dealerId
+        }
+        if (isUpstream) {
+            currentRoundPayment.upstream_dealer_name = upstreamDealerName || 'เจ้ามือรับตีออก'
+            currentRoundPayment.upstream_dealer_id = upstreamDealerId || null
+        } else {
+            currentRoundPayment.user_id = memberUserId
+        }
+    }
+
+    return {
+        currentRoundPayment,
+        pastRoundPayments
+    }
+}
+

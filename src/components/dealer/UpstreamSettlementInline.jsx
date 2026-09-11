@@ -338,7 +338,7 @@ export default function UpstreamSettlementInline({
                         className="btn-cross-offset"
                         onClick={() => setShowOffsetModal(true)}
                     >
-                        ⚡ หักล้างยอดข้ามงวด
+                        ⚡ บันทึกชำระเงิน
                     </button>
                 </div>
             )}
@@ -354,7 +354,7 @@ export default function UpstreamSettlementInline({
                             type="button"
                             className="btn-upstream-settle-action btn-cross-offset-action"
                             onClick={() => setShowOffsetModal(true)}
-                            title="หักล้างยอดข้ามงวด"
+                            title="บันทึกชำระเงิน"
                             style={{
                                 background: 'rgba(250, 204, 21, 0.12)',
                                 color: '#facc15',
@@ -362,7 +362,7 @@ export default function UpstreamSettlementInline({
                                 fontWeight: 600
                             }}
                         >
-                            <FiZap size={14} /> หักล้างข้ามงวด ({pastUnpaidRounds.length})
+                            <FiZap size={14} /> บันทึกชำระเงิน ({pastUnpaidRounds.length})
                         </button>
                     )}
                     {!status.isSettled && (
@@ -1087,7 +1087,9 @@ export default function UpstreamSettlementInline({
                     member={transfer}
                     dealerId={dealerId}
                     pastUnpaidRounds={pastUnpaidRounds}
-                    currentWinnings={availableWinnings}
+                    currentBalance={currentBalance}
+                    currentWinnings={totalWinnings}
+                    availableWinnings={availableWinnings}
                     isUpstream={true}
                     upstreamDealerName={transfer?.target_dealer_name || transfer?.upstream_dealer_name || transfer?.dealerName}
                 />

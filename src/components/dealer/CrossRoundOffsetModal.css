@@ -87,6 +87,61 @@
     padding: 0.65rem 0.85rem;
 }
 
+/* Modes Grid & Cards */
+.cross-round-modes-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.45rem;
+    margin-top: 0.25rem;
+}
+
+@media (max-width: 640px) {
+    .cross-round-modes-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.cross-round-mode-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 0.55rem 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+    font-size: 0.8rem;
+    color: #cbd5e1;
+}
+
+.cross-round-mode-card:hover:not(.disabled) {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(250, 204, 21, 0.35);
+    color: #f8fafc;
+}
+
+.cross-round-mode-card.active {
+    background: rgba(250, 204, 21, 0.12);
+    border-color: #facc15;
+    color: #fef08a;
+    font-weight: 600;
+}
+
+.cross-round-mode-card.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.cross-round-mode-checkbox {
+    accent-color: #facc15;
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
 .past-rounds-list {
     max-height: 140px;
     overflow-y: auto;

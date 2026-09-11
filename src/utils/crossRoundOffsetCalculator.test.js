@@ -4,7 +4,9 @@ import {
     allocateCrossRoundOffsetPayments,
     findMemberPastUnpaidRounds,
     findUpstreamPastUnpaidRounds,
-    getRoundCloseDate
+    getRoundCloseDate,
+    calculateCrossRoundPaymentSummary,
+    allocateSettlementPaymentsByMode
 } from './crossRoundOffsetCalculator'
 
 describe('crossRoundOffsetCalculator', () => {
@@ -384,6 +386,120 @@ describe('crossRoundOffsetCalculator', () => {
 
             expect(unpaid).toHaveLength(1)
             expect(unpaid[0].roundDate).toBe('2026-05-16')
+        })
+    })
+
+    describe('calculateCrossRoundPaymentSummary', () => {
+        const pastRounds = [
+            { roundId: 'r-1', debt: 1000 },
+            { roundId: 'r-2', debt: 500 }
+        ]
+
+        it('calculates current_debt mode correctly', () => {
+            const summary = calculateCrossRoundPaymentSummary({
+                mode: 'current_debt',
+                currentBalance: 2500,
+                currentWinnings: 1000,
+                selectedPastRounds: pastRounds
+            })
+            expect(summary.mode).toBe('current_debt')
+            expect(summary.suggestedSlipAmount).toBe(2500)
+            expect(summary.direction).toBe('member_to_dealer')
+            expect(summary.pastDebtsTotal).toBe(0)
+        })
+
+        it('calculates current_prize mode correctly', () => {
+            const summary = calculateCrossRoundPaymentSummary({
+                mode: 'current_prize',
+                currentBalance: 2500,
+                currentWinnings: 3000,
+                selectedPastRounds: pastRounds
+            })
+            expect(summary.mode).toBe('current_prize')
+            expect(summary.suggestedSlipAmount).toBe(3000)
+            expect(summary.direction).toBe('dealer_to_member')
+        })
+
+        it('calculates offset_prize_past_debt mode correctly', () => {
+            const summary = calculateCrossRoundPaymentSummary({
+                mode: 'offset_prize_past_debt',
+                currentBalance: 500,
+                currentWinnings: 1000,
+                selectedPastRounds: pastRounds // total debt = 1500
+            })
+            expect(summary.mode).toBe('offset_prize_past_debt')
+            expect(summary.suggestedSlipAmount).toBe(500) // 1500 - 1000 = 500
+            expect(summary.direction).toBe('member_to_dealer')
+        })
+
+        it('calculates combine_all mode correctly', () => {
+            const summary = calculateCrossRoundPaymentSummary({
+                mode: 'combine_all',
+                currentBalance: 2000,
+                currentWinnings: 0,
+                selectedPastRounds: pastRounds // total debt = 1500
+            })
+            expect(summary.mode).toBe('combine_all')
+            expect(summary.suggestedSlipAmount).toBe(3500) // 2000 + 1500 = 3500
+            expect(summary.direction).toBe('member_to_dealer')
+        })
+    })
+
+    describe('allocateSettlementPaymentsByMode', () => {
+        const curRound = { round_id: 'cur-1', round_date: '2026-09-11', lottery_type: 'lao' }
+        const pastRounds = [
+            { roundId: 'past-1', debt: 1000, round_date: '2026-08-01', lottery_type: 'lao' },
+            { roundId: 'past-2', debt: 500, round_date: '2026-08-16', lottery_type: 'lao' }
+        ]
+
+        it('allocates current_debt correctly', () => {
+            const alloc = allocateSettlementPaymentsByMode({
+                mode: 'current_debt',
+                currentBalance: 1200,
+                actualSlipAmount: 1200,
+                paidAt: '2026-09-11',
+                currentRound: curRound,
+                memberUserId: 'm-1',
+                dealerId: 'd-1'
+            })
+            expect(alloc.currentRoundPayment).toBeDefined()
+            expect(alloc.currentRoundPayment.amount).toBe(1200)
+            expect(alloc.currentRoundPayment.payment_type).toBe('net_settlement')
+            expect(alloc.pastRoundPayments).toHaveLength(0)
+        })
+
+        it('allocates current_prize correctly', () => {
+            const alloc = allocateSettlementPaymentsByMode({
+                mode: 'current_prize',
+                currentWinnings: 3000,
+                actualSlipAmount: 3000,
+                paidAt: '2026-09-11',
+                currentRound: curRound,
+                memberUserId: 'm-1',
+                dealerId: 'd-1'
+            })
+            expect(alloc.currentRoundPayment).toBeDefined()
+            expect(alloc.currentRoundPayment.amount).toBe(3000)
+            expect(alloc.currentRoundPayment.payment_type).toBe('prize_payout')
+            expect(alloc.pastRoundPayments).toHaveLength(0)
+        })
+
+        it('allocates combine_all correctly covering past debts and current debt', () => {
+            const alloc = allocateSettlementPaymentsByMode({
+                mode: 'combine_all',
+                currentBalance: 1500,
+                selectedPastRounds: pastRounds, // 1000 + 500 = 1500
+                actualSlipAmount: 3000, // covers 1500 past + 1500 current
+                paidAt: '2026-09-11',
+                currentRound: curRound,
+                memberUserId: 'm-1',
+                dealerId: 'd-1'
+            })
+            expect(alloc.pastRoundPayments).toHaveLength(2)
+            expect(alloc.pastRoundPayments[0].amount).toBe(1000)
+            expect(alloc.pastRoundPayments[1].amount).toBe(500)
+            expect(alloc.currentRoundPayment).toBeDefined()
+            expect(alloc.currentRoundPayment.amount).toBe(1500)
         })
     })
 })

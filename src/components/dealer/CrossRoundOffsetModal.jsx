@@ -1,7 +1,11 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { FiZap, FiX, FiCheck, FiCalendar, FiDollarSign, FiFileText } from 'react-icons/fi'
-import { calculateOffsetSummary, allocateCrossRoundOffsetPayments, getRoundCloseDate } from '../../utils/crossRoundOffsetCalculator'
+import {
+    calculateCrossRoundPaymentSummary,
+    allocateSettlementPaymentsByMode,
+    getRoundCloseDate
+} from '../../utils/crossRoundOffsetCalculator'
 import './CrossRoundOffsetModal.css'
 
 export default function CrossRoundOffsetModal({
@@ -12,7 +16,9 @@ export default function CrossRoundOffsetModal({
     member,
     dealerId,
     pastUnpaidRounds = [],
+    currentBalance = 0,
     currentWinnings = 0,
+    availableWinnings = 0,
     isUpstream = false,
     upstreamDealerName = null
 }) {
@@ -26,6 +32,29 @@ export default function CrossRoundOffsetModal({
             return dateB.localeCompare(dateA)
         })
     }, [pastUnpaidRounds])
+
+    const hasPastRounds = sortedPastRounds.length > 0
+    const prizeToOffset = Math.max(0, Number(availableWinnings > 0 ? availableWinnings : currentWinnings) || 0)
+    const curBal = Number(currentBalance || 0)
+
+    // 4 Modes: 'current_debt' | 'current_prize' | 'offset_prize_past_debt' | 'combine_all'
+    const [mode, setMode] = useState(() => {
+        if (hasPastRounds) {
+            if (prizeToOffset > 0) return 'offset_prize_past_debt'
+            if (curBal > 0) return 'combine_all'
+            return 'offset_prize_past_debt'
+        }
+        if (curBal > 0) return 'current_debt'
+        if (prizeToOffset > 0) return 'current_prize'
+        return 'current_debt'
+    })
+
+    // Sync mode if member has no past unpaid rounds
+    useEffect(() => {
+        if (!hasPastRounds && (mode === 'offset_prize_past_debt' || mode === 'combine_all')) {
+            setMode(curBal > 0 ? 'current_debt' : (prizeToOffset > 0 ? 'current_prize' : 'current_debt'))
+        }
+    }, [hasPastRounds, curBal, prizeToOffset, mode])
 
     // Default select all past unpaid rounds
     const [selectedRoundIds, setSelectedRoundIds] = useState(() =>
@@ -82,18 +111,25 @@ export default function CrossRoundOffsetModal({
             .reduce((sum, r) => sum + Math.abs(Number(r.debt || 0)), 0)
     }, [selectedPastRounds])
 
-    const pastNetTotal = useMemo(() => {
-        return selectedPastRounds.reduce((sum, r) => sum + Number(r.debt || 0), 0)
-    }, [selectedPastRounds])
-
+    // Summary calculation for the 4 modes
     const summary = useMemo(() => {
-        return calculateOffsetSummary({
-            pastDebtTotal: pastNetTotal,
-            prizeAmount: currentWinnings
+        return calculateCrossRoundPaymentSummary({
+            mode,
+            currentBalance: curBal,
+            currentWinnings,
+            availableWinnings,
+            selectedPastRounds,
+            isUpstream
         })
-    }, [pastNetTotal, currentWinnings])
+    }, [mode, curBal, currentWinnings, availableWinnings, selectedPastRounds, isUpstream])
 
     const activeSlipAmount = customSlipAmount !== '' ? Number(customSlipAmount) : summary.suggestedSlipAmount
+
+    const handleModeChange = (newMode) => {
+        if (newMode === mode) return
+        setMode(newMode)
+        setCustomSlipAmount('') // reset custom amount so it defaults to the new mode's suggested amount
+    }
 
     const toggleRound = (roundId) => {
         setSelectedRoundIds(prev =>
@@ -111,16 +147,21 @@ export default function CrossRoundOffsetModal({
 
     const handleSubmit = async (e) => {
         e.preventDefault()
-        if (selectedPastRounds.length === 0 || saving) return
+        const needsPastRounds = mode === 'offset_prize_past_debt' || mode === 'combine_all'
+        if (needsPastRounds && selectedPastRounds.length === 0) return
+        if (saving) return
         setErrorMsg(null)
 
         const targetUpstreamName = upstreamDealerName || member?.name || member?.user_name || member?.dealerName
         const effectiveDealerId = dealerId || member?.dealer_id || currentRound?.dealer_id || null
         const effectiveMemberUserId = member?.user_id || member?.id || member?.userId || null
 
-        const allocations = allocateCrossRoundOffsetPayments({
+        const allocations = allocateSettlementPaymentsByMode({
+            mode,
             selectedPastRounds,
-            offsetPrizeAmount: currentWinnings,
+            currentBalance: curBal,
+            currentWinnings,
+            availableWinnings,
             actualSlipAmount: activeSlipAmount,
             paidAt,
             currentRound,
@@ -128,25 +169,16 @@ export default function CrossRoundOffsetModal({
             dealerId: effectiveDealerId,
             isUpstream,
             upstreamDealerName: targetUpstreamName,
-            upstreamDealerId: member?.upstream_dealer_id || null
+            upstreamDealerId: member?.upstream_dealer_id || null,
+            customNotes
         })
-
-        if (customNotes && customNotes.trim()) {
-            const noteText = customNotes.trim()
-            if (allocations.currentRoundPayment) {
-                allocations.currentRoundPayment.notes += ` (${noteText})`
-            }
-            allocations.pastRoundPayments.forEach(p => {
-                p.notes += ` (${noteText})`
-            })
-        }
 
         setSaving(true)
         try {
             await onConfirmOffset(allocations)
             onClose()
         } catch (err) {
-            console.error('Error confirming cross-round offset:', err)
+            console.error('Error confirming settlement payment:', err)
             setErrorMsg(err?.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง')
         } finally {
             setSaving(false)
@@ -161,6 +193,9 @@ export default function CrossRoundOffsetModal({
         member?.user_name ||
         member?.dealerName ||
         (isUpstream ? 'เจ้ามือรับตีออก' : 'สมาชิก')
+
+    const needsPastRounds = mode === 'offset_prize_past_debt' || mode === 'combine_all'
+    const isSubmitDisabled = saving || (needsPastRounds && selectedPastRounds.length === 0)
 
     return createPortal(
         <div
@@ -184,7 +219,7 @@ export default function CrossRoundOffsetModal({
             <div className="cross-round-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
                     <h3>
-                        <FiZap color="#facc15" /> หักล้างยอดข้ามงวด (Cross-Round Offset)
+                        <FiZap color="#facc15" /> บันทึกชำระเงิน
                     </h3>
                     <button
                         type="button"
@@ -206,127 +241,247 @@ export default function CrossRoundOffsetModal({
                             </div>
                             <div>
                                 <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>{isUpstream ? 'ยอดถูกที่นำมาหักล้าง: ' : 'รางวัลงวดนี้ที่นำมาหักล้าง: '}</span>
-                                <strong style={{ color: 'var(--color-primary, #facc15)', fontSize: '0.9rem' }}>฿{Number(currentWinnings).toLocaleString()}</strong>
+                                <strong style={{ color: 'var(--color-primary, #facc15)', fontSize: '0.9rem' }}>฿{Number(prizeToOffset).toLocaleString()}</strong>
                             </div>
                         </div>
 
-                        {/* Past Rounds Selector with Master Checkbox */}
+                        {/* 4 Settlement Modes Selection Grid */}
                         <div className="cross-round-box">
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                                <label style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.45rem',
-                                    cursor: 'pointer',
-                                    fontSize: '0.8rem',
-                                    fontWeight: 600,
-                                    color: '#f8fafc',
-                                    userSelect: 'none'
-                                }}>
-                                    <input
-                                        ref={masterCheckboxRef}
-                                        type="checkbox"
-                                        checked={isAllSelected}
-                                        onChange={toggleSelectAll}
-                                        style={{ cursor: 'pointer', width: '15px', height: '15px' }}
-                                    />
-                                    <span>เลือกงวดเก่าที่ต้องการหักล้าง ({selectedRoundIds.length}/{sortedPastRounds.length})</span>
-                                </label>
-                                <button
-                                    type="button"
-                                    onClick={toggleSelectAll}
-                                    style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        color: 'var(--color-primary, #facc15)',
-                                        fontSize: '0.75rem',
-                                        cursor: 'pointer',
-                                        fontWeight: 600,
-                                        padding: '0 0.2rem'
-                                    }}
+                            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#94a3b8', display: 'block', marginBottom: '0.35rem' }}>
+                                รูปแบบการชำระเงิน
+                            </label>
+                            <div className="cross-round-modes-grid">
+                                <div
+                                    className={`cross-round-mode-card ${mode === 'current_debt' ? 'active' : ''}`}
+                                    onClick={() => handleModeChange('current_debt')}
                                 >
-                                    {isAllSelected ? 'ยกเลิกทั้งหมด' : 'เลือกทั้งหมด'}
-                                </button>
+                                    <input
+                                        type="checkbox"
+                                        className="cross-round-mode-checkbox"
+                                        checked={mode === 'current_debt'}
+                                        onChange={() => handleModeChange('current_debt')}
+                                    />
+                                    <span>จ่ายหนี้งวดนี้</span>
+                                </div>
+                                <div
+                                    className={`cross-round-mode-card ${mode === 'current_prize' ? 'active' : ''}`}
+                                    onClick={() => handleModeChange('current_prize')}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        className="cross-round-mode-checkbox"
+                                        checked={mode === 'current_prize'}
+                                        onChange={() => handleModeChange('current_prize')}
+                                    />
+                                    <span>รางวัลงวดนี้</span>
+                                </div>
+                                <div
+                                    className={`cross-round-mode-card ${mode === 'offset_prize_past_debt' ? 'active' : ''} ${!hasPastRounds ? 'disabled' : ''}`}
+                                    onClick={() => hasPastRounds && handleModeChange('offset_prize_past_debt')}
+                                    style={!hasPastRounds ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
+                                    title={!hasPastRounds ? 'ไม่มีรายการหนี้งวดเก่า' : ''}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        className="cross-round-mode-checkbox"
+                                        checked={mode === 'offset_prize_past_debt'}
+                                        disabled={!hasPastRounds}
+                                        onChange={() => hasPastRounds && handleModeChange('offset_prize_past_debt')}
+                                    />
+                                    <span>หักลบรางวัลกับหนี้เก่า</span>
+                                </div>
+                                <div
+                                    className={`cross-round-mode-card ${mode === 'combine_all' ? 'active' : ''} ${!hasPastRounds ? 'disabled' : ''}`}
+                                    onClick={() => hasPastRounds && handleModeChange('combine_all')}
+                                    style={!hasPastRounds ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
+                                    title={!hasPastRounds ? 'ไม่มีรายการหนี้งวดเก่า' : ''}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        className="cross-round-mode-checkbox"
+                                        checked={mode === 'combine_all'}
+                                        disabled={!hasPastRounds}
+                                        onChange={() => hasPastRounds && handleModeChange('combine_all')}
+                                    />
+                                    <span>หักลบหนี้ทั้งหมด</span>
+                                </div>
                             </div>
-
-                            <div className="past-rounds-list">
-                                {sortedPastRounds.map(r => {
-                                    const isChecked = selectedRoundIds.includes(r.roundId)
-                                    const roundDebtNum = Number(r.debt || 0)
-                                    const isDebtPositive = roundDebtNum > 0
-                                    const isDebtNegative = roundDebtNum < 0
-
-                                    return (
-                                        <div
-                                            key={r.roundId}
-                                            className={`past-round-row ${isChecked ? 'selected' : ''}`}
-                                            onClick={() => toggleRound(r.roundId)}
-                                        >
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={isChecked}
-                                                    onChange={() => {}}
-                                                    style={{ cursor: 'pointer' }}
-                                                />
-                                                <span>
-                                                    งวดวันที่ <strong>{r.roundDate || getRoundCloseDate(r) || r.round_date}</strong>
-                                                    {r.lotteryType && (
-                                                        <span style={{ fontSize: '0.75rem', opacity: 0.75, marginLeft: '0.35rem' }}>
-                                                            ({r.lotteryType === 'thai' ? 'หวยไทย' : r.lotteryType === 'lao' ? 'หวยลาว' : r.lotteryType})
-                                                        </span>
-                                                    )}
-                                                </span>
-                                            </div>
-                                            {isDebtPositive ? (
-                                                <span style={{ color: '#ef4444', fontWeight: 600 }}>
-                                                    {isUpstream ? 'เราค้าง' : 'ค้าง'} ฿{roundDebtNum.toLocaleString()}
-                                                </span>
-                                            ) : isDebtNegative ? (
-                                                <span style={{ color: '#22c55e', fontWeight: 600 }}>
-                                                    {isUpstream ? 'เจ้ามือค้างเรา' : 'ค้างจ่าย'} -฿{Math.abs(roundDebtNum).toLocaleString()}
-                                                </span>
-                                            ) : (
-                                                <span style={{ color: '#94a3b8', fontWeight: 600 }}>
-                                                    ฿0
-                                                </span>
-                                            )}
-                                        </div>
-                                    )
-                                })}
+                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.4rem', fontStyle: 'italic' }}>
+                                {mode === 'current_debt' && 'ℹ️ บันทึกชำระเฉพาะยอดคงค้างของงวดปัจจุบันเท่านั้น (ไม่รวมยอดงวดเก่า)'}
+                                {mode === 'current_prize' && 'ℹ️ บันทึกจ่ายเฉพาะเงินถูกรางวัลของงวดปัจจุบันเท่านั้น'}
+                                {mode === 'offset_prize_past_debt' && 'ℹ️ นำเงินรางวัลจากงวดนี้ไปหักลบกับหนี้งวดก่อนหน้าที่เลือก'}
+                                {mode === 'combine_all' && 'ℹ️ รวมยอดคงค้างงวดนี้และหนี้งวดก่อนหน้าเข้าด้วยกันเพื่อเคลียร์ทั้งหมด'}
                             </div>
                         </div>
+
+                        {/* Past Rounds Selector (only when mode requires past rounds) */}
+                        {needsPastRounds && (
+                            <div className="cross-round-box">
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                                    <label style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '0.45rem',
+                                        cursor: 'pointer',
+                                        fontSize: '0.8rem',
+                                        fontWeight: 600,
+                                        color: '#f8fafc',
+                                        userSelect: 'none'
+                                    }}>
+                                        <input
+                                            ref={masterCheckboxRef}
+                                            type="checkbox"
+                                            checked={isAllSelected}
+                                            onChange={toggleSelectAll}
+                                            style={{ cursor: 'pointer', width: '15px', height: '15px' }}
+                                        />
+                                        <span>เลือกงวดเก่าที่ต้องการหักล้าง ({selectedRoundIds.length}/{sortedPastRounds.length})</span>
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={toggleSelectAll}
+                                        style={{
+                                            background: 'none',
+                                            border: 'none',
+                                            color: 'var(--color-primary, #facc15)',
+                                            fontSize: '0.75rem',
+                                            cursor: 'pointer',
+                                            fontWeight: 600,
+                                            padding: '0 0.2rem'
+                                        }}
+                                    >
+                                        {isAllSelected ? 'ยกเลิกทั้งหมด' : 'เลือกทั้งหมด'}
+                                    </button>
+                                </div>
+
+                                <div className="past-rounds-list">
+                                    {sortedPastRounds.map(r => {
+                                        const isChecked = selectedRoundIds.includes(r.roundId)
+                                        const roundDebtNum = Number(r.debt || 0)
+                                        const isDebtPositive = roundDebtNum > 0
+                                        const isDebtNegative = roundDebtNum < 0
+
+                                        return (
+                                            <div
+                                                key={r.roundId}
+                                                className={`past-round-row ${isChecked ? 'selected' : ''}`}
+                                                onClick={() => toggleRound(r.roundId)}
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isChecked}
+                                                        onChange={() => {}}
+                                                        style={{ cursor: 'pointer' }}
+                                                    />
+                                                    <span>
+                                                        งวดวันที่ <strong>{r.roundDate || getRoundCloseDate(r) || r.round_date}</strong>
+                                                        {r.lotteryType && (
+                                                            <span style={{ fontSize: '0.75rem', opacity: 0.75, marginLeft: '0.35rem' }}>
+                                                                ({r.lotteryType === 'thai' ? 'หวยไทย' : r.lotteryType === 'lao' ? 'หวยลาว' : r.lotteryType})
+                                                            </span>
+                                                        )}
+                                                    </span>
+                                                </div>
+                                                {isDebtPositive ? (
+                                                    <span style={{ color: '#ef4444', fontWeight: 600 }}>
+                                                        {isUpstream ? 'เราค้าง' : 'ค้าง'} ฿{roundDebtNum.toLocaleString()}
+                                                    </span>
+                                                ) : isDebtNegative ? (
+                                                    <span style={{ color: '#22c55e', fontWeight: 600 }}>
+                                                        {isUpstream ? 'เจ้ามือค้างเรา' : 'ค้างจ่าย'} -฿{Math.abs(roundDebtNum).toLocaleString()}
+                                                    </span>
+                                                ) : (
+                                                    <span style={{ color: '#94a3b8', fontWeight: 600 }}>
+                                                        ฿0
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Offset Calculation Box */}
                         <div className="cross-round-box" style={{ background: 'rgba(250, 204, 21, 0.05)', borderColor: 'rgba(250, 204, 21, 0.2)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--color-text-muted, #94a3b8)' }}>
-                                <span>รวมหนี้เก่าที่เลือก:</span>
-                                <span style={{ fontWeight: 600 }}>฿{pastDebtsTotal.toLocaleString()}</span>
-                            </div>
-                            {pastPrizesTotal > 0 && (
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--color-text-muted, #94a3b8)', marginTop: '0.2rem' }}>
-                                    <span>{isUpstream ? 'หักลบยอดถูกรางวัลงวดเก่า (เจ้ามือค้างเรา):' : 'หักลบยอดค้างจ่ายรางวัลเก่า (ให้สมาชิก):'}</span>
-                                    <span style={{ color: 'var(--color-success, #22c55e)', fontWeight: 600 }}>-฿{pastPrizesTotal.toLocaleString()}</span>
+                            {/* Mode 1: current_debt */}
+                            {mode === 'current_debt' && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--color-text-muted, #94a3b8)' }}>
+                                    <span>ยอดคงค้างงวดปัจจุบัน:</span>
+                                    <span style={{ fontWeight: 600, color: curBal > 0 ? 'var(--color-warning, #f59e0b)' : 'inherit' }}>
+                                        ฿{Math.abs(curBal).toLocaleString()}
+                                    </span>
                                 </div>
                             )}
-                            {Number(currentWinnings) > 0 && (
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--color-text-muted, #94a3b8)', marginTop: '0.2rem' }}>
-                                    <span>{isUpstream ? 'หักลบยอดถูกรางวัลงวดนี้:' : 'หักลบเงินรางวัลงวดนี้:'}</span>
-                                    <span style={{ color: 'var(--color-primary, #facc15)', fontWeight: 600 }}>-฿{Number(currentWinnings).toLocaleString()}</span>
+
+                            {/* Mode 2: current_prize */}
+                            {mode === 'current_prize' && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--color-text-muted, #94a3b8)' }}>
+                                    <span>{isUpstream ? 'ยอดถูกรางวัลงวดนี้:' : 'เงินถูกรางวัลงวดนี้:'}</span>
+                                    <span style={{ fontWeight: 600, color: 'var(--color-primary, #facc15)' }}>
+                                        ฿{prizeToOffset.toLocaleString()}
+                                    </span>
                                 </div>
                             )}
+
+                            {/* Mode 3: offset_prize_past_debt */}
+                            {mode === 'offset_prize_past_debt' && (
+                                <>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--color-text-muted, #94a3b8)' }}>
+                                        <span>รวมหนี้เก่าที่เลือก:</span>
+                                        <span style={{ fontWeight: 600 }}>฿{pastDebtsTotal.toLocaleString()}</span>
+                                    </div>
+                                    {pastPrizesTotal > 0 && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--color-text-muted, #94a3b8)', marginTop: '0.2rem' }}>
+                                            <span>{isUpstream ? 'หักลบยอดถูกรางวัลงวดเก่า (เจ้ามือค้างเรา):' : 'หักลบยอดค้างจ่ายรางวัลเก่า (ให้สมาชิก):'}</span>
+                                            <span style={{ color: 'var(--color-success, #22c55e)', fontWeight: 600 }}>-฿{pastPrizesTotal.toLocaleString()}</span>
+                                        </div>
+                                    )}
+                                    {prizeToOffset > 0 && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--color-text-muted, #94a3b8)', marginTop: '0.2rem' }}>
+                                            <span>{isUpstream ? 'หักลบยอดถูกรางวัลงวดนี้:' : 'หักลบเงินรางวัลงวดนี้:'}</span>
+                                            <span style={{ color: 'var(--color-primary, #facc15)', fontWeight: 600 }}>-฿{prizeToOffset.toLocaleString()}</span>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+
+                            {/* Mode 4: combine_all */}
+                            {mode === 'combine_all' && (
+                                <>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--color-text-muted, #94a3b8)' }}>
+                                        <span>ยอดคงค้างงวดปัจจุบัน:</span>
+                                        <span style={{ fontWeight: 600, color: curBal > 0 ? '#ef4444' : curBal < 0 ? '#22c55e' : 'inherit' }}>
+                                            {curBal > 0 ? `฿${curBal.toLocaleString()}` : curBal < 0 ? `-฿${Math.abs(curBal).toLocaleString()}` : '฿0'}
+                                        </span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--color-text-muted, #94a3b8)', marginTop: '0.2rem' }}>
+                                        <span>รวมหนี้เก่าที่เลือก:</span>
+                                        <span style={{ fontWeight: 600 }}>฿{pastDebtsTotal.toLocaleString()}</span>
+                                    </div>
+                                    {pastPrizesTotal > 0 && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--color-text-muted, #94a3b8)', marginTop: '0.2rem' }}>
+                                            <span>{isUpstream ? 'หักลบยอดถูกรางวัลงวดเก่า:' : 'หักลบยอดค้างจ่ายรางวัลเก่า:'}</span>
+                                            <span style={{ color: 'var(--color-success, #22c55e)', fontWeight: 600 }}>-฿{pastPrizesTotal.toLocaleString()}</span>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+
+                            {/* Net difference and direction line */}
                             <div style={{ borderTop: '1px dashed rgba(255,255,255,0.1)', marginTop: '0.4rem', paddingTop: '0.4rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>
                                     {!isUpstream ? (
                                         <>
-                                            {summary.direction === 'member_to_dealer' && '🟢 สมาชิกต้องโอนชำระเพิ่ม:'}
-                                            {summary.direction === 'dealer_to_member' && '🔴 เจ้ามือต้องโอนคืนสมาชิก:'}
+                                            {summary.direction === 'member_to_dealer' && (mode === 'combine_all' ? '🟢 สมาชิกต้องโอนชำระรวม:' : '🟢 สมาชิกต้องโอนชำระ:')}
+                                            {summary.direction === 'dealer_to_member' && (mode === 'current_prize' ? '🔴 เจ้ามือต้องโอนจ่ายรางวัลให้สมาชิก:' : mode === 'combine_all' ? '🔴 เจ้ามือต้องโอนคืนรวม:' : '🔴 เจ้ามือต้องโอนคืนสมาชิก:')}
                                             {summary.direction === 'even' && '⚪ ยอดหักล้างกันพอดี (ไม่ต้องโอน):'}
                                         </>
                                     ) : (
                                         <>
-                                            {summary.direction === 'member_to_dealer' && '🔴 เจ้ามือต้องโอนชำระเพิ่ม:'}
-                                            {summary.direction === 'dealer_to_member' && '🟢 เจ้ามือรับตีออกต้องโอนจ่าย:'}
+                                            {summary.direction === 'dealer_to_upstream' && (mode === 'combine_all' ? '🔴 เจ้ามือต้องโอนชำระรวม:' : '🔴 เจ้ามือต้องโอนชำระ:')}
+                                            {summary.direction === 'upstream_to_dealer' && (mode === 'current_prize' ? '🟢 เจ้ามือรับตีออกต้องโอนจ่ายคืน:' : mode === 'combine_all' ? '🟢 เจ้ามือรับตีออกต้องโอนจ่ายรวม:' : '🟢 เจ้ามือรับตีออกต้องโอนจ่าย:')}
                                             {summary.direction === 'even' && '⚪ ยอดหักล้างกันพอดี (ไม่ต้องโอน):'}
                                         </>
                                     )}
@@ -334,9 +489,9 @@ export default function CrossRoundOffsetModal({
                                 <span style={{
                                     fontSize: '1.1rem',
                                     fontWeight: 800,
-                                    color: summary.direction === 'even' ? '#f8fafc' : 'var(--color-warning, #f59e0b)'
+                                    color: summary.direction === 'even' ? '#f8fafc' : (summary.direction === 'dealer_to_member' && mode === 'current_prize') ? 'var(--color-danger, #ef4444)' : 'var(--color-warning, #f59e0b)'
                                 }}>
-                                    ฿{Math.abs(summary.netDifference).toLocaleString()}
+                                    ฿{summary.suggestedSlipAmount.toLocaleString()}
                                 </span>
                             </div>
                         </div>
@@ -438,10 +593,10 @@ export default function CrossRoundOffsetModal({
                         <button
                             type="submit"
                             className="btn btn-primary btn-sm"
-                            disabled={saving || selectedPastRounds.length === 0}
+                            disabled={isSubmitDisabled}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600 }}
                         >
-                            <FiCheck size={14} /> {saving ? 'กำลังบันทึก...' : `ยืนยันหักล้างยอด (${selectedPastRounds.length} งวด)`}
+                            <FiCheck size={14} /> {saving ? 'กำลังบันทึก...' : 'ยืนยันบันทึกชำระเงิน'}
                         </button>
                     </div>
                 </form>
