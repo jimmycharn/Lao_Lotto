@@ -23,7 +23,7 @@ export default function CrossRoundOffsetModal({
     pastUnpaidRounds = [],
     currentBalance = 0,
     currentWinnings = 0,
-    availableWinnings = 0,
+    availableWinnings,
     isUpstream = false,
     upstreamDealerName = null
 }) {
@@ -39,7 +39,11 @@ export default function CrossRoundOffsetModal({
     }, [pastUnpaidRounds])
 
     const hasPastRounds = sortedPastRounds.length > 0
-    const prizeToOffset = Math.max(0, Number(availableWinnings > 0 ? availableWinnings : currentWinnings) || 0)
+    const effectiveAvailableWinnings = (availableWinnings !== undefined && availableWinnings !== null)
+        ? availableWinnings
+        : currentWinnings
+    const prizeToOffset = Math.max(0, Number(effectiveAvailableWinnings) || 0)
+    const hasPrizeToPay = prizeToOffset > 0
     const curBal = Number(currentBalance || 0)
 
     // 4 Modes: 'current_debt' | 'current_prize' | 'offset_prize_past_debt' | 'combine_all'
@@ -49,16 +53,18 @@ export default function CrossRoundOffsetModal({
             return 'offset_prize_past_debt'
         }
         if (curBal > 0) return 'current_debt'
-        if (prizeToOffset > 0) return 'current_prize'
+        if (hasPrizeToPay) return 'current_prize'
         return 'current_debt'
     })
 
-    // Sync mode if member has no past unpaid rounds
+    // Sync mode if member has no past unpaid rounds or current mode is disabled
     useEffect(() => {
         if (!hasPastRounds && (mode === 'offset_prize_past_debt' || mode === 'combine_all')) {
-            setMode(curBal > 0 ? 'current_debt' : (prizeToOffset > 0 ? 'current_prize' : 'current_debt'))
+            setMode(curBal > 0 ? 'current_debt' : (hasPrizeToPay ? 'current_prize' : 'current_debt'))
+        } else if (mode === 'current_prize' && !hasPrizeToPay) {
+            setMode(hasPastRounds ? 'offset_prize_past_debt' : 'current_debt')
         }
-    }, [hasPastRounds, curBal, prizeToOffset, mode])
+    }, [hasPastRounds, curBal, hasPrizeToPay, mode])
 
     // Default select all past unpaid rounds
     const [selectedRoundIds, setSelectedRoundIds] = useState(() =>
@@ -233,6 +239,8 @@ export default function CrossRoundOffsetModal({
 
     const handleModeChange = (newMode) => {
         if (newMode === mode) return
+        if (newMode === 'current_prize' && !hasPrizeToPay) return
+        if ((newMode === 'offset_prize_past_debt' || newMode === 'combine_all') && !hasPastRounds) return
         setMode(newMode)
         setCustomSlipAmount('') // reset custom amount so it defaults to the new mode's suggested amount
         isUserNotesEdited.current = false // reset so note updates to the new mode's default template
@@ -391,14 +399,17 @@ export default function CrossRoundOffsetModal({
                                     <span>จ่ายหนี้งวดนี้</span>
                                 </div>
                                 <div
-                                    className={`cross-round-mode-card ${mode === 'current_prize' ? 'active' : ''}`}
-                                    onClick={() => handleModeChange('current_prize')}
+                                    className={`cross-round-mode-card ${mode === 'current_prize' ? 'active' : ''} ${!hasPrizeToPay ? 'disabled' : ''}`}
+                                    onClick={() => hasPrizeToPay && handleModeChange('current_prize')}
+                                    style={!hasPrizeToPay ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
+                                    title={!hasPrizeToPay ? (isUpstream ? 'ไม่มีเงินรางวัลค้างรับในงวดนี้' : 'ไม่มีเงินรางวัลค้างจ่ายในงวดนี้') : ''}
                                 >
                                     <input
                                         type="checkbox"
                                         className="cross-round-mode-checkbox"
                                         checked={mode === 'current_prize'}
-                                        onChange={() => handleModeChange('current_prize')}
+                                        disabled={!hasPrizeToPay}
+                                        onChange={() => hasPrizeToPay && handleModeChange('current_prize')}
                                     />
                                     <span>รางวัลงวดนี้</span>
                                 </div>

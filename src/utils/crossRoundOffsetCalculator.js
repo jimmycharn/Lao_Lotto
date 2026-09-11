@@ -437,12 +437,15 @@ export function calculateCrossRoundPaymentSummary({
     mode = 'offset_prize_past_debt',
     currentBalance = 0,
     currentWinnings = 0,
-    availableWinnings = 0,
+    availableWinnings,
     selectedPastRounds = [],
     isUpstream = false
 }) {
     const curBal = Number(currentBalance || 0)
-    const prize = Math.max(0, Number(availableWinnings > 0 ? availableWinnings : currentWinnings) || 0)
+    const effectiveWinnings = (availableWinnings !== undefined && availableWinnings !== null)
+        ? availableWinnings
+        : currentWinnings
+    const prize = Math.max(0, Number(effectiveWinnings) || 0)
 
     const pastDebts = selectedPastRounds.filter(r => Number(r.debt || 0) > 0)
     const pastPrizes = selectedPastRounds.filter(r => Number(r.debt || 0) < 0)
@@ -544,7 +547,7 @@ export function allocateSettlementPaymentsByMode({
     selectedPastRounds = [],
     currentBalance = 0,
     currentWinnings = 0,
-    availableWinnings = 0,
+    availableWinnings,
     actualSlipAmount = 0,
     paidAt = new Date().toISOString().split('T')[0],
     paidTime = '',
@@ -558,7 +561,10 @@ export function allocateSettlementPaymentsByMode({
     customNotes = ''
 }) {
     const curBal = Number(currentBalance || 0)
-    const prize = Math.max(0, Number(availableWinnings > 0 ? availableWinnings : currentWinnings) || 0)
+    const effectiveWinnings = (availableWinnings !== undefined && availableWinnings !== null)
+        ? availableWinnings
+        : currentWinnings
+    const prize = Math.max(0, Number(effectiveWinnings) || 0)
     const slip = Math.max(0, Number(actualSlipAmount) || 0)
     const curRoundId = currentRound.round_id || currentRound.id
     const curRoundDateIso = getRoundCloseDate(currentRound) || (/^\d{4}-\d{2}-\d{2}$/.test(String(currentRound.round_date)) ? currentRound.round_date : null)

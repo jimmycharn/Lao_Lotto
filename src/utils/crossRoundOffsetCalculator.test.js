@@ -443,6 +443,34 @@ describe('crossRoundOffsetCalculator', () => {
             expect(summary.direction).toBe('dealer_to_member')
         })
 
+        it('respects availableWinnings = 0 when prize was already paid in full (does NOT fallback to currentWinnings)', () => {
+            const summary = calculateCrossRoundPaymentSummary({
+                mode: 'current_prize',
+                currentBalance: 1064,
+                currentWinnings: 7000,
+                availableWinnings: 0,
+                selectedPastRounds: []
+            })
+            expect(summary.mode).toBe('current_prize')
+            expect(summary.currentRoundPrize).toBe(0)
+            expect(summary.suggestedSlipAmount).toBe(0)
+            expect(summary.netDifference).toBe(0)
+        })
+
+        it('respects partial availableWinnings (e.g. 2000 of 7000 remaining)', () => {
+            const summary = calculateCrossRoundPaymentSummary({
+                mode: 'current_prize',
+                currentBalance: 0,
+                currentWinnings: 7000,
+                availableWinnings: 2000,
+                selectedPastRounds: []
+            })
+            expect(summary.mode).toBe('current_prize')
+            expect(summary.currentRoundPrize).toBe(2000)
+            expect(summary.suggestedSlipAmount).toBe(2000)
+            expect(summary.direction).toBe('dealer_to_member')
+        })
+
         it('calculates offset_prize_past_debt mode correctly', () => {
             const summary = calculateCrossRoundPaymentSummary({
                 mode: 'offset_prize_past_debt',

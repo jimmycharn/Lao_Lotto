@@ -29,7 +29,7 @@ export default function PaymentNoticeModal({
     pastUnpaidRounds = [],
     currentBalance = 0,
     currentWinnings = 0,
-    availableWinnings = 0,
+    availableWinnings,
     roundHistory = []
 }) {
     if (!isOpen || typeof document === 'undefined') return null
@@ -142,7 +142,9 @@ export default function PaymentNoticeModal({
     }, [isIndeterminate])
 
     // Calculate live summary based on mode & selection
-    const prizeToOffset = availableWinnings > 0 ? availableWinnings : currentWinnings
+    const prizeToOffset = (availableWinnings !== undefined && availableWinnings !== null)
+        ? availableWinnings
+        : currentWinnings
     const summary = useMemo(() => {
         return calculatePaymentNoticeSummary({
             mode,
