@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { isMemberCodeParam, matchMembersByCode } from './memberCode.ts'
+import {
+    isMemberCodeParam,
+    matchMembersByCode,
+    parseRoundDateParam,
+    parseMemberAndRoundDateParam
+} from './memberCode.ts'
 
 type Member = { user_id: string; member_code: string | null; name: string }
 
@@ -83,5 +88,154 @@ describe('matchMembersByCode', () => {
     it('skips members without a code', () => {
         expect(matchMembersByCode(members, '', byCode)).toEqual([])
         expect(matchMembersByCode(members, 'null', byCode)).toEqual([])
+    })
+})
+
+describe('parseRoundDateParam', () => {
+    it('parses 2-digit Buddhist year correctly (e.g. 69 -> 2569 -> 2026)', () => {
+        expect(parseRoundDateParam('8-9-69')).toBe('2026-09-08')
+        expect(parseRoundDateParam('10-6-69')).toBe('2026-06-10')
+    })
+
+    it('parses 2-digit Gregorian year correctly (e.g. 26 -> 2026)', () => {
+        expect(parseRoundDateParam('8-9-26')).toBe('2026-09-08')
+        expect(parseRoundDateParam('10-6-26')).toBe('2026-06-10')
+    })
+
+    it('parses 4-digit Buddhist year (e.g. 2569 -> 2026)', () => {
+        expect(parseRoundDateParam('08-09-2569')).toBe('2026-09-08')
+        expect(parseRoundDateParam('8-9-2569')).toBe('2026-09-08')
+    })
+
+    it('parses 4-digit Gregorian year (e.g. 2026)', () => {
+        expect(parseRoundDateParam('08-09-2026')).toBe('2026-09-08')
+        expect(parseRoundDateParam('8-9-2026')).toBe('2026-09-08')
+    })
+
+    it('supports slash separator (e.g. 8/9/69, 8/9/26)', () => {
+        expect(parseRoundDateParam('8/9/69')).toBe('2026-09-08')
+        expect(parseRoundDateParam('8/9/26')).toBe('2026-09-08')
+        expect(parseRoundDateParam('08/09/2569')).toBe('2026-09-08')
+    })
+
+    it('rejects invalid dates or non-date strings', () => {
+        expect(parseRoundDateParam('10048')).toBeNull()
+        expect(parseRoundDateParam('1234')).toBeNull()
+        expect(parseRoundDateParam('123456/25')).toBeNull()
+        expect(parseRoundDateParam('')).toBeNull()
+        expect(parseRoundDateParam('99-99-99')).toBeNull()
+    })
+})
+
+describe('parseMemberAndRoundDateParam', () => {
+    it('parses member ID + round date with hyphen and Buddhist year (e.g. 10039/8-9-69)', () => {
+        const res = parseMemberAndRoundDateParam('10039/8-9-69')
+        expect(res).toEqual({
+            memberParam: '10039',
+            dateStr: '2026-09-08',
+            rawDate: '8-9-69'
+        })
+    })
+
+    it('parses member ID + round date with hyphen and Gregorian year (e.g. 10039/8-9-26)', () => {
+        const res = parseMemberAndRoundDateParam('10039/8-9-26')
+        expect(res).toEqual({
+            memberParam: '10039',
+            dateStr: '2026-09-08',
+            rawDate: '8-9-26'
+        })
+    })
+
+    it('parses member ID + round date with slash separator (e.g. 10039/8/9/69, 10039/8/9/26)', () => {
+        expect(parseMemberAndRoundDateParam('10039/8/9/69')).toEqual({
+            memberParam: '10039',
+            dateStr: '2026-09-08',
+            rawDate: '8/9/69'
+        })
+        expect(parseMemberAndRoundDateParam('10039/8/9/26')).toEqual({
+            memberParam: '10039',
+            dateStr: '2026-09-08',
+            rawDate: '8/9/26'
+        })
+    })
+
+    it('handles spaces around separators (e.g. 10039 / 8-9-69 or 10039 8-9-69)', () => {
+        expect(parseMemberAndRoundDateParam('10039 / 8-9-69')).toEqual({
+            memberParam: '10039',
+            dateStr: '2026-09-08',
+            rawDate: '8-9-69'
+        })
+        expect(parseMemberAndRoundDateParam('10039 8-9-69')).toEqual({
+            memberParam: '10039',
+            dateStr: '2026-09-08',
+            rawDate: '8-9-69'
+        })
+    })
+
+    it('handles leading slash command syntax (e.g. /10039/8-9-69)', () => {
+        expect(parseMemberAndRoundDateParam('/10039/8-9-69')).toEqual({
+            memberParam: '10039',
+            dateStr: '2026-09-08',
+            rawDate: '8-9-69'
+        })
+    })
+
+    it('parses Thai member name + round date (e.g. สมชาย/8-9-69)', () => {
+        expect(parseMemberAndRoundDateParam('สมชาย/8-9-69')).toEqual({
+            memberParam: 'สมชาย',
+            dateStr: '2026-09-08',
+            rawDate: '8-9-69'
+        })
+    })
+
+    it('identifies date-only params without a member (e.g. 8-9-69, 8/9/69)', () => {
+        expect(parseMemberAndRoundDateParam('8-9-69')).toEqual({
+            memberParam: null,
+            dateStr: '2026-09-08',
+            rawDate: '8-9-69'
+        })
+        expect(parseMemberAndRoundDateParam('8/9/69')).toEqual({
+            memberParam: null,
+            dateStr: '2026-09-08',
+            rawDate: '8/9/69'
+        })
+    })
+
+    it('identifies member-only params without a date (e.g. 10048, /10048, สมชาย)', () => {
+        expect(parseMemberAndRoundDateParam('10048')).toEqual({
+            memberParam: '10048',
+            dateStr: null,
+            rawDate: null
+        })
+        expect(parseMemberAndRoundDateParam('/10048')).toEqual({
+            memberParam: '10048',
+            dateStr: null,
+            rawDate: null
+        })
+        expect(parseMemberAndRoundDateParam('สมชาย')).toEqual({
+            memberParam: 'สมชาย',
+            dateStr: null,
+            rawDate: null
+        })
+    })
+
+    it('does NOT misclassify Thai/Stock winning numbers as member+date', () => {
+        expect(parseMemberAndRoundDateParam('123456/25')).toEqual({
+            memberParam: '123456/25',
+            dateStr: null,
+            rawDate: null
+        })
+        expect(parseMemberAndRoundDateParam('25/49')).toEqual({
+            memberParam: '25/49',
+            dateStr: null,
+            rawDate: null
+        })
+    })
+
+    it('returns null for empty strings or falsy input', () => {
+        expect(parseMemberAndRoundDateParam('')).toBeNull()
+        expect(parseMemberAndRoundDateParam('   ')).toBeNull()
+        expect(parseMemberAndRoundDateParam(null)).toBeNull()
+        expect(parseMemberAndRoundDateParam(undefined)).toBeNull()
     })
 })

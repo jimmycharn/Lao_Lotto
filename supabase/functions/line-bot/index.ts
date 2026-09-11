@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0"
 import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts"
 import { parseMultiLinePaste, ParsedBet, getPermutations, getUnique3DigitPermsFrom4, getUnique3DigitPermsFrom5, extractBuyerNote } from "./pasteParser.ts"
 import { buildBetItems, calculateScenarios, greedyRecommendations } from "./layoffCalculator.ts"
-import { isMemberCodeParam, matchMembersByCode } from "./memberCode.ts"
+import { isMemberCodeParam, matchMembersByCode, parseRoundDateParam, parseMemberAndRoundDateParam } from "./memberCode.ts"
 import { parseWinningNumbers, getWinningNumberFormatHelp } from "./winningNumbers.ts"
 import { PDFDocument, rgb } from "npm:pdf-lib@1.17.1"
 import fontkit from "npm:@pdf-lib/fontkit@0.0.4"
@@ -1440,36 +1440,7 @@ function parseReportParams(param: string): { lotteryType: string; dateStr: strin
   return { lotteryType, dateStr: `${yStr}-${mStr}-${dStr}` };
 }
 
-// Helper: Parse a round-date param (e.g. 10-6-26, 10-6-2026, 10-6-69, 10-6-2569).
-// Accepts '-' or '/' separators. Returns Gregorian 'YYYY-MM-DD' or null.
-// Distinct from winning numbers (which never use a D-M-Y 3-part format).
-function parseRoundDateParam(param: string): string | null {
-  const clean = param.replace(/\s+/g, '');
-  const match = clean.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
-  if (!match) return null;
-
-  const day = parseInt(match[1], 10);
-  const month = parseInt(match[2], 10);
-  let year = parseInt(match[3], 10);
-
-  // Year normalization (same convention as parseReportParams)
-  if (year >= 2500) {
-    year = year - 543;                 // 4-digit Buddhist (2569 -> 2026)
-  } else if (year >= 50 && year < 100) {
-    year = (2500 + year) - 543;        // 2-digit Buddhist (69 -> 2569 -> 2026)
-  } else if (year < 50) {
-    year = 2000 + year;                // 2-digit Gregorian (26 -> 2026)
-  }
-  // 4-digit Gregorian (e.g. 2026) passes through unchanged
-
-  if (month < 1 || month > 12) return null;
-  if (day < 1 || day > 31) return null;
-
-  const yStr = year.toString();
-  const mStr = month.toString().padStart(2, '0');
-  const dStr = day.toString().padStart(2, '0');
-  return `${yStr}-${mStr}-${dStr}`;
-}
+// Note: parseRoundDateParam is imported from ./memberCode.ts
 
 // Helper: Find a round within a list of rounds matching a Gregorian date string (YYYY-MM-DD).
 // Checks both round_date (opening/start date) and the date portion of close_time (closing/draw date).
@@ -9849,29 +9820,22 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 continue;
               }
 
-              // --- PARSE PARAM: winning numbers (announce) OR a past round date OR a member ---
+              // --- PARSE PARAM: winning numbers (announce) OR a past round date OR a member OR member+date ---
               const isSummaryTh = text.startsWith('/สรุป');
               const prefixLen = isSummaryTh ? '/สรุป'.length : '/summary'.length;
               const rawParam = text.substring(prefixLen).trim();
 
-              // `/สรุป/10048` — a leading slash explicitly targets one member, so what
-              // follows is never parsed as winning numbers or a round date.
-              const explicitMemberParam = rawParam.startsWith('/') ? rawParam.slice(1).trim() : null;
-              const param = explicitMemberParam === null ? rawParam : '';
+              const parsed = parseMemberAndRoundDateParam(rawParam);
+              const requestedRoundDate = parsed?.dateStr || null;
+              const rawDateParam = parsed?.rawDate || '';
+              const memberLookupParam = parsed?.memberParam || '';
 
-              if (explicitMemberParam !== null) {
-                if (showOwnOnly) {
+              if (memberLookupParam !== '') {
+                if (showOwnOnly || !permissions.can_view_total) {
                   await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ดูสรุปของสมาชิกคนอื่น\nพิมพ์ /สรุป เพื่อดูสรุปของตัวเอง`);
                   continue;
                 }
-                if (explicitMemberParam === '') {
-                  await sendLineReply(replyToken, `❌ กรุณาระบุรหัสสมาชิกหลังเครื่องหมาย /\nเช่น /สรุป/10048`);
-                  continue;
-                }
               }
-
-              // A date param (e.g. 10-6-26, 10-6-2569) selects a past round for read-only summary
-              const requestedRoundDate = param !== "" ? parseRoundDateParam(param) : null;
 
               const summaryLotteryType = groupLink ? (groupLink.lottery_type || 'thai') : (privateSession?.lottery_type || 'lao');
 
@@ -9883,12 +9847,12 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   .eq('dealer_id', dealerId)
                   .eq('lottery_type', summaryLotteryType)
                   .order('created_at', { ascending: false })
-                  .limit(20);
+                  .limit(100);
 
                 const dateRound = findRoundByDate(recentRounds || [], requestedRoundDate);
 
                 if (!dateRound) {
-                  await sendLineReply(replyToken, `❌ ไม่พบงวดหวย ${summaryLotteryType.toUpperCase()} ของวันที่ ${param}\n(งวดอาจถูกลบไปแล้ว หรือยังไม่ได้สร้างงวดของวันนั้น)`);
+                  await sendLineReply(replyToken, `❌ ไม่พบงวดหวย ${summaryLotteryType.toUpperCase()} ของวันที่ ${rawDateParam || requestedRoundDate}\n(งวดอาจถูกลบไปแล้ว หรือยังไม่ได้สร้างงวดของวันนั้น)`);
                   continue;
                 }
                 activeRound = dateRound;
@@ -9910,15 +9874,11 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 activeRound = latestRound;
               }
 
-              // Check if the param is a valid winning number format
-              const isValidWinningNum = param !== "" && !requestedRoundDate && !!parseWinningNumbers(param, activeRound.lottery_type);
-
-              // `/สรุป/10048` targets a member explicitly; `/สรุป 10048` only does so
-              // when the param is neither a round date nor a winning number.
-              const memberLookupParam = explicitMemberParam !== null ? explicitMemberParam : param;
+              // Check if the param is a valid winning number format (only when NOT a past round date)
+              const isValidWinningNum = !requestedRoundDate && memberLookupParam !== "" && !!parseWinningNumbers(memberLookupParam, activeRound.lottery_type);
 
               let targetMember: any = null;
-              if (memberLookupParam !== "" && !requestedRoundDate && !isValidWinningNum && !showOwnOnly) {
+              if (memberLookupParam !== "" && !isValidWinningNum && !showOwnOnly) {
                 // Look up member by name, member code, or user_id
                 const { data: memberships } = await supabase
                   .from('user_dealer_memberships')
@@ -9943,12 +9903,20 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                     m.user_id === memberLookupParam || m.profiles?.id === memberLookupParam
                   );
 
-                  // 2. Member code — e.g. /สรุป/10048 หรือ /สรุป 10048
+                  // 2. Member code — e.g. /สรุป/10048 หรือ /สรุป 10048 หรือ /สรุป 10039/8-9-69
                   //    Resolves duplicate display names with an exact handle.
                   if (matches.length === 0 && isMemberCodeParam(memberLookupParam)) {
                     const codeMatches = matchMembersByCode(memberships, memberLookupParam, memberCodeOf);
                     if (codeMatches.length > 0) {
                       matches = codeMatches;
+                    }
+                  }
+
+                  // 2.5 Direct code match even if fewer/more digits
+                  if (matches.length === 0) {
+                    const directCodeMatches = memberships.filter((m: any) => (memberCodeOf(m) || '').trim() === memberLookupParam.trim());
+                    if (directCodeMatches.length > 0) {
+                      matches = directCodeMatches;
                     }
                   }
 
@@ -9988,7 +9956,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               }
 
               // Winning-number announcement only when param is provided AND is NOT a date AND is a valid winning number
-              if (param !== "" && !requestedRoundDate && isValidWinningNum) {
+              if (memberLookupParam !== "" && !requestedRoundDate && isValidWinningNum) {
                 // ต้องปิดรับก่อนถึงจะประกาศผลได้
                 if (activeRound.status === 'open') {
                   await sendLineReply(replyToken, `❌ ไม่สามารถประกาศผลได้ เพราะงวดนี้ยังเปิดรับแทงอยู่\nกรุณาปิดรับก่อนโดยใช้คำสั่ง /ปิด`);
@@ -9999,7 +9967,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   continue;
                 }
 
-                const parsedWinning = parseWinningNumbers(param, activeRound.lottery_type);
+                const parsedWinning = parseWinningNumbers(memberLookupParam, activeRound.lottery_type);
                 if (!parsedWinning) {
                   await sendLineReply(replyToken, `❌ รูปแบบเลขรางวัลไม่ถูกต้อง\n${getWinningNumberFormatHelp(activeRound.lottery_type)}`);
                   continue;
@@ -10092,15 +10060,20 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
             // ─── COMMAND: /ยอดรวม หรือ /total ───
             if (text.startsWith('/total') || text.startsWith('/ยอดรวม')) {
-              let searchArg = '';
+              let rawSearchArg = '';
               if (text.startsWith('/total')) {
-                searchArg = text.substring('/total'.length).trim();
+                rawSearchArg = text.substring('/total'.length).trim();
               } else if (text.startsWith('/ยอดรวม')) {
-                searchArg = text.substring('/ยอดรวม'.length).trim();
+                rawSearchArg = text.substring('/ยอดรวม'.length).trim();
               }
 
+              const parsed = parseMemberAndRoundDateParam(rawSearchArg);
+              const requestedRoundDate = parsed?.dateStr || null;
+              const rawDateParam = parsed?.rawDate || '';
+              const searchArg = parsed?.memberParam || '';
+
               if (searchArg !== '') {
-                if (!permissions.can_view_total) {
+                if (showOwnOnly || !permissions.can_view_total) {
                   await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์เข้าถึงรายงานยอดรวมของสมาชิกรายอื่น`);
                   continue;
                 }
@@ -10111,19 +10084,40 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 }
               }
 
-              const { data: activeRound } = await supabase
-                .from('lottery_rounds')
-                .select('id, round_date, close_time')
-                .eq('dealer_id', dealerId)
-                .eq('lottery_type', groupLink.lottery_type)
-                .in('status', ['open', 'closed', 'announced'])
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
+              const targetLotteryType = groupLink ? (groupLink.lottery_type || 'thai') : (privateSession?.lottery_type || 'lao');
 
-              if (!activeRound) {
-                await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงสำหรับหวยประเภท ${groupLink.lottery_type.toUpperCase()}`);
-                continue;
+              let activeRound: any = null;
+              if (requestedRoundDate) {
+                const { data: recentRounds } = await supabase
+                  .from('lottery_rounds')
+                  .select('id, round_date, close_time')
+                  .eq('dealer_id', dealerId)
+                  .eq('lottery_type', targetLotteryType)
+                  .order('created_at', { ascending: false })
+                  .limit(100);
+
+                const dateRound = findRoundByDate(recentRounds || [], requestedRoundDate);
+                if (!dateRound) {
+                  await sendLineReply(replyToken, `❌ ไม่พบงวดหวย ${targetLotteryType.toUpperCase()} ของวันที่ ${rawDateParam || requestedRoundDate}\n(งวดอาจถูกลบไปแล้ว หรือยังไม่ได้สร้างงวดของวันนั้น)`);
+                  continue;
+                }
+                activeRound = dateRound;
+              } else {
+                const { data: latestRound } = await supabase
+                  .from('lottery_rounds')
+                  .select('id, round_date, close_time')
+                  .eq('dealer_id', dealerId)
+                  .eq('lottery_type', targetLotteryType)
+                  .in('status', ['open', 'closed', 'announced'])
+                  .order('created_at', { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+
+                if (!latestRound) {
+                  await sendLineReply(replyToken, `❌ ไม่มีงวดที่กำลังเปิดรับแทงสำหรับหวยประเภท ${targetLotteryType.toUpperCase()}`);
+                  continue;
+                }
+                activeRound = latestRound;
               }
 
               let matchedUserId: string | null = null;
@@ -10140,7 +10134,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                       full_name,
                       line_poy_display,
                       line_user_id,
-                      email
+                      email,
+                      member_code
                     )
                   `)
                   .eq('dealer_id', dealerId)
@@ -10152,10 +10147,14 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 }
 
                 // 2. Fetch group members for this LINE group
-                const { data: groupMembers } = await supabase
-                  .from('line_group_members')
-                  .select('user_id, line_user_id, display_name')
-                  .eq('line_group_id', groupLink.line_group_id);
+                let groupMembers: any[] = [];
+                if (groupLink?.line_group_id) {
+                  const { data: gmData } = await supabase
+                    .from('line_group_members')
+                    .select('user_id, line_user_id, display_name')
+                    .eq('line_group_id', groupLink.line_group_id);
+                  groupMembers = gmData || [];
+                }
 
                 const cleanArg = searchArg.toLowerCase().trim();
 
@@ -10166,6 +10165,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   line_user_id: string;
                   email: string;
                   group_display_name: string;
+                  member_code: string;
                 }> = [];
 
                 (memberships || []).forEach((m: any) => {
@@ -10177,7 +10177,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                       full_name: p.full_name || '',
                       line_user_id: p.line_user_id || '',
                       email: p.email || '',
-                      group_display_name: gm?.display_name || ''
+                      group_display_name: gm?.display_name || '',
+                      member_code: (p.member_code || '').trim()
                     });
                   }
                 });
@@ -10186,12 +10187,17 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 // 1. Exact match on UUID
                 let matches = candidates.filter(c => c.user_id.toLowerCase() === cleanArg);
 
-                // 2. Exact match on line_user_id
+                // 2. Exact match on member_code (e.g. 10039)
+                if (matches.length === 0) {
+                  matches = candidates.filter(c => c.member_code && c.member_code.toLowerCase() === cleanArg);
+                }
+
+                // 3. Exact match on line_user_id
                 if (matches.length === 0) {
                   matches = candidates.filter(c => c.line_user_id.toLowerCase() === cleanArg);
                 }
 
-                // 3. Exact match on full_name or group_display_name
+                // 4. Exact match on full_name or group_display_name
                 if (matches.length === 0) {
                   matches = candidates.filter(c => 
                     c.full_name.toLowerCase() === cleanArg ||
@@ -10199,7 +10205,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   );
                 }
 
-                // 4. Substring match on full_name, group_display_name, email
+                // 5. Substring match on full_name, group_display_name, email
                 if (matches.length === 0) {
                   matches = candidates.filter(c => 
                     c.full_name.toLowerCase().includes(cleanArg) ||
@@ -10214,8 +10220,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 }
 
                 if (matches.length > 1) {
-                  const names = matches.map(c => `คุณ ${c.full_name || c.group_display_name || 'ไม่ทราบชื่อ'}`).join(', ');
-                  await sendLineReply(replyToken, `⚠️ พบสมาชิกมากกว่า 1 คนที่ตรงกับ "${searchArg}":\n${names}\nกรุณาระบุชื่อที่ละเอียดขึ้นค่ะ`);
+                  const names = matches.map(c => `คุณ ${c.full_name || c.group_display_name || 'ไม่ทราบชื่อ'}${c.member_code ? ` (รหัส: ${c.member_code})` : ''}`).join(', ');
+                  await sendLineReply(replyToken, `⚠️ พบสมาชิกมากกว่า 1 คนที่ตรงกับ "${searchArg}":\n${names}\nกรุณาระบุรหัสสมาชิกหรือชื่อที่ละเอียดขึ้นค่ะ`);
                   continue;
                 }
 
@@ -10269,7 +10275,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 '2_have': '2 ตัวลอย',
                 '2_back': '2 ตัวบน',
                 '2_front_single': '2 ตัวหน้า',
-                '3_top': groupLink.lottery_type === 'lao' || groupLink.lottery_type === 'hanoi' ? '3 ตัวตรง' : '3 ตัวบน',
+                '3_top': targetLotteryType === 'lao' || targetLotteryType === 'hanoi' ? '3 ตัวตรง' : '3 ตัวบน',
                 '3_tod': '3 ตัวโต๊ด',
                 '3_front': '3 ตัวหน้า',
                 '3_back': '3 ตัวหลัง',
@@ -10287,7 +10293,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               const headerContents: any[] = [];
 
               if (matchedUserId) {
-                headerTitle = `📈 ยอดรวมส่งโพยของ คุณ ${matchedUserName} (${groupLink.lottery_type.toUpperCase()})`;
+                headerTitle = `📈 ยอดรวมส่งโพยของ คุณ ${matchedUserName} (${targetLotteryType.toUpperCase()})`;
                 summaryText = `${headerTitle}\n`;
                 summaryText += `งวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
                 summaryText += `ผู้ซื้อ: คุณ ${matchedUserName}\n`;
@@ -10316,7 +10322,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   }
                 );
               } else if (showOwnOnly) {
-                headerTitle = `📈 ยอดรวมส่งโพยของคุณ (${groupLink.lottery_type.toUpperCase()})`;
+                headerTitle = `📈 ยอดรวมส่งโพยของคุณ (${targetLotteryType.toUpperCase()})`;
                 summaryText = `${headerTitle}\n`;
                 summaryText += `งวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
                 summaryText += `ผู้ซื้อ: คุณ ${memberProfileName}\n`;
@@ -10345,7 +10351,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   }
                 );
               } else {
-                headerTitle = `📈 ยอดรวมส่งโพย (${groupLink.lottery_type.toUpperCase()})`;
+                headerTitle = `📈 ยอดรวมส่งโพย (${targetLotteryType.toUpperCase()})`;
                 summaryText = `${headerTitle}\n`;
                 summaryText += `งวดวันที่: ${getRoundDisplayDate(activeRound, false)}\n`;
 
@@ -13152,9 +13158,11 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                       cmdRow("/สรุป [รางวัลที่ 1]/[2 ตัวล่าง]", "ประกาศผลหวยไทย เช่น /สรุป 123456/25"),
                       cmdRow("/สรุป [รางวัลที่ 1]/[3 ตัวล่าง]/[2 ตัวล่าง]", "หวยไทยพร้อม 3 ตัวล่าง (สูงสุด 4 ชุด คั่นด้วย ,)\nเช่น /สรุป 123456/124,456,254,784/25"),
                       cmdRow("/สรุป [งวดวันที่]", "ดูสรุปย้อนหลัง เช่น /สรุป 10-6-69"),
+                      cmdRow("/สรุป [รหัส]/[งวดวันที่]", "ดูสรุปสมาชิกย้อนหลัง เช่น /สรุป 10039/8-9-69"),
                       cmdRow("/สรุป/[รหัสสมาชิก]", "ดูสรุปรายคน เช่น /สรุป/10048\n(ใช้ได้ทั้งก่อนและหลังออกรางวัล — ดูรหัสจาก /สมาชิก หรือ /คนส่ง)"),
                       cmdRow("/สรุป/[ชื่อสมาชิก]", "ดูสรุปรายคนตามชื่อ เช่น /สรุป/สมชาย"),
                       cmdRow("/ยอดรวม", "รายงานยอดรับรวมแยกตามประเภทเลข"),
+                      cmdRow("/ยอดรวม [รหัส]/[งวดวันที่]", "ดูยอดรวมสมาชิกย้อนหลัง เช่น /ยอดรวม 10039/8-9-69"),
                       cmdRow("/กำไร [หวย] [m/w/เดือน-ปี]", "สรุปกำไร/ขาดทุน (ระบุประเภทหวย หรือช่วงเวลาได้)"),
                       cmdRow("/คนส่ง", "รายงานยอดรับแทงแยกตามสมาชิกแต่ละคน (แสดงรหัสสมาชิก)"),
                       cmdRow("/สมาชิก [ชื่อ/รหัส]", "ค้นหายอดคงเหลือและรหัสสมาชิก"),
