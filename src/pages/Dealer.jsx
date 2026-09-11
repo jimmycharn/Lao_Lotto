@@ -401,7 +401,7 @@ export default function Dealer() {
             if (userIds.length > 0) {
                 const { data: profilesData } = await supabase
                     .from('profiles')
-                    .select('id, full_name, email, phone')
+                    .select('id, full_name, email, phone, line_user_id, line_display_name')
                     .in('id', userIds)
                 if (profilesData) {
                     profilesData.forEach(p => {
@@ -452,7 +452,8 @@ export default function Dealer() {
                 ...uh,
                 total_commission: getMemberCommission(uh.total_amount, uh.total_commission),
                 total_winnings: Number(uh.total_winnings || 0),
-                profiles: profilesMap[uh.user_id] || null
+                profiles: profilesMap[uh.user_id] || null,
+                line_user_id: profilesMap[uh.user_id]?.line_user_id || null
             }))
 
             const roundIdsToQuery = [historyItem.round_id, historyItem.id].filter(Boolean)

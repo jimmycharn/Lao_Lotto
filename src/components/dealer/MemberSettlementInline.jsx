@@ -1132,7 +1132,11 @@ export default function MemberSettlementInline({
                 <PaymentNoticeModal
                     isOpen={showPaymentNoticeModal}
                     onClose={() => setShowPaymentNoticeModal(false)}
-                    member={{ ...member, name: memberName }}
+                    member={{
+                        ...member,
+                        name: memberName,
+                        line_user_id: member?.line_user_id || member?.profiles?.line_user_id || ''
+                    }}
                     round={round}
                     dealerId={dealerId}
                     pastUnpaidRounds={pastUnpaidRounds}

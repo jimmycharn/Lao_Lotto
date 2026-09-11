@@ -59,11 +59,54 @@ export default function PaymentNoticeModal({
     const [bankAccountText, setBankAccountText] = useState('')
     const [loadingBank, setLoadingBank] = useState(true)
 
+    // Member LINE User ID state
+    const [lineUserId, setLineUserId] = useState(() => (
+        member?.line_user_id ||
+        member?.profiles?.line_user_id ||
+        ''
+    ).trim())
+    const [loadingProfile, setLoadingProfile] = useState(false)
+
     // Send state
     const [sending, setSending] = useState(false)
     const [copied, setCopied] = useState(false)
 
     const masterCheckboxRef = useRef(null)
+
+    // Fetch fresh profile to ensure up-to-date line_user_id
+    useEffect(() => {
+        let isMounted = true
+        async function fetchMemberProfile() {
+            const memberUserId = member?.user_id || member?.id || member?.userId
+            if (!memberUserId) return
+
+            if (!lineUserId) {
+                setLoadingProfile(true)
+            }
+            try {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('id, line_user_id, full_name, line_display_name')
+                    .eq('id', memberUserId)
+                    .maybeSingle()
+
+                if (isMounted && profile?.line_user_id) {
+                    setLineUserId(profile.line_user_id.trim())
+                }
+            } catch (err) {
+                console.error('Error fetching member line_user_id in modal:', err)
+            } finally {
+                if (isMounted) {
+                    setLoadingProfile(false)
+                }
+            }
+        }
+
+        fetchMemberProfile()
+        return () => {
+            isMounted = false
+        }
+    }, [member])
 
     // Reset round selection when past rounds change
     useEffect(() => {
@@ -176,6 +219,7 @@ export default function PaymentNoticeModal({
     const lotteryName = lotteryType === 'thai' ? 'หวยไทย' : lotteryType === 'lao' ? 'หวยลาว' : lotteryType
 
     const effectiveLineUserId = (
+        lineUserId ||
         member?.line_user_id ||
         member?.profiles?.line_user_id ||
         ''
@@ -562,41 +606,79 @@ export default function PaymentNoticeModal({
                         </div>
 
                         {/* LINE Status & Copy Fallback */}
-                        {!effectiveLineUserId && (
+                        {effectiveLineUserId ? (
                             <div style={{
-                                background: 'rgba(239, 68, 68, 0.1)',
-                                border: '1px solid rgba(239, 68, 68, 0.25)',
+                                background: 'rgba(34, 197, 94, 0.08)',
+                                border: '1px solid rgba(34, 197, 94, 0.25)',
                                 borderRadius: '6px',
-                                padding: '0.5rem 0.75rem',
+                                padding: '0.45rem 0.75rem',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
                                 fontSize: '0.8rem',
-                                color: '#fca5a5'
+                                color: '#86efac'
                             }}>
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                    <FiAlertCircle size={15} /> สมาชิกยังไม่ได้ผูก LINE UID
+                                    <FiCheckCircle size={15} color="#22c55e" /> ผูก LINE UID แล้ว: <code style={{ fontSize: '0.75rem', color: '#bbf7d0', background: 'rgba(0,0,0,0.3)', padding: '0.1rem 0.35rem', borderRadius: '4px' }}>{effectiveLineUserId}</code>
                                 </span>
                                 <button
                                     type="button"
                                     onClick={handleCopyNotice}
                                     style={{
-                                        background: 'rgba(255,255,255,0.1)',
-                                        border: '1px solid rgba(255,255,255,0.2)',
+                                        background: 'rgba(255,255,255,0.08)',
+                                        border: '1px solid rgba(255,255,255,0.15)',
                                         color: '#fff',
-                                        padding: '0.2rem 0.6rem',
+                                        padding: '0.2rem 0.55rem',
                                         borderRadius: '4px',
-                                        fontSize: '0.75rem',
+                                        fontSize: '0.73rem',
                                         cursor: 'pointer',
                                         display: 'inline-flex',
                                         alignItems: 'center',
                                         gap: '0.3rem'
                                     }}
+                                    title="คัดลอกข้อความสำรอง"
                                 >
                                     {copied ? <FiCheckCircle color="#22c55e" /> : <FiCopy />}
                                     {copied ? 'คัดลอกแล้ว' : 'คัดลอกข้อความ'}
                                 </button>
                             </div>
+                        ) : (
+                            !loadingProfile && (
+                                <div style={{
+                                    background: 'rgba(239, 68, 68, 0.1)',
+                                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                                    borderRadius: '6px',
+                                    padding: '0.5rem 0.75rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    fontSize: '0.8rem',
+                                    color: '#fca5a5'
+                                }}>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                        <FiAlertCircle size={15} /> สมาชิกยังไม่ได้ผูก LINE UID
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={handleCopyNotice}
+                                        style={{
+                                            background: 'rgba(255,255,255,0.1)',
+                                            border: '1px solid rgba(255,255,255,0.2)',
+                                            color: '#fff',
+                                            padding: '0.2rem 0.6rem',
+                                            borderRadius: '4px',
+                                            fontSize: '0.75rem',
+                                            cursor: 'pointer',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.3rem'
+                                        }}
+                                    >
+                                        {copied ? <FiCheckCircle color="#22c55e" /> : <FiCopy />}
+                                        {copied ? 'คัดลอกแล้ว' : 'คัดลอกข้อความ'}
+                                    </button>
+                                </div>
+                            )
                         )}
                     </div>
 
