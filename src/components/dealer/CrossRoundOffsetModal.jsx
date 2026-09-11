@@ -612,7 +612,7 @@ export default function CrossRoundOffsetModal({
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.5rem' }}>
                             <div className="settlement-form-field">
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem' }}>
-                                    <FiDollarSign /> จำนวนเงินตามสลิปจริง (บาท)
+                                    <FiDollarSign /> จำนวนเงิน
                                 </label>
                                 <input
                                     type="number"
