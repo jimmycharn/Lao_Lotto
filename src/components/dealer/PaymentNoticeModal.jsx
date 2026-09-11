@@ -220,6 +220,8 @@ export default function PaymentNoticeModal({
         ''
     ).trim()
 
+    const [sendError, setSendError] = useState(null)
+
     // Format full notice message
     const formattedMessage = useMemo(() => {
         return formatPaymentNoticeMessage({
@@ -261,6 +263,7 @@ export default function PaymentNoticeModal({
         }
 
         setSending(true)
+        setSendError(null)
         try {
             const { data, error } = await supabase.functions.invoke('line-bot', {
                 body: {
@@ -279,7 +282,9 @@ export default function PaymentNoticeModal({
             onClose()
         } catch (err) {
             console.error('Error sending payment notice via LINE:', err)
-            toast.error(`ส่งข้อความไม่สำเร็จ: ${err.message || 'กรุณาลองใหม่อีกครั้ง'}`)
+            const errorMsg = err.message || 'กรุณาลองใหม่อีกครั้ง'
+            setSendError(errorMsg)
+            toast.error(`ส่งข้อความไม่สำเร็จ: ${errorMsg}`, { duration: 6000 })
         } finally {
             setSending(false)
         }
@@ -565,7 +570,7 @@ export default function PaymentNoticeModal({
                             />
                         </div>
 
-                        {/* LINE Status & Copy Fallback (แสดงเฉพาะเมื่อยังไม่ได้ผูก LINE UID) */}
+                        {/* LINE Status Fallback (แสดงเฉพาะเมื่อยังไม่ได้ผูก LINE UID) */}
                         {!effectiveLineUserId && !loadingProfile && (
                             <div style={{
                                 background: 'rgba(239, 68, 68, 0.1)',
@@ -581,25 +586,35 @@ export default function PaymentNoticeModal({
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                                     <FiAlertCircle size={15} /> สมาชิกยังไม่ได้ผูก LINE UID
                                 </span>
-                                <button
-                                    type="button"
-                                    onClick={handleCopyNotice}
-                                    style={{
-                                        background: 'rgba(255,255,255,0.1)',
-                                        border: '1px solid rgba(255,255,255,0.2)',
-                                        color: '#fff',
-                                        padding: '0.2rem 0.6rem',
-                                        borderRadius: '4px',
-                                        fontSize: '0.75rem',
-                                        cursor: 'pointer',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '0.3rem'
-                                    }}
-                                >
-                                    {copied ? <FiCheckCircle color="#22c55e" /> : <FiCopy />}
-                                    {copied ? 'คัดลอกแล้ว' : 'คัดลอกข้อความ'}
-                                </button>
+                                <span style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>
+                                    (ใช้ปุ่มคัดลอกข้อความเพื่อส่งเอง)
+                                </span>
+                            </div>
+                        )}
+
+                        {/* Error Alert (เช่น โควตา Push Message หมด หรือ LINE API ปฏิเสธ) */}
+                        {sendError && (
+                            <div style={{
+                                background: 'rgba(239, 68, 68, 0.12)',
+                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                borderRadius: '6px',
+                                padding: '0.6rem 0.85rem',
+                                fontSize: '0.82rem',
+                                color: '#fca5a5',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.35rem'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600 }}>
+                                    <FiAlertCircle size={16} color="#ef4444" />
+                                    <span>ส่งข้อความไม่สำเร็จ</span>
+                                </div>
+                                <div style={{ fontSize: '0.78rem', color: '#fecaca', lineHeight: 1.4 }}>
+                                    {sendError}
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.15rem' }}>
+                                    💡 กดปุ่ม <strong>"คัดลอกข้อความ"</strong> ด้านล่างเพื่อนำไปส่งให้สมาชิกในแชทได้ทันที
+                                </div>
                             </div>
                         )}
                     </div>
@@ -613,14 +628,26 @@ export default function PaymentNoticeModal({
                         >
                             ยกเลิก
                         </button>
-                        <button
-                            type="submit"
-                            className="btn-notice-send"
-                            disabled={sending}
-                        >
-                            <FiSend size={15} />
-                            {sending ? 'กำลังส่ง...' : 'ส่งใบแจ้งชำระ'}
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <button
+                                type="button"
+                                className="btn-notice-copy"
+                                onClick={handleCopyNotice}
+                                title="คัดลอกข้อความเพื่อนำไปส่งเองใน LINE"
+                            >
+                                {copied ? <FiCheckCircle color="#22c55e" size={15} /> : <FiCopy size={15} />}
+                                {copied ? 'คัดลอกแล้ว' : 'คัดลอกข้อความ'}
+                            </button>
+                            <button
+                                type="submit"
+                                className="btn-notice-send"
+                                disabled={sending || !effectiveLineUserId}
+                                title={!effectiveLineUserId ? 'สมาชิกยังไม่ได้ผูก LINE UID' : 'ส่งข้อความเข้า LINE สมาชิกผ่านบอท'}
+                            >
+                                <FiSend size={15} />
+                                {sending ? 'กำลังส่ง...' : 'ส่งใบแจ้งชำระ'}
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>

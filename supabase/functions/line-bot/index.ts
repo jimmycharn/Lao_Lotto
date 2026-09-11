@@ -4818,6 +4818,35 @@ serve(async (req) => {
       })
     }
 
+    if (apiPayload && (apiPayload.action === 'diagnose_line' || apiPayload.action === 'get_line_quota')) {
+      try {
+        const quotaRes = await fetch("https://api.line.me/v2/bot/message/quota", {
+          headers: { "Authorization": `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}` }
+        });
+        const quotaData = await quotaRes.json();
+
+        const consumptionRes = await fetch("https://api.line.me/v2/bot/message/quota/consumption", {
+          headers: { "Authorization": `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}` }
+        });
+        const consumptionData = await consumptionRes.json();
+
+        return new Response(JSON.stringify({
+          success: true,
+          hasToken: !!LINE_CHANNEL_ACCESS_TOKEN,
+          quota: quotaData,
+          consumption: consumptionData
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200
+        });
+      } catch (err: any) {
+        return new Response(JSON.stringify({ success: false, error: err.message }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 500
+        });
+      }
+    }
+
     if (apiPayload && apiPayload.action === 'send_payment_notice') {
       const targetLineUserId = (apiPayload.line_user_id || '').trim();
       const messageText = (apiPayload.message_text || '').trim();
@@ -4836,8 +4865,51 @@ serve(async (req) => {
         });
       }
 
+      if (!LINE_CHANNEL_ACCESS_TOKEN) {
+        return new Response(JSON.stringify({ success: false, error: 'LINE_CHANNEL_ACCESS_TOKEN not configured' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 500
+        });
+      }
+
       try {
-        await sendLinePush(targetLineUserId, messageText);
+        const lineRes = await fetch("https://api.line.me/v2/bot/message/push", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`
+          },
+          body: JSON.stringify({
+            to: targetLineUserId,
+            messages: [{ type: "text", text: messageText }]
+          })
+        });
+
+        if (!lineRes.ok) {
+          const errText = await lineRes.text();
+          console.error(`Failed to send LINE push: ${lineRes.status} - ${errText}`);
+          let parsedError = errText;
+          try {
+            const jsonErr = JSON.parse(errText);
+            if (jsonErr.message) {
+              parsedError = jsonErr.message;
+              if (jsonErr.details && jsonErr.details.length > 0 && jsonErr.details[0].message) {
+                parsedError += ` (${jsonErr.details[0].message})`;
+              }
+            }
+          } catch (_) {}
+          return new Response(JSON.stringify({
+            success: false,
+            statusCode: lineRes.status,
+            error: lineRes.status === 429 
+              ? 'โควตา Push Message ประจำเดือนของ LINE Bot หมดแล้ว (429)'
+              : `LINE API ปฏิเสธการส่ง (${lineRes.status}): ${parsedError}`
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200
+          });
+        }
+
         return new Response(JSON.stringify({ success: true }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 200
@@ -4846,7 +4918,7 @@ serve(async (req) => {
         console.error('Error sending payment notice push:', pushErr);
         return new Response(JSON.stringify({ success: false, error: pushErr.message || String(pushErr) }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 500
+          status: 200
         });
       }
     }
