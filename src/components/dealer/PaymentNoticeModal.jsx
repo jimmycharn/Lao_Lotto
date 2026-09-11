@@ -45,8 +45,21 @@ export default function PaymentNoticeModal({
         })
     }, [pastUnpaidRounds])
 
+    const hasPastRounds = sortedPastRounds.length > 0
+
     // Modes: 'current_debt' (หนี้งวดนี้), 'offset_prize_past_debt' (หักลบรางวัลกับหนี้เก่า), 'combine_all' (หักลบทั้งหมด)
-    const [mode, setMode] = useState('offset_prize_past_debt')
+    // Default to 'current_debt' if no past unpaid rounds, otherwise 'offset_prize_past_debt'
+    const [mode, setMode] = useState(() => (
+        hasPastRounds ? 'offset_prize_past_debt' : 'current_debt'
+    ))
+
+    // Sync mode if member has no past unpaid rounds
+    useEffect(() => {
+        if (!hasPastRounds) {
+            setMode('current_debt')
+        }
+    }, [hasPastRounds])
+
     const [selectedRoundIds, setSelectedRoundIds] = useState(() =>
         sortedPastRounds.map(r => r.roundId)
     )
@@ -403,26 +416,32 @@ export default function PaymentNoticeModal({
                                     <span>หนี้งวดนี้</span>
                                 </div>
                                 <div
-                                    className={`notice-mode-card ${mode === 'offset_prize_past_debt' ? 'active' : ''}`}
-                                    onClick={() => setMode('offset_prize_past_debt')}
+                                    className={`notice-mode-card ${mode === 'offset_prize_past_debt' ? 'active' : ''} ${!hasPastRounds ? 'disabled' : ''}`}
+                                    onClick={() => hasPastRounds && setMode('offset_prize_past_debt')}
+                                    style={!hasPastRounds ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
+                                    title={!hasPastRounds ? 'ไม่มีรายการหนี้งวดเก่า' : ''}
                                 >
                                     <input
                                         type="checkbox"
                                         className="notice-mode-checkbox"
                                         checked={mode === 'offset_prize_past_debt'}
-                                        onChange={() => setMode('offset_prize_past_debt')}
+                                        disabled={!hasPastRounds}
+                                        onChange={() => hasPastRounds && setMode('offset_prize_past_debt')}
                                     />
                                     <span>หักลบรางวัลกับหนี้เก่า</span>
                                 </div>
                                 <div
-                                    className={`notice-mode-card ${mode === 'combine_all' ? 'active' : ''}`}
-                                    onClick={() => setMode('combine_all')}
+                                    className={`notice-mode-card ${mode === 'combine_all' ? 'active' : ''} ${!hasPastRounds ? 'disabled' : ''}`}
+                                    onClick={() => hasPastRounds && setMode('combine_all')}
+                                    style={!hasPastRounds ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
+                                    title={!hasPastRounds ? 'ไม่มีรายการหนี้งวดเก่า' : ''}
                                 >
                                     <input
                                         type="checkbox"
                                         className="notice-mode-checkbox"
                                         checked={mode === 'combine_all'}
-                                        onChange={() => setMode('combine_all')}
+                                        disabled={!hasPastRounds}
+                                        onChange={() => hasPastRounds && setMode('combine_all')}
                                     />
                                     <span>หักลบทั้งหมด</span>
                                 </div>

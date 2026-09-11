@@ -120,6 +120,9 @@ export default function MemberSettlementInline({
         return pastUnpaidRounds.reduce((sum, r) => sum + (Number(r.debt) || 0), 0)
     }, [pastUnpaidRounds])
 
+    // Member has debt if current round is not settled or has past unpaid rounds
+    const hasDebt = !status.isSettled || pastUnpaidRounds.length > 0
+
     // Open form with prefilled defaults
     const handleOpenForm = (type, isTabSwitch = false) => {
         const targetType = type || (totalWinnings > 0 ? 'prize_payout' : 'net_settlement')
@@ -300,8 +303,8 @@ export default function MemberSettlementInline({
                 </div>
             </div>
 
-            {/* Smart Detection Banner for Payment Notice: strictly requires both past debt and current round debt/outstanding */}
-            {pastUnpaidRounds.length > 0 && currentBalance !== 0 && (
+            {/* Smart Detection Banner for Payment Notice: when member has past unpaid rounds */}
+            {pastUnpaidRounds.length > 0 && (
                 <div className="cross-round-smart-banner">
                     <div className="banner-left">
                         <span className="banner-icon"><FiZap color="#facc15" size={18} /></span>
@@ -372,6 +375,16 @@ export default function MemberSettlementInline({
                             }}
                         >
                             <FiZap size={14} /> ⚡ หักล้างข้ามงวด ({pastUnpaidRounds.length})
+                        </button>
+                    )}
+                    {hasDebt && (
+                        <button
+                            type="button"
+                            className="btn-settle-action btn-settle-notice"
+                            onClick={() => setShowPaymentNoticeModal(true)}
+                            title="ส่งใบแจ้งชำระเงิน / คัดลอกใบแจ้งหนี้ให้สมาชิก"
+                        >
+                            <FiSend size={14} /> แจ้งชำระเงิน
                         </button>
                     )}
                     {!status.isSettled && (

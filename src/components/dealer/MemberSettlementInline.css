@@ -87,6 +87,19 @@
     transform: translateY(-1px);
 }
 
+.btn-settle-notice {
+    background: linear-gradient(135deg, #eab308 0%, #ca8a04 100%);
+    color: #0f172a;
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(234, 179, 8, 0.25);
+}
+
+.btn-settle-notice:hover:not(:disabled) {
+    background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(234, 179, 8, 0.35);
+}
+
 .btn-settle-add {
     background: rgba(255, 255, 255, 0.08);
     color: var(--color-text, #f8fafc);
