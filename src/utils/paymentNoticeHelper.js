@@ -275,7 +275,7 @@ export function formatPaymentNoticeMessage({
     if (bankAccount && (bankAccount.bank_account || bankAccount.bank_name)) {
         lines.push('')
         lines.push('💳 บัญชีโอนเงิน:')
-        if (bankAccount.bank_name) lines.push(`ธนาคาร: ${bankAccount.bank_name}`)
+        if (bankAccount.bank_name) lines.push(bankAccount.bank_name)
         if (bankAccount.bank_account) lines.push(`เลขบัญชี: ${bankAccount.bank_account}`)
         if (bankAccount.account_name) lines.push(`ชื่อบัญชี: ${bankAccount.account_name}`)
     }
