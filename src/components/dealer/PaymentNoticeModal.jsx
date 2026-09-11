@@ -17,7 +17,7 @@ import {
     formatPaymentNoticeMessage
 } from '../../utils/paymentNoticeHelper'
 import { getRoundCloseDate } from '../../utils/crossRoundOffsetCalculator'
-import toast from 'react-hot-toast'
+import { useToast } from '../../contexts/ToastContext'
 import './PaymentNoticeModal.css'
 
 export default function PaymentNoticeModal({
@@ -33,6 +33,8 @@ export default function PaymentNoticeModal({
     roundHistory = []
 }) {
     if (!isOpen || typeof document === 'undefined') return null
+
+    const { toast } = useToast()
 
     // Sort past unpaid rounds descending by close date
     const sortedPastRounds = useMemo(() => {
@@ -239,16 +241,57 @@ export default function PaymentNoticeModal({
         })
     }, [targetDisplayName, roundDateIso, lotteryName, mode, summary, bankAccountText, resolvedBank, customNotes])
 
-    // Copy to clipboard
-    const handleCopyNotice = async () => {
+    // Copy to clipboard with multi-layer fallback (supports HTTP, mobile, iframe, and modern clipboard API)
+    const handleCopyNotice = async (e) => {
+        if (e) {
+            e.preventDefault()
+            e.stopPropagation()
+        }
+
+        let success = false
+
+        // 1. Try modern clipboard API
         try {
-            await navigator.clipboard.writeText(formattedMessage)
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(formattedMessage)
+                success = true
+            }
+        } catch (clipErr) {
+            console.warn('navigator.clipboard.writeText failed, falling back...', clipErr)
+        }
+
+        // 2. Fallback using invisible textarea (works everywhere: HTTP, Safari, Android, desktop)
+        if (!success) {
+            try {
+                const textArea = document.createElement('textarea')
+                textArea.value = formattedMessage
+                textArea.style.position = 'fixed'
+                textArea.style.top = '0'
+                textArea.style.left = '0'
+                textArea.style.width = '2em'
+                textArea.style.height = '2em'
+                textArea.style.padding = '0'
+                textArea.style.border = 'none'
+                textArea.style.outline = 'none'
+                textArea.style.boxShadow = 'none'
+                textArea.style.background = 'transparent'
+                document.body.appendChild(textArea)
+                textArea.focus()
+                textArea.select()
+                textArea.setSelectionRange(0, formattedMessage.length)
+                success = document.execCommand('copy')
+                document.body.removeChild(textArea)
+            } catch (fallbackErr) {
+                console.error('Fallback execCommand copy failed:', fallbackErr)
+            }
+        }
+
+        if (success) {
             setCopied(true)
-            toast.success('คัดลอกข้อความแจ้งชำระเงินแล้ว')
+            toast?.success('คัดลอกข้อความแจ้งชำระเงินเรียบร้อยแล้ว')
             setTimeout(() => setCopied(false), 2500)
-        } catch (err) {
-            console.error('Failed to copy notice:', err)
-            toast.error('ไม่สามารถคัดลอกข้อความได้')
+        } else {
+            toast?.error('ไม่สามารถคัดลอกข้อความได้ กรุณาลองใหม่อีกครั้ง')
         }
     }
 
@@ -258,7 +301,7 @@ export default function PaymentNoticeModal({
         if (sending) return
 
         if (!effectiveLineUserId) {
-            toast.error('สมาชิกยังไม่ได้ผูกบัญชี LINE (สามารถกดคัดลอกข้อความเพื่อส่งเองได้)')
+            toast?.error('สมาชิกยังไม่ได้ผูกบัญชี LINE (สามารถกดคัดลอกข้อความเพื่อส่งเองได้)')
             return
         }
 
@@ -278,13 +321,13 @@ export default function PaymentNoticeModal({
                 throw new Error(data.error || 'เกิดข้อผิดพลาดในการส่งข้อความ')
             }
 
-            toast.success(`ส่งใบแจ้งชำระเงินไปยัง LINE ของ ${targetDisplayName} เรียบร้อยแล้ว`)
+            toast?.success(`ส่งใบแจ้งชำระเงินไปยัง LINE ของ ${targetDisplayName} เรียบร้อยแล้ว`)
             onClose()
         } catch (err) {
             console.error('Error sending payment notice via LINE:', err)
             const errorMsg = err.message || 'กรุณาลองใหม่อีกครั้ง'
             setSendError(errorMsg)
-            toast.error(`ส่งข้อความไม่สำเร็จ: ${errorMsg}`, { duration: 6000 })
+            toast?.error(`ส่งข้อความไม่สำเร็จ: ${errorMsg}`, 6000)
         } finally {
             setSending(false)
         }
