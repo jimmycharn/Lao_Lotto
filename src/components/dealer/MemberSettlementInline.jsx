@@ -361,6 +361,16 @@ export default function MemberSettlementInline({
                     จัดการการชำระเงินสำหรับ: <strong>{memberName}</strong>
                 </span>
                 <div className="settlement-btn-group">
+                    {hasDebt && pastUnpaidRounds.length === 0 && (
+                        <button
+                            type="button"
+                            className="btn-settle-action btn-settle-notice"
+                            onClick={() => setShowPaymentNoticeModal(true)}
+                            title="ส่งใบแจ้งชำระเงิน / คัดลอกใบแจ้งหนี้ให้สมาชิก"
+                        >
+                            <FiSend size={14} /> แจ้งชำระเงิน
+                        </button>
+                    )}
                     <button
                         type="button"
                         className="btn-settle-action btn-cross-offset-action"
@@ -375,16 +385,6 @@ export default function MemberSettlementInline({
                     >
                         <FiZap size={14} /> บันทึกชำระเงิน{pastUnpaidRounds.length > 0 ? ` (${pastUnpaidRounds.length})` : ''}
                     </button>
-                    {hasDebt && pastUnpaidRounds.length === 0 && (
-                        <button
-                            type="button"
-                            className="btn-settle-action btn-settle-notice"
-                            onClick={() => setShowPaymentNoticeModal(true)}
-                            title="ส่งใบแจ้งชำระเงิน / คัดลอกใบแจ้งหนี้ให้สมาชิก"
-                        >
-                            <FiSend size={14} /> แจ้งชำระเงิน
-                        </button>
-                    )}
                 </div>
             </div>
 
